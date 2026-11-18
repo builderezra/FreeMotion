@@ -12789,6 +12789,20 @@ body.ed-simple #sm-bar:has(> #sm-say.sm-saying) > .sm-hint { display: none; }
   color: var(--text); font: 600 12px/1 system-ui, sans-serif; cursor: pointer; }
 .sm-look-reset { align-self: flex-start; }
 .sm-look-reset[aria-disabled="true"] { opacity: .38; cursor: default; }
+/* #1243 S12 (his words: "the look menu is good… it's just not organized at all"): a row of chips over the ONE strip, one per section, the
+   chip of the section in view lit; inside the strip each section opens with a thin divider and its name. Chips are 32 px tall (the tabs'
+   floor) and scroll sideways on their own when they do not fit. */
+.sm-look-chips { display: flex; gap: 6px; flex: none; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; touch-action: pan-x; overscroll-behavior-x: contain; }
+.sm-look-chips::-webkit-scrollbar { display: none; }
+.sm-look-chip { flex: 0 0 auto; min-height: 32px; padding: 0 12px; border-radius: 16px; border: 1px solid var(--line); background: transparent; white-space: nowrap;
+  color: var(--text-dim); font: 600 11.5px/1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-look-chip[aria-pressed="true"] { color: var(--text); background: var(--panel-2); border-color: var(--accent, #4da3ff); }
+.sm-look-sec { flex: 0 0 auto; display: flex; align-items: flex-start; max-width: 64px; margin-left: 2px; padding: 4px 4px 0 8px; border-left: 1px solid var(--line); }
+.sm-look-sec-l { color: var(--text-dim); font: 700 9.5px/1.2 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .02em; white-space: normal; overflow-wrap: anywhere; }
+/* …and the panel's two lines (clips that keep a look of their own · Remove them; a look that ends early · Fix), laid out as the keyed note */
+.sm-look-line { display: flex; align-items: center; gap: 8px; color: var(--text-dim); font: 500 11.5px/1.3 system-ui, sans-serif; }
+.sm-look-line > .sm-look-note-t { flex: 1 1 auto; min-width: 0; }
+.sm-look-line > .sm-look-full { flex: none; }
 
 /* ═══ Simple mode Phase 3 · CAPTIONS (queue 980; DESIGN §8.5 the caption-track tray's Edit lines, D20 A): the lines panel, drawn in
    #inspector where More's and Look's panels dock. One 44 px row per line — its time, its words (one line, cut with an ellipsis), and

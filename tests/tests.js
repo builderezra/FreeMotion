@@ -65574,9 +65574,11 @@
   /* #1243 S24 and S25 (8 Nov) took Length, Move earlier and Move later off the tray (his "people pick it up and drag it", "you just grab
      the end and drag it"), so a video clip's tray was eight. #1243 S5 (R5, his words: "put the split button on the row that pops up when
      you have a layer selected") put Split first: nine, two rows of five and four on a PC, ten beside a gap on two rows of five. */
-  test('simple P2.3 · S9 option E: a main video clip’s tray is Split, Audio, Look, Lift off, Duplicate, Crop, Replace, More and 🗑 (Speed, Volume, Reverse and Take sound out are inside Audio; no Length, Move earlier or Move later since #1243; Split first since #1243 S5), and on a PC at 1280×800 and 1024×600 the wider Simple band lays the nine on TWO rows of five and four, every tool on show, More and 🗑 last; on a phone one row with Split, Audio and Look on show with no swipe; next to a gap ten tools on two rows of five', { item: '1243', budgetMs: 150000 }, async function () {
+  /* #1243 S12 (R9) took Look off the clip's tray (it is the project row's, for the whole video): eight tools, two rows of four on a PC, nine
+     beside a gap on two rows of five and four. */
+  test('simple P2.3 · S9 option E: a main video clip’s tray is Split, Audio, Lift off, Duplicate, Crop, Replace, More and 🗑 with no Look (#1243 S12 put Look on the project row; Speed, Volume, Reverse and Take sound out are inside Audio; no Length, Move earlier or Move later since #1243; Split first since #1243 S5), and on a PC at 1280×800 and 1024×600 the wider Simple band lays the eight on TWO rows of four, every tool on show, More and 🗑 last; on a phone one row with Split and Audio on show with no swipe; next to a gap nine tools on two rows of five and four', { item: '1243', budgetMs: 150000 }, async function () {
     smNeedP2();
-    const WANT = ['split', 'audio', 'look', 'lift', 'duplicateClip', 'crop', 'replace', 'more', 'delete'];
+    const WANT = ['split', 'audio', 'lift', 'duplicateClip', 'crop', 'replace', 'more', 'delete'];
     for (const [w, h] of SM9_SIZES) {
       await sm9At(w, h, async function () {
         await smP2((W, H) => [smV('C', 5, 3, W, H, { muted: false }), smV('B', 3, 2, W, H, { muted: false }), smV('A', 0, 3, W, H, { muted: false })], async function (v) {
@@ -65587,26 +65589,27 @@
           if (w > 700) {
             const m = smTrayBMeasure(), bw = document.getElementById('inspector-panel').getBoundingClientRect().width;
             if (bw < 371.5 || bw > 420.5) throw new Error(w + 'x' + h + ': Simple’s band is ' + Math.round(bw) + ' px wide, want the design’s 372–420');
-            if (m.rows.join() !== '5,4') throw new Error(w + 'x' + h + ': the clip’s nine tools are on rows [' + m.rows + '], want two rows [5,4]');
+            if (m.rows.join() !== '4,4') throw new Error(w + 'x' + h + ': the clip’s eight tools are on rows [' + m.rows + '], want two rows [4,4]');
             if (m.bad.length) throw new Error(w + 'x' + h + ': ' + m.bad.join('; '));
             if (m.order.join() !== WANT.join()) throw new Error(w + 'x' + h + ': the tools read ' + m.order + ', want ' + WANT);
           } else {
             const run = document.querySelector('#sm-tray .sm-run'); if (run) run.scrollLeft = 0;
             await v.sleep(30);
           }
-          ['split', 'audio', 'look', 'more', 'delete'].forEach(id => { if (sm9Hit(id)) throw new Error(w + ': ' + id + ' cannot be pressed with the strip at its start — ' + sm9Hit(id)); });
+          ['split', 'audio', 'more', 'delete'].forEach(id => { if (sm9Hit(id)) throw new Error(w + ': ' + id + ' cannot be pressed with the strip at its start — ' + sm9Hit(id)); });
           ['length', 'earlier', 'later'].forEach(id => { if (smTool(id)) throw new Error(w + ': the tray still offers ' + id + ', which #1243 took off'); });
+          if (document.querySelector('#sm-tray [data-tool="look"]')) throw new Error(w + ': the clip’s tray still holds Look, which #1243 S12 put on the project row');
         });
-        /* next to a gap there are ten tools: two rows of five on a PC */
+        /* next to a gap there are nine tools: two rows of five and four on a PC */
         await smP2((W, H) => [smV('C', 6, 3, W, H, { muted: false }), smV('B', 3, 2, W, H, { muted: false }), smV('A', 0, 3, W, H, { muted: false })], async function (v) {
           FM.selectLayer(v.L('B').id); await v.sleep(150);
           if (!smTool('seam')) throw new Error('CONTROL: B has a gap after it and the tray offers no Close gap: ' + sm9Tools());
           if (w > 700) {
             const m = smTrayBMeasure();
-            if (m.rows.join() !== '5,5' || m.bad.length) throw new Error(w + 'x' + h + ': ten tools should lie on two rows of five, got [' + m.rows + '] ' + m.bad.join('; '));
+            if (m.rows.join() !== '5,4' || m.bad.length) throw new Error(w + 'x' + h + ': nine tools should lie on two rows of five and four, got [' + m.rows + '] ' + m.bad.join('; '));
           }
           const run = document.querySelector('#sm-tray .sm-run') || document.getElementById('sm-tray'); run.scrollLeft = 0; await v.sleep(30);
-          if (sm9Hit('audio') || sm9Hit('look')) throw new Error(w + ': Audio or Look is not reachable beside a gap: ' + sm9Hit('audio') + ' ' + sm9Hit('look'));
+          if (sm9Hit('audio') || sm9Hit('lift')) throw new Error(w + ': Audio or Lift off is not reachable beside a gap: ' + sm9Hit('audio') + ' ' + sm9Hit('lift'));
         });
       });
     }
@@ -65658,7 +65661,7 @@
             if (v.L('A').reversed || v.steps() !== n0 + 2) throw new Error(w + ': Reverse did not go back with one more press');
             /* Done leaves for the clip's own tray */
             smTool('rowBack').click(); await v.sleep(100);
-            if (!smTool('audio') || !smTool('look')) throw new Error(w + ': Done from Audio did not return to the clip’s tray (' + sm9Tools() + ')');
+            if (!smTool('audio') || !smTool('lift')) throw new Error(w + ': Done from Audio did not return to the clip’s tray (' + sm9Tools() + ')');   // #1243 S12: Look left the tray, Lift off marks it
           } finally { FM.ensureReverseCache = real; FM.maybeClearCache = realClr; }
         }, { media: [{ name: 'A', rec: smRec(10, 'a.mp4', { width: 320, height: 240 }) }] }));
       });
@@ -129434,24 +129437,60 @@
      a look change. Here the arrow is let finish, then each of those happens with a real finger or mouse and a real
      resize, and every painted frame reads how much of each of its three strokes is drawn (the mask's dash, what is on
      screen). Pass: the arrow stays up and whole through all of it — no stroke's drawn part ever drops. CONTROL: each of
-     the three really redrew the arrow (a new arrow replaced the old one during it), and the frames were painted. */
+     the three really redrew the arrow (a new arrow replaced the old one during it), and the frames were painted.
+     17 Nov (v18.42's first ship, refused three hours in on this test's own control): 'the frames were painted' was ten
+     frames in a fixed wait, and at 1280 the finger pass paints only 19-38 in the look change on an idle laptop (measured,
+     five runs; 70-87 at 390) - a busy one painted 7 (another program was starting up on the laptop during that finger
+     pass). So the arrow is now also read the instant it goes up and on a 30 ms timer (arrowWatch989r), neither of which
+     waits for a paint, and each step waits for its frames instead of hoping for them. CONTROL as well: each step had an
+     arrow read as it went up, and the timer really ran. */
   function arrowFrac989r(mp) {
     const cs = getComputedStyle(mp), dash = parseFloat(cs.strokeDasharray), off = parseFloat(cs.strokeDashoffset);
     return dash > 0 ? Math.max(0, Math.min(1, 1 - (off || 0) / dash)) : 1;   // a still arrow has no dash: whole
   }
   function arrowWatch989r() {
-    const ids = new WeakMap(), rec = [];
+    const ids = new WeakMap(), born = new WeakSet(), rec = [], ups = [], tks = [];
     let n = 0, on = true, step = '';
+    const idOf = a => { if (!ids.has(a)) ids.set(a, ++n); return ids.get(a); };
+    const frac = a => [].map.call(a.querySelectorAll('mask path'), arrowFrac989r);
+    const dash = x => { try { return x.transitionProperty ? /^stroke-dash/.test(x.transitionProperty) : x.effect.getKeyframes().some(k => 'strokeDashoffset' in k || 'strokeDasharray' in k); } catch (e) { return true; } };
+    const anim = a => { let all = 0, run = 0; [].forEach.call(a.querySelectorAll('mask path'), function (mp) { (mp.getAnimations ? mp.getAnimations() : []).filter(dash).forEach(function (x) { all++; if (x.playState !== 'finished') run++; }); }); return [all, run]; };
+    const nap = ms => new Promise(r => setTimeout(r, ms));
     const tick = () => {
       if (!on) return;
       const all = document.querySelectorAll('svg[id^="hm-arrow936"]'), a = all[0];
-      if (a && !ids.has(a)) ids.set(a, ++n);
-      rec.push({ t: Math.round(performance.now()), step: step, n: all.length, id: a ? ids.get(a) : 0,
-        f: a ? [].map.call(a.querySelectorAll('mask path'), arrowFrac989r) : null });
+      rec.push({ t: Math.round(performance.now()), step: step, n: all.length, id: a ? idOf(a) : 0, f: a ? frac(a) : null });
       requestAnimationFrame(tick);
     };
+    /* 17 Nov: the arrow is ALSO read without waiting for a paint, two ways.
+       (1) The instant it goes up: an observer's callback runs at the end of the task that put the arrow up, before any paint,
+           however late the next paint is - and a redraw that restarts a finished arrow is at its LEAST drawn right then.
+       (2) On a 30 ms timer, between the painted frames.
+       Both also count the animations of the DASH on its strokes (the dash is what draws a stroke on; a colour fade would not
+       count). A finished arrow is redrawn STILL (js/home-arrow.js: no animation at all), so an arrow that went up during the
+       watch must carry none: one that does is set to draw part of itself again, whether or not any frame ever shows it.
+       The painted frames alone could not promise this - at 1280 this laptop's finger pass paints 19-38 frames in the look
+       change when idle (70-87 at 390), a busy one painted 7, and a head that redraws for 270 ms, or a stroke set back for
+       70 ms after the arrow is up, can fall between two of those. */
+    const mo = new MutationObserver(function (list) {
+      if (!on) return;
+      for (const m of list) for (const a of m.addedNodes) {
+        if (a.nodeType === 1 && a.matches && a.matches('svg[id^="hm-arrow936"]')) { born.add(a); const an = anim(a); ups.push({ t: Math.round(performance.now()), step: step, id: idOf(a), live: a.isConnected, f: frac(a), an: an[0], run: an[1] }); }
+      }
+    });
+    mo.observe(document.getElementById('home-screen') || document.body, { childList: true, subtree: true });
+    const timer = setInterval(function () {
+      if (!on) return;
+      const a = document.querySelector('svg[id^="hm-arrow936"]');
+      if (!a) return;
+      const an = anim(a);
+      tks.push({ t: Math.round(performance.now()), step: step, id: idOf(a), born: born.has(a), f: frac(a), an: an[0], run: an[1] });
+    }, 30);
     requestAnimationFrame(tick);
-    return { rec: rec, step: s => { step = s; }, stop: () => { on = false; } };
+    /* settle(ms): wait ms, then go on waiting (5 s at most) until this step has 14 painted frames. A step used to need its
+       ten frames inside a fixed wait (about 7 a second); now it needs them within 5 s more (about 2 a second). */
+    const settle = async function (ms) { await nap(ms); for (let i = 0; i < 50 && rec.filter(r => r.step === step).length < 14; i++) await nap(100); };
+    return { rec: rec, ups: ups, tks: tks, step: s => { step = s; }, settle: settle, stop: () => { on = false; mo.disconnect(); clearInterval(timer); } };
   }
   test('989 a Home arrow that has finished drawing stays whole through a tap on Projects, a window drag and a look change - its head is never drawn again', { item: '989', budgetMs: 90000 }, async function () {
     if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;   // drawn still there: nothing is ever redrawn part-way
@@ -129480,26 +129519,41 @@
       try {
         W.step(TAP);
         if (press === 'tap') await h3aTap(tab, label + ': a tap on the Projects tab'); else await hcMouse(tab, label + ': a click on the Projects tab');
-        await wait(800);
+        await W.settle(800);
         W.step('a window drag');                        // a real resize of the frame, a step every 90 ms, then back
         const w0 = fe.style.width;
         for (let i = 1; i <= 8; i++) { fe.style.width = (w - 4 * i) + 'px'; await wait(90); }
         for (let i = 7; i >= 0; i--) { fe.style.width = (w - 4 * i) + 'px'; await wait(90); }
-        fe.style.width = w0; await wait(800);
+        fe.style.width = w0; await W.settle(800);
         W.step('a look change');                        // what the Toggle dark mode switch does, both ways
         const lt = html.getAttribute('data-home') === 'light';
         FM.settings.set('homeLight', !lt); await wait(700);
-        FM.settings.set('homeLight', lt); await wait(800);
+        FM.settings.set('homeLight', lt); await W.settle(800);
       } finally { W.stop(); }
-      const S = W.rec.filter(r => r.step);
+      const S = W.rec.filter(r => r.step), U = W.ups.filter(u => u.step), T = W.tks.filter(q => q.step);
       for (const st of [TAP, 'a window drag', 'a look change']) {
         const F = S.filter(r => r.step === st), t0 = F.length ? F[0].t : 0;
         const before = W.rec.filter(r => r.t < t0).map(r => r.id);
-        if (F.length < 10) throw new Error(label + ': CONTROL: only ' + F.length + ' painted frames during ' + st + ' - the frame is not being painted, so a redrawn head could not be seen');
+        if (F.length < 10) throw new Error(label + ': CONTROL: only ' + F.length + ' painted frames during ' + st + ' (5 s past its own wait) - the frame is not being painted, so a redrawn head could not be seen');
         if (!F.some(r => r.id && before.indexOf(r.id) < 0)) throw new Error(label + ': CONTROL: ' + st + ' never redrew the arrow (the same arrow stayed up throughout), so this case is not the one that broke');
+        const Ust = U.filter(u => u.step === st), Tst = T.filter(q => q.step === st);
+        if (!Ust.some(u => u.live)) throw new Error(label + ': CONTROL: during ' + st + ' no redrawn arrow was read the instant it went up (' + Ust.length + ' went up, none still on the page when read), so a head drawn again between two painted frames could be missed');
+        if (Tst.length < 5) throw new Error(label + ': CONTROL: only ' + Tst.length + ' timed readings during ' + st + ' - the 30 ms timer is not running, so a stroke set back between two painted frames could not be seen');
       }
       const gone = S.filter(r => r.n !== 1)[0];
       if (gone) throw new Error(label + ': during ' + gone.step + ' there were ' + gone.n + ' arrows on screen (a frame ' + (gone.t - S[0].t) + ' ms in)');
+      const frames989 = st => { const same = S.filter(q => q.step === st); return same.filter(q => q.f && q.f.some(x => x < 0.98)).length + ' of ' + same.length + ' painted frames missing part of it'; };
+      const again989 = (q, k, where) => label + ': the arrow had finished drawing, and during ' + q.step + ' ' + NAMES[k] + ' was drawn again - ' + Math.round(q.f[k] * 100) + '% drawn ' + where + ', and ' + frames989(q.step) + ' (a redraw that restarted a finished arrow)';
+      for (const u of U) {
+        const k = u.f.findIndex(x => x < 0.98);
+        if (k >= 0) throw new Error(again989(u, k, 'at the instant the redrawn arrow went up'));
+        if (u.an) throw new Error(label + ': during ' + u.step + ' a redrawn arrow went up carrying ' + u.an + ' draw animation(s) on its strokes (' + u.run + ' not finished) - a finished arrow is redrawn still, so this one is set to draw part of itself again');
+      }
+      for (const q of T) {
+        const k = q.f.findIndex(x => x < 0.98);
+        if (k >= 0) throw new Error(again989(q, k, 'between two painted frames (a 30 ms timed reading)'));
+        if (q.born ? q.an : q.run) throw new Error(label + ': during ' + q.step + ' the arrow on screen carried ' + q.an + ' draw animation(s) on its strokes (' + q.run + ' not finished) some time after it went up - a finished arrow stays still, so part of it is being drawn again');
+      }
       for (const r of S) {
         const k = r.f.findIndex(x => x < 0.98);
         if (k < 0) continue;
@@ -129508,7 +129562,8 @@
         const bad = same.filter(q => q.f.some(x => x < 0.98)).length;
         throw new Error(label + ': the arrow had finished drawing, and during ' + r.step + ' ' + NAMES[k] + ' was drawn again - down to ' + Math.round(low * 100) + '% drawn, ' + bad + ' of ' + same.length + ' frames missing part of it (a redraw that restarted a finished arrow)');
       }
-      rows.push(label + ' ' + S.length + ' frames, ' + (new Set(S.map(r => r.id))).size + ' arrows, all whole');
+      const per989 = st => S.filter(r => r.step === st).length + 'f ' + U.filter(u => u.step === st).length + 'u ' + T.filter(q => q.step === st).length + 't';
+      rows.push(label + ' ' + [TAP, 'a window drag', 'a look change'].map(per989).join(', ') + ' (f painted frames, u arrows read as they went up, t timed readings), ' + (new Set(S.map(r => r.id))).size + ' arrows, all whole and still');
     };
     try {
       FM.projects.list = () => [];                     // an EMPTY Projects tab without touching the suite's own project
@@ -141325,12 +141380,12 @@
         const h1 = sayH();
         if (Math.abs(h1 - 56) > 0.5) throw new Error('CONTROL: the one-row tray of two selected is ' + h1 + ' px, want 56');
         FM.selectLayer(null); FM.selectLayer(v.L('B').id); await v.sleep(150);
-        const want = ['split', 'audio', 'look', 'lift', 'duplicateClip', 'crop', 'replace', 'more', 'delete'];   // #1243 S5: Split first; pick 2B: Look right after Audio; #1243 took Length, Move earlier and Move later off
+        const want = ['split', 'audio', 'lift', 'duplicateClip', 'crop', 'replace', 'more', 'delete'];   // #1243 S5: Split first; #1243 took Length, Move earlier and Move later off; #1243 S12 took Look off (the project row's now)
         const got = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
         if (got.join() !== want.join()) throw new Error('CONTROL: the tray is ' + got + ', want ' + want);
         const m = smTrayBMeasure();
-        if (m.bad.length) throw new Error('1280×800, nine tools: ' + m.bad.join(' · '));
-        if (m.rows.length !== 2) throw new Error('1280×800: the nine tools sit on ' + m.rows.length + ' row(s) ' + JSON.stringify(m.rows) + ', want two');
+        if (m.bad.length) throw new Error('1280×800, eight tools: ' + m.bad.join(' · '));
+        if (m.rows.length !== 2) throw new Error('1280×800: the eight tools sit on ' + m.rows.length + ' row(s) ' + JSON.stringify(m.rows) + ', want two');
         if (m.rows.some(n => n < 2) || Math.abs(m.rows[0] - m.rows[1]) > 1) throw new Error('1280×800: the rows are uneven ' + JSON.stringify(m.rows) + ' (never a lone tool on a row)');
         if (m.order.slice(-2).join() !== 'more,delete') throw new Error('1280×800: More and Delete are not in the last places: ' + m.order);
         if (Math.abs(sayH() - 104) > 1.5 || Math.abs(barH() - 105) > 1.5) throw new Error('1280×800: the two rows are ' + sayH() + ' px in a bar of ' + barH() + ', want 104 and its 1 px edge');
@@ -141373,7 +141428,7 @@
         const bin = smTool('delete');
         if (!bin) throw new Error('CONTROL: no Delete in the tray');
         const top0 = bar.getBoundingClientRect().top, h2 = barH(), r = bin.getBoundingClientRect();
-        if (Math.abs(h2 - 105) > 1.5) throw new Error('a clip’s eight tools: the bar is ' + h2 + ' px, want two rows (104) and its edge');
+        if (Math.abs(h2 - 105) > 1.5) throw new Error('a picture’s seven tools: the bar is ' + h2 + ' px, want two rows (104) and its edge');
         bin.click(); await v.idle();
         if (!/locked/.test(v.say())) throw new Error('CONTROL: no locked line: “' + v.say() + '”');
         await v.sleep(450);                                                   /* armed */
@@ -141417,13 +141472,13 @@
     const out = [];
     for (const [w, h] of [[1280, 800], [1280, 720], [960, 700]]) {
       await smTrayBAt(w, h, async function () {
-        /* B flush with C (C at 5, no gap): a picture's eight tools (Split first since #1243 S5; Length, Move earlier and Move later off since
-           #1243 S24/S25), rows of four */
+        /* B flush with C (C at 5, no gap): a picture's seven tools (Split first since #1243 S5; Length, Move earlier and Move later off since
+           #1243 S24/S25; Look off since #1243 S12), rows of four and three */
         await smP2((W, H) => [smV('C', 5, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
           FM.selectLayer(v.L('B').id); await v.sleep(150);
           const at = w + '×' + h + ': ', m = smTrayBMeasure();
           if (innerHeight !== h) throw new Error('CONTROL: ' + at + 'the window is ' + innerWidth + '×' + innerHeight);
-          if (m.order.length !== 8) throw new Error('CONTROL: ' + at + 'the tray is ' + m.order);
+          if (m.order.length !== 7) throw new Error('CONTROL: ' + at + 'the tray is ' + m.order);
           if (m.bad.length || m.rows.length !== 2) throw new Error(at + JSON.stringify(m.rows) + ' ' + m.bad.join(' · '));
           const insp = document.getElementById('inspector'), ib = insp.getBoundingClientRect(), hint = insp.querySelector('.sm-band-hint');
           const title = document.querySelector('#inspector-panel .panel-title'), tb = title.getBoundingClientRect();
@@ -141464,7 +141519,7 @@
         if (Math.abs(h1 - 57) > 0.5) throw new Error('CONTROL: with nothing selected the bar is ' + h1 + ' px, want one 56 px row and its edge');
         FM.selectLayer(v.L('B').id); await v.sleep(150);
         const bs = Array.from(tray.querySelectorAll('.sm-tool'));
-        if (bs.length !== 9) throw new Error('CONTROL: the tray is ' + bs.map(b => b.dataset.tool) + ' (a picture beside a gap: nine tools since #1243 took Length, Move earlier and Move later off and S5 put Split first)');
+        if (bs.length !== 8) throw new Error('CONTROL: the tray is ' + bs.map(b => b.dataset.tool) + ' (a picture beside a gap: eight tools since #1243 took Length, Move earlier and Move later off, S5 put Split first and S12 took Look off)');
         const tops = new Set(bs.map(b => Math.round(b.getBoundingClientRect().top)));
         if (tops.size !== 1) throw new Error('380: the tools sit on ' + tops.size + ' rows');
         if (Math.abs(say.getBoundingClientRect().height - h1) > 0.5) throw new Error('380: the bar grew to ' + say.getBoundingClientRect().height + ' px');
@@ -141472,9 +141527,9 @@
            slid under them), so "pinned at the right end" is the pair's own place, and the strip is what scrolls */
         const pins = tray.querySelector('.sm-pins'), sc = tray.querySelector('.sm-run') || tray;
         if (!pins || !pins.querySelector('[data-tool="more"]') || !pins.querySelector('[data-tool="delete"]') || Math.abs(pins.getBoundingClientRect().right - tray.getBoundingClientRect().right) > 1) throw new Error('380: More and Delete are not pinned together at the right end');
-        if (sc.scrollWidth <= sc.clientWidth + 1) throw new Error('380: nine tools fit one phone row without scrolling — the control no longer measures the phone');
+        if (sc.scrollWidth <= sc.clientWidth + 1) throw new Error('380: eight tools fit one phone row without scrolling — the control no longer measures the phone');
         sc.scrollLeft = 0; await v.sleep(30);
-        ['split', 'look', 'more', 'delete'].forEach(id => { const r = smTool(id).getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        ['split', 'lift', 'more', 'delete'].forEach(id => { const r = smTool(id).getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
           if (!e || !smTool(id).contains(e)) throw new Error('380: ' + id + ' cannot be pressed'); });
         if (FM.spineWords.tools.bandHintSel !== 'Its tools are below · More opens the rest') throw new Error('380: the phone’s words changed: ' + FM.spineWords.tools.bandHintSel);
       });
@@ -141492,9 +141547,9 @@
         FM.selectLayer(v.L('C').id); await v.sleep(150);
         const seam = smTool('seam'), m = smTrayBMeasure();
         if (!seam || !/Close gap/.test(seam.textContent)) throw new Error('CONTROL: C’s tray has no Close gap (' + m.order + ')');
-        /* a picture beside a seam: nine tools since #1243 (Length, Move earlier and Move later off; Split first since S5), on two rows of
-           five and four, all on show (a scrolling row is what the band at 192 px below holds) */
-        if (m.rows.join() !== '5,4' || m.bad.length) throw new Error('CONTROL: C’s nine tools are not all on show on two rows of five and four: ' + JSON.stringify(m.rows) + ' ' + m.bad.join(' · '));
+        /* a picture beside a seam: eight tools since #1243 (Length, Move earlier and Move later off; Split first since S5; Look off since S12),
+           on two rows of four, all on show (a scrolling row is what the band at 192 px below holds) */
+        if (m.rows.join() !== '4,4' || m.bad.length) throw new Error('CONTROL: C’s eight tools are not all on show on two rows of four: ' + JSON.stringify(m.rows) + ' ' + m.bad.join(' · '));
         const r = seam.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, s0 = v.steps();
         const seen = document.elementFromPoint(x, y);
         if (!seen || !seam.contains(seen)) throw new Error('CONTROL: Close gap is not on screen after scrolling the strip to it (its centre hits ' + (seen ? (seen.dataset && seen.dataset.tool) || seen.getAttribute('class') : 'nothing') + ')');
@@ -141529,7 +141584,8 @@
   test('simple P2.2 · tray B at 1280×720 after the window was once 500 px tall the band is left at 230 px, and its tools still lie on two rows there with the words above them whole — two rows need what the band’s parts measure, not a fixed 232 (checker finding 2)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smTrayBAt(1280, 720, async function () {
-      /* B flush with C (C at 5, no gap): a picture's eight tools (Split first since #1243 S5; Length, Move earlier and Move later off), rows of four */
+      /* B flush with C (C at 5, no gap): a picture's seven tools (Split first since #1243 S5; Length, Move earlier and Move later off; Look off
+         since #1243 S12), rows of four and three */
       await smP2((W, H) => [smV('C', 5, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
         const fe = window.frameElement, root = document.documentElement, band = () => document.getElementById('inspector-panel').getBoundingClientRect();
         /* the window made short and tall again: js/app.js's resize re-clamp writes --tl-h 230 at 500 px, and it stays */
@@ -141539,8 +141595,8 @@
         if (innerHeight !== 720 || !(tl < 232) || Math.abs(band().height - tl) > 1) throw new Error('CONTROL: the round trip did not leave a band under 232 px (window ' + innerHeight + ', --tl-h “' + root.style.getPropertyValue('--tl-h') + '”, band ' + band().height + ')');
         FM.selectLayer(v.L('B').id); await v.sleep(150);
         const m = smTrayBMeasure();
-        if (m.order.length !== 8) throw new Error('CONTROL: the tray is ' + m.order);
-        if (m.bad.length || m.rows.length !== 2) throw new Error('a band left at ' + tl + ' px: the eight tools sit on ' + m.rows.length + ' row(s) ' + JSON.stringify(m.rows) + ' ' + m.bad.join(' · ') + ' — his pick B silently turned back into A');
+        if (m.order.length !== 7) throw new Error('CONTROL: the tray is ' + m.order);
+        if (m.bad.length || m.rows.length !== 2) throw new Error('a band left at ' + tl + ' px: the seven tools sit on ' + m.rows.length + ' row(s) ' + JSON.stringify(m.rows) + ' ' + m.bad.join(' · ') + ' — his pick B silently turned back into A');
         const insp = document.getElementById('inspector'), ib = insp.getBoundingClientRect(), hint = insp.querySelector('.sm-band-hint'), tb = document.getElementById('sm-bar').getBoundingClientRect();
         if (!hint) throw new Error('CONTROL: the band shows no words');
         const hb = hint.getBoundingClientRect();
@@ -141557,8 +141613,8 @@
     const words = () => { const h = document.querySelector('#inspector .sm-band-hint'); return h ? h.textContent : null; };
     const rowsNow = () => { const m = smTrayBMeasure(); return m.rows.length; };
     await smTrayBAt(1280, 720, async function () {
-      /* B flush with C (C at 5, no gap): a picture's eight tools (Split first since #1243 S5; Length, Move earlier and Move later off since
-         #1243 S24/S25), rows of four */
+      /* B flush with C (C at 5, no gap): a picture's seven tools (Split first since #1243 S5; Length, Move earlier and Move later off since
+         #1243 S24/S25; Look off since #1243 S12), rows of four and three */
       await smP2((W, H) => [smT('On A', 0.5, 1, W, H), smV('C', 5, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
         const root = document.documentElement;
         FM.selectLayer(v.L('B').id); await v.sleep(150);
@@ -150109,7 +150165,8 @@
   /* #1243 S9: with the panel up the bar is covered (a phone's sheet runs from the stage's bottom edge) or hidden (a PC's band), so More
      can no longer be pressed again: the panel's own way back closes it — the grab bar on a phone (Look's ‹ in its tab row too), the band
      title's ‹ on a PC — and More raises it again after. A double tap on More still only opens it. */
-  test('SU1 #4 · More’s panel closes by its own way back — the grab bar at 380 (Look’s ‹ too), the band title’s ‹ at 1280 — and More raises it again; a double tap on More only opens it, and the grab bar still closes it', { item: '980', budgetMs: 90000 }, async function () {
+  /* #1243 S12 (R9): Look is the project row's now, so its ‹ is measured with nothing selected: the panel goes and the project row is back */
+  test('SU1 #4 · More’s panel closes by its own way back — the grab bar at 380 (the project row’s Look’s ‹ too, giving the project row back), the band title’s ‹ at 1280 — and More raises it again; a double tap on More only opens it, and the grab bar still closes it', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     const more = () => smTool('more');
     const tap = (el, n) => { const r = el.getBoundingClientRect(); el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, detail: n, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 })); };
@@ -150134,11 +150191,20 @@
         tap(more(), 1); await smSettle(60); tap(more(), 2); await smSettle(250);
         if (!insp.classList.contains('open')) fails.push('a double tap on More opened the panel and shut it again');
         grab().click(); await smSettle(250);
-        /* Look's own ‹, in its tab row */
-        tap(smTool('look'), 1); await smSettle(250);
-        const lb = document.querySelector('#inspector .sm-look-tabs > .sm-pback');
-        if (!insp.classList.contains('open') || !lb) fails.push('Look’s panel ' + (lb ? 'did not rise' : 'has no ‹ in its tab row'));
-        else { tap(lb, 1); await smSettle(250); if (insp.classList.contains('open') || FM.simpleTools.panelFor()) fails.push('Look’s ‹ left its panel up'); }
+        /* Look's own ‹, in its tab row: the project row's Look (#1243 S12), with nothing selected */
+        FM.selectLayer(null); await smSettle(150);
+        const lt = document.querySelector('#sm-tools .sm-tool[data-tool="look"]');
+        if (!lt) fails.push('the project row has no Look');
+        else {
+          tap(lt, 1); await smSettle(250);
+          const lb = document.querySelector('#inspector .sm-look-tabs > .sm-pback');
+          if (!insp.classList.contains('open') || !lb) fails.push('Look’s panel ' + (lb ? 'did not rise' : 'has no ‹ in its tab row'));
+          else {
+            tap(lb, 1); await smSettle(250);
+            if (insp.classList.contains('open') || FM.simpleTools.panelFor()) fails.push('Look’s ‹ left its panel up');
+            if (FM.simpleTools.mode() !== 'project') fails.push('Look’s ‹ gave the bar mode “' + FM.simpleTools.mode() + '”, want the project row');
+          }
+        }
         if (fails.length) throw new Error('380 px: ' + fails.join(' · '));
       });
     }, 380);
@@ -200071,17 +200137,17 @@
     });
   });
 
-  /* ═══ SIMPLE MODE PHASE 3 · LOOK (queue 980; DESIGN §8.5 the tray's Look, §8.7 "Filters + strength …; Adjust", §8.5c item 4, D20 A) ═══
-     A main clip's tray holds Look; Look opens Simple's own panel — FILTERS (None, then the library looks as tiles) and ADJUST (six
-     sliders) — docked where More's panel docks: the sheet under the tray on a phone, inside the left band above the tray on a PC.
-     A pick is ONE runner step, labelled Change look, that puts exactly the filter Full's Filters tab adds (FM.filters.makeInstance
-     fitted to the clip) on THAT clip, marked sm 1 (the Phase 1 marker); Adjust writes one filter named Adjust of ordinary colour
-     effects. Each test fails on the v17.50 tree by what it looks for — no Look tool in the tray, no Look panel — never by a
-     missing function: every probe below throws its own sentence first. */
-  async function smLookOpen(v, id) {
-    FM.selectLayer(id); await v.sleep(150);
-    const t = smTool('look');
-    if (!t) throw new Error('the selected clip’s tray has no Look tool (it holds ' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+  /* ═══ SIMPLE MODE PHASE 3 · LOOK (queue 980; DESIGN §8.5, §8.7 "Filters + strength …; Adjust", §8.5c item 4, D20 A) ═══
+     Look opens Simple's own panel — FILTERS (None, then the library looks as tiles) and ADJUST (six sliders) — docked where Simple's
+     panels dock: the sheet from the stage's bottom edge on a phone, the left band on a PC. Since #1243 S12 (R9) Look is on the PROJECT
+     ROW and works on the project's Look layer: its panel opens with nothing selected, and a pick is ONE runner step, labelled Change look,
+     that makes that layer (a full-frame shape: Backdrop Clone, then exactly the filter Full's Filters tab adds, fitted to it and marked
+     sm 1, then Adjust) over the whole video, leaving the clips' own effects alone. These tests were the per-clip Look's; each now drives
+     the project's, and says so in its title where the title named a clip. Every probe throws its own sentence first. */
+  async function smLookOpen(v) {
+    FM.selectLayer(null); await v.sleep(150);
+    const t = document.querySelector('#sm-tools .sm-tool[data-tool="look"]');
+    if (!t) throw new Error('the project row has no Look tool (it holds ' + Array.from(document.querySelectorAll('#sm-tools .sm-tool')).map(b => b.dataset.tool) + ')');
     t.click(); await v.sleep(250);
     document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
     const p = document.querySelector('#inspector .sm-look');
@@ -200101,14 +200167,28 @@
   const smLookPic = (fill, W, H) => { const c = offscreen(W, H), x = c.getContext('2d'); x.fillStyle = fill; x.fillRect(0, 0, W, H); return { kind: 'image', el: c, width: W, height: H }; };
   const smLookPx = (W, H, t) => { const c = offscreen(W, H), g = c.getContext('2d'); FM.renderScene(g, FM.scene, t); return Array.from(px(g, W >> 1, H >> 1)).slice(0, 3); };
   const smLookBoxes = l => (l.effects || []).filter(f => f && f.type === FM.FX_CONTAINER);
+  /* the project's Look layer(s) (#1243 S12): every layer carrying sm.look */
+  const smLookLayers = () => FM.scene.layers.filter(l => l && l.sm && l.sm.look === true);
+  /* a Look layer as Simple makes it (js/spine-edit.js makeLookLayer), for a fixture: Backdrop Clone first, then the given boxes */
+  function smLookLayerOf(W, H, start, dur, boxes) {
+    const cb = FM.fxRegistry.makeInstance('copybg'); cb.sm = 1;
+    const K = FM.makeLayer('shape', { name: 'Look', shape: 'rect', x: W / 2, y: H / 2, shapeW: W, shapeH: H, fill: '#000000', start: start, duration: dur });
+    K.effects = [cb].concat(boxes || []); K.sm = { stay: true, look: true };
+    return K;
+  }
 
-  test('simple P3 · Look at 380 a selected clip’s tray holds Look, and Look raises its own panel — Filters and Adjust, None and the library tiles — in the sheet from the stage’s bottom edge, its first row on screen with a ‹ that closes it; Look shows pressed', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P3 · Look at 380 is on the project row, not in a clip’s tray, and raises its own panel with nothing selected — Filters and Adjust, None and the library tiles — in the sheet from the stage’s bottom edge, its first row on screen with a ‹ that closes it back to the project row; Look shows pressed', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
       await smP2(smClips3, async function (v) {
-        const p = await smLookOpen(v, v.L('B').id);
+        FM.selectLayer(v.L('B').id); await v.sleep(150);
+        const tray = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool);
+        if (tray.indexOf('split') < 0 || tray.indexOf('more') < 0) throw new Error('CONTROL: Clip 2’s tray is not drawn (it holds ' + tray + ')');
+        if (tray.indexOf('look') >= 0) throw new Error('380: Clip 2’s tray still holds Look; #1243 S12 put it on the project row (' + tray + ')');
+        const p = await smLookOpen(v);
         const insp = document.getElementById('inspector-panel'), fails = [];
-        if (!insp.classList.contains('open')) fails.push('Look did not raise the sheet');
+        if ((FM.selectionIds ? FM.selectionIds() : []).length) fails.push('the Look panel is up with something selected');
+        if (!insp.classList.contains('open')) fails.push('Look did not raise the sheet with nothing selected');
         const line = document.getElementById('stage').getBoundingClientRect().bottom, ir = insp.getBoundingClientRect();
         if (Math.abs(ir.top - line) > 1) fails.push('the Look sheet starts at ' + Math.round(ir.top) + ', not at the stage’s bottom edge ' + Math.round(line) + ' (#1243 rule 3)');
         const tabs = Array.from(p.querySelectorAll('.sm-look-tab')).map(b => b.textContent).join('|');
@@ -200120,9 +200200,10 @@
           if (!hit || !first.contains(hit)) fails.push('the panel’s first row is not on screen (Filters’ centre hits ' + (hit ? hit.getAttribute('class') || hit.tagName : 'nothing') + ')');
           if (fr.width < 44 || fr.height < 32) fails.push('Filters is ' + Math.round(fr.width) + '×' + Math.round(fr.height) + ' px, under 44×32');
         }
-        const t = smTool('look');
+        const t = document.querySelector('#sm-tools .sm-tool[data-tool="look"]');
         if (!t || t.getAttribute('aria-pressed') !== 'true') fails.push('Look does not show pressed while its panel is open');
-        /* #1243 S9: its way back is the ‹ at the start of its tab row (the bar is under the sheet, so Look cannot be pressed again) */
+        if (FM.simpleTools.mode() !== 'panel') fails.push('with Look’s panel up the bar’s mode is “' + FM.simpleTools.mode() + '”, want panel');
+        /* #1243 S9: its way back is the ‹ at the start of its tab row */
         const back = p.querySelector('.sm-look-tabs > .sm-pback');
         if (!back) fails.push('the panel’s tab row has no ‹ first');
         else { const br = back.getBoundingClientRect(), hit = document.elementFromPoint(br.left + br.width / 2, br.top + br.height / 2); if (!hit || !back.contains(hit) || br.width < 44 || br.height < 32) fails.push('the panel’s ‹ is ' + Math.round(br.width) + '×' + Math.round(br.height) + ' px or covered'); }
@@ -200130,6 +200211,7 @@
         back.click(); await v.sleep(250);
         document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
         if (document.querySelector('#inspector .sm-look') || insp.classList.contains('open')) throw new Error('380: Look’s ‹ left its panel up');
+        if (FM.simpleTools.mode() !== 'project') throw new Error('380: Look’s ‹ gave the bar mode “' + FM.simpleTools.mode() + '”, want the project row');
       });
     }, 380);
   });
@@ -200138,7 +200220,7 @@
     smNeedP2();
     await smTrayBAt(1280, 800, async function () {
       await smP2(smClips3, async function (v) {
-        const p = await smLookOpen(v, v.L('B').id);
+        const p = await smLookOpen(v);
         const band = document.getElementById('inspector-panel'), bar = document.getElementById('sm-bar'), fails = [];
         if (bar.parentNode !== band) throw new Error('CONTROL: the bar is not in the PC band');
         if (!band.contains(p)) fails.push('the Look panel is not inside #inspector-panel');
@@ -200158,71 +200240,76 @@
     }, 1280);
   });
 
-  test('simple P3 · Look at 380 a tap on Noir puts Noir on THAT clip only — the filter Full’s Filters tab adds, fitted to the clip and marked sm 1, and the picture turns grey — in ONE undo step labelled Change look; a second pick replaces it, one Undo gives Noir back, None takes it off', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P3 · Look at 380 a tap on Noir greys every clip through ONE Look layer — the clips render in colour first, then grey at the centre of each, their own effects untouched — in ONE undo step labelled Change look; a second pick replaces it on that layer, one Undo gives Noir back, and None takes the look away', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
       await smP2((W, H) => [smPic('C', 4, 2, W, H), smPic('B', 2, 2, W, H), smPic('A', 0, 2, W, H)], async function (v) {
         const W = v.W, H = v.H, spread = p => Math.max(Math.abs(p[0] - p[1]), Math.abs(p[0] - p[2]), Math.abs(p[1] - p[2]));
-        const a0 = smLookPx(W, H, 1), b0 = smLookPx(W, H, 3);
-        if (spread(a0) < 60 || spread(b0) < 60) throw new Error('CONTROL: the clips do not render their colour (A ' + a0 + ', B ' + b0 + ')');
-        const others = () => JSON.stringify([v.L('A'), v.L('C')].map(l => l.effects || []));
-        const o0 = others(), n0 = v.steps();
-        await smLookOpen(v, v.L('B').id);
+        const at = [1, 3, 5], p0 = at.map(t => smLookPx(W, H, t));
+        if (p0.some(p => spread(p) < 60)) throw new Error('CONTROL: the clips do not render their colour (' + JSON.stringify(p0) + ')');
+        const own = () => JSON.stringify(['A', 'B', 'C'].map(n => v.L(n).effects || []));
+        const o0 = own(), n0 = v.steps();
+        await smLookOpen(v);
         const t = smLookTile('noir');
         if (!t) throw new Error('no Noir tile in the Look strip');
         t.click(); await v.idle(); await v.sleep(80);
-        const L = v.L('B'), fx = smLookBoxes(L), f = fx[0] || {}, fails = [];
-        if (fx.length !== 1) fails.push('B carries ' + fx.length + ' filters after one pick, want 1');
-        if (f.fid !== 'noir' || f.sm !== 1 || f.name !== 'Noir') fails.push('the filter on B is ' + JSON.stringify({ fid: f.fid, sm: f.sm, name: f.name }) + ', want Noir marked sm 1');
-        const want = FM.fxRegistry.fitToLayer(FM.filters.makeInstance('noir'), L), sig = b => JSON.stringify((b.effects || []).map(c => [c.type, c.enabled !== false, c.params]));
-        if (!want || sig(f) !== sig(want)) fails.push('B’s Noir is not the filter Full’s Filters tab adds: ' + sig(f) + ' · want ' + (want && sig(want)));
-        if (others() !== o0) fails.push('the pick changed A or C too');
+        const K = smLookLayers(), fails = [];
+        if (K.length !== 1) fails.push('one pick made ' + K.length + ' Look layers, want 1');
+        const fx = K[0] ? smLookBoxes(K[0]) : [], f = fx[0] || {};
+        if (fx.length !== 1 || f.fid !== 'noir' || f.sm !== 1 || f.name !== 'Noir') fails.push('the Look layer holds ' + JSON.stringify(fx.map(b => ({ fid: b.fid, sm: b.sm, name: b.name }))) + ', want Noir marked sm 1');
+        if (K[0]) {
+          const want = FM.fxRegistry.fitToLayer(FM.filters.makeInstance('noir'), K[0]), sig = b => JSON.stringify((b.effects || []).map(c => [c.type, c.enabled !== false, c.params]));
+          if (!want || sig(f) !== sig(want)) fails.push('the Look’s Noir is not the filter Full’s Filters tab adds: ' + sig(f) + ' · want ' + (want && sig(want)));
+        }
+        if (own() !== o0) fails.push('the pick changed a clip’s own effects');
         if (v.steps() !== n0 + 1) fails.push('one pick made ' + (v.steps() - n0) + ' undo steps, want 1');
-        const b1 = smLookPx(W, H, 3), a1 = smLookPx(W, H, 1);
-        if (spread(b1) > 6) fails.push('B with Noir still renders in colour at its centre: ' + b1 + ' (was ' + b0 + ')');
-        if (a1.join() !== a0.join()) fails.push('A’s picture changed with B’s pick: ' + a0 + ' → ' + a1);
+        const p1 = at.map(t => smLookPx(W, H, t));
+        p1.forEach((p, i) => { if (spread(p) > 6) fails.push('at ' + at[i] + ' s the clip still renders in colour at its centre: ' + p + ' (was ' + p0[i] + ')'); });
         const t2 = smLookTile('silver');
         if (!t2) fails.push('no Silver tile'); else { t2.click(); await v.idle(); await v.sleep(80); }
-        const fx2 = smLookBoxes(v.L('B'));
-        if (fx2.length !== 1 || fx2[0].fid !== 'silver') fails.push('a second pick did not replace Noir with Silver: ' + JSON.stringify(fx2.map(x => x.fid)));
+        const K2 = smLookLayers(), fx2 = K2[0] ? smLookBoxes(K2[0]) : [];
+        if (K2.length !== 1 || (K[0] && K2[0].id !== K[0].id) || fx2.length !== 1 || fx2[0].fid !== 'silver') fails.push('a second pick did not replace Noir with Silver on the same Look layer: ' + JSON.stringify({ layers: K2.length, fids: fx2.map(x => x.fid) }));
         if (v.steps() !== n0 + 2) fails.push('two picks made ' + (v.steps() - n0) + ' steps, want 2');
         FM.history.undo(); await v.sleep(80);
         const ls = FM.history.lastStep || {};
         if (ls.label !== 'Change look' || ls.ed !== 's') fails.push('Undo of a pick names ' + JSON.stringify({ label: ls.label, ed: ls.ed }) + ', want Change look from Simple');
-        const back = smLookBoxes(v.L('B'));
-        if (back.length !== 1 || back[0].fid !== 'noir') fails.push('one Undo after two picks did not give Noir back: ' + JSON.stringify(back.map(x => x.fid)));
+        const back = smLookLayers()[0], bfx = back ? smLookBoxes(back) : [];
+        if (bfx.length !== 1 || bfx[0].fid !== 'noir') fails.push('one Undo after two picks did not give Noir back: ' + JSON.stringify(bfx.map(x => x.fid)));
         const none = smLookTile('');
         if (!none) fails.push('no None tile'); else { none.click(); await v.idle(); await v.sleep(80); }
-        if (smLookBoxes(v.L('B')).length) fails.push('None left a filter on B');
+        if (smLookLayers().length) fails.push('None left a Look layer (nothing in it to grade)');
+        if (own() !== o0) fails.push('the picks or None changed a clip’s own effects');
         if (fails.length) throw new Error('380: ' + fails.join(' · '));
       }, { media: ['A', 'B', 'C'].map(n => ({ name: n, rec: smLookPic('#c05030', 320, 240) })) });
     }, 380);
   });
 
-  test('simple P3 · Look at 380 Adjust’s Brightness moves the picture: a grey clip rendered through FM.renderScene is brighter at +50 in ONE step labelled Adjust, kept in one Adjust filter marked sm 1, and Undo puts the picture back (CONTROL: the probe reads the plain grey first)', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P3 · Look at 380 Adjust’s Brightness moves the picture of every clip: grey clips rendered through FM.renderScene are brighter at +50 in ONE step labelled Adjust, kept in one Adjust filter marked sm 1 on the Look layer and none on the clips, and Undo puts the picture back (CONTROL: the probe reads the plain grey first)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
       await smP2((W, H) => [smPic('B', 2, 2, W, H), smPic('A', 0, 2, W, H)], async function (v) {
         const W = v.W, H = v.H;
         FM.time = 1;
-        const p0 = smLookPx(W, H, 1);
-        if (Math.abs(p0[0] - 128) > 8 || Math.abs(p0[1] - 128) > 8) throw new Error('CONTROL: the grey clip renders ' + p0 + ' at its centre, not ~128');
-        await smLookOpen(v, v.L('A').id);
+        const p0 = smLookPx(W, H, 1), q0 = smLookPx(W, H, 3);
+        if (Math.abs(p0[0] - 128) > 8 || Math.abs(p0[1] - 128) > 8 || Math.abs(q0[0] - 128) > 8) throw new Error('CONTROL: the grey clips render ' + p0 + ' / ' + q0 + ' at their centres, not ~128');
+        await smLookOpen(v);
         const adj = smLookTab('Adjust');
         if (!adj) throw new Error('the Look panel has no Adjust tab');
         adj.click(); await v.sleep(100);
         const n0 = v.steps();
         await smLookSlide(v, 'bright', 50);
-        const p1 = smLookPx(W, H, 1), fails = [];
-        if (!(p1[0] > p0[0] + 15)) fails.push('Brightness +50 left the centre at ' + p1 + ' (it was ' + p0 + ')');
+        const p1 = smLookPx(W, H, 1), q1 = smLookPx(W, H, 3), fails = [];
+        if (!(p1[0] > p0[0] + 15)) fails.push('Brightness +50 left Clip 1’s centre at ' + p1 + ' (it was ' + p0 + ')');
+        if (!(q1[0] > q0[0] + 15)) fails.push('Brightness +50 left Clip 2’s centre at ' + q1 + ' (it was ' + q0 + ')');
         if (v.steps() !== n0 + 1) fails.push('one slide made ' + (v.steps() - n0) + ' undo steps, want 1');
-        const box = smLookBoxes(v.L('A')).filter(f => f.name === 'Adjust')[0];
-        if (!box || box.sm !== 1 || !box.effects.some(c => c.type === 'brightness')) fails.push('A carries no Adjust filter marked sm 1 with a Brightness in it: ' + JSON.stringify(v.L('A').effects));
-        if (smLookBoxes(v.L('B')).length) fails.push('B got an Adjust too');
+        const K = smLookLayers()[0], box = K ? smLookBoxes(K).filter(f => f.name === 'Adjust')[0] : null;
+        if (!box || box.sm !== 1 || !box.effects.some(c => c.type === 'brightness')) fails.push('the Look layer carries no Adjust filter marked sm 1 with a Brightness in it: ' + JSON.stringify(K ? K.effects : 'no Look layer'));
+        if (smLookBoxes(v.L('A')).length || smLookBoxes(v.L('B')).length) fails.push('a clip got an Adjust of its own');
         FM.history.undo(); await v.sleep(80);
         if ((FM.history.lastStep || {}).label !== 'Adjust') fails.push('Undo of the slide names ' + JSON.stringify((FM.history.lastStep || {}).label) + ', want Adjust');
         const p2 = smLookPx(W, H, 1);
         if (Math.abs(p2[0] - p0[0]) > 2) fails.push('after Undo the centre is ' + p2 + ', want ' + p0);
+        if (smLookLayers().length) fails.push('after Undo a Look layer is left');
         if (fails.length) throw new Error('380: ' + fails.join(' · '));
       }, { media: ['A', 'B'].map(n => ({ name: n, rec: smLookPic('#808080', 320, 240) })) });
     }, 380);
@@ -200232,22 +200319,22 @@
     smNeedP2();
     await atPhoneWidth(async function () {
       await smP2((W, H) => {
-        const B = smPic('B', 0, 4, W, H), f = FM.filters.makeInstance('noir');
+        const f = FM.filters.makeInstance('noir');
         f.sm = 1; f.params.strength = { kf: [{ t: 0, v: 1, e: 'linear' }, { t: 4, v: 0.5, e: 'linear' }] };
-        B.effects = [f];
-        return [smPic('C', 4, 2, W, H), B];
+        /* #1243 S12: the keyed Noir is the project Look's (its layer over the whole video, above the top-most picture) */
+        return [smLookLayerOf(W, H, 0, 6, [f]), smPic('C', 4, 2, W, H), smPic('B', 0, 4, W, H)];
       }, async function (v) {
         FM.time = 2;
-        const k0 = smLookBoxes(v.L('B'))[0];
-        if (!k0 || !FM.isAnimated(k0.params.strength) || k0.params.strength.kf.length !== 2) throw new Error('CONTROL: B’s Noir does not carry a two-key Strength after loading: ' + JSON.stringify(k0 && k0.params));
-        await smLookOpen(v, v.L('B').id);
+        const K = v.L('Look'), k0 = K ? smLookBoxes(K)[0] : null;
+        if (!k0 || !FM.isAnimated(k0.params.strength) || k0.params.strength.kf.length !== 2) throw new Error('CONTROL: the Look’s Noir does not carry a two-key Strength after loading: ' + JSON.stringify(k0 && k0.params));
+        await smLookOpen(v);
         const fails = [], r = document.querySelector('#inspector .sm-look-r[data-key="strength"]');
-        if (!r) throw new Error('the Look panel shows no Strength for B’s Noir');
+        if (!r) throw new Error('the Look panel shows no Strength for the Look’s Noir');
         if (r.value !== '75') fails.push('Strength reads ' + r.value + ' at 2 s, want 75 (halfway from 100 to 50)');
         if (!document.querySelector('#inspector .sm-look-note')) fails.push('no line says the keyed Strength changes over time');
         const n0 = v.steps();
         await smLookSlide(v, 'strength', 40);
-        const s = (smLookBoxes(v.L('B'))[0] || { params: {} }).params.strength;
+        const s = (smLookBoxes(v.L('Look'))[0] || { params: {} }).params.strength;
         if (!FM.isAnimated(s) || s.kf.length !== 2) fails.push('the keyed Strength now has ' + (s && s.kf ? s.kf.length : 'no') + ' keys, want 2');
         else if (Math.abs(s.kf[0].v - 0.65) > 1e-6 || Math.abs(s.kf[1].v - 0.15) > 1e-6) fails.push('the keys did not move as a whole by −0.35: ' + JSON.stringify(s.kf.map(k => k.v)));
         if (v.steps() !== n0 + 1) fails.push('one slide made ' + (v.steps() - n0) + ' undo steps, want 1');
@@ -200258,35 +200345,38 @@
     }, 380);
   });
 
-  test('simple P3 · Look switched to Full: the clip’s Simple filter is an ordinary filter there — Noir in Full’s Effects list, with nothing on it Full does not know — and Full shows no Look tool and no Look panel', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P3 · Look switched to Full: the Look layer is an ordinary shape there — Noir in Full’s Effects list for it, with nothing on the filter Full does not know — and Full shows no Look tool and no Look panel', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smP2((W, H) => [smPic('B', 2, 2, W, H), smPic('A', 0, 2, W, H)], async function (v) {
-      await smLookOpen(v, v.L('A').id);
+      await smLookOpen(v);
       const t = smLookTile('noir');
       if (!t) throw new Error('no Noir tile in the Look strip');
       t.click(); await v.idle(); await v.sleep(80);
+      const K = smLookLayers()[0];
+      if (!K) throw new Error('CONTROL: the pick made no Look layer');
       FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(120);
-      FM.selectLayer(v.L('A').id); FM.inspector.openCategory('effects'); await v.sleep(150);
+      FM.selectLayer(K.id); FM.inspector.openCategory('effects'); await v.sleep(150);
       const insp = document.getElementById('inspector'), fails = [];
       if (insp.querySelector('.sm-look')) fails.push('Full draws Simple’s Look panel');
       const lt = smTool('look');
       if (lt && lt.getClientRects().length) fails.push('Full shows a Look tool');
+      if (K.type !== 'shape') fails.push('the Look layer is a ' + K.type + ', want an ordinary shape');
       const names = Array.from(insp.querySelectorAll('.fx-name')).map(n => n.textContent);
-      if (names.indexOf('Noir') < 0) fails.push('Full’s Effects for A does not list Noir: ' + JSON.stringify(names));
-      const f = smLookBoxes(v.L('A'))[0] || {};
+      if (names.indexOf('Noir') < 0) fails.push('Full’s Effects for the Look layer does not list Noir: ' + JSON.stringify(names));
+      const f = smLookBoxes(K)[0] || {};
       const odd = Object.keys(f).filter(k => k.charAt(0) !== '_' && ['type', 'enabled', 'params', 'effects', 'name', 'fid', 'sm', 'uid'].indexOf(k) < 0);
-      if (f.fid !== 'noir' || odd.length) fails.push('A’s filter in Full is ' + JSON.stringify({ fid: f.fid, odd: odd }) + ' — want Noir with nothing but a filter’s own fields and the sm marker');
+      if (f.fid !== 'noir' || odd.length) fails.push('the Look’s filter in Full is ' + JSON.stringify({ fid: f.fid, odd: odd }) + ' — want Noir with nothing but a filter’s own fields and the sm marker');
       if (fails.length) throw new Error(fails.join(' · '));
     });
   });
 
-  test('simple P3 · Look leaves Full’s own panel alone: switched to Full with Look open on a clip, at 380 and 1280 Full draws its layer editor for it with the title Inspector, never the Look panel, and drawPanel draws nothing in Full (CONTROL: Simple shows the Look panel there first)', { item: '980', budgetMs: 120000 }, async function () {
+  test('simple P3 · Look leaves Full’s own panel alone: switched to Full with the project’s Look open, at 380 and 1280 Full draws its layer editor for a selected clip with its own title, never the Look panel, and drawPanel draws nothing in Full (CONTROL: Simple shows the Look panel there first)', { item: '980', budgetMs: 120000 }, async function () {
     smNeedP2();
     for (const width of [380, 1280]) {
       await (width <= 700 ? atPhoneWidth : atWideWidth)(async function () {
         await smP2(smClips3, async function (v) {
           const B = v.L('B').id;
-          await smLookOpen(v, B);
+          await smLookOpen(v);
           FM.editor.apply('full', { force: true, quiet: true }); await v.sleep(150);
           FM.selectLayer(B); FM.refreshAll(); await v.sleep(150);
           const insp = document.getElementById('inspector'), title = document.querySelector('#inspector-panel .panel-title-label'), fails = [];
@@ -200295,7 +200385,8 @@
           /* Full's own words for a selected layer: app.js's selection sync writes Layer (the phone's label over the name box), the
              inspector writes Inspector; either is Full's, the Look panel's title is not (first run, 16 Oct: 380 reads Layer) */
           if (!title || ['Inspector', 'Layer'].indexOf(title.textContent) < 0) fails.push('Full’s panel title reads ' + JSON.stringify(title && title.textContent) + ', want Full’s own Inspector or Layer');
-          if (FM.simpleTools.drawPanel(document.createElement('div'), v.L('B'), null)) fails.push('simpleTools.drawPanel draws in Full');
+          if (FM.simpleTools.drawPanel(document.createElement('div'), null, null) || FM.simpleTools.drawPanel(document.createElement('div'), v.L('B'), null)) fails.push('simpleTools.drawPanel draws in Full');
+          if (FM.simpleTools.projectPanel && FM.simpleTools.projectPanel()) fails.push('Full reads Simple’s Look panel as open (js/mobile.js would raise its sheet)');
           if (fails.length) throw new Error(width + ' px: ' + fails.join(' · '));
         });
       }, width);
@@ -200343,14 +200434,15 @@
   const smCpMeta = () => FM.history._metaHere() || {};
   const smCpStop = () => { try { if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {} };
 
-  test('simple P3 · Captions at 380 the project row is Clips · Text · Captions · Sound · Overlay · Effects, Captions opens a row of Type captions, Find speech, Caption looks and Style, and a selected caption track’s tray is Edit lines · Style · Find speech · Follows the clips · Stays with the sound · Delete — the last two one two-way choice, ONE step each, their faces one word each on a phone (Follows · Stays) with all six on show', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P3 · Captions at 380 the project row is Clips · Text · Captions · Sound · Overlay · Look · Effects, Captions opens a row of Type captions, Find speech, Caption looks and Style, and a selected caption track’s tray is Edit lines · Style · Find speech · Follows the clips · Stays with the sound · Delete — the last two one two-way choice, ONE step each, their faces one word each on a phone (Follows · Stays) with all six on show', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
       await smP2((W, H) => [smCap('Caps', 0, 6, [[0.5, 1.5], [3, 4]], W, H)].concat(smClips3(W, H)), async function (v) {
         const fails = [];
         const tools = Array.from(document.querySelectorAll('#sm-tools .sm-tool')).map(b => b.dataset.tool).join(',');
-        /* the stack (sm3-stack): Phase 3 · Effect segments put Effects after Overlay, DESIGN §8.5's order (Look for all and Ask are not built) */
-        if (tools !== 'clips,text,captions,sound,overlay,effects') throw new Error('380: the project tools are ' + tools + ', want clips,text,captions,sound,overlay,effects');
+        /* the stack (sm3-stack): Phase 3 · Effect segments put Effects after Overlay, DESIGN §8.5's order; #1243 S12 put Look (for the whole
+           video) before Effects, R (a)'s order (Ask is not built) */
+        if (tools !== 'clips,text,captions,sound,overlay,look,effects') throw new Error('380: the project tools are ' + tools + ', want clips,text,captions,sound,overlay,look,effects');
         const ct = smTool('captions').getBoundingClientRect();
         if (ct.width < 44 || ct.right > innerWidth + 0.5) fails.push('Captions is ' + Math.round(ct.width) + ' px wide or off screen');
         smTool('captions').click(); await v.sleep(80);
@@ -203871,7 +203963,8 @@
   /* N2 · S9: ONE MENU AT A TIME, every opener on the project row and in a clip's, a title's and an overlay video's tray, and the ◇ over a
      cut. Red on v18.36: Clips opens a floating list over the project row and the tray's quiet line, and a clip's tray sits on the project
      row. CONTROL: Simple's Export list over the project row counts two (the ⋯ list until #1243 S5), so the probe can count past one. */
-  test('1243 R4 · S9 one menu at a time at 380 and 1280: Clips, Clips › Extras, Captions, Sound and Effects; a clip’s tray, its Audio, Audio › Speed, Look and More; a title’s Add effect and More; an overlay video’s Volume, Add effect and More; and the ◇ over a cut (at 1280 with that clip’s More open too) each leave exactly one menu on screen, and the bar says which (CONTROL: Simple’s Export list over the project row counts two)', { item: '1243', budgetMs: 240000 }, async function () {
+  /* #1243 S12 (R9): Look is the project row's, its panel one menu like Extras' */
+  test('1243 R4 · S9 one menu at a time at 380 and 1280: Clips, Clips › Extras, Captions, Sound, Look and Effects; a clip’s tray, its Audio, Audio › Speed and More; a title’s Add effect and More; an overlay video’s Volume, Add effect and More; and the ◇ over a cut (at 1280 with that clip’s More open too) each leave exactly one menu on screen, and the bar says which (CONTROL: Simple’s Export list over the project row counts two)', { item: '1243', budgetMs: 240000 }, async function () {
     smNeedP2();
     const fails = [], ctl = [];
     for (const width of [380, 1280]) {
@@ -203909,11 +204002,11 @@
           await step('Clips › Extras', () => press('extras'), ph ? 'add' : 'band', 'panel', ''); await clean();
           await step('Captions', () => press('captions'), 'tray', 'sub', 'captions'); await clean();
           await step('Sound', () => press('sound'), 'tray', 'sub', 'sound'); await clean();
+          await step('Look', () => press('look'), panelMenu, 'panel', ''); await clean();
           await step('Effects', () => press('effects'), 'tray', 'sub', 'effects'); await clean();
           await step('Clip 2 selected', () => sel(B), 'tray', 'item', '');
           await step('Clip 2’s Audio', () => press('audio'), 'tray', 'sub', 'audio');
           await step('Audio › Speed', () => press('speed'), 'tray', 'sub', 'speed'); await clean();
-          await sel(B); await step('Clip 2’s Look', () => press('look'), panelMenu, 'panel', ''); await clean();
           await sel(B); await step('Clip 2’s More', () => press('more'), panelMenu, 'panel', ''); await clean();
           /* …and the other way round (the 9 Nov review, MODE-1): on a PC the ◇ over the cut before Clip 2 stays on screen beside Clip 2’s
              More, and its Transition row takes the bar from the panel (a phone’s sheet covers the ◇) */
@@ -203945,7 +204038,8 @@
      MODE-5: Clips', Sound's and Captions' lists owned Escape, their rows did not), and a panel opened by the keyboard hands the focus to
      its way back (MODE-3: it fell to <body> with the bar). Red on v18.36: a clip's tray has no ‹ at all. CONTROL: Speed opened straight
      from the tray (no row under it) goes back to the tray, so "back to Audio" is the row's own memory. */
-  test('1243 R4 · S9 the ‹ goes back one level: at 380 Speed opened from Audio goes back to Audio, by a double click on its ‹ too, Audio to the clip’s tray with focus on Audio by the keyboard, the item ‹ to the project row; Look’s own ‹ gives the clip’s tray back with Look focused; Captions’ ‹ gives the project row back; Escape on Sound’s ‹ gives the project row back with Sound focused; More and Look opened by the keyboard hand the focus to their way back (the grab bar, Look’s ‹), and at 1280 to the band title’s ‹ and Look’s ‹, where Escape closes them with the focus back on More and Look (CONTROL: Speed opened straight from the tray goes back to the tray)', { item: '1243', budgetMs: 120000 }, async function () {
+  /* #1243 S12 (R9): Look is the project row's, so its ‹ and Escape give the PROJECT row back, with the focus on Look there */
+  test('1243 R4 · S9 the ‹ goes back one level: at 380 Speed opened from Audio goes back to Audio, by a double click on its ‹ too, Audio to the clip’s tray with focus on Audio by the keyboard, the item ‹ to the project row; the project row’s Look’s own ‹ gives the project row back with Look focused; Captions’ ‹ gives the project row back; Escape on Sound’s ‹ gives the project row back with Sound focused; More and Look opened by the keyboard hand the focus to their way back (the grab bar, Look’s ‹), and at 1280 to the band title’s ‹ and Look’s ‹, where Escape closes them with the focus back on More and Look (CONTROL: Speed opened straight from the tray goes back to the tray)', { item: '1243', budgetMs: 120000 }, async function () {
     smNeedP2();
     const focus = () => { const a = document.activeElement; return a ? (a.dataset && a.dataset.tool) || a.id || String(a.getAttribute('class') || a.tagName) : 'nothing'; };
     const esc = () => { const a = document.activeElement || document.body; a.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true })); };
@@ -203977,14 +204071,14 @@
         const ib = r4ItemBack();
         if (ib) { ib.click(); await r4Settle(150); }
         if (r4Mode() !== 'project' || FM.selectionIds().length) fails.push('the item ‹ gave mode “' + r4Mode() + '” with ' + FM.selectionIds().length + ' selected, want the project row');
-        /* Look's own ‹, in its tab row */
-        FM.selectLayer(B); await r4Settle(150);
+        /* Look's own ‹, in its tab row (#1243 S12: the project row's Look, with nothing selected) */
+        FM.selectLayer(null); await r4Settle(150);
         smTool('look').click(); await r4Settle(350);
         const lb = document.querySelector('#inspector .sm-look-tabs > .sm-pback');
         if (!lb) fails.push('Look’s panel has no ‹ in its tab row');
         else {
           lb.focus(); lb.click(); await r4Settle(350);
-          if (FM.simpleTools.panelFor() || r4Mode() !== 'item') fails.push('Look’s ‹ left mode “' + r4Mode() + '” (panelFor ' + FM.simpleTools.panelFor() + '), want the clip’s tray');
+          if (FM.simpleTools.panelFor() || r4Mode() !== 'project') fails.push('Look’s ‹ left mode “' + r4Mode() + '” (panelFor ' + FM.simpleTools.panelFor() + '), want the project row');
           if (focus() !== 'look') fails.push('after Look’s ‹ focus is on ' + focus() + ', want Look');
         }
         /* Captions' ‹ */
@@ -204007,6 +204101,7 @@
         if (!FM.simpleTools.panelFor()) fails.push('More by the keyboard opened no panel');
         else if (focus() !== 'insp-grab') fails.push('with More’s panel opened by the keyboard the focus is on ' + focus() + ', want the sheet’s grab bar, its way back');
         FM.simpleTools.closePanel(); await r4Settle(250);
+        FM.selectLayer(null); await r4Settle(150);   // #1243 S12: Look is on the project row
         { const lk = smTool('look'); lk.focus(); lk.click(); await r4Settle(350); }
         const lb2 = document.querySelector('#inspector .sm-look-tabs > .sm-pback');
         if (!lb2) fails.push('Look by the keyboard opened no panel with a ‹');
@@ -204034,14 +204129,14 @@
           if (FM.simpleTools.panelFor() || r4Mode() !== 'item') fails.push('Escape on the band title’s ‹ left mode “' + r4Mode() + '” (panelFor ' + FM.simpleTools.panelFor() + '), want the clip’s tray');
           if (focus() !== 'more') fails.push('after Escape in More’s panel the focus is on ' + focus() + ', want More');
         }
-        FM.simpleTools.closePanel(); FM.selectLayer(B); await r4Settle(200);
+        FM.simpleTools.closePanel(); FM.selectLayer(null); await r4Settle(200);   // #1243 S12: Look is on the project row
         { const lk = smTool('look'); lk.focus(); lk.click(); await r4Settle(350); }
         const lb = document.querySelector('#inspector .sm-look-tabs > .sm-pback');
         if (!lb) fails.push('Look by the keyboard opened no panel with a ‹');
         else if (document.activeElement !== lb) fails.push('with Look’s panel opened by the keyboard the focus is on ' + focus() + ', want Look’s ‹');
         else {
           esc(); await r4Settle(250);
-          if (FM.simpleTools.panelFor() || r4Mode() !== 'item') fails.push('Escape on Look’s ‹ left mode “' + r4Mode() + '”, want the clip’s tray');
+          if (FM.simpleTools.panelFor() || r4Mode() !== 'project') fails.push('Escape on Look’s ‹ left mode “' + r4Mode() + '”, want the project row');
           if (focus() !== 'look') fails.push('after Escape in Look’s panel the focus is on ' + focus() + ', want Look');
         }
         FM.simpleTools.closePanel(); await r4Settle(150);
@@ -204087,9 +204182,11 @@
     });
   });
 
-  /* N5 · S15 IN THE PC BAND. Red on v18.36: the six tools share the 371 px band at about 62 px each, never scrolling. CONTROL: each width is
-     the other's (the wide band's tools are wider), so the two halves measure two different bands. */
-  test('1243 R4 · S15 in the PC band the project row scrolls when its tools overflow and spreads when they fit: at 1280×800 every tool is at least 64 px and the last is pressable once the row is scrolled to its end; at 1680×1050 every tool is at least 69.5 px with no overflow and no fade (CONTROL: each width is the other’s)', { item: '1243', budgetMs: 90000 }, async function () {
+  /* N5 · S15 IN THE PC BAND. Red on v18.36: the six tools share the 371 px band at about 62 px each, never scrolling. #1243 S12 (R9) put Look
+     on the row: seven tools of at least 64 px (448) never fit the band, which is at most 420 px (styles.css --insp-w), so the old 1680×1050
+     half (six tools spread to 70 px with no fade) has nothing left to measure, and both windows must now scroll. CONTROL: the band at
+     1680×1050 is wider than at 1280×800, so the two halves measure two different bands. */
+  test('1243 R4 · S15 in the PC band the project row scrolls when its tools overflow: with Look on it its seven tools overflow the band at 1280×800 and at 1680×1050, every tool at least 64 px, the end fade on, and the last pressable once the row is scrolled to its end (CONTROL: the band at 1680×1050 is wider than at 1280×800)', { item: '1243', budgetMs: 90000 }, async function () {
     smNeedP2();
     const got = {};
     await smHintKeep('1', async function () {
@@ -204098,24 +204195,27 @@
           await smP2(smClips3, async function () {
             FM.selectLayer(null); await r4Settle(150);
             const run = document.querySelector('#sm-tools > .sm-runbox > .sm-run'), bs = Array.from(document.querySelectorAll('#sm-tools .sm-tool'));
-            got[w] = { ws: bs.map(b => b.getBoundingClientRect().width), run: !!run, over: run ? run.scrollWidth - run.clientWidth : 0, fades: run ? ['sm-more-s', 'sm-more-e'].filter(c => run.parentNode.classList.contains(c)) : [] };
-            if (run && w === 1280) { run.scrollLeft = run.scrollWidth; await r4Settle(150); got[w].last = r4Hits(bs[bs.length - 1]); }
+            got[w] = { band: document.getElementById('inspector-panel').getBoundingClientRect().width, n: bs.length, tools: bs.map(b => b.dataset.tool).join(','),
+              ws: bs.map(b => b.getBoundingClientRect().width), run: !!run, over: run ? run.scrollWidth - run.clientWidth : 0,
+              fades: run ? ['sm-more-s', 'sm-more-e'].filter(c => run.parentNode.classList.contains(c)) : [] };
+            if (run) { run.scrollLeft = run.scrollWidth; await r4Settle(150); got[w].last = r4Hits(bs[bs.length - 1]); }
           });
         });
       }
     });
     const a = got[1280], b = got[1680], fails = [], f = ws => ws.map(x => x.toFixed(1)).join(', ');
     if (!a || !b) throw new Error('setup: a window did not run: ' + JSON.stringify(got));
-    if (a.ws.some(x => x < 63.5)) fails.push('1280×800: the project tools are squeezed to ' + f(a.ws) + ' px, under 64');
-    if (!a.run) fails.push('1280×800: the project row has no strip of its own to scroll');
-    else if (!(a.over > 1)) fails.push('1280×800: the six tools fit the band (' + Math.round(a.over) + ' px over), so nothing is cut');
-    else if (!a.last) fails.push('1280×800: scrolled to its end, the last tool is not pressable');
-    if (b.ws.some(x => x < 69.5)) fails.push('1680×1050: the tools are ' + f(b.ws) + ' px, want them spread to at least 69.5 each');
-    if (b.over > 1 || b.fades.length) fails.push('1680×1050: the row overflows by ' + Math.round(b.over) + ' px or wears a fade (' + b.fades.join(',') + ') with every tool fitting');
-    if (!(Math.min.apply(null, b.ws) > Math.min.apply(null, a.ws) + 3)) throw new Error('CONTROL: the tools at 1680×1050 (' + f(b.ws) + ') are no wider than at 1280×800 (' + f(a.ws) + '), so the two windows measure one band · ' + fails.join(' · '));
+    if (!(b.band > a.band + 20)) throw new Error('CONTROL: the band at 1680×1050 (' + Math.round(b.band) + ' px) is not wider than at 1280×800 (' + Math.round(a.band) + ' px), so the two windows measure one band');
+    for (const [at, g] of [['1280×800', a], ['1680×1050', b]]) {
+      if (g.n !== 7 || g.tools.split(',').indexOf('look') < 0) fails.push(at + ': the project row holds ' + g.tools + ', want seven tools with Look');
+      if (g.ws.some(x => x < 63.5)) fails.push(at + ': the project tools are squeezed to ' + f(g.ws) + ' px, under 64');
+      if (!g.run) { fails.push(at + ': the project row has no strip of its own to scroll'); continue; }
+      if (!(g.over > 1)) fails.push(at + ': the seven tools fit the band (' + Math.round(g.over) + ' px over), so nothing is cut');
+      if (g.fades.indexOf('sm-more-e') < 0) fails.push(at + ': no end fade while tools lie past the band’s edge (' + g.fades.join(',') + ')');
+      if (!g.last) fails.push(at + ': scrolled to its end, the last tool is not pressable');
+    }
     if (fails.length) throw new Error(fails.join(' · '));
   });
-
   /* N6 · THE FLOATING LINE (A COMBINED point 5). Red on v18.36: the line is the tray row inside the bar, its bottom 52 px below the bar's
      top, and the tray's tools go while it shows. CONTROL: a live-only line takes no strip (its words go to #sm-live), and a real line's
      words are in .sm-line. */
@@ -204184,6 +204284,8 @@
           FM.selectLayer(v.L('B').id); await r4Settle(200);
           const s0 = stageR();
           for (const [what, id] of [['More’s panel', 'more'], ['Look’s panel', 'look']]) {
+            /* More is Clip 2's; Look the project row's, with nothing selected (#1243 S12) */
+            if (id === 'look') { FM.selectLayer(null); await r4Settle(200); if (Math.abs(stageR().height - s0.height) > 0.5) fails.push(at + 'letting the selection go changed the stage to ' + Math.round(stageR().height) + ' px'); }
             smTool(id).click(); await r4Settle(400);
             if (!insp().classList.contains('open')) { fails.push(at + what + ' did not rise'); FM.simpleTools.closePanel(); await r4Settle(250); continue; }
             const s1 = stageR(), ir = insp().getBoundingClientRect();
@@ -204225,6 +204327,8 @@
           FM.selectLayer(B); await r4Settle(200);
           const s0 = { stage: r4Box(document.getElementById('stage')), band: band().height, tl: tlh(), kept: stored() };
           for (const [what, id] of [['Look’s panel', 'look'], ['More’s panel', 'more']]) {
+            /* Look is the project row's, with nothing selected (#1243 S12); More is Clip 2's */
+            FM.selectLayer(id === 'look' ? null : B); await r4Settle(200);
             smTool(id).click(); await r4Settle(350);
             const bh = r4Bar().getBoundingClientRect().height, ins = document.getElementById('inspector').getBoundingClientRect(), br = band(), title = document.querySelector('#inspector-panel > .panel-title').getBoundingClientRect();
             if (r4Shown(document.getElementById('sm-tray')) || r4Shown(document.getElementById('sm-tools')) || bh > 1) fails.push(at + 'with ' + what + ' up the bar is still on screen (' + Math.round(bh) + ' px: ' + r4Menus().join(' + ') + ')');
@@ -205486,6 +205590,469 @@
       });
     });
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  /* ═══ #1243 S12 (R9): LOOK FOR THE WHOLE VIDEO. His words, 8 Nov: "you shouldn't have the look menu on each layer… you want to press add and
+     it goes over your entire project immediately… consistent color correction over your project". Look left the clip's tray for the project
+     row; a pick makes ONE Look layer (route R2: a full-frame shape holding Backdrop Clone, the filter and Adjust) over [first clip start,
+     track end], just above the top-most video or picture, and S.fitProjectLayers' case 4 keeps it there on every Simple step. The strip has
+     a chip per section; clips that kept a look of their own get one Remove them. Each test is red on land/r9 61da1b0e (v18.39's code) by
+     what it measures, and names its CONTROL. Helpers: the P3 Look block's smLookOpen / smLookTile / smLookBoxes / smLookLayers /
+     smLookLayerOf, and R4's r4At / r4Settle. */
+  test('1243 R9 · S12 at 380 with two clips and nothing selected Look is on the project row before Effects, and a tap on Noir makes exactly ONE Look layer over the whole video — from the first clip’s start to the track’s end — holding Backdrop Clone and Noir as a Simple box, the clips’ own effects untouched, in ONE step that one Undo takes away (CONTROL: before the pick there is no Look layer, and the panel shows Noir)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await r4At(380, 0, async function () {
+      await smP2((W, H) => [smV('B', 2, 3, W, H), smV('A', 0.5, 1.5, W, H)], async function (v) {
+        const ix = () => FM.history._steps().index, own = () => JSON.stringify(['A', 'B'].map(n => v.L(n).effects || []));
+        if (smLookLayers().length) throw new Error('CONTROL: a Look layer exists before any pick');
+        FM.selectLayer(null); await r4Settle(150);
+        const order = Array.from(document.querySelectorAll('#sm-tools .sm-tool')).map(b => b.dataset.tool);
+        const lt = document.querySelector('#sm-tools .sm-tool[data-tool="look"]');
+        if (!lt) throw new Error('380: the project row has no Look (it holds ' + order.join(', ') + ')');
+        if (order.indexOf('effects') >= 0 && order.indexOf('look') > order.indexOf('effects')) fails.push('Look comes after Effects on the project row (' + order.join(', ') + ')');
+        /* a press a finger could make: the tool scrolled into its strip's view, as a swipe would, then on screen and on top */
+        const run = lt.closest('.sm-run');
+        if (run) { const rr = run.getBoundingClientRect(), br = lt.getBoundingClientRect(); if (br.left < rr.left || br.right > rr.right) { run.scrollLeft += (br.left + br.width / 2) - (rr.left + rr.width / 2); await r4Settle(100); } }
+        smMustHit(lt, 'Look');
+        lt.click(); await r4Settle(350);
+        const noir = smLookTile('noir');
+        if (!document.querySelector('#inspector .sm-look') || !noir) throw new Error('CONTROL: Look opened no panel with a Noir tile · ' + fails.join(' · '));
+        const o0 = own(), i0 = ix();
+        noir.click(); await v.idle(); await r4Settle(150);
+        const K = smLookLayers(), R = FM.spine.read(FM.scene);
+        if (K.length !== 1) fails.push('one pick made ' + K.length + ' Look layers, want exactly one');
+        else {
+          const L = K[0], box = smLookBoxes(L), end = (+L.start || 0) + (+L.duration || 0);
+          if (Math.abs(R.trackEnd - 5) > 1e-6) fails.push('CONTROL: the track ends at ' + R.trackEnd + ', want 5');
+          if (Math.abs((+L.start || 0) - 0.5) > 1e-6) fails.push('the Look starts at ' + L.start + ', want the first clip’s start (0.5)');
+          if (Math.abs(end - R.trackEnd) > 1e-6) fails.push('the Look ends at ' + end + ', want the track’s end (' + R.trackEnd + ')');
+          if (box.length !== 1 || box[0].fid !== 'noir' || box[0].sm !== 1) fails.push('the Look holds ' + JSON.stringify(box.map(b => ({ fid: b.fid, sm: b.sm }))) + ', want Noir marked sm 1');
+          if (!(L.effects || []).some(f => f && f.type === 'copybg')) fails.push('the Look holds no Backdrop Clone (route R2): ' + JSON.stringify((L.effects || []).map(f => f && f.type)));
+          if (R.look !== L.id) fails.push('the read does not name it as the project’s Look (R.look ' + R.look + ')');
+        }
+        if (own() !== o0) fails.push('the pick changed a clip’s own effects');
+        if (ix() !== i0 + 1) fails.push('the pick took ' + (ix() - i0) + ' undo steps, want one');
+        FM.history.undo(); await r4Settle(200);
+        if (smLookLayers().length) fails.push('one Undo left ' + smLookLayers().length + ' Look layer(s)');
+        if (ix() !== i0) fails.push('after one Undo the history is ' + (ix() - i0) + ' from where it was');
+        if (own() !== o0) fails.push('after Undo a clip’s own effects differ');
+      });
+    });
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  test('1243 R9 · S12 at 380 the Look layer keeps the length of the video on every step: duplicating the last clip onto the end makes it end at the new track end in that same step, still just above the top-most picture, and one Undo puts both back (CONTROL: before, it ends at the old track end)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await r4At(380, 0, async function () {
+      await smP2((W, H) => {
+        const f = FM.filters.makeInstance('noir'); f.sm = 1;
+        return [smLookLayerOf(W, H, 0, 4, [f]), smPic('B', 2, 2, W, H), smPic('A', 0, 2, W, H)];   // the Look as a Noir pick leaves it
+      }, async function (v) {
+        const ix = () => FM.history._steps().index, at = id => FM.scene.layers.findIndex(l => l.id === id);
+        const K = smLookLayers()[0], R0 = FM.spine.read(FM.scene);
+        if (!K) throw new Error('setup: the fixture’s Look layer did not load with its sm.look');
+        const e0 = (+K.start || 0) + (+K.duration || 0);
+        if (Math.abs(e0 - R0.trackEnd) > 1e-6 || Math.abs(R0.trackEnd - 4) > 1e-6) throw new Error('CONTROL: before, the Look ends at ' + e0 + ' and the track at ' + R0.trackEnd + ', want both at 4');
+        const i0 = ix();
+        FM.selectLayer(v.L('B').id); await r4Settle(120);
+        await FM.spine.cmd.duplicate(v.L('B').id); await v.idle(); await r4Settle(150);
+        const R1 = FM.spine.read(FM.scene), L = smLookLayers()[0];
+        if (!(R1.trackEnd > R0.trackEnd + 1)) fails.push('CONTROL: duplicating the last clip left the track ending at ' + R1.trackEnd + ' (it was ' + R0.trackEnd + '; it said “' + v.say() + '”)');
+        if (!L) fails.push('the duplicate step lost the Look layer');
+        else {
+          const e1 = (+L.start || 0) + (+L.duration || 0);
+          if (Math.abs(e1 - R1.trackEnd) > 1e-6) fails.push('after the duplicate the Look ends at ' + e1 + ', the track at ' + R1.trackEnd + ': it no longer covers the last clip');
+          if (Math.abs(+L.start || 0) > 1e-6) fails.push('after the duplicate the Look starts at ' + L.start + ', want 0');
+          const topPic = FM.scene.layers.findIndex(l => l !== L && (l.type === 'video' || l.type === 'image'));
+          if (at(L.id) !== topPic - 1) fails.push('after the duplicate the Look is at ' + at(L.id) + ' in the stack, want just above the top-most picture (' + topPic + ')');
+        }
+        if (ix() !== i0 + 1) fails.push('the duplicate took ' + (ix() - i0) + ' steps, want one (the Look’s fit is inside it)');
+        FM.history.undo(); await r4Settle(200);
+        const L2 = smLookLayers()[0], R2 = FM.spine.read(FM.scene);
+        if (!L2 || Math.abs((+L2.start || 0) + (+L2.duration || 0) - R2.trackEnd) > 1e-6 || Math.abs(R2.trackEnd - R0.trackEnd) > 1e-6) fails.push('one Undo did not put the Look and the track back together (' + (L2 ? L2.start + ' + ' + L2.duration : 'no Look') + ', track ' + R2.trackEnd + ')');
+      });
+    });
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  test('1243 R9 · S12 at 380 and 1280 a video clip’s and a picture clip’s trays hold no Look, and with nothing selected the project row does (CONTROL: each tray is drawn, Split and More in it)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    for (const width of [380, 1280]) {
+      await r4At(width, width > 700 ? 800 : 0, async function () {
+        await smP2((W, H) => [smPic('P', 4, 2, W, H), smV('V', 0, 4, W, H)], async function (v) {
+          const at = width + ' px: ';
+          for (const [name, who] of [['V', 'the video clip'], ['P', 'the picture clip']]) {
+            FM.selectLayer(v.L(name).id); await r4Settle(150);
+            const tools = r4TrayTools();
+            if (tools.indexOf('split') < 0 || tools.indexOf('more') < 0) { fails.push('CONTROL ' + at + who + '’s tray is not drawn (it holds ' + tools.join(', ') + ')'); continue; }
+            if (document.querySelector('#sm-tray [data-tool="look"]')) fails.push(at + who + '’s tray holds Look (' + tools.join(', ') + '): #1243 S12 put it on the project row');
+          }
+          FM.selectLayer(null); await r4Settle(150);
+          if (!document.querySelector('#sm-tools .sm-tool[data-tool="look"]')) fails.push(at + 'with nothing selected the project row has no Look');
+        });
+      });
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1243 R9 · S12 the Look layer is never drawn as an item in the Simple timeline at 380 and 1280: it is R.look with the section look, in no lane of R.lanes and with no item on the timeline (CONTROL: a title over the clips is in a lane and drawn)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    for (const width of [380, 1280]) {
+      await r4At(width, width > 700 ? 800 : 0, async function () {
+        await smP2((W, H) => {
+          const f = FM.filters.makeInstance('noir'); f.sm = 1;
+          return [smT('Hi', 0.5, 1, W, H), smLookLayerOf(W, H, 0, 6, [f])].concat(smClips3(W, H));
+        }, async function (v) {
+          FM.selectLayer(null); FM.refreshAll(); await r4Settle(200);
+          const at = width + ' px: ', K = v.L('Look'), T = v.L('Hi'), R = FM.spine.read(FM.scene);
+          const inLane = id => Object.keys(R.lanes).some(sec => (R.lanes[sec] || []).some(lane => lane.indexOf(id) >= 0));
+          const drawn = id => !!document.querySelector('#sm-timeline .sm-item[data-id="' + CSS.escape(String(id)) + '"]');
+          if (!inLane(T.id) || !drawn(T.id)) { fails.push('CONTROL ' + at + 'the title is ' + (inLane(T.id) ? 'in a lane' : 'in no lane') + ' and ' + (drawn(T.id) ? 'drawn' : 'not drawn') + ', so the probe cannot see an item'); return; }
+          if (R.look !== K.id) fails.push(at + 'R.look is ' + R.look + ', want the Look layer');
+          if (!R.units[K.id] || R.units[K.id].section !== 'look') fails.push(at + 'the Look’s section is ' + (R.units[K.id] && R.units[K.id].section) + ', want look');
+          if (Object.keys(R.lanes).indexOf('look') >= 0) fails.push(at + 'R.lanes has a look lane');
+          if (inLane(K.id)) fails.push(at + 'the Look layer is in a lane of R.lanes');
+          if (drawn(K.id)) fails.push(at + 'the Look layer is drawn as an item on the Simple timeline');
+          if (R.isMain(K.id)) fails.push(at + 'the Look layer reads as a clip');
+        });
+      });
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1243 R9 · S12 at 380 the Filters strip has one chip per section that holds a look — his own, his favourites, then the library’s sections by their own names — each section opening with a divider and its name, and a tap on a chip brings that section’s first tile into the strip’s view and lights that chip (CONTROL: before the tap that tile is out of view and the chip is not lit)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await r4At(380, 0, async function () {
+      await smP2(smClips3, async function (v) {
+        await smLookOpen(v); await r4Settle(150);
+        const F = FM.filters, want = [];
+        if ((F.custom() || []).length) want.push('yours');
+        if ((F.faves() || []).length) want.push('fav');
+        F.sections().forEach(s => { if ((F.bySection(s.key) || []).length) want.push(String(s.key)); });
+        const chips = Array.from(document.querySelectorAll('#inspector .sm-look-chips > .sm-look-chip'));
+        const got = chips.map(c => c.dataset.sec);
+        if (got.join() !== want.join()) fails.push('the chips are ' + got.join(', ') + ', want ' + want.join(', '));
+        const strip = document.querySelector('#inspector .sm-look-strip');
+        if (!strip) throw new Error('the Look panel has no Filters strip · ' + fails.join(' · '));
+        F.sections().forEach(s => {
+          const h = strip.querySelector(':scope > .sm-look-sec[data-sec="' + CSS.escape(String(s.key)) + '"]');
+          if (!h || h.textContent !== String(s.label)) fails.push('the strip’s ' + s.key + ' section opens with ' + (h ? '“' + h.textContent + '”' : 'no divider') + ', want its name “' + s.label + '” from js/filters.js');
+          const c = chips.filter(x => x.dataset.sec === String(s.key))[0];
+          if (c && c.textContent !== String(s.label)) fails.push('the ' + s.key + ' chip reads “' + c.textContent + '”, want “' + s.label + '”');
+        });
+        const key = got.indexOf('retro') >= 0 ? 'retro' : got[got.length - 1];
+        const chip = chips.filter(c => c.dataset.sec === key)[0], first = strip.querySelector(':scope > .sm-look-tile[data-sec="' + CSS.escape(String(key)) + '"]');
+        if (!chip || !first) throw new Error('setup: no ' + key + ' chip or tile · ' + fails.join(' · '));
+        const inView = el => { const r = el.getBoundingClientRect(), s = strip.getBoundingClientRect(); return r.left >= s.left - 1 && r.right <= s.right + 1; };
+        strip.scrollLeft = 0; await r4Settle(150);
+        if (inView(first) || chip.getAttribute('aria-pressed') === 'true') throw new Error('CONTROL: with the strip at its start the ' + key + ' section’s first tile is ' + (inView(first) ? 'already in view' : 'out of view but its chip is lit') + ', so the tap measures nothing · ' + fails.join(' · '));
+        /* a tap a finger could make: the chip in its row's view, on top */
+        const row = chip.parentNode, rr = row.getBoundingClientRect(), cr = chip.getBoundingClientRect();
+        if (cr.left < rr.left || cr.right > rr.right) { row.scrollLeft += cr.left - rr.left - 8; await r4Settle(80); }
+        smMustHit(chip, 'the ' + key + ' chip');
+        chip.click(); await r4Settle(200);
+        if (!inView(first)) fails.push('after its chip the ' + key + ' section’s first tile is still out of the strip’s view (its left ' + Math.round(first.getBoundingClientRect().left) + ', the strip ' + Math.round(strip.getBoundingClientRect().left) + '–' + Math.round(strip.getBoundingClientRect().right) + ')');
+        if (chip.getAttribute('aria-pressed') !== 'true') fails.push('after its tap the ' + key + ' chip is not lit');
+        const lit = Array.from(document.querySelectorAll('#inspector .sm-look-chip[aria-pressed="true"]')).map(c => c.dataset.sec);
+        if (lit.length !== 1) fails.push('lit chips: ' + (lit.join(', ') || 'none') + ', want one');
+      });
+    });
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  test('1243 R9 · S12 at 380 the Look panel says how many clips keep a look of their own, and Remove them takes those looks off in ONE step: every Simple filter with an fid and every Simple box named Adjust go, while a Simple effect, another Simple box, Full’s own filters and the project’s Look stay (CONTROL: before, the panel says 2 clips have their own look)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await r4At(380, 0, async function () {
+      await smP2((W, H) => {
+        const sm1 = o => { o.sm = 1; return o; };
+        const adj = sm1(FM.fxRegistry.makeInstance(FM.FX_CONTAINER)); adj.name = 'Adjust'; adj.effects = [FM.fxRegistry.makeInstance('brightness')];
+        const match = sm1(FM.fxRegistry.makeInstance(FM.FX_CONTAINER)); match.name = 'Match'; match.effects = [FM.fxRegistry.makeInstance('contrast')];
+        const A = smPic('A', 0, 2, W, H, { effects: [sm1(FM.filters.makeInstance('noir')), adj] });
+        const B = smPic('B', 2, 2, W, H, { effects: [FM.filters.makeInstance('silver'), sm1(FM.fxRegistry.makeInstance('shake')), match, sm1(FM.filters.makeInstance('tealorange'))] });
+        const C = smPic('C', 4, 2, W, H, { effects: [FM.filters.makeInstance('noir')] });
+        return [smLookLayerOf(W, H, 0, 6, [sm1(FM.filters.makeInstance('silver'))]), C, B, A];
+      }, async function (v) {
+        const ix = () => FM.history._steps().index;
+        const sig = l => (l.effects || []).map(f => f.type === FM.FX_CONTAINER ? 'box:' + (f.fid || f.name) + (f.sm === 1 ? '/sm' : '') : f.type + (f.sm === 1 ? '/sm' : '')).join(',');
+        const K0 = sig(v.L('Look')), C0 = sig(v.L('C'));
+        await smLookOpen(v); await r4Settle(150);
+        const line = document.querySelector('#inspector .sm-look-line[data-line="clipsOff"]'), btn = document.querySelector('#inspector [data-look="line-clipsOff"]');
+        if (!line || !/^2 clips have their own look/.test(line.textContent) || !btn) throw new Error('CONTROL: the Look panel does not say 2 clips have their own look (it says “' + (line ? line.textContent : 'nothing') + '”) · ' + sig(v.L('A')) + ' | ' + sig(v.L('B')));
+        smMustHit(btn, 'Remove them');
+        const i0 = ix();
+        btn.click(); await v.idle(); await r4Settle(200);
+        const a = sig(v.L('A')), b = sig(v.L('B'));
+        if (a !== '') fails.push('Clip 1 still carries ' + a + ', want nothing (its Noir and its Adjust were Simple looks)');
+        if (b !== 'box:silver,shake/sm,box:Match/sm') fails.push('Clip 2 carries ' + b + ', want Full’s Silver, the Simple Shake and the Simple Match box (only its Teal & Orange look goes)');
+        if (sig(v.L('C')) !== C0) fails.push('Clip 3 (Full’s own Noir) changed: ' + sig(v.L('C')));
+        if (sig(v.L('Look')) !== K0) fails.push('the project’s Look changed: ' + sig(v.L('Look')) + ', was ' + K0);
+        if (ix() !== i0 + 1) fails.push('Remove them took ' + (ix() - i0) + ' steps, want one');
+        if (document.querySelector('#inspector .sm-look-line[data-line="clipsOff"]')) fails.push('the panel still offers Remove them');
+        FM.history.undo(); await r4Settle(200);
+        if (!/box:noir\/sm/.test(sig(v.L('A'))) || !/box:tealorange\/sm/.test(sig(v.L('B')))) fails.push('one Undo did not give the clips’ looks back: ' + sig(v.L('A')) + ' | ' + sig(v.L('B')));
+      });
+    });
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  /* R9, the route proof (1243-C S12's tests, the fourth: "every ingredient of every library filter changes the picture on the look layer,
+     reuse queue 858's per-ingredient test"). The layer is made by the real command (FM.spine.cmd.projectLook); a copy of it, sized to a
+     small frame, is drawn over queue 858's fixture with each filter, then each ingredient alone. Route R2 lives or dies on the Backdrop
+     Clone under the filter: without it the filter grades the shape's own black fill. Thresholds are queue 858's; the CONTROL's 2.0 is a
+     ceiling to MEASURE in the first run and narrow (copybg may resample by a fraction of a level). */
+  test('1243 R9 · S12 every ingredient of every library filter changes the picture through the Look layer that Look makes — Backdrop Clone, then the filter — so a filter over the whole video is the filter he picked (CONTROL: that layer with Backdrop Clone alone leaves the picture as it was, and Greyscale on it changes it)', { item: '980', budgetMs: 240000 }, async function () {
+    smNeedP2();
+    if (!FM.FILTERS || !FM.filters || !FM.filters.makeInstance || !FM.renderScene) throw new Error('the filter list or the renderer is missing');
+    let made = null, PW = 0, PH = 0;
+    await smP2((W, H) => [smV('A', 0, 3, W, H)], async function (v) {
+      if (!FM.spine.cmd || typeof FM.spine.cmd.projectLook !== 'function') throw new Error('there is no project Look command (FM.spine.cmd.projectLook)');
+      const r = FM.spine.cmd.projectLook({ kind: 'filter', fid: FM.FILTERS[0].id });
+      if (r && typeof r.then === 'function') await r;
+      await v.idle();
+      const K = smLookLayers();
+      if (K.length !== 1) throw new Error('one pick made ' + K.length + ' Look layers, want one');
+      made = JSON.parse(JSON.stringify(K[0]));
+      PW = FM.scene.project.width; PH = FM.scene.project.height;
+    });
+    /* CONTROL on the ROUTE: the test below rebuilds the made layer at 96 px, so it first proves the layer still IS what it rebuilds — a
+       full-frame rect shape whose first effect is Backdrop Clone. A new route fails here and says the test must follow it. */
+    if (made.type !== 'shape' || made.shape !== 'rect' || made.shapeW !== PW || made.shapeH !== PH || !(made.effects && made.effects[0] && made.effects[0].type === 'copybg'))
+      throw new Error('CONTROL: the Look layer is no longer a full-frame rect shape that starts with Backdrop Clone (type ' + made.type + ', shape ' + made.shape + ', ' + made.shapeW + '×' + made.shapeH +
+        ' in a ' + PW + '×' + PH + ' project, effects ' + (made.effects || []).map(f => f && f.type).join(', ') + ') — this test rebuilds that shape at 96 px and must be rewritten for the new route');
+    const S = 96, mid = '_r9look';
+    const src = document.createElement('canvas'); src.width = S; src.height = S;
+    const sc = src.getContext('2d');
+    const g = sc.createLinearGradient(0, 0, S, S);
+    g.addColorStop(0, '#fdf6d8'); g.addColorStop(0.45, '#e07a3a'); g.addColorStop(0.8, '#2a3550'); g.addColorStop(1, '#05070c');
+    sc.fillStyle = g; sc.fillRect(0, 0, S, S);
+    sc.fillStyle = '#ffffff'; sc.beginPath(); sc.arc(S * 0.3, S * 0.28, S * 0.11, 0, 7); sc.fill();
+    sc.fillStyle = '#1b6f4a'; sc.fillRect(0, S * 0.72, S, S * 0.1);
+    FM.media.set(mid, { kind: 'image', el: src, width: S, height: S, duration: 0 });
+    if (FM.media.pin) FM.media.pin(mid);
+    /* the Look layer rebuilt at the small frame's size by the same factory, carrying the made layer's own Backdrop Clone, fill, name and
+       marks; then the effects under test. (A JSON copy keeps the big project's POSITION — it lives in the layer's transform — so at 96 px
+       it lay off the frame and graded nothing: the first run's red, 16 Nov, was this test's fixture and not the route.) */
+    const lookWith = (fx) => {
+      const l = FM.makeLayer('shape', { name: made.name, shape: 'rect', x: S / 2, y: S / 2, shapeW: S, shapeH: S, fill: made.fill, start: 0, duration: 2 });
+      if (made.sm) l.sm = JSON.parse(JSON.stringify(made.sm));
+      l.effects = made.effects.filter(f => f && f.type === 'copybg').map(f => JSON.parse(JSON.stringify(f))).concat(fx || []);
+      return l;
+    };
+    const shoot = (look) => {
+      const img = FM.makeLayer('image', { x: S / 2, y: S / 2, start: 0, duration: 2 });
+      img.id = mid; img.effects = [];
+      const o = document.createElement('canvas'); o.width = S; o.height = S;
+      /* index 0 is the TOP of the stack (the Look sits above the picture it grades) */
+      FM.renderScene(o.getContext('2d'), { project: { width: S, height: S, fps: 30, duration: 2, background: '#000000' }, layers: look ? [look, img] : [img] }, 0.001);
+      return o.getContext('2d').getImageData(0, 0, S, S).data;
+    };
+    const diff = (a, b) => { let d = 0; for (let i = 0; i < a.length; i += 4) d += Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]); return d / (a.length / 4) / 3; };
+    const fit = (box, l) => (FM.fxRegistry && FM.fxRegistry.fitToLayer) ? (FM.fxRegistry.fitToLayer(box, l) || box) : box;
+    try {
+      const bare = shoot(null), plain = shoot(lookWith([]));
+      const d0 = diff(bare, plain);
+      /* measured 16 Nov at 1280: Backdrop Clone alone 0 (the picture, byte for byte); the shape's black fill showing instead would be 125;
+         a 1 px dark fringe round the 96 px frame about 5. So 0.5 sits between the jitter (none) and the smallest fault. */
+      if (!(d0 < 0.5)) throw new Error('CONTROL: the Look layer with Backdrop Clone alone changes the picture by ' + d0.toFixed(2) + ' (measured 0; a fringe is about 5, the fill showing 125) — it does not hand the filter the picture under it, so route R2 grades its own fill');
+      const gs = FM.fxRegistry && FM.fxRegistry.makeInstance('grayscale');
+      if (!gs) throw new Error('CONTROL: could not build a grayscale instance');
+      const dg = diff(plain, shoot(lookWith([gs])));
+      /* measured 16 Nov: Greyscale through the Look layer moves the picture by 33.6; a layer that grades nothing gives 0 */
+      if (!(dg > 5)) throw new Error('CONTROL: Greyscale on the Look layer changed the picture by only ' + dg.toFixed(2) + ' (measured 33.6), so this test cannot see a filter there');
+      const dead = [], weak = [];
+      for (const f of FM.FILTERS) {
+        const L0 = lookWith([]), box = FM.filters.makeInstance(f.id);
+        if (!box) throw new Error('no instance for the ' + f.name + ' filter');
+        const whole = diff(plain, shoot(lookWith([fit(box, L0)])));
+        if (whole < 0.5) dead.push(f.name + ' as a whole (' + whole.toFixed(2) + ')');
+        for (const kid of (box.effects || [])) {
+          const d = diff(plain, shoot(lookWith([JSON.parse(JSON.stringify(kid))])));
+          if (d < 0.05) dead.push(f.name + ' → ' + kid.type + ' (' + d.toFixed(2) + ')');
+          else if (d < 0.3) weak.push(f.name + ' → ' + kid.type + ' (' + d.toFixed(2) + ')');
+        }
+      }
+      if (dead.length) throw new Error(dead.length + ' filter ingredient(s) change NOTHING on the Look layer, so a project Look is not the filter he picked: ' + dead.slice(0, 8).join('; '));
+      if (weak.length > 6) throw new Error(weak.length + ' ingredients barely register on the Look layer (' + weak.slice(0, 6).join('; ') + ')');
+    } finally {
+      try { if (FM.media.remove) FM.media.remove(mid); } catch (e) {}
+    }
+  });
+
+  /* ═══ #1243 S12 (R9), THE REVIEW'S FINDINGS (stage 3): the Fix line's words and its lock, the Adjust note before a look exists, the
+     empty project's refusal, a shape the look must not cover when a picture lands over it, and the delete line that counted the Look. */
+  test('1243 R9 · S12 review at 380 a look that no longer covers the whole video shows the line The look doesn’t cover the whole video with Fix, one press of Fix fits it over the whole video in ONE step and the line goes, and a look locked in Full shows no line (CONTROL: unlocked, the line is there before Fix)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await r4At(380, 0, async function () {
+      await smP2((W, H) => {
+        const f = FM.filters.makeInstance('noir'); f.sm = 1;
+        return [smLookLayerOf(W, H, 0, 2, [f]), smPic('B', 2, 2, W, H), smPic('A', 0, 2, W, H)];   // the look as it was before B was added in Full
+      }, async function (v) {
+        const ix = () => FM.history._steps().index, K = v.L('Look'), want = (FM.spineWords.tools || {}).lookEndsEarly;
+        const fixLine = () => document.querySelector('#inspector .sm-look-line[data-line="fix"]');
+        const redraw = async () => { if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh(); await r4Settle(120); };
+        if (!K || Math.abs(FM.spine.read(FM.scene).trackEnd - 4) > 1e-6) throw new Error('setup: no Look layer, or the track does not end at 4');
+        await smLookOpen(v); await r4Settle(120);
+        const ln = fixLine();
+        if (!ln) throw new Error('CONTROL: a look over 0 to 2 s on a 4 s video shows no Fix line');
+        if (ln.querySelector('.sm-look-note-t').textContent !== want || !/whole video/.test(want)) fails.push('the line reads “' + ln.querySelector('.sm-look-note-t').textContent + '”, want “The look doesn’t cover the whole video”');
+        K.locked = true; await redraw();
+        if (fixLine()) fails.push('a look locked in Full still shows the Fix line, and Fix could not move it');
+        K.locked = false; await redraw();
+        const b = fixLine() && fixLine().querySelector('[data-look="line-fix"]');
+        if (!b) throw new Error('CONTROL: unlocked again, no Fix button · ' + fails.join(' · '));
+        smMustHit(b, 'Fix');
+        const i0 = ix();
+        b.click(); await v.idle(); await r4Settle(150);
+        const L = v.L('Look'), R = FM.spine.read(FM.scene);
+        if (!L || Math.abs(+L.start || 0) > 1e-6 || Math.abs((+L.start || 0) + (+L.duration || 0) - R.trackEnd) > 1e-6) fails.push('after Fix the look runs ' + (L ? L.start + ' + ' + L.duration : 'nowhere') + ', want 0 to ' + R.trackEnd);
+        if (ix() !== i0 + 1) fails.push('Fix took ' + (ix() - i0) + ' steps, want one');
+        if (fixLine()) fails.push('after Fix the line is still there');
+      });
+    });
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  test('1243 R9 · S12 review at 380 with no look yet the Adjust tab says Let go to see it above the sliders inside the panel, and once a slider has made the look the note is gone (CONTROL: the Brightness slider is there)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await r4At(380, 0, async function () {
+      await smP2(smClips3, async function (v) {
+        await smLookOpen(v);
+        const tab = smLookTab((FM.spineWords.tools || {}).lookAdjust || 'Adjust');
+        if (!tab) throw new Error('setup: the Look panel has no Adjust tab');
+        tab.click(); await r4Settle(150);
+        if (!document.querySelector('#inspector .sm-look-r[data-key="bright"]')) throw new Error('CONTROL: the Adjust tab has no Brightness slider');
+        const note = document.querySelector('#inspector .sm-look-letgo'), want = (FM.spineWords.tools || {}).lookLetGo;
+        if (!note) fails.push('with no look yet the Adjust tab says nothing about the picture changing only on release');
+        else {
+          if (note.textContent !== want) fails.push('the note reads “' + note.textContent + '”, want “' + want + '”');
+          const r = note.getBoundingClientRect(), p = document.querySelector('#inspector .sm-look').getBoundingClientRect();
+          if (!r.width || r.left < p.left - 1 || r.right > p.right + 1 || r.right > innerWidth) fails.push('the note is not inside the panel at 380 (' + Math.round(r.left) + ' to ' + Math.round(r.right) + ', the panel ' + Math.round(p.left) + ' to ' + Math.round(p.right) + ')');
+        }
+        await smLookSlide(v, 'bright', 30); await r4Settle(150);
+        if (!smLookLayers().length) fails.push('CONTROL: letting go of Brightness made no look');
+        else if (document.querySelector('#inspector .sm-look-letgo')) fails.push('with a look the note still shows, though the sliders now show the picture as they move');
+      });
+    });
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  test('1243 R9 · S12 review at 380 on a project with no clips a tap on Noir makes no layer, takes no step and says Add a clip first, then a look over it (CONTROL: the same tap with one clip makes the Look layer)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [], want = (FM.spineWords.lines || {}).lookNoClip;
+    await r4At(380, 0, async function () {
+      await smP2(() => [], async function (v) {
+        const n0 = v.steps();
+        await smLookOpen(v);
+        const noir = smLookTile('noir');
+        if (!noir) throw new Error('setup: the Look panel on an empty project has no Noir tile');
+        noir.click(); await v.idle(); await r4Settle(150);
+        if (smLookLayers().length) fails.push('a tap on Noir with no clip made ' + smLookLayers().length + ' Look layer(s)');
+        if (v.steps() !== n0) fails.push('a tap on Noir with no clip took ' + (v.steps() - n0) + ' step(s)');
+        if (v.say().indexOf(want) < 0) fails.push('it said “' + v.say() + '”, want “' + want + '”');
+      });
+      await smP2((W, H) => [smPic('A', 0, 2, W, H)], async function (v) {
+        await smLookOpen(v);
+        const noir = smLookTile('noir');
+        if (!noir) throw new Error('CONTROL: no Noir tile with one clip');
+        noir.click(); await v.idle(); await r4Settle(150);
+        if (smLookLayers().length !== 1) fails.push('CONTROL: with one clip the same tap made ' + smLookLayers().length + ' Look layers, want one');
+      });
+    });
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  test('1243 R9 · S12 review at 380 a shape lifted above a Noir look keeps its own colour when Overlay adds a photo over it: the look moves above the photo and lifts the shape above itself in that same step (CONTROL: before the add the shape is red, above the look)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [], pic = await smPng('#ffffff', 'over.png');
+    await r4At(380, 0, async function () {
+      await smP2((W, H) => {
+        const f = FM.filters.makeInstance('noir'); f.sm = 1;
+        const box = FM.makeLayer('shape', { name: 'Box', shape: 'rect', x: 38, y: 30, shapeW: 30, shapeH: 30, fill: '#ff0000', start: 0, duration: 4 });
+        return [box, smLookLayerOf(W, H, 0, 4, [f]), smPic('A', 0, 4, W, H)];   // as the first pick leaves it: the shape lifted above the look
+      }, async function (v) {
+        const at = n => FM.scene.layers.findIndex(l => l.id === v.L(n).id);
+        const red = () => { const c = offscreen(v.W, v.H), g = c.getContext('2d'); FM.renderScene(g, FM.scene, 1); return Array.from(px(g, 38, 30)).slice(0, 3); };
+        const p0 = red();
+        if (!(at('Box') < at('Look')) || !(p0[0] > 200 && p0[1] < 60 && p0[2] < 60)) throw new Error('CONTROL: before the add the shape is at ' + at('Box') + ' over the look at ' + at('Look') + ' and draws ' + p0.join(','));
+        const n0 = v.steps();
+        FM.selectLayer(null); FM.time = 1;
+        await FM.spine.cmd.addOverlay([pic]); await v.idle(); await r4Settle(150);
+        const o = FM.scene.layers.find(l => l.type === 'image' && l.name !== 'A');
+        if (!o) throw new Error('CONTROL: the add made no photo (it said “' + v.say() + '”)');
+        const oi = FM.scene.layers.indexOf(o), order = FM.scene.layers.map(l => l.name).join(' / ');
+        if (!(at('Look') < oi)) fails.push('the look is not above the new photo: ' + order);
+        if (!(at('Box') < at('Look'))) fails.push('the shape is under the look after the add, so Noir greys it: ' + order);
+        const p1 = red();
+        if (!(p1[0] > 200 && p1[1] < 60 && p1[2] < 60)) fails.push('the shape draws ' + p1.join(',') + ' after the add, want its own red');
+        if (v.steps() !== n0 + 1) fails.push('the add took ' + (v.steps() - n0) + ' steps, want one');
+      });
+    });
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  test('1243 R9 · S12 review at 380 deleting the last clip under a look says the look went with it on its own, and counts only what is drawn as a thing on it (CONTROL: the title on the clip is counted, and the look is gone)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await r4At(380, 0, async function () {
+      await smP2((W, H) => {
+        const f = FM.filters.makeInstance('noir'); f.sm = 1;
+        return [smT('On A', 0.5, 1, W, H), smLookLayerOf(W, H, 0, 3, [f]), smPic('A', 0, 3, W, H)];
+      }, async function (v) {
+        const S = FM.spine, said = [], say0 = S.say, A = v.L('A'), K = v.L('Look'), ln = FM.spineWords.lines || {};
+        if (!K || !A) throw new Error('setup: no clip or no Look layer');
+        S.say = function (t) { said.push(String(t)); return say0.apply(this, arguments); };
+        try { await S.cmd.del(A.id); await v.idle(); await r4Settle(80); } finally { S.say = say0; }
+        if (FM.layerById(FM.scene, A.id)) throw new Error('CONTROL: Delete clip left the clip (it said ' + JSON.stringify(said) + ')');
+        if (FM.layerById(FM.scene, K.id)) fails.push('CONTROL: the Look layer is still there with no clip under it');
+        const want = ln.deletedWith(1) + ' · ' + ln.lookWent;
+        if (!said.some(t => t.indexOf(want) === 0)) fails.push('the line did not say “' + want + '” (it said ' + JSON.stringify(said) + ')');
+        if (said.some(t => /2 things on it/.test(t))) fails.push('the line counts the hidden Look as a thing on the clip: ' + JSON.stringify(said));
+      });
+    });
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+  /* A CUBE'S FACE IS A LINK (S.refsOf counts every layer ref an effect holds through FM.eachFxRef, #1246 U11). A shape on Clip 2 whose Cube
+     shows Clip 1 on its back face: the tray's Delete on Clip 1 must refuse with the attached line, as it does for a matte source, and leave
+     the clip where it is. Without the count the delete went through and the Cube's back face pointed at a layer that no longer exists.
+     CONTROL: with the face picked as None the same tap deletes Clip 1 in one step, so the tap reaches the delete and the refusal is the face. */
+  test('1243 R9 · at 380 and 1280 the Delete in Clip 1’s tray refuses while a Cube on Clip 2 shows Clip 1 on a face — the line says it is attached and Clip 1 stays, no step taken (CONTROL: with no face picked the same tap deletes Clip 1 in one step)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    for (const width of [380, 1280]) {
+      for (const linked of [false, true]) {
+        await r4At(width, width > 700 ? 800 : 0, async function () {
+          await smP2((W, H) => { const box = smS('Box', 5, 2, W, H); return smThree(W, H, [box]); }, async function (v) {
+            const at = width + ' px' + (linked ? '' : ' CONTROL') + ': ', A = v.L('A');
+            const cube = FM.fxRegistry.makeInstance('cube3d');
+            cube.params = Object.assign({}, cube.params, { faceback: linked ? A.id : '' });
+            v.L('Box').effects = [cube];
+            FM.selectLayer(A.id); await r4Settle(200);
+            const del = document.querySelector('#sm-tray .sm-tool[data-tool="delete"]');
+            if (!del) throw new Error('CONTROL ' + at + 'Clip 1’s tray has no Delete (it holds ' + r4TrayTools().join(', ') + ')');
+            smMustHit(del, at + 'Delete in Clip 1’s tray');
+            const n0 = v.steps();
+            del.click(); await v.idle(); await r4Settle(200);
+            if (!linked) {
+              if (v.L('A') || v.steps() !== n0 + 1) fails.push(at + 'with no face picked the tray’s Delete did not delete Clip 1 in one step (' + (v.steps() - n0) + ' steps, it said “' + v.say() + '”)');
+              return;
+            }
+            if (!v.L('A')) fails.push(at + 'Delete took Clip 1 away while the Cube on Clip 2 shows it on its back face; the face now points at ' + JSON.stringify(((v.L('Box').effects || [])[0] || {}).params && v.L('Box').effects[0].params.faceback) + ', a layer that is gone');
+            if (v.steps() !== n0) fails.push(at + 'the refused Delete took ' + (v.steps() - n0) + ' undo steps, want none');
+            const ln = document.querySelector('#sm-say .sm-line');
+            if (!/attached/.test(v.say()) || !r4Shown(ln)) fails.push(at + 'no line on screen says Clip 1 is attached (it said “' + v.say() + '”)');
+          });
+        });
+      }
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
   });
 
   /* ═══ #1253 · THE DRAWN EFFECT PICTURES IN THE APP'S EFFECT MENUS ═══

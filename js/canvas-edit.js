@@ -244,6 +244,10 @@ window.FM = window.FM || {};
     for (let i = 0; i < FM.scene.layers.length; i++) {
       const l = FM.scene.layers[i];
       if (l.type === 'camera' || l.type === 'adjustment') continue;   // non-visual — select via the layer list
+      /* #1243 S12: Simple's Look layer is a full-frame shape over every clip (Backdrop Clone + its grade): a grade, not a thing to tap, as an
+         adjustment layer is. Taken, every tap on the picture picked it and never the clip under it. Only a layer carrying `sm.look` (Simple
+         makes it; Full never does), so Full's taps on every other project are exactly today's. */
+      if (l.sm && l.sm.look === true) continue;
       if (l.type === 'group') {
         if (FM.groupContext === l.id) continue;   // inside Edit Group, taps pick MEMBERS, not the open group
         if (l.visible && !l.locked && FM.groupBounds) {

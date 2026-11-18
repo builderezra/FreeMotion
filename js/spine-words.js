@@ -62,7 +62,7 @@ window.FM = window.FM || {};
       deleted: 'Deleted clip',
       deletedWith: n => 'Deleted clip and ' + n + (n === 1 ? ' thing on it' : ' things on it'),
       keptRunsOn: n => 'kept ' + n + (n === 1 ? ' item that runs on' : ' items that run on') + ', trimmed to match',
-      fadeWent: 'the fade went with it',
+      fadeWent: 'the fade went with it', lookWent: 'the look went with it',
       trimmed: name => 'Trimmed ' + name, split: 'Split', duplicated: 'Duplicated clip',
       gapClosed: 'Gap closed', overlapFixed: 'Overlap fixed',
       keepsLength: name => name + ' keeps the length you gave it',
@@ -161,6 +161,10 @@ window.FM = window.FM || {};
       lookSet: (name, clip) => name + ' on ' + clip, lookOff: clip => 'No filter on ' + clip,
       lookStrengthSet: pct => 'Strength ' + pct + '%', adjustSet: (what, v) => what + ' ' + (v > 0 ? '+' : '') + v,
       adjustReset: 'Adjust is back to zero', lookUnsuited: 'That filter doesn’t work on this clip',
+      /* #1243 S12: Look is the whole video's now (the project row's Look, one Look layer); said in #sm-live, the refusal in #sm-say */
+      lookSetAll: name => name + ' over the whole video', lookOffAll: 'No filter on the video', lookNoClip: 'Add a clip first, then a look over it',
+      lookUnsuitedAll: 'That filter can’t go over this video',
+      clipLooksOff: n => 'Took the look off ' + n + (n === 1 ? ' clip' : ' clips'), lookFitted: 'The look covers the whole video again',
       /* Phase 3 · Captions (queue 980, DESIGN §8.5, §3.5, §12.3; §8.7 the honest label: it finds WHEN people speak, he types the words) */
       captionAdded: 'Caption added · type its words', captionRemoved: 'Caption removed',
       capStays: 'The captions stay with the sound now', capFollows: 'The captions follow the clips again',
@@ -207,7 +211,7 @@ window.FM = window.FM || {};
       bandHintSelPc: 'Its tools are below',   // PC (his pick B): every tool is on show there, More with them
       /* 2.7 (SU1 #13): the first-run hint, floating just above the bar since #1243 S3 (§7.3 step 4, §8.9): one verb everywhere, split, never
          "cut". #1243 S5: Split is the first tool on a clip now, not ✂ on the play row. The hint no longer says "or look": R decision 1 takes
-         Look off the clip in a LATER release, and until then a clip's tools still hold Look third (review L3-10: said honestly, 11 Nov) */
+         Look off the clip (#1243 S12 did: Look is on the project row, for the whole video) */
       firstHint: 'Tap a clip to split it or change its speed',
       firstHintPc: 'Click a clip to split it or change its speed · S splits at the line',
       /* #1243 S5: Split, first on every item's tools (his "put the split button on the row that pops up when you have a layer selected") */
@@ -235,12 +239,18 @@ window.FM = window.FM || {};
       /* release 2.7: the ◇'s Transition row, and Turn into a transition on a crossfade (#1122, his pick A) */
       transition: 'Transition', turnTr: 'Turn into a transition', trNone: 'None', trCrossfade: 'Crossfade', trDipBlack: 'Dip to black', trDipWhite: 'Dip to white',
       trLength: 'Length', trEvery: 'On every cut', trShorter: 'Shorter by 0.1 s', trLonger: 'Longer by 0.1 s',
-      /* Phase 3 · Look (queue 980, DESIGN §8.5, §8.7): the tray's Look and its panel, Filters and Adjust */
-      look: 'Look', lookTitle: 'Filters and Adjust for this clip', lookFilters: 'Filters', lookAdjust: 'Adjust', lookNone: 'None',
+      /* Phase 3 · Look (queue 980, DESIGN §8.5, §8.7): Look and its panel, Filters and Adjust. #1243 S12: on the project row, for the whole
+         video (his words: "you shouldn't have the look menu on each layer… it goes over your entire project immediately") */
+      look: 'Look', lookTitle: 'Filters and Adjust over the whole video', lookFilters: 'Filters', lookAdjust: 'Adjust', lookNone: 'None',
       lookStrength: 'Strength', lookReset: 'Reset',
       adjBright: 'Brightness', adjContrast: 'Contrast', adjSat: 'Saturation', adjExposure: 'Exposure', adjWarmth: 'Warmth', adjVignette: 'Vignette',
       /* §8.5's line under a keyed numeric row; its Open in Full is the button beside it (openFull) */
-      lookKeyed: 'This changes over time. Your change applies to the whole clip',
+      lookKeyed: 'This changes over time. Your change applies to the whole video',
+      /* #1243 S12: the chips over the Filters strip (his favourites, his own, then the library's sections by their own names, js/filters.js),
+         and the panel's two lines: clips that still carry a look of their own (Remove them, one step), a look that ends early (Fix) */
+      lookFaves: 'Favourites', lookYours: 'Yours', lookChips: 'Filter sections',
+      lookClipsOwn: n => n === 1 ? '1 clip has its own look' : n + ' clips have their own look', lookClipsOff: n => n === 1 ? 'Remove it' : 'Remove them',
+      lookEndsEarly: 'The look doesn’t cover the whole video', lookLetGo: 'Let go to see it',
       /* Phase 3 · Captions (queue 980, DESIGN §8.5 the Captions tool and the caption-track tray, §8.9 the caption-track switch) */
       captions: 'Captions', captionsTitle: 'Type captions, find speech, pick a style', typeCaptions: 'Type captions',
       findSpeech: 'Find speech', findSpeechTitle: 'Finds when people talk · you type the words',

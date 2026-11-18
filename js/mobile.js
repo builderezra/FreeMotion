@@ -54,6 +54,16 @@ window.FM = window.FM || {};
       var has = !!id || ids.length > 0;
       var key = multi ? 'multi:' + ids.length : id;
       if (key !== lastSyncKey) { userClosed = false; lastSyncKey = key; }   // a NEW selection always gets the sheet back
+      /* #1243 S12 (C S12 change 8): SIMPLE'S PROJECT PANEL (Look, from the project row) needs nothing selected, so the sheet rises for it
+         with no selection, docked at the sheet line like every Simple panel (dockSheet), and its grab bar or a swipe closes it as ever
+         (userClosed holds it shut until Look is pressed again, which unlatches it). projectPanel is false whenever Simple is not on
+         screen, so Full's sheet with nothing selected is exactly today's (shut). */
+      if (!has && FM.simpleTools && FM.simpleTools.projectPanel && FM.simpleTools.projectPanel()) {
+        if (userClosed) return;
+        if (!insp.classList.contains('open')) { if (FM.mobile && FM.mobile.closeAdd) FM.mobile.closeAdd(); open(); }
+        dockSheet();
+        return;
+      }
       if (!has) { insp.style.top = ''; insp.style.maxHeight = ''; close(); userClosed = false; return; }
       /* SIMPLE MODE P2.2 (D10): in Simple a selection shows its tools in the tray row; the sheet rises only for a tray tool
          that has a panel ("More"). simpleTools.sheetHeld is false whenever Simple is not on screen, so Full is today's. */
@@ -281,7 +291,8 @@ window.FM = window.FM || {};
       /* SIMPLE MODE (#1243 rule 3, his words 8 Nov: "when you open up any of these sub menus, I want the first menu to go away"): in Simple
          the sheet docks at the sheet line, the stage's bottom edge, and covers the play row, the timeline and the bar, whose job is done
          while a panel is up; the stage keeps its size (styles.css). Full docks under its one solo row, which Simple never shows. */
-      const smDock = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.simpleTimeline && document.body.classList.contains('sm-has-sel') && (FM.selectionIds ? FM.selectionIds().length === 1 : true));
+      const smProject = !!(FM.simpleTools && FM.simpleTools.projectPanel && FM.simpleTools.projectPanel());   // #1243 S12: Look's panel, nothing selected
+      const smDock = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple() && FM.simpleTimeline && (smProject || (document.body.classList.contains('sm-has-sel') && (FM.selectionIds ? FM.selectionIds().length === 1 : true))));
       /* SU1 #5 (refers to #980): Simple's docked sheet scrolls its BODY (#inspector), not its frame — styles.css, the
          `#inspector-panel.sm-sheet` block, says why. Marked here, where the sheet becomes Simple's, and taken off here for Full's
          sheet and in close(). So on the way INTO Simple, when inspector.js's band keeps Full's sheet scroll (bandKept, queue 980),

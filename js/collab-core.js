@@ -195,7 +195,12 @@ window.FM = window.FM || {};
      project differently, the resync loop this gate exists to prevent; and a rev-43 peer reads every project as linked, so its Simple
      moves would carry titles along on a peer whose Link says everything stays. `unlinked: 'yes'` in SCHEMA_PROJECT_FIXTURE pins the
      rule. FM.SM_V does not move: an older build opens a project holding it as linked, exactly as before. */
-  C.SCHEMA_REV = 45;   // #1246 / #1250: new effect params (Blinds Solid, Dispersion Sweep, Starfield Streak, Number Roll Style, Lens Flare ghost shape and colour, CRT power, Card Flip and Cube faces, Clouds look, Rock Noise Stone, Datamosh detail / bloom / cuts; and #1248 carry: Snow & Rain Area legacy 0). Before: 44, #1243 S34 A: project.sm.unlinked true-only. Before: 43, #1248 (v18.38): Snow & Rain's Area control (weather 'area', a button row) moved the effect definitions
+  /* Rev 46 = rev 45's effect params (v18.41, #1246 / #1250, below) PLUS this release's stored field (#1243 S12, Simple's Look for the
+     whole video): the sanitiser keeps `layer.sm.look` only as exactly true (storage.js SM_FLAGS). A rev-45 build keeps any plain `look`
+     as an unknown key (smKeepUnknown), so the two would normalise such a layer differently. No build writes anything but `look: true` on
+     the one Look layer, so no saved project changes. fp_15 in the fixture pins the rule. FM.SM_V does not move: an older build opens a
+     project holding one as an ordinary shape with Backdrop Clone and a filter (its steps do not refit it). */
+  C.SCHEMA_REV = 46;   // #1243 S12: layer.sm.look true-only, fp_15, on top of rev 45. Before: 45, #1246 / #1250: new effect params (Blinds Solid, Dispersion Sweep, Starfield Streak, Number Roll Style, Lens Flare ghost shape and colour, CRT power, Card Flip and Cube faces, Clouds look, Rock Noise Stone, Datamosh detail / bloom / cuts; and #1248 carry: Snow & Rain Area legacy 0). Before: 44, #1243 S34 A: project.sm.unlinked true-only. Before: 43, #1248 (v18.38): Snow & Rain's Area control (weather 'area', a button row) moved the effect definitions
 
   C.active = false;      // no session is running
   C.role = 'owner';
@@ -363,6 +368,9 @@ window.FM = window.FM || {};
       id: 'fp_13', type: 'adjustment', name: 'W13', start: 0, duration: 4, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [], sm: { whole: true, wholeStart: 0, wholeEnd: 4 }
     }, {
       id: 'fp_14', type: 'adjustment', name: 'W14', start: 0, duration: 4, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [], sm: { stay: true, whole: true, wholeStart: 'x', wholeEnd: -1 }
+    }, {
+      /* Rev 46 (#1243 S12): `look` is a true-only flag; a rev-45 build keeps a non-true one as a plain unknown key. fp_15 pins it. */
+      id: 'fp_15', type: 'shape', name: 'K15', start: 0, duration: 4, transform: { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }, effects: [], sm: { stay: true, look: 1 }
     }];
   };
   /* …and a project carrying Simple's project keys (SCHEMA_REV 8): `home` any string ≤ 32 is kept, `v` clamped, junk dropped. */
@@ -450,7 +458,7 @@ window.FM = window.FM || {};
 
   /* Measured by `921 S1 SCHEMA_FP gate…`. When that test fails it prints the new number and the reason
      the rules moved; bump SCHEMA_REV and paste the number here — never the other way round. */
-  C.SCHEMA_FP =2473754717662702;   // SCHEMA_REV 45 (#1248 carry): weather 'area' gained legacy 0. Measured 17 Nov by `921 S1 the schema fingerprint gate` at rev 45; before: 4655892608289749 (rev 45, the #1246 / #1250 params). Before that: SCHEMA_REV 44 (#1243 S34 A, review L1-2): project.sm.unlinked true-only, `unlinked: 'yes'` in SCHEMA_PROJECT_FIXTURE. Measured 11 Nov by `921 S1 the schema fingerprint gate` at rev 44, 1280; before: 4747328505700994 at rev 43 (#1248, v18.38): weather gained Area (Inside the layer / Whole frame). Measured 11 Nov by `921 S1 the schema fingerprint gate` at rev 43; before:  // SCHEMA_REV 42 (#1243 S10): sm.whole true-only, fp_11 / fp_12; the S10 review's whole-only-with-stay and wholeStart / wholeEnd, fp_13 / fp_14. Measured 9 Nov by `921 S1 the schema fingerprint gate` at rev 42 (5720067090430967 before the review's rules, never shipped); before: 7533255701768435 at rev 41 (v18.15, #482 4.6: the Filter's Apply as), 6290761865100751 at rev 40.
+  C.SCHEMA_FP =1165714573301265;   // SCHEMA_REV 46 (#1243 S12 on top of rev 45): layer.sm.look true-only, fp_15. Measured 17 Nov by `921 S1 the schema fingerprint gate` at rev 46, 1280, on v18.41 + Simple release 7; before: 2473754717662702 at rev 45 (v18.41), and 2246342054236627 at rev 46 on land/r9 without rev 45's params (never shipped). SCHEMA_REV 45 (#1248 carry): weather 'area' gained legacy 0. Measured 17 Nov by `921 S1 the schema fingerprint gate` at rev 45; before: 4655892608289749 (rev 45, the #1246 / #1250 params). Before that: SCHEMA_REV 44 (#1243 S34 A, review L1-2): project.sm.unlinked true-only, `unlinked: 'yes'` in SCHEMA_PROJECT_FIXTURE. Measured 11 Nov by `921 S1 the schema fingerprint gate` at rev 44, 1280; before: 4747328505700994 at rev 43 (#1248, v18.38): weather gained Area (Inside the layer / Whole frame). Measured 11 Nov by `921 S1 the schema fingerprint gate` at rev 43; before:  // SCHEMA_REV 42 (#1243 S10): sm.whole true-only, fp_11 / fp_12; the S10 review's whole-only-with-stay and wholeStart / wholeEnd, fp_13 / fp_14. Measured 9 Nov by `921 S1 the schema fingerprint gate` at rev 42 (5720067090430967 before the review's rules, never shipped); before: 7533255701768435 at rev 41 (v18.15, #482 4.6: the Filter's Apply as), 6290761865100751 at rev 40.
                                     // measured 13 Oct in node on this tree (the app's collab-core, storage and registries in a vm; the same harness gives fb2's 6375563268202997 and fx-all's 4775724801447341 exactly); before: fb2 (SCHEMA_REV 9) 6375563268202997. `921 S1 the schema fingerprint gate` has not run on it in a browser yet
 
   /* ═══ S2: THE HOOKS THE APP CALLS ═════════════════════════════════════════════════════════════

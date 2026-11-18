@@ -43,7 +43,10 @@ window.FM = window.FM || {};
      last fitted to, `wholeStart` / `wholeEnd` (seconds, like `tailEnd`): written here when the mark goes on and by every fit. A span that
      differs from it when a Simple step begins was set somewhere else — D at the line, More's trim row, Full, a friend, an older build —
      and the fit lets the mark go instead of pulling the effect back over the whole video. Whatever takes the mark takes the span. */
-  const FLAGS = ['main', 'stay', 'tail', 'twin', 'muteByMode', 'unit', 'cut', 'snd', 'rideVol', 'whole'];
+  /* #1243 S12 (1243-R decision 10 case 4) adds `look`: THE PROJECT'S LOOK LAYER (js/spine-edit.js, PHASE 3 · LOOK FOR THE WHOLE VIDEO), the one
+     layer Look's panel writes, kept over [first clip start, track end] and just above the top-most video or picture by S.fitProjectLayers.
+     True-only, in storage.js SM_FLAGS like `whole`. A copy, a pack and both halves of a split lose it: there is one look per project. */
+  const FLAGS = ['main', 'stay', 'tail', 'twin', 'muteByMode', 'unit', 'cut', 'snd', 'rideVol', 'whole', 'look'];
   function dropWhole(sm) { delete sm.whole; delete sm.wholeStart; delete sm.wholeEnd; }
   S.setFlag = function (layer, key, on) {
     if (!layer || FLAGS.indexOf(key) < 0) return false;
@@ -86,6 +89,7 @@ window.FM = window.FM || {};
       if (c.sm && typeof c.sm === 'object') {
         delete c.sm.main; delete c.sm.tail; delete c.sm.tailEnd;
         dropWhole(c.sm);   // #1243 S10: nor a second whole-video effect, which the next Simple step would pull back over the first
+        delete c.sm.look;   // #1243 S12: nor a second project look (a copy of the Look layer is an ordinary shape)
         if (!Object.keys(c.sm).length) delete c.sm;
       }
     });
@@ -106,6 +110,7 @@ window.FM = window.FM || {};
       if (c.sm && typeof c.sm === 'object') {
         delete c.sm.main; delete c.sm.tail; delete c.sm.tailEnd; delete c.sm.muteByMode;
         dropWhole(c.sm);   // #1243 S10: the pack's whole video is not this one's
+        delete c.sm.look;   // #1243 S12: nor is the pack's look this project's
         if (el) delete c.sm.stay;
         if (!c.sm.stay) delete c.sm.rideVol;   // the rider needs Stay put (setFlag's rule)
         if (!Object.keys(c.sm).length) delete c.sm;
@@ -122,9 +127,10 @@ window.FM = window.FM || {};
        there is no transition) does not carry it. Only a Simple-made field: a Full-made project splits exactly as before. */
     if (tail && typeof tail === 'object' && 'trIn' in tail) delete tail.trIn;
     /* #1243 S10: neither half of a whole-video effect is the whole video any more (left on, the next Simple step pulled both back over it) */
-    if (tail && tail.sm && typeof tail.sm === 'object' && ('whole' in tail.sm || 'wholeStart' in tail.sm || 'wholeEnd' in tail.sm)) { dropWhole(tail.sm); if (!Object.keys(tail.sm).length) delete tail.sm; }
+    if (tail && tail.sm && typeof tail.sm === 'object' && ('whole' in tail.sm || 'wholeStart' in tail.sm || 'wholeEnd' in tail.sm || 'look' in tail.sm)) { dropWhole(tail.sm); delete tail.sm.look; if (!Object.keys(tail.sm).length) delete tail.sm; }
     if (!head || !head.sm || typeof head.sm !== 'object') return;
-    delete head.sm.tail; delete head.sm.tailEnd; dropWhole(head.sm);
+    /* #1243 S12: nor is either half of the Look layer the project's look (kept, the head would be pulled back over the tail's span, two grades there) */
+    delete head.sm.tail; delete head.sm.tailEnd; dropWhole(head.sm); delete head.sm.look;
     if (!Object.keys(head.sm).length) delete head.sm;
   };
 
@@ -620,6 +626,7 @@ window.FM = window.FM || {};
     const R = {
       rev: 0, adopted: adopted, unlinked: unlinked, eps: eps, main: main, trackEnd: trackEnd, index: index, clipNo: clipNo, units: {}, followers: {},
       tail: [], riders: [], fullOnly: [], anomalies: anomalies,
+      look: null,   // #1243 S12: the project's Look layer (the top-most `sm.look` unit), section 'look', never a lane (below)
       lanes: { captions: [], text: [], overlay: [], behind: [], audio: [] },
       isMain: id => mainSet.has(id)
     };
@@ -685,6 +692,10 @@ window.FM = window.FM || {};
         rec.section = k === 'captions' ? 'captions' : k === 'text' ? 'text' : k === 'audio' ? 'audio'
           : k === 'background' ? 'behind' : k === 'undecided' ? 'main'
           : (rec.side === 'behind' ? 'behind' : 'overlay');   // overlay, effect and block: Behind when under every clip it meets
+        /* #1243 S12 (C S12 change 5): THE PROJECT'S LOOK has a section of its own, 'look', which is not a key of R.lanes, so the timeline
+           never draws it as an item (it is the project's, made and changed only by the project row's Look). R.look names it. Only the
+           top-most one: a second (two people pressing Look at once) reads as the overlay it is, so it can be seen and deleted. */
+        if (!R.look && u.l.sm && u.l.sm.look === true) { rec.section = 'look'; R.look = u.id; }
       }
       // what Simple cannot edit renders as it is, with a ✦ (§9.1)
       if (k === 'block') rec.pro = 'block';

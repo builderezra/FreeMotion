@@ -2000,7 +2000,9 @@ window.FM = window.FM || {};
   /* #1243 S10: `whole` (an effect over the whole video, kept there by FM.spine.fitProjectLayers) is true-only like `stay`. Before it was
      listed, a non-true `whole` was kept as a plain unknown key; no build ever wrote one, so a valid document sanitises as before. Its span,
      `wholeStart` / `wholeEnd`, is a finite time from 0 like `tailEnd`, and both go when `whole` does (sanitizeSmLayer below). */
-  const SM_FLAGS = ['main', 'stay', 'tail', 'twin', 'muteByMode', 'unit', 'whole'];
+  /* #1243 S12: `look` (the project's Look layer, kept over the whole video by FM.spine.fitProjectLayers' case 4) is true-only too. Before it
+     was listed a non-true `look` was kept as a plain unknown key; no build ever wrote one, so a valid document sanitises as before. */
+  const SM_FLAGS = ['main', 'stay', 'tail', 'twin', 'muteByMode', 'unit', 'whole', 'look'];
   function smPlain(v, depth) {
     if (v === null || typeof v === 'boolean') return true;
     if (typeof v === 'number') return isFinite(v);

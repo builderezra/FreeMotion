@@ -164,6 +164,7 @@ window.FM = window.FM || {};
     if (!l || !u) return false;
     if (u.kind === 'audio' || u.kind === 'captions' || u.kind === 'fullOnly' || u.kind === 'undecided' || u.kind === 'background') return false;
     if (l.audioOnly === true || (l.sm && l.sm.snd === true) || l.type === 'camera') return false;
+    if (l.sm && l.sm.look === true) return false;   // #1243 S12: the project's Look layer is kept at the video's length by S.fitProjectLayers, not by the tail fit
     if (l.type === 'video' && !l.muted) { const m = FM.media && FM.media.get(l.id); if (!(m && m.hasAudio === false)) return false; }
     return true;
   }
@@ -252,12 +253,13 @@ window.FM = window.FM || {};
   /* ═══ THE ONE NORMALISER (#1243, 1243-R decision 10): S.fitProjectLayers keeps the layers that belong to the whole project at the
      project's length. It runs at the end of EVERY S.edit step that lands, inside that step (so the fit is part of the same undo step and
      the same collab transaction), after the tail fit; it lives only in Simple's runner, so it never writes in Full. Idempotent: a layer
-     already at its span is not touched. R decision 10 lists four cases; this release builds case 3 only:
+     already at its span is not touched. R decision 10 lists four cases; cases 3 and 4 are built (4, the Look layer, since #1243 S12:
+     fitLook in PHASE 3 · LOOK FOR THE WHOLE VIDEO, which also keeps it just above the top-most video or picture):
        3. a whole-video effect (an adjustment layer marked `sm.whole`, made by the project row's Effects, S10) spans [first clip start,
           track end]. Its keys ride the change as the tail fit's do (moved by the start's shift, then S.fitMap over the new length).
           Dragging or trimming one of its ends clears the flag (planTrimItem, planMoveItem), and so do Follow clip and a split, so a
           segment he shortened by hand is never pulled back. With no clip at all there is no span, and it is left where it was.
-     Cases 1, 2 and 4 (the backdrop image, the blur fill behind each clip, the Look layer) come with S22 and S12.
+     Cases 1 and 2 (the backdrop image, the blur fill behind each clip) come with S22.
      THE S10 REVIEW'S RULES (9 Nov), each a way the fit wrote what it must not:
        · A SPAN SET ANYWHERE ELSE STAYS (S10-N2, F1, S10-L2). The mark carries the span it was last fitted to (sm.wholeStart / wholeEnd,
          written by setFlag and by every fit). `pre` is every whole layer's span as the step began (S.wholeSpans, read by S.edit before
@@ -304,6 +306,8 @@ window.FM = window.FM || {};
       if (plan && plan.touched) plan.touched.add(l.id);
       out.push(l.id);
     });
+    const lk = fitLook(R2, plan, PZ, s, end, span);   // case 4 (#1243 S12): the project's Look layer
+    if (lk) out.push(lk);
     return out;
   };
 
@@ -417,7 +421,7 @@ window.FM = window.FM || {};
     const out = [];
     if (l.parent) out.push({ id: l.parent, via: 'parent' });
     (l.behaviors || []).forEach(b => { if (b && b.params) { if (b.params.targetId) out.push({ id: b.params.targetId, via: 'follow' }); if (b.params.sourceId) out.push({ id: b.params.sourceId, via: 'audio' }); } });   // 2.4b: an Audio Drive source is its own kind (read through the split lineage, §3.10 rule 1)
-    if (FM.eachRefFx) FM.eachRefFx(l, fx => { if (fx && fx.params && fx.params.source) out.push({ id: fx.params.source, via: 'matte' }); });
+    if (FM.eachRefFx) FM.eachRefFx(l, fx => { if (FM.eachFxRef) FM.eachFxRef(fx, (k, v) => out.push({ id: v, via: 'matte' })); else if (fx && fx.params && fx.params.source) out.push({ id: fx.params.source, via: 'matte' }); });   // every layer ref an effect holds: a matte or Card Flip source, and a Cube's face layers (#1246 U11)
     if (l.karaokeOf) out.push({ id: l.karaokeOf, via: 'twin' });
     return out;
   }
@@ -884,6 +888,9 @@ window.FM = window.FM || {};
        hand (the mark gone, or its span no longer the one recorded with it) or locked in Full stays, as any Stay put item does. */
     if (!R.main.some(e => !e.slot && e.id !== c.id)) {
       FM.scene.layers.forEach(l => {
+        /* #1243 S12: the project's Look layer too (it is Stay put, and with no clip it grades nothing and only holds the video's length).
+           It is never drawn as an item, so it is not counted as a "thing on it": the line names it on its own (R9 review) */
+        if (l && l.sm && l.sm.look === true && !l.locked && !plan.removes.has(l.id)) { plan.removes.add(l.id); plan.touched.add(l.id); plan.counts.look = 1; return; }
         if (!l || l.type !== 'adjustment' || !(l.sm && l.sm.whole === true) || l.locked || plan.removes.has(l.id)) return;
         const s0 = +l.start || 0, e0 = s0 + (+l.duration || 0), ws = l.sm.wholeStart, we = l.sm.wholeEnd;
         if (typeof ws === 'number' && typeof we === 'number' && (Math.abs(s0 - ws) > R.eps || Math.abs(e0 - we) > R.eps)) return;
@@ -960,6 +967,7 @@ window.FM = window.FM || {};
     const nf = plan.counts.followers;
     plan.say = nf ? line('deletedWith', nf) : null;
     plan.live = nf ? null : line('deleted');
+    if (plan.counts.look) { plan.say = (plan.say || line('deleted')) + ' · ' + line('lookWent'); plan.live = null; }
     if (plan.counts.cut) plan.say = (plan.say || line('deleted')) + ' · ' + line('keptRunsOn', plan.counts.cut);
     if (plan.counts.fade) plan.say = (plan.say || line('deleted')) + ' · ' + line('fadeWent');
     if (plan.counts.xfade) plan.say = (plan.say || line('deleted')) + ' · ' + line('crossfadeRemoved');
@@ -2924,8 +2932,9 @@ window.FM = window.FM || {};
   };
 
   /* ═══ PHASE 3 · LOOK (queue 980; DESIGN §8.5 the tray's Look, §8.7 "Filters + strength …; Adjust" (Core, the Look tool), §8.5c
-     item 4 the `sm` marker, §8.5's two panel rules). A clip's look in Simple is TWO ordinary filter containers on its own effect
-     stack, each marked Simple-made with the Phase 1 marker the sanitiser keeps (inst.sm = 1, js/storage.js):
+     item 4 the `sm` marker, §8.5's two panel rules). A look in Simple is TWO ordinary filter containers on one layer's effect
+     stack — since #1243 S12 the project's Look layer (LOOK FOR THE WHOLE VIDEO, below); a clip given one by the tray's Look before
+     that keeps it — each marked Simple-made with the Phase 1 marker the sanitiser keeps (inst.sm = 1, js/storage.js):
        · THE FILTER: exactly what Full's Filters tab adds — FM.filters.makeInstance fitted to the clip by fitToLayer — so Full shows
          it as an ordinary filter row with its name, its Strength and its ingredients. A pick REPLACES the Simple-made filter where it
          stands (one look per clip, as the strip shows it); None takes it off. A filter added in Full is never touched.
@@ -3031,70 +3040,213 @@ window.FM = window.FM || {};
     FM.shiftProp(c.params, d.p, d.zero + u / 100 * d.span, t, { min: row.min, max: row.max });
     return true;
   };
-  function lookTarget(R, id, map) {
-    const L = map.get(id), u = R.units[id];
-    if (!L || !u || (L.type !== 'video' && L.type !== 'image') || L.audioOnly) return null;
-    return L;
-  }
-  function lookPlan(label, L, id) {
-    const plan = newPlan(label);
-    plan.arranges = false; plan.adopts = false; plan.keepSel = true; plan.touched.add(id); plan.pulse = [id];
-    return plan;
-  }
-  /* A PICK from the strip (fid), or None (null): the filter Full adds, fitted to this clip, marked sm 1, where the old Simple one stood */
-  S.planLookFilter = function (R, id, fid) {
-    const map = byIdMap(), L = lookTarget(R, id, map);
-    if (!L) return refusePlan('gone');
-    const cur = S.lookOf(L).filter, want = fid || null;
-    if ((cur ? cur.fid : null) === want) return refusePlan('nothingChanged');
-    let box = null, name = '';
-    if (want) {
-      const def = FM.filters && FM.filters.get ? FM.filters.get(want) : null;
-      const made = FM.filters && FM.filters.makeInstance ? FM.filters.makeInstance(want) : null;
-      box = (made && FM.fxRegistry) ? FM.fxRegistry.fitToLayer(made, L) : null;
-      if (!box) return refusePlan('lookUnsuited');
-      box.sm = 1;
-      name = String((def && def.name) || box.name || want);
-    }
-    const plan = lookPlan('Change look', L, id);
-    plan.writes.push(() => {
-      if (!Array.isArray(L.effects)) L.effects = [];
-      const lk = S.lookOf(L), i = L.effects.indexOf(lk.filter);
-      if (i >= 0) { if (box) L.effects.splice(i, 1, box); else L.effects.splice(i, 1); return; }
-      if (!box) return;
-      const a = L.effects.indexOf(lk.adjust);
-      if (a >= 0) L.effects.splice(a, 0, box); else L.effects.push(box);
-    });
-    plan.live = box ? line('lookSet', name, S.itemWord(L, R)) : line('lookOff', S.itemWord(L, R));
-    return plan;
+  /* ═══ #1243 S12: LOOK FOR THE WHOLE VIDEO (his words, 8 Nov: "you shouldn't have the look menu on each layer… you want to press add
+     and it goes over your entire project immediately… consistent color correction over your project"). Look left the clip's tray and is
+     on the project row; it edits ONE layer, the project's LOOK LAYER, marked `sm.look` and made on the first pick (§8.5c, pick first):
+       · ROUTE R2 (C S12 change 2, the plan's default, chosen here; a timing probe of R1 against it runs later): a full-frame rect SHAPE
+         holding [Backdrop Clone, the filter, Adjust]. Backdrop Clone fills the shape with everything drawn below it and the two boxes grade
+         that copy, so EVERY ingredient renders — grain, vignette, light leaks and sharpen too, which an adjustment layer (R1) skips
+         (fx-registry ADJ_OK) — and js/compositor.js does not change. Its cost is one full-frame copy a frame. R1 would swap makeLookLayer's
+         shape for an adjustment layer, and needs the compositor change C S12 names for those four.
+       · WHERE (his pick B): directly above the top-most video or picture (S.lookSlot), so the clips and the pictures on top are graded and
+         the titles, captions, shapes and stickers above it keep their own colours. Made, it lifts the titles, captions and shapes that sat
+         below that place in front of a clip to just above itself, as a whole-video effect does (liftOverSegment, S10-N1).
+       · KEPT OVER THE WHOLE VIDEO, [first clip start, track end], and in its place by S.fitProjectLayers' case 4 (fitLook) after EVERY
+         Simple step — never by a write on the switch into Simple. A look that ends early because clips were added in Full says so in the
+         panel, with a one-step Fix (S.lookEndsEarly). A look that becomes empty (None with no Adjust, Reset with no filter) goes.
+       · THE WRITES are the per-clip Look's (S.lookOf, S.lookApply, a filter fitted by fitToLayer and marked sm 1), on the look layer:
+         S.planProjectLook. Each is ONE runner step (one undo step, one collab transaction), never arranging or adopting, so it works in a
+         live session; the first one also makes the layer, in that same step, so one Undo takes the whole look away.
+       · A CLIP THAT ALREADY CARRIES A SIMPLE LOOK (the tray's Look, before this release) keeps it and keeps rendering. The panel says how
+         many there are and offers Remove them: one step that takes off only the Simple-made boxes with an `fid` and the box named Adjust
+         (1243-R O5), never Match, an effect, a blur fill, or a filter added in Full (no sm marker).
+     No DOM here: js/simple-tools.js draws the panel. */
+  const lookMedia = l => !!l && (l.type === 'video' || l.type === 'image') && l.audioOnly !== true && !(l.sm && (l.sm.snd === true || l.sm.look === true));
+  /* a member's place in the stack is its outermost group's, so the look never goes in between a group's members */
+  function topLevelOf(l, map) { let p = l, n = 0; while (p && p.parent && n++ < 64) { const q = map.get(p.parent); if (!q || q.type !== 'group') break; p = q; } return p; }
+  /* WHERE THE LOOK GOES: its index among the layers other than `look` — just above the top-most layer that is (or holds) a video or a
+     picture. With no picture at all, the bottom. */
+  S.lookSlot = function (look) {
+    const map = byIdMap(), others = FM.scene.layers.filter(l => l !== look), idx = new Map(others.map((l, i) => [l, i]));
+    let best = others.length;
+    others.forEach(l => { if (!lookMedia(l)) return; const i = idx.get(topLevelOf(l, map)); if (i != null && i < best) best = i; });
+    return best;
   };
-  /* STRENGTH, an ADJUST control, or RESET: one step each (a slider writes on release, never while it moves) */
-  S.planLook = function (R, id, op) {
-    const map = byIdMap(), L = lookTarget(R, id, map);
-    if (!L || !op) return refusePlan('gone');
-    const lk = S.lookOf(L), w = (words().tools || {});
-    let label = 'Adjust', live = '';
-    if (op.kind === 'strength') {
-      if (!lk.filter) return refusePlan('gone');
-      if (S.lookValue(L, 'strength') === Math.round(+op.v || 0) && !S.lookKeyed(L, 'strength')) return refusePlan('nothingChanged');
+  /* …and puts it there; true when it moved. One inside a group (moved there in Full) stays where it is. */
+  S.lookToSlot = function (look) {
+    const arr = FM.scene.layers, at = arr.indexOf(look);
+    if (at < 0 || look.parent) return false;
+    const j = S.lookSlot(look);
+    if (j === at) return false;
+    arr.splice(at, 1); arr.splice(j, 0, look);
+    return true;
+  };
+  /* the project's look layer: R.look from a read, else the top-most `sm.look` layer; null when there is none yet */
+  S.lookLayer = function (R) {
+    if (R) return R.look ? (FM.layerById(FM.scene, R.look) || null) : null;
+    return FM.scene.layers.find(l => l && l.sm && l.sm.look === true) || null;
+  };
+  /* the look layer, built (not yet in the stack): Backdrop Clone first, marked sm 1 */
+  function makeLookLayer(w) {
+    const P = FM.scene.project, cb = FM.fxRegistry && FM.fxRegistry.makeInstance ? FM.fxRegistry.makeInstance('copybg') : null;
+    if (!cb || !w) return null;
+    cb.sm = 1;
+    const l = FM.makeLayer('shape', { name: 'Look', shape: 'rect', x: P.width / 2, y: P.height / 2, shapeW: P.width, shapeH: P.height, fill: '#000000', start: w.start, duration: w.duration });
+    l.effects = [cb];
+    return l;
+  }
+  /* the titles, captions and shapes the new look would grade: below its place, in front of a clip they meet, not inside a group */
+  function lookLift(R, look) {
+    const L = FM.scene.layers, map = byIdMap(), j = S.lookSlot(look);
+    return L.slice(j).filter(l => {
+      const u = l && R.units[l.id];
+      if (!u || R.isMain(l.id) || lookMedia(l)) return false;
+      if (!(u.kind === 'text' || u.kind === 'captions' || (u.kind === 'overlay' && l.type === 'shape'))) return false;
+      if (!(u.side === 'front' || u.side === 'mixed')) return false;
+      const p = l.parent && map.get(l.parent);
+      return !(p && p.type === 'group');
+    }).map(l => l.id);
+  }
+  /* CASE 4 of S.fitProjectLayers (1243-R decision 10): the look over [first clip start, track end], in its place. Its keys (a Strength
+     keyed in Full) ride the change as a whole-video effect's do. Never a locked or held one (S10-N3); with no clip there is no span and
+     only its place is kept. Returns its id when it moved anything. */
+  function fitLook(R2, plan, PZ, s, end, span) {
+    const l = R2.look ? byIdMap().get(R2.look) : null;
+    if (!l || !(l.sm && l.sm.look === true)) return null;
+    if (l.locked || (PZ && PZ.heldByOther(l.id))) return null;
+    let moved = false;
+    if (span) {
+      const s0 = +l.start || 0, d0 = +l.duration || 0;
+      if (Math.abs(s0 - s) > 1e-9 || Math.abs(s0 + d0 - end) > 1e-9) {
+        if (Math.abs(s - s0) > 1e-9) S.shiftKeys(l, s - s0);
+        if (d0 > 0) S.mapLayerKeys(l, S.fitMap(s, d0, end - s));
+        l.start = s; l.duration = end - s;
+        moved = true;
+      }
+    }
+    /* R9 review: when the look moves UP past a title, caption or shape (a picture added over a shape that sits above the look), that
+       layer is lifted back to just above the look in this same step, as the making step lifts them (lookLift), so it keeps its own
+       colours. Only the ones the move newly covers: one he put under the look himself stays graded. */
+    const arr = FM.scene.layers, at0 = arr.indexOf(l), above = new Set(at0 > 0 ? arr.slice(0, at0) : []);
+    if (S.lookToSlot(l)) {
+      moved = true;
+      const map = byIdMap(), up = new Set(lookLift(R2, l).filter(id => { const x = map.get(id); return x && above.has(x) && !(PZ && PZ.heldByOther(id)); }));
+      if (up.size) {
+        const mv = arr.filter(x => up.has(x.id)), rest = arr.filter(x => !up.has(x.id));
+        rest.splice(rest.indexOf(l), 0, ...mv);
+        arr.length = 0; Array.prototype.push.apply(arr, rest);
+        if (plan && plan.touched) up.forEach(id => plan.touched.add(id));
+      }
+    }
+    if (moved && plan && plan.touched) plan.touched.add(l.id);
+    return moved ? l.id : null;
+  }
+  /* a Simple per-clip look box: a Simple-made filter (it has an fid) or the Simple-made box named Adjust (1243-R O5) */
+  const clipLookBox = f => lookBox(f) && ((typeof f.fid === 'string' && !!f.fid) || f.name === ADJ_NAME);
+  /* the pictures that carry a Simple per-clip look of their own (the tray's Look, before #1243 S12), the look layer aside */
+  S.clipLooks = function () {
+    return FM.scene.layers.filter(l => l && !(l.sm && l.sm.look === true) && (l.type === 'video' || l.type === 'image') && Array.isArray(l.effects) && l.effects.some(clipLookBox));
+  };
+  /* the look no longer covers the whole video (clips added or moved in Full; on every Simple step fitLook keeps it), at either end.
+     Never for a look locked in Full or held by a friend (R9 review): fitLook would not move it, so Fix could only say it did */
+  S.lookEndsEarly = function (R) {
+    const L = S.lookLayer(R), w = R ? S.segmentWhole(R) : null;
+    if (!L || !w) return false;
+    const C = FM.collab, PZ = C && C.active && C.presence && C.presence.heldByOther ? C.presence : null;
+    if (L.locked || (PZ && PZ.heldByOther(L.id))) return false;
+    const s = +L.start || 0, e = s + (+L.duration || 0);
+    return Math.abs(s - w.start) > R.eps || Math.abs(e - (w.start + w.duration)) > R.eps;
+  };
+  function projectLookPlan(label, cur) {
+    const plan = newPlan(label);
+    plan.arranges = false; plan.adopts = false;
+    if (cur) plan.touched.add(cur.id);
+    return plan;
+  }
+  /* REMOVE THEM: every clip's Simple per-clip look off, in ONE step */
+  function planClipLooksOff() {
+    const list = S.clipLooks();
+    if (!list.length) return refusePlan('nothingChanged');
+    const plan = newPlan('Remove clip looks'); plan.arranges = false; plan.adopts = false; plan.keepSel = true;
+    list.forEach(l => plan.touched.add(l.id));
+    plan.writes.push(() => { list.forEach(l => { if (Array.isArray(l.effects)) l.effects = l.effects.filter(f => !clipLookBox(f)); }); });
+    plan.live = line('clipLooksOff', list.length);
+    return plan;
+  }
+  /* op: {kind: 'filter', fid} (null: None), {kind: 'strength', v}, {kind: 'adjust', key, v}, {kind: 'reset'} — what the per-clip Look
+     took — and {kind: 'clipsOff'} (Remove them) and {kind: 'fix'} (Fix, for a look that ends early). */
+  S.planProjectLook = function (R, op) {
+    if (!op || typeof op !== 'object') return refusePlan('gone');
+    if (op.kind === 'clipsOff') return planClipLooksOff();
+    const map = byIdMap(), cur = R.look ? (map.get(R.look) || null) : null, w = S.segmentWhole(R);
+    if (op.kind === 'fix') {
+      if (!cur || !S.lookEndsEarly(R)) return refusePlan('nothingChanged');
+      const plan = projectLookPlan('Fit look', cur);
+      plan.writes.push(() => { fitLook(R, plan, null, w.start, w.start + w.duration, true); });
+      plan.live = line('lookFitted');
+      return plan;
+    }
+    if (!cur && !w) return refusePlan('lookNoClip');
+    const lk = S.lookOf(cur), tw = (words().tools || {});
+    let label = 'Change look', live = '', box = null, empty = false;
+    if (op.kind === 'filter') {
+      const want = op.fid || null;
+      if ((lk.filter ? lk.filter.fid : null) === want) return refusePlan('nothingChanged');
+      empty = !want && !lk.adjust;
+    } else if (op.kind === 'strength') {
+      if (!lk.filter) return refusePlan('nothingChanged');
+      if (S.lookValue(cur, 'strength') === Math.round(+op.v || 0) && !S.lookKeyed(cur, 'strength')) return refusePlan('nothingChanged');
       label = 'Look strength'; live = line('lookStrengthSet', Math.round(+op.v || 0));
     } else if (op.kind === 'reset') {
       if (!lk.adjust) return refusePlan('nothingChanged');
-      label = 'Reset adjust'; live = line('adjustReset');
-    } else {
+      label = 'Reset adjust'; live = line('adjustReset'); empty = !lk.filter;
+    } else if (op.kind === 'adjust') {
       const d = adjDef(op.key);
       if (!d) return refusePlan('gone');
-      if (S.lookValue(L, d.key) === Math.round(+op.v || 0) && !S.lookKeyed(L, d.key)) return refusePlan('nothingChanged');
-      live = line('adjustSet', w[d.word] || d.key, Math.round(+op.v || 0));
+      if (S.lookValue(cur, d.key) === Math.round(+op.v || 0) && !S.lookKeyed(cur, d.key)) return refusePlan('nothingChanged');
+      label = 'Adjust'; live = line('adjustSet', tw[d.word] || d.key, Math.round(+op.v || 0));
+      empty = !lk.filter && !Math.round(+op.v || 0) && !!lk.adjust && lk.adjust.effects.every(c => c && c.type === d.type) && !S.lookKeyed(cur, d.key);   // its last control back at zero
+    } else return refusePlan('gone');
+    const L = cur || makeLookLayer(w);
+    if (!L) return refusePlan('lookUnsuitedAll');
+    if (op.kind === 'filter') {
+      if (op.fid) {
+        const def = FM.filters && FM.filters.get ? FM.filters.get(op.fid) : null;
+        const made = FM.filters && FM.filters.makeInstance ? FM.filters.makeInstance(op.fid, +L.start || 0) : null;
+        box = (made && FM.fxRegistry) ? FM.fxRegistry.fitToLayer(made, L) : null;
+        if (!box) return refusePlan('lookUnsuitedAll');
+        box.sm = 1;
+        live = line('lookSetAll', String((def && def.name) || box.name || op.fid));
+      } else live = line('lookOffAll');
     }
-    const plan = lookPlan(label, L, id);
-    plan.writes.push(() => { S.lookApply(L, op); });
+    const plan = projectLookPlan(label, cur);
+    if (!cur) {
+      const lift = lookLift(R, L);
+      lift.forEach(id => plan.touched.add(id));
+      plan.pre.push(async () => {
+        S.setFlag(L, 'stay', true); S.setFlag(L, 'look', true);
+        S.insertAt(L, S.lookSlot(L));
+        const up = lift.filter(id => FM.layerById(FM.scene, id));
+        if (up.length) FM.moveLayers(up, L.id);   // just above the look, in their own order
+      });
+    }
+    plan.writes.push(() => {
+      if (!Array.isArray(L.effects)) L.effects = [];
+      if (op.kind === 'filter') {
+        const now = S.lookOf(L), i = L.effects.indexOf(now.filter);
+        if (i >= 0) { if (box) L.effects.splice(i, 1, box); else L.effects.splice(i, 1); }
+        else if (box) { const a = L.effects.indexOf(now.adjust); if (a >= 0) L.effects.splice(a, 0, box); else L.effects.push(box); }
+      } else S.lookApply(L, op);
+    });
+    /* nothing left to grade: the layer goes with the step (an empty look is a full-frame copy a frame for nothing) */
+    if (cur && empty) plan.removes.add(cur.id);
     plan.live = live;
     return plan;
   };
+  const projectLookLabel = op => !op ? 'Change look' : op.kind === 'strength' ? 'Look strength' : op.kind === 'reset' ? 'Reset adjust'
+    : op.kind === 'adjust' ? 'Adjust' : op.kind === 'clipsOff' ? 'Remove clip looks' : op.kind === 'fix' ? 'Fit look' : 'Change look';
   Object.assign(S.cmd, {
-    lookFilter(id, fid) { return S.edit('Change look', R => S.planLookFilter(R, id, fid)); },
-    look(id, op) { return S.edit(op && op.kind === 'strength' ? 'Look strength' : op && op.kind === 'reset' ? 'Reset adjust' : 'Adjust', R => S.planLook(R, id, op)); }
+    projectLook(op) { return S.edit(projectLookLabel(op), R => S.planProjectLook(R, op)); }
   });
 
   /* ═══ PHASE 3 · CAPTIONS (queue 980; DESIGN §8.5 the Captions tool "Type captions · Find speech · Style" and the caption-track tray
