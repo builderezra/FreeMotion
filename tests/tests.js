@@ -65571,10 +65571,13 @@
   /* (History: Phase 3 · Look made a video clip's tray eleven on two rows of six, his sheet 1 pick B; #1243 S24 and S25 took Length and Move
      off it; S5 put Split first; S12 took Look off.) #1243 R RELEASE 8 (R decision 2, one tray order; S28, S32, S4, S31, S33's lines): a main video clip's tray is ONE strip in R (a)'s order,
      on a PC as on a phone (decision 6: no two-row grid). It replaced 'simple P2.3 · S9 option E: a main video clip’s tray is Split, Audio, …'
-     (his option E is reversed by his own S28 words). The strip reads its children in order, a section line as '|'. */
-  test('1243 R8 · decision 2 a main video clip’s tray reads Split, Speed, Volume, Replace, Transition, Reverse, Take sound out, Lift off, Duplicate | Opacity | Crop, Transform | Delete — no Audio, More, Look, Length or Move — on ONE 56 px row at 1280×800, 1024×600 and 380, with Split, Speed, Volume and Replace pressable at the strip’s start; next to a gap Close gap follows Duplicate', { item: '980', budgetMs: 150000 }, async function () {
+     (his option E is reversed by his own S28 words). The strip reads its children in order, a section line as '|'.
+     #1243 R RELEASE 8b (S33's first wave, R (a)): Motion blur and Smooth skin join Opacity's section, and the sound section (Quieter
+     background, Sound styles, Clear voice) comes between Transform's and Delete. It replaced '1243 R8 · decision 2 a main video clip’s tray
+     reads Split, Speed, Volume, Replace, Transition, Reverse, Take sound out, Lift off, Duplicate | Opacity | Crop, Transform | Delete — …'. */
+  test('1243 R8b · decision 2 a main video clip’s tray reads Split, Speed, Volume, Replace, Transition, Reverse, Take sound out, Lift off, Duplicate | Opacity, Motion blur, Smooth skin | Crop, Transform | Quieter background, Sound styles, Clear voice | Delete — no Audio, More, Look, Length or Move — on ONE 56 px row at 1280×800, 1024×600 and 380, with Split, Speed, Volume and Replace pressable at the strip’s start; next to a gap Close gap follows Duplicate', { item: '980', budgetMs: 150000 }, async function () {
     smNeedP2();
-    const WANT = ['split', 'speed', 'volume', 'replace', 'transition', 'reverse', 'takeSound', 'lift', 'duplicateClip', '|', 'opacity', '|', 'crop', 'transform', '|', 'delete'];
+    const WANT = ['split', 'speed', 'volume', 'replace', 'transition', 'reverse', 'takeSound', 'lift', 'duplicateClip', '|', 'opacity', 'motionBlur', 'smoothSkin', '|', 'crop', 'transform', '|', 'quieter', 'soundStyles', 'clearVoice', '|', 'delete'];
     const read = () => { const r = document.querySelector('#sm-tray > .sm-runbox > .sm-run'); return r ? Array.from(r.children).map(c => c.classList.contains('sm-div') ? '|' : (c.dataset.tool || c.className)) : []; };
     for (const [w, h] of SM9_SIZES) {
       await sm9At(w, h, async function () {
@@ -141113,8 +141116,12 @@
 
 
   /* #1243 S4 and S31 (release 8): there is no More to keep in reach, and Delete is no longer pinned beside the strip — it is the strip's last
-     tool and scrolls with the rest, so the wheel (his #976) is what brings it, and Close gap, into reach on a PC */
-  test('simple P2.2 · review at 1280 and 380 a plain mouse wheel scrolls a clip’s tray to its end, where Close gap and Delete can be pressed (#976; #1243 S31: Delete scrolls with the rest, out of view at the start)', { item: '980', budgetMs: 90000 }, async function () {
+     tool and scrolls with the rest, so the wheel (his #976) is what brings it, and Close gap, into reach on a PC.
+     #1243 R release 8b: the sound section (Quieter background, Sound styles, Clear voice) sits between Transform and Delete, so the strip's end
+     no longer holds Close gap (the main section's last tool) too: a turn of the wheel brings Close gap under the pointer, and a long one takes
+     the strip to its end, where the sound section's Clear voice and Delete are. It replaced 'simple P2.2 · review at 1280 and 380 a plain mouse
+     wheel scrolls a clip’s tray to its end, where Close gap and Delete can be pressed (#976; …)'. */
+  test('simple P2.2 · review at 1280 and 380 a plain mouse wheel scrolls a clip’s tray: one turn brings Close gap under the pointer, and a long turn takes the strip to its end, where Clear voice and Delete can be pressed (#976; #1243 S31: Delete scrolls with the rest, out of view at the start; release 8b: the sound section sits before Delete)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     const hits = (id) => { const b = smTool(id); if (!b) return 'missing'; const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, e = document.elementFromPoint(x, y); return e && b.contains(e) ? '' : 'its centre (' + Math.round(x) + ',' + Math.round(y) + ') hits ' + (e ? (e.dataset && e.dataset.tool) || e.id || e.className || e.tagName : 'nothing'); };
     for (const width of [1280, 380]) {
@@ -141128,9 +141135,14 @@
           if (hits('speed')) throw new Error('CONTROL (' + width + '): Speed is not reachable at the strip’s start: ' + hits('speed'));
           const d0 = smTool('delete').getBoundingClientRect(), s0 = sc.getBoundingClientRect();
           if (d0.left < s0.right - 0.5) throw new Error(width + ' px: Delete is in view with the strip at its start (' + Math.round(d0.left) + ' in a strip ending at ' + Math.round(s0.right) + '): it should be the last tool, scrolling with the rest');
+          /* one turn, as far as puts Close gap in the strip's middle */
+          const seam = smTool('seam'), turn = Math.max(1, Math.round(seam.offsetLeft - (sc.clientWidth - seam.offsetWidth) / 2));
+          tray.dispatchEvent(new WheelEvent('wheel', { deltaY: turn, bubbles: true, cancelable: true })); await v.sleep(30);
+          if (sc.scrollLeft < 1) throw new Error(width + ' px: a mouse wheel does not scroll the tray at all');
+          if (hits('seam')) throw new Error(width + ' px: after a turn of the wheel, Close gap still cannot be clicked — ' + hits('seam'));
           tray.dispatchEvent(new WheelEvent('wheel', { deltaY: 3000, bubbles: true, cancelable: true })); await v.sleep(30);
           if (sc.scrollWidth - sc.clientWidth > 1 && Math.abs(sc.scrollLeft - (sc.scrollWidth - sc.clientWidth)) > 1) throw new Error(width + ' px: a mouse wheel does not scroll the tray to its end (scrollLeft ' + sc.scrollLeft + ' of ' + (sc.scrollWidth - sc.clientWidth) + ')');
-          ['seam', 'delete'].forEach(id => { if (hits(id)) throw new Error(width + ' px: after the wheel, ' + id + ' still cannot be clicked — ' + hits(id)); });
+          ['clearVoice', 'delete'].forEach(id => { if (hits(id)) throw new Error(width + ' px: after the long turn, ' + id + ' still cannot be clicked — ' + hits(id)); });
         });
       }, width);
     }
@@ -206111,7 +206123,11 @@
     if (fails.length) throw new Error(fails.join(' · '));
   });
 
-  test('1243 R8 · section lines at 380 and 1280 every tray’s sections are split by ONE thin line — never first, never last, never two together — a song’s tray reads Split, Volume, Replace, Fade, Speed, Stay put, Open in Full | Delete, a title’s Split, Edit words, Style, Add effect, Stay put | Opacity, Transform | Delete, an overlay photo’s ends Back | Opacity | Crop, Transform | Delete (CONTROL: the line is about 1 × 24 px, takes no press and is read by no one)', { item: '980', budgetMs: 120000 }, async function () {
+  /* #1243 R release 8b: a song's tray has its sound section (Quieter background, Sound styles, Clear voice, then Open in Full, which keeps Remove
+     vocals and the rest of the audio effects) and an overlay photo's Opacity section has Motion blur (R (a)). It replaced '1243 R8 · section
+     lines at 380 and 1280 every tray’s sections are split by ONE thin line — … a song’s tray reads Split, Volume, Replace, Fade, Speed, Stay
+     put, Open in Full | Delete, …'. */
+  test('1243 R8b · section lines at 380 and 1280 every tray’s sections are split by ONE thin line — never first, never last, never two together — a song’s tray reads Split, Volume, Replace, Fade, Speed, Stay put | Quieter background, Sound styles, Clear voice, Open in Full | Delete, a title’s Split, Edit words, Style, Add effect, Stay put | Opacity, Transform | Delete, an overlay photo’s ends Back | Opacity, Motion blur | Crop, Transform | Delete (CONTROL: the line is about 1 × 24 px, takes no press and is read by no one)', { item: '980', budgetMs: 120000 }, async function () {
     smNeedP2();
     const fails = [];
     for (const width of [380, 1280]) {
@@ -206119,9 +206135,9 @@
         await smP2(r8Fixture, async function (v) {
           const at = width + ' px: ';
           const want = {
-            Song: 'split volume replace fade speed stay openFull | delete',
+            Song: 'split volume replace fade speed stay | quieter soundStyles clearVoice openFull | delete',
             Hi: 'split editwords style addfx stay | opacity transform | delete',
-            OP: 'split into replace addfx stay forward backward | opacity | crop transform | delete'
+            OP: 'split into replace addfx stay forward backward | opacity motionBlur | crop transform | delete'
           };
           for (const n of ['V', 'P', 'Hi', 'OP', 'Song', 'Caps']) {
             FM.selectLayer(null); FM.selectLayer(v.L(n).id); await r4Settle(150);
@@ -206278,6 +206294,312 @@
       });
     });
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  /* ═══ #1243 R RELEASE 8b · THE REST OF S33's FIRST WAVE (1243-R (c) row 8b; R (a)'s trays) ═══
+     His words, 8 Nov (S33): "a second section where it's got stuff like makeup, like retouch… opacity, motion blur… another section which is
+     more like an audio section where they've got extract audio, isolate voice… reduce noise, audio effects, enhance voice". Each door drives
+     what Full already has (js/spine-edit.js, release 8b). Every press goes through the page (scrolled into the strip's view, hit-tested), and
+     the steps are counted by the history's position. Red on v18.43: none of the five tools exists. */
+  async function r8bPress(id, what) {
+    const b = smTool(id);
+    if (!b) throw new Error(what + ' is not in the row (' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(x => x.dataset.tool).join(' ') + ')');
+    const run = b.closest('.sm-run');
+    if (run) { run.scrollLeft = Math.max(0, b.offsetLeft - (run.clientWidth - b.offsetWidth) / 2); await r4Settle(40); }
+    smMustHit(b, what);
+    /* review R8B-5: the lines are emptied first, so a check of what this press said never reads an earlier press's line */
+    const lv = document.getElementById('sm-live'), ln = document.querySelector('#sm-say .sm-line');
+    if (lv) lv.textContent = '';
+    if (ln) ln.textContent = '';
+    b.click();
+    return b;
+  }
+  const r8bPressed = id => { const b = smTool(id); return b ? b.getAttribute('aria-pressed') : 'missing'; };
+  const r8bLine = () => [document.getElementById('sm-live'), document.getElementById('sm-say')].map(e => e ? e.textContent : '').join(' / ');
+
+  test('1243 R8b · S33 Motion blur and Smooth skin at 380 and 1280: on a video clip one press puts Motion blur on it in ONE step and shows the tool pressed, a second press takes it off in one step and Undo brings it back; on a picture clip Smooth skin puts Soften Skin on and Motion blur the picture’s own Motion Blur (Object), one step each; an overlay photo has Motion blur and no Smooth skin, a title neither (CONTROL: each tray has its Opacity, and the video clip’s two start unpressed)', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    for (const width of [380, 1280]) {
+      await r4At(width, width > 700 ? 800 : 0, async function () {
+        await smP2(r8Fixture, async function (v) {
+          const at = width + ' px: ', ix = () => FM.history._steps().index, types = n => (v.L(n).effects || []).map(f => f.type).join(',');
+          FM.selectLayer(v.L('V').id); await r4Settle(150);
+          if (!smTool('opacity')) { fails.push('CONTROL ' + at + 'the video clip’s tray has no Opacity (' + r8Kids().join(' ') + ')'); return; }
+          if (r8bPressed('motionBlur') !== 'false' || r8bPressed('smoothSkin') !== 'false') { fails.push(at + 'the video clip’s Motion blur reads ' + r8bPressed('motionBlur') + ' and its Smooth skin ' + r8bPressed('smoothSkin') + ', want both in the tray and unpressed (' + r8Kids().join(' ') + ')'); return; }
+          let n0 = ix();
+          await r8bPress('motionBlur', at + 'the video clip’s Motion blur'); await v.idle(); await r4Settle(150);
+          const mb = (v.L('V').effects || []).filter(f => f.type === 'motionflow');
+          if (mb.length !== 1 || mb[0].sm !== 1 || types('V') !== 'motionflow' || ix() !== n0 + 1) fails.push(at + 'Motion blur on the video clip left its effects [' + types('V') + '] after ' + (ix() - n0) + ' steps, want one Motion Blur (Footage) marked as Simple’s, in ONE step');
+          if (r8bPressed('motionBlur') !== 'true') fails.push(at + 'Motion blur does not show pressed once it is on (' + r8bPressed('motionBlur') + ')');
+          if (!/Motion blur on/.test(r8bLine())) fails.push(at + 'Motion blur said “' + r8bLine() + '”, want Motion blur on');
+          n0 = ix();
+          await r8bPress('motionBlur', at + 'the pressed Motion blur'); await v.idle(); await r4Settle(150);
+          if (types('V') !== '' || ix() !== n0 + 1) fails.push(at + 'a second press left [' + types('V') + '] after ' + (ix() - n0) + ' steps, want the Motion blur gone in ONE step');
+          if (r8bPressed('motionBlur') !== 'false') fails.push(at + 'Motion blur still shows pressed once it is off');
+          FM.history.undo(); await r4Settle(150);
+          if (types('V') !== 'motionflow') fails.push(at + 'one Undo after the second press left [' + types('V') + '], want the Motion blur back');
+          FM.history.undo(); await r4Settle(150);
+          if (types('V') !== '') fails.push(at + 'a second Undo left [' + types('V') + '], want the clip as it was');
+          FM.selectLayer(null); FM.selectLayer(v.L('P').id); await r4Settle(150);
+          if (!smTool('opacity')) fails.push('CONTROL ' + at + 'the picture clip’s tray has no Opacity (' + r8Kids().join(' ') + ')');
+          n0 = ix();
+          await r8bPress('smoothSkin', at + 'the picture clip’s Smooth skin'); await v.idle(); await r4Settle(150);
+          if (types('P') !== 'softskin' || ix() !== n0 + 1) fails.push(at + 'Smooth skin on the picture clip left [' + types('P') + '] after ' + (ix() - n0) + ' steps, want Soften Skin in ONE step');
+          if (r8bPressed('smoothSkin') !== 'true') fails.push(at + 'Smooth skin does not show pressed once it is on');
+          n0 = ix();
+          await r8bPress('motionBlur', at + 'the picture clip’s Motion blur'); await v.idle(); await r4Settle(150);
+          if (types('P') !== 'softskin,objectblur' || ix() !== n0 + 1) fails.push(at + 'Motion blur on the picture clip left [' + types('P') + '] after ' + (ix() - n0) + ' steps, want Motion Blur (Object) after the Soften Skin in ONE step');
+          FM.selectLayer(null); FM.selectLayer(v.L('OP').id); await r4Settle(150);
+          if (!smTool('opacity')) fails.push('CONTROL ' + at + 'the overlay photo’s tray has no Opacity (' + r8Kids().join(' ') + ')');
+          else if (!smTool('motionBlur') || smTool('smoothSkin')) fails.push(at + 'the overlay photo’s tray reads ' + r8Kids().join(' ') + ', want Motion blur and no Smooth skin');
+          FM.selectLayer(null); FM.selectLayer(v.L('Hi').id); await r4Settle(150);
+          if (!smTool('opacity')) fails.push('CONTROL ' + at + 'the title’s tray has no Opacity (' + r8Kids().join(' ') + ')');
+          else if (smTool('motionBlur') || smTool('smoothSkin')) fails.push(at + 'the title’s tray offers Motion blur or Smooth skin (' + r8Kids().join(' ') + ')');
+        });
+      });
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1243 R8b · S33 Clear voice and Sound styles at 380 and 1280: on a song Clear voice puts its four audio effects on after the song’s own Reverb in ONE step, pressed, and a second press takes only them off; Sound styles opens its own row where None is pressed, Robot puts the Robot voice on in one step and Deep then takes its place in one step, Deep still pressed once the project is read back in, and None takes it off leaving the Reverb; on a video clip Clear voice goes on the clip’s own sound; a picture clip has none of the sound tools (CONTROL: the song’s own Reverb is there and its tray has Volume)', { item: '980', budgetMs: 180000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    const fixture = (W, H) => r8Fixture(W, H).map(l => { if (l.name === 'Song') { const r = FM.audioFxRegistry.makeInstance('reverb'); r.params.mix = 0.77; l.audioFx = [r]; } return l; });
+    for (const width of [380, 1280]) {
+      await r4At(width, width > 700 ? 800 : 0, async function () {
+        await smP2(fixture, async function (v) {
+          const at = width + ' px: ', ix = () => FM.history._steps().index, afx = n => (v.L(n).audioFx || []).map(f => f.type).join(',');
+          FM.selectLayer(v.L('Song').id); await r4Settle(150);
+          if (!smTool('volume') || afx('Song') !== 'reverb') { fails.push('CONTROL ' + at + 'the song’s tray (' + r8Kids().join(' ') + ') or its own effects [' + afx('Song') + '] are not as built'); return; }
+          if (r8bPressed('clearVoice') !== 'false' || r8bPressed('soundStyles') !== 'false') { fails.push(at + 'the song’s Clear voice reads ' + r8bPressed('clearVoice') + ' and Sound styles ' + r8bPressed('soundStyles') + ', want both in the tray and unpressed (' + r8Kids().join(' ') + ')'); return; }
+          let n0 = ix();
+          await r8bPress('clearVoice', at + 'the song’s Clear voice'); await v.idle(); await r4Settle(150);
+          if (afx('Song') !== 'reverb,highpass,eq3,compressor,deesser' || ix() !== n0 + 1) fails.push(at + 'Clear voice left the song’s audio effects [' + afx('Song') + '] after ' + (ix() - n0) + ' steps, want the Reverb then High-Pass, 3-Band EQ, Compressor and De-esser in ONE step');
+          if (r8bPressed('clearVoice') !== 'true') fails.push(at + 'Clear voice does not show pressed once it is on');
+          n0 = ix();
+          await r8bPress('clearVoice', at + 'the pressed Clear voice'); await v.idle(); await r4Settle(150);
+          if (afx('Song') !== 'reverb' || ix() !== n0 + 1) fails.push(at + 'a second Clear voice left [' + afx('Song') + '] after ' + (ix() - n0) + ' steps, want only the Reverb, in ONE step');
+          await r8bPress('soundStyles', at + 'the song’s Sound styles'); await r4Settle(150);
+          const bar = document.getElementById('sm-bar');
+          if (FM.simpleTools.mode() !== 'sub' || bar.getAttribute('data-sub') !== 'soundstyles') { fails.push(at + 'Sound styles opened mode ' + FM.simpleTools.mode() + ' / ' + bar.getAttribute('data-sub') + ', want its own row'); return; }
+          if (r8bPressed('style-none') !== 'true' || r8bPressed('style-robot') !== 'false' || r8bPressed('style-deep') !== 'false') fails.push(at + 'the row’s None / Robot / Deep read ' + [r8bPressed('style-none'), r8bPressed('style-robot'), r8bPressed('style-deep')].join(' / ') + ', want None pressed');
+          n0 = ix();
+          await r8bPress('style-robot', at + 'Robot'); await v.idle(); await r4Settle(150);
+          if (afx('Song') !== 'reverb,ringmod,flanger' || ix() !== n0 + 1) fails.push(at + 'Robot left [' + afx('Song') + '] after ' + (ix() - n0) + ' steps, want the Reverb then the Robot voice, in ONE step');
+          if (r8bPressed('style-robot') !== 'true' || r8bPressed('style-none') !== 'false') fails.push(at + 'after Robot the row reads Robot ' + r8bPressed('style-robot') + ', None ' + r8bPressed('style-none') + ', want Robot pressed');
+          n0 = ix();
+          await r8bPress('style-deep', at + 'Deep'); await v.idle(); await r4Settle(150);
+          if (afx('Song') !== 'reverb,pitch,bassTreble' || ix() !== n0 + 1) fails.push(at + 'Deep after Robot left [' + afx('Song') + '] after ' + (ix() - n0) + ' steps, want the Reverb then the Deep voice in Robot’s place, in ONE step');
+          if (r8bPressed('style-deep') !== 'true' || r8bPressed('style-robot') !== 'false') fails.push(at + 'after Deep the row reads Deep ' + r8bPressed('style-deep') + ', Robot ' + r8bPressed('style-robot') + ', want Deep alone pressed');
+          /* read back in: nothing marks the style, so the sanitised copy must read as Deep by what it is */
+          FM.simpleTools.back(); await r4Settle(100);
+          const ok = await FM.storage.applyScene(JSON.parse(v.doc())); FM.refreshAll(); await r4Settle(150);
+          if (!ok) { fails.push('CONTROL ' + at + 'the project could not be read back in'); return; }
+          FM.selectLayer(null); FM.selectLayer(v.L('Song').id); await r4Settle(150);
+          if (r8bPressed('soundStyles') !== 'true') fails.push(at + 'read back in, the song’s Sound styles reads ' + r8bPressed('soundStyles') + ', want pressed');
+          await r8bPress('soundStyles', at + 'Sound styles after the read'); await r4Settle(150);
+          if (r8bPressed('style-deep') !== 'true') fails.push(at + 'read back in, Deep reads ' + r8bPressed('style-deep') + ', want pressed');
+          n0 = ix();
+          await r8bPress('style-none', at + 'None'); await v.idle(); await r4Settle(150);
+          if (afx('Song') !== 'reverb' || ix() !== n0 + 1) fails.push(at + 'None left [' + afx('Song') + '] after ' + (ix() - n0) + ' steps, want only the song’s own Reverb, in ONE step');
+          FM.simpleTools.back(); await r4Settle(100);
+          FM.selectLayer(null); FM.selectLayer(v.L('V').id); await r4Settle(150);
+          n0 = ix();
+          await r8bPress('clearVoice', at + 'the video clip’s Clear voice'); await v.idle(); await r4Settle(150);
+          if (afx('V') !== 'highpass,eq3,compressor,deesser' || ix() !== n0 + 1) fails.push(at + 'Clear voice on the video clip left its audio effects [' + afx('V') + '] after ' + (ix() - n0) + ' steps, want the four in ONE step');
+          FM.selectLayer(null); FM.selectLayer(v.L('P').id); await r4Settle(150);
+          if (!smTool('opacity')) fails.push('CONTROL ' + at + 'the picture clip’s tray has no Opacity');
+          else if (smTool('quieter') || smTool('soundStyles') || smTool('clearVoice')) fails.push(at + 'the picture clip offers a sound tool (' + r8Kids().join(' ') + ')');
+        });
+      });
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* Quieter background is Full's own Reduce noise (js/noise-reduction.js), which decodes the file and takes seconds: the suite's clips have no
+     file, so its two answers are stubbed (descriptors put back) and the test checks what Simple does with them — which sound it hands Full,
+     with the settings to clean and none to restore, what it shows pressed and resting, and what it says */
+  test('1243 R8b · S33 Quieter background at 380 and 1280: on a song one press hands that song to Full’s Reduce noise with its settings and shows the tool pressed with its line, a second press hands it back to put the original back and the tool unpressed; a video clip hands its own sound; with Remove vocals on the song the tool rests, says why and hands nothing; a picture clip has no Quieter background (CONTROL: the song’s tray has Volume and the stubs answer)', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    const fails = [], N = FM.noiseReduction;
+    if (!N) throw new Error('FM.noiseReduction is missing — js/noise-reduction.js did not load');
+    const dS = Object.getOwnPropertyDescriptor(N, 'state'), dT = Object.getOwnPropertyDescriptor(N, 'toggle'), st = {}, calls = [];
+    try {
+      N.state = l => (l && st[l.id]) || 'off';
+      N.toggle = async (l, settings) => { calls.push({ id: l && l.id, settings: !!settings }); st[l.id] = st[l.id] === 'on' ? 'off' : 'on'; if (FM.toast) FM.toast('Noise reduced — Restore original audio puts it back', 4500); if (FM.refreshAll) FM.refreshAll(); return true; };
+      for (const width of [380, 1280]) {
+        await r4At(width, width > 700 ? 800 : 0, async function () {
+          await smP2(r8Fixture, async function (v) {
+            const at = width + ' px: ', song = v.L('Song').id;
+            FM.selectLayer(song); await r4Settle(150);
+            if (!smTool('volume') || N.state(v.L('Song')) !== 'off') { fails.push('CONTROL ' + at + 'the song’s tray (' + r8Kids().join(' ') + ') or the stub is not as built'); return; }
+            if (r8bPressed('quieter') !== 'false') { fails.push(at + 'the song’s Quieter background reads ' + r8bPressed('quieter') + ', want it in the tray and unpressed (' + r8Kids().join(' ') + ')'); return; }
+            const c0 = calls.length;
+            await r8bPress('quieter', at + 'the song’s Quieter background'); await v.idle(); await r4Settle(200);
+            const c1 = calls.slice(c0);
+            if (c1.length !== 1 || c1[0].id !== song || !c1[0].settings) fails.push(at + 'Quieter background handed Full ' + JSON.stringify(c1) + ', want the song once, with settings');
+            if (r8bPressed('quieter') !== 'true') fails.push(at + 'Quieter background does not show pressed once the song is cleaned');
+            if (!/Background noise turned down/.test(r8bLine())) fails.push(at + 'it said “' + r8bLine() + '”, want Background noise turned down');
+            await r8bPress('quieter', at + 'the pressed Quieter background'); await v.idle(); await r4Settle(200);
+            const c2 = calls.slice(c0 + 1);
+            if (c2.length !== 1 || c2[0].id !== song || c2[0].settings) fails.push(at + 'the second press handed Full ' + JSON.stringify(c2) + ', want the song once, with no settings (put the original back)');
+            if (r8bPressed('quieter') !== 'false') fails.push(at + 'Quieter background still shows pressed once the original is back');
+            if (!/Original sound back/.test(r8bLine())) fails.push(at + 'the second press said “' + r8bLine() + '”, want Original sound back');
+            FM.selectLayer(null); FM.selectLayer(v.L('V').id); await r4Settle(150);
+            const c3 = calls.length;
+            await r8bPress('quieter', at + 'the video clip’s Quieter background'); await v.idle(); await r4Settle(200);
+            if (calls.length !== c3 + 1 || calls[c3].id !== v.L('V').id) fails.push(at + 'the video clip’s Quieter background handed Full ' + JSON.stringify(calls.slice(c3)) + ', want the clip itself');
+            st[song] = 'blocked';
+            FM.selectLayer(null); FM.selectLayer(song); await r4Settle(150);
+            const q = smTool('quieter'), c4 = calls.length;
+            if (!q || q.getAttribute('aria-disabled') !== 'true') fails.push(at + 'with Remove vocals on, the song’s Quieter background is ' + (q ? 'not resting' : 'gone'));
+            else { await r8bPress('quieter', at + 'the resting Quieter background'); await r4Settle(200); }
+            if (calls.length !== c4) fails.push(at + 'the resting Quieter background still handed Full the song');
+            if (q && !/Remove vocals is on this sound/.test(r8bLine())) fails.push(at + 'the resting press said “' + r8bLine() + '”, want why');
+            FM.selectLayer(null); FM.selectLayer(v.L('P').id); await r4Settle(150);
+            if (!smTool('opacity')) fails.push('CONTROL ' + at + 'the picture clip’s tray has no Opacity');
+            else if (smTool('quieter')) fails.push(at + 'the picture clip offers Quieter background');
+          });
+        });
+      }
+    } finally {
+      if (dS) Object.defineProperty(N, 'state', dS); else delete N.state;
+      if (dT) Object.defineProperty(N, 'toggle', dT); else delete N.toggle;
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* Release 8b's review (R8b-1…7, R8B-1…4): the test above stubs Full's answers and never makes a cleaned copy, so nothing it checks could see
+     where the other sound tools write once one plays. Here Full's apply is replaced by what it does to the project, without the decode (the
+     suite's clips have no file): a copy with karaokeOf = the sound, twinKind 'denoise', the sound's mix copied onto it, the sound muted, ONE
+     step. Full's own state, twinOf and restore run for real. */
+  function r8bFakeApply(src, warn) {
+    const c = FM.makeLayer('video', { name: src.name + ' (noise reduced)', x: 0, y: 0, start: src.start, duration: src.duration });
+    c.audioOnly = true; c.karaokeOf = src.id; c.twinKind = 'denoise'; c.twinSourceWasMuted = !!src.muted;
+    c.trimStart = src.trimStart || 0; c.speed = src.speed == null ? 1 : src.speed; c.volume = src.volume == null ? 1 : src.volume;
+    c.fadeIn = src.fadeIn || 0; c.fadeOut = src.fadeOut || 0;
+    if (Array.isArray(src.audioFx) && src.audioFx.length) c.audioFx = JSON.parse(JSON.stringify(src.audioFx, FM.jsonReplacer));
+    c.muted = !!src.muted; if (c.transform) c.transform.opacity = 0;
+    src.muted = true;
+    FM.scene.layers.push(c); FM.scene.selectedId = src.id; FM.scene.selectedIds = [src.id];
+    FM.refreshAll(); FM.history.commit();
+    if (FM.toast) FM.toast(warn || 'Noise reduced — Restore original audio puts it back', 4500);
+    return true;
+  }
+  test('1243 R8b · review at 380 and 1280 Quieter background with a real cleaned copy: once a song is cleaned, Clear voice and Volume change the copy that plays and the song stays muted; pressed again the song comes back with that Clear voice and volume in ONE step; on a video clip the copy never turns Take sound out into Put sound back; a locked song asks with Do it anyway; resting, it offers Open in Full; pressed while that sound is still cleaning it says this sound; a no-voice result says so (CONTROL: the copy plays and the song is muted, and the clip offers Take sound out before)', { item: '980', budgetMs: 180000 }, async function () {
+    smNeedP2();
+    const fails = [], N = FM.noiseReduction;
+    if (!N || !N.isTwin || !N.twinOf || !N.state || !N.toggle) throw new Error('FM.noiseReduction is missing — js/noise-reduction.js did not load');
+    const dT = Object.getOwnPropertyDescriptor(N, 'toggle'), dS = Object.getOwnPropertyDescriptor(N, 'state'), dJ = Object.getOwnPropertyDescriptor(N, 'job');
+    const realToggle = N.toggle, realState = N.state, calls = [];
+    let warn = '';
+    try {
+      N.toggle = async (l, s) => { calls.push(l && l.id); const st = N.state(l); return (st === 'on' || st === 'twin') ? realToggle(l, s) : r8bFakeApply(l, warn); };
+      for (const width of [380, 1280]) {
+        await r4At(width, width > 700 ? 800 : 0, async function () {
+          await smP2(r8Fixture, async function (v) {
+            const at = width + ' px: ', ix = () => FM.history._steps().index, afx = l => ((l && l.audioFx) || []).map(f => f.type).join(','), song = () => v.L('Song');
+            const say = () => { const e = document.querySelector('#sm-say .sm-line'); return e ? e.textContent : ''; }, sayB = () => Array.from(document.querySelectorAll('#sm-say .sm-say-b')).map(b => b.textContent);
+            FM.selectLayer(song().id); await r4Settle(150);
+            let n0 = ix();
+            await r8bPress('quieter', at + 'the song’s Quieter background'); await v.idle(); await r4Settle(200);
+            const C = N.twinOf(song());
+            if (!C || song().muted !== true || ix() !== n0 + 1) { fails.push('CONTROL ' + at + 'after Quieter background the cleaned copy is ' + (C ? 'there' : 'missing') + ' and the song ' + (song().muted ? 'muted' : 'heard') + ' after ' + (ix() - n0) + ' steps'); return; }
+            if (r8bPressed('quieter') !== 'true') fails.push(at + 'Quieter background does not show pressed while the cleaned copy plays');
+            n0 = ix();
+            await r8bPress('clearVoice', at + 'Clear voice on the cleaned song'); await v.idle(); await r4Settle(150);
+            if (afx(C) !== 'highpass,eq3,compressor,deesser' || afx(song()) !== '' || ix() !== n0 + 1) fails.push(at + 'with Quieter background on, Clear voice left [' + afx(C) + '] on the copy that plays and [' + afx(song()) + '] on the muted song after ' + (ix() - n0) + ' steps, want the four on the copy, in ONE step');
+            if (r8bPressed('clearVoice') !== 'true') fails.push(at + 'Clear voice does not show pressed once it is on the copy that plays');
+            await FM.spine.cmd.volume(song().id, 0.8); await v.idle(); await r4Settle(150);
+            if (song().muted !== true || Math.abs((+C.volume) - 0.8) > 1e-6) fails.push(at + 'Volume 80 % left the song ' + (song().muted ? 'muted' : 'heard as well as its copy') + ' and the copy at ' + C.volume + ', want the copy at 0.8 and the song still muted');
+            n0 = ix();
+            await r8bPress('quieter', at + 'the pressed Quieter background'); await v.idle(); await r4Settle(200);
+            if (N.twinOf(song()) || song().muted !== false || ix() !== n0 + 1) fails.push(at + 'the second press left the copy ' + (N.twinOf(song()) ? 'there' : 'gone') + ' and the song ' + (song().muted ? 'muted' : 'heard') + ' after ' + (ix() - n0) + ' steps, want the original back in ONE step');
+            if (afx(song()) !== 'highpass,eq3,compressor,deesser' || Math.abs((+song().volume) - 0.8) > 1e-6) fails.push(at + 'the original came back with [' + afx(song()) + '] at volume ' + song().volume + ', want the Clear voice and the 80 % he set while it was cleaned');
+            if (r8bPressed('clearVoice') !== 'true' || r8bPressed('quieter') !== 'false') fails.push(at + 'once the original is back Clear voice reads ' + r8bPressed('clearVoice') + ' and Quieter background ' + r8bPressed('quieter') + ', want true and false');
+            /* the video clip: its copy rides it like a taken-out sound, but Quieter background is what puts it back */
+            FM.selectLayer(null); FM.selectLayer(v.L('V').id); await r4Settle(150);
+            if (!smTool('takeSound')) fails.push('CONTROL ' + at + 'the video clip offers no Take sound out before Quieter background (' + r8Kids().join(' ') + ')');
+            await r8bPress('quieter', at + 'the video clip’s Quieter background'); await v.idle(); await r4Settle(200);
+            if (!N.twinOf(v.L('V'))) fails.push('CONTROL ' + at + 'the video clip has no cleaned copy after Quieter background');
+            else if (smTool('putSound') || smTool('takeSound')) fails.push(at + 'with Quieter background on, the video clip’s tray reads ' + r8Kids().join(' ') + ', want neither Put sound back nor Take sound out');
+            await r8bPress('quieter', at + 'the video clip’s pressed Quieter background'); await v.idle(); await r4Settle(200);
+            if (N.twinOf(v.L('V')) || v.L('V').muted) fails.push(at + 'the video clip’s second Quieter background left its copy ' + (N.twinOf(v.L('V')) ? 'there' : 'gone') + ' and the clip ' + (v.L('V').muted ? 'muted' : 'heard') + ', want the original back');
+            /* a locked song: the locked line and Do it anyway, nothing handed to Full */
+            FM.selectLayer(null); FM.selectLayer(song().id); await r4Settle(150);
+            song().locked = true; FM.refreshAll(); await r4Settle(150);
+            let c0 = calls.length;
+            try {
+              await r8bPress('quieter', at + 'the locked song’s Quieter background'); await v.idle(); await r4Settle(200);
+              if (calls.length !== c0 || N.twinOf(song())) fails.push(at + 'Quieter background on a locked song handed Full the song with no question');
+              if (!/locked/.test(say()) || sayB().indexOf('Do it anyway') < 0) fails.push(at + 'on a locked song it said “' + say() + '”, want the locked line with Do it anyway');
+            } finally { song().locked = false; FM.refreshAll(); await r4Settle(100); }
+            /* resting (Remove vocals on, Full's answer stubbed): why, with Open in Full */
+            N.state = l => (l && l.id === song().id) ? 'blocked' : realState(l);
+            try {
+              FM.selectLayer(null); FM.selectLayer(song().id); await r4Settle(150);
+              c0 = calls.length;
+              await r8bPress('quieter', at + 'the resting Quieter background'); await r4Settle(200);
+              if (calls.length !== c0 || !/Remove vocals is on this sound/.test(say()) || sayB().indexOf('Open in Full') < 0) fails.push(at + 'the resting Quieter background said “' + say() + '” with [' + sayB().join(', ') + '] after ' + (calls.length - c0) + ' hand-overs, want why with Open in Full and none');
+            } finally { if (dS) Object.defineProperty(N, 'state', dS); else delete N.state; }
+            /* still cleaning THIS sound (Full's job stubbed) */
+            N.job = () => ({ layerId: song().id, progress: 0.4 });
+            try {
+              FM.selectLayer(null); FM.selectLayer(song().id); await r4Settle(150);
+              c0 = calls.length;
+              await r8bPress('quieter', at + 'Quieter background while it cleans'); await r4Settle(200);
+              if (calls.length !== c0 || !/on this sound/.test(say())) fails.push(at + 'pressed while the song is still being cleaned it said “' + say() + '” after ' + (calls.length - c0) + ' hand-overs, want this sound and none');
+            } finally { if (dJ) Object.defineProperty(N, 'job', dJ); else delete N.job; }
+            /* Full found no voice: said in Simple's words, where he sees it */
+            warn = 'No voice found, so the whole clip was treated as noise — press Restore original audio if that took too much';
+            try {
+              await r8bPress('quieter', at + 'Quieter background on a sound with no voice'); await v.idle(); await r4Settle(200);
+              if (!N.twinOf(song())) fails.push('CONTROL ' + at + 'the no-voice press made no cleaned copy');
+              else if (!/No voice found, so all of it was treated as noise/.test(say())) fails.push(at + 'Full’s no-voice result was said as “' + say() + '”, want No voice found, so all of it was treated as noise');
+            } finally { warn = ''; }
+          });
+        });
+      }
+    } finally {
+      if (dT) Object.defineProperty(N, 'toggle', dT); else delete N.toggle;
+      if (dS) Object.defineProperty(N, 'state', dS); else delete N.state;
+      if (dJ) Object.defineProperty(N, 'job', dJ); else delete N.job;
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* the same review: a taken-out sound made quieter has a cleaned copy tied to IT (karaokeOf = the taken-out sound), which is not the clip's twin,
+     so Put sound back must take it too or it is left playing, tied to nothing. The neighbours' clip with a file (P2.3 T24's fixture and loader). */
+  test('1243 R8b · review Put sound back on a clip whose taken-out sound was made quieter takes the cleaned copy away with that sound and the clip is heard again, in ONE step (CONTROL: Take sound out made a sound the clip plays, and Quieter background gave that sound a cleaned copy)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const N = FM.noiseReduction;
+    if (!N || !N.twinOf || !N.toggle) throw new Error('FM.noiseReduction is missing — js/noise-reduction.js did not load');
+    const dT = Object.getOwnPropertyDescriptor(N, 'toggle'), calls = [];
+    let aId = null, twId = null;
+    try {
+      N.toggle = async l => { calls.push(l && l.id); return r8bFakeApply(l, ''); };
+      await smFakeLoad(() => smP2((W, H) => [smV('Z', 6, 3, W, H), smV('A', 0, 6, W, H, { muted: false })], async function (v) {
+        const S = FM.spine, ix = () => FM.history._steps().index;
+        aId = v.L('A').id;
+        await S.cmd.takeSoundOut(aId); await v.idle();
+        /* the suite's clip has no file: the sound is known as the clip's own by its file, so both get one shared full-frame record */
+        const tw = FM.scene.layers.find(l => l.sm && l.sm.twin === true && l.audioOnly === true), rec = smRec(6, 'r8b-a.mp4', { width: v.W, height: v.H });
+        if (tw) { twId = tw.id; FM.media.set(aId, rec); FM.media.set(twId, Object.assign({}, rec)); FM.refreshAll(); await v.sleep(40); }
+        const Tid = S.soundTargetId(S.classify(FM.scene), aId);
+        if (!tw || Tid !== twId) throw new Error('CONTROL: Take sound out made no sound the clip plays (it said ' + v.say() + ')');
+        await S.cmd.quieter(aId); await v.idle();
+        const TC = N.twinOf(FM.layerById(FM.scene, Tid));
+        if (calls[0] !== Tid || !TC) throw new Error('CONTROL: Quieter background handed Full ' + JSON.stringify(calls) + ' and the taken-out sound has ' + (TC ? 'a' : 'no') + ' cleaned copy, want that sound and a copy');
+        const n0 = ix();
+        await S.cmd.putSoundBack(aId); await v.idle();
+        const left = FM.scene.layers.filter(l => l.karaokeOf === Tid).length;
+        if (FM.layerById(FM.scene, Tid) || left || v.L('A').muted || ix() !== n0 + 1) throw new Error('Put sound back left the taken-out sound ' + (FM.layerById(FM.scene, Tid) ? 'there' : 'gone') + ', ' + left + ' cleaned cop' + (left === 1 ? 'y' : 'ies') + ' tied to it and the clip ' + (v.L('A').muted ? 'muted' : 'heard') + ' after ' + (ix() - n0) + ' steps, want both gone and the clip heard, in ONE step');
+      }));
+    } finally {
+      if (dT) Object.defineProperty(N, 'toggle', dT); else delete N.toggle;
+      [aId, twId].forEach(x => { if (x && FM.media.get(x)) { try { FM.media.remove(x); } catch (e) {} } });
+    }
   });
 
   /* ═══ #1253 · THE DRAWN EFFECT PICTURES IN THE APP'S EFFECT MENUS ═══

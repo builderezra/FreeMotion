@@ -75,7 +75,13 @@ window.FM = window.FM || {};
     flipv: '<path d="M3 12h18" stroke-dasharray="2 2"/><path d="M7 9.5L17 4v5.5zM7 14.5L17 20v-5.5z"/>',
     turn: '<rect x="3.5" y="9.5" width="11" height="11" rx="1.5"/><path d="M9 4.5h4.5a6 6 0 0 1 6 6V14"/><path d="M17 11.5l2.5 2.5 2.5-2.5"/>',
     centre: '<circle cx="12" cy="12" r="2.2"/><path d="M12 3v5M12 16v5M3 12h5M16 12h5"/>',
-    reset: '<path d="M5 12a7 7 0 1 0 2.05-4.95"/><path d="M4.5 3.5v4h4"/>'
+    reset: '<path d="M5 12a7 7 0 1 0 2.05-4.95"/><path d="M4.5 3.5v4h4"/>',
+    /* #1243 R release 8b: S33's look and sound doors (our own drawings, the D16 A stroke) */
+    motionblur: '<circle cx="15" cy="12" r="5.5"/><path d="M2.5 8.5h5M2 12h5M2.5 15.5h5"/>',
+    smoothskin: '<circle cx="11" cy="13" r="7.5"/><path d="M8 15a3.6 3.6 0 0 0 6 0"/><path d="M19 2.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
+    quieter: '<path d="M2.5 12h2l1.5-5 2 10 2-8 1.5 3h2"/><path d="M18.5 5.5v11M15.5 13.5l3 3 3-3"/>',
+    soundstyles: '<rect x="7.5" y="3" width="6" height="10.5" rx="3"/><path d="M4.5 10.5a6 6 0 0 0 12 0M10.5 16.5v4M7.5 20.5h6"/><path d="M19.5 3l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z"/>',
+    clearvoice: '<rect x="9" y="3" width="6" height="10.5" rx="3"/><path d="M6 10.5a6 6 0 0 0 12 0M12 16.5v4"/><path d="M2.5 8v5M21.5 8v5"/>'
   };
   const svg = n => '<svg viewBox="0 0 24 24" class="sm-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICON[n] || ICON.more) + '</svg>';
   const W = () => (FM.spineWords && FM.spineWords.tools) || {};
@@ -85,7 +91,7 @@ window.FM = window.FM || {};
   /* #1243 S9: THE SUB-ROW ON THE BAR ({key: a SUBS key, id: the item it acts on or null, from: the sub ‹ returns to, sel: the
      selection it was opened with — any other selection closes it}); the data-tool focus goes to after a ‹ */
   let subFor = null, backTo = '';
-  const ROW_KEYS = new Set(['speed', 'volume', 'opacity', 'transform', 'fade', 'transition', 'strength']);   // the item rows rowFor() still names (#1243 S28: Audio's went)
+  const ROW_KEYS = new Set(['speed', 'volume', 'opacity', 'transform', 'fade', 'transition', 'strength', 'soundstyles']);   // the item rows rowFor() still names (#1243 S28: Audio's went; 8b: Sound styles)
   let fills = 0, lastPress = null;   // how many times the tray was refilled; the tool a pointer's last single click pressed
   let rowN = 0;                      // how many times the bar has shown another row (_fill): tool()'s double-tap hold (HW5)
   let hintUp = false;              // 2.7: the first-run hint floats above the bar now (hintSync)
@@ -280,7 +286,7 @@ window.FM = window.FM || {};
       if (e.isTrusted && e.detail >= 1 && lastPress && lastPress.key !== key && lastPress.row !== rowN && performance.now() - lastPress.at < 450 &&
           Math.abs(e.clientX - lastPress.x) < 24 && Math.abs(e.clientY - lastPress.y) < 24) return;
       if (e.detail >= 1) lastPress = { key: key, fill: fills, row: rowN, at: performance.now(), x: e.clientX, y: e.clientY };
-      if (b.getAttribute('aria-disabled') === 'true') { if (t.why && FM.spine) FM.spine.say(t.why); return; }
+      if (b.getAttribute('aria-disabled') === 'true') { if (t.rest) t.rest(b, e); else if (t.why && FM.spine) FM.spine.say(t.why); return; }   // t.rest: a resting tool whose why has a button (release 8b review)
       closeMenu(); t.run(b, e);
     });
     return b;
@@ -559,6 +565,29 @@ window.FM = window.FM || {};
     const tfOk = !!(S.canTransform && S.canTransform(l));
     const opacityT = tfOk ? { id: 'opacity', label: w.opacity || 'Opacity', icon: 'opacity', run: () => FM.simpleTools.openRow('opacity', id) } : null;
     const transformT = tfOk ? { id: 'transform', label: w.transform || 'Transform', icon: 'transform', title: w.transformTitle, run: () => FM.simpleTools.openRow('transform', id) } : null;
+    /* the sound commands make or remove a layer: the tray is drawn again when they are done (the redraw during the command saw a half-done
+       scene), so the button that was pressed turns into its opposite where it was */
+    const again = async p => { const ok = await p; if (FM.layerById(FM.scene, id)) { lastSig = ''; FM.refreshAll(); } return ok; };
+    /* #1243 R release 8b (1243-R (a) "| Match · Opacity · Motion blur · Smooth skin" on a clip, "| Opacity · Motion blur" on an overlay; his S33
+       words: "a second section where it's got stuff like makeup, like retouch… opacity, motion blur"): one tap puts Full's own effect on the
+       item in ONE step and shows it pressed; a second tap takes it off in one step. No sub-row (R (a) gives none). */
+    const fxT = (which, icon) => (S.fxToggleOk && S.fxToggleOk(l, which)) ? { id: which, label: w[which], icon: icon, title: w[which + 'Title'], pressed: S.fxToggleOn(l, which),
+      run: () => S.cmd.fxToggle(id, which, !S.fxToggleOn(FM.layerById(FM.scene, id), which)) } : null;
+    const motionT = fxT('motionBlur', 'motionblur'), skinT = fxT('smoothSkin', 'smoothskin');
+    /* #1243 R release 8b (1243-R (a) "| Quieter background · Sound styles · Clear voice" on a video clip and a sound; his S33 words: "another
+       section which is more like an audio section where they've got extract audio, isolate voice… reduce noise, audio effects, enhance
+       voice"): on the sound the item plays (S.soundFxTarget), only when it has one. Quieter background and Clear voice are one tap each,
+       pressed while on; Sound styles opens its row of styles (R rule 2: a few choices fit one row). The audio is unlocked inside the tap
+       (iOS starts it only there), as Full's audio effects browser does. */
+    const sndL = S.soundFxTarget ? S.soundFxTarget(R, id) : null, Ln = (FM.spineWords && FM.spineWords.lines) || {};
+    const unlock = () => { if (FM.audioFxLive && FM.audioFxLive.resume) { try { FM.audioFxLive.resume(); } catch (e) {} } };
+    const qz = sndL && S.quieterState ? S.quieterState(R, id) : null;
+    /* resting (Remove vocals on): a press still asks the command, which says why WITH Open in Full (review R8b-5) */
+    const quietT = qz ? { id: 'quieter', label: w.quieter, icon: 'quieter', title: w.quieterTitle, pressed: qz.on, disabled: qz.blocked, why: Ln.quieterBlocked, rest: () => S.cmd.quieter(id), run: () => again(S.cmd.quieter(id)) } : null;
+    const stylesT = sndL ? { id: 'soundStyles', label: w.soundStyles, icon: 'soundstyles', title: w.soundStylesTitle, pressed: !!S.soundStyleOf(sndL), run: () => FM.simpleTools.openRow('soundstyles', id) } : null;
+    const clearT = sndL ? { id: 'clearVoice', label: w.clearVoice, icon: 'clearvoice', title: w.clearVoiceTitle, pressed: S.clearVoiceOn(sndL),
+      run: () => { unlock(); const t = S.soundFxTarget(S.read(FM.scene), id); S.cmd.clearVoice(id, !(t && S.clearVoiceOn(t))); } } : null;
+    const soundSec = [quietT, stylesT, clearT];
     /* (Phase 3 · Look sat third in a clip's tray, after Audio, until #1243 S12 put Look on the project row for the whole video: "you
        shouldn't have the look menu on each layer". A clip that already carries a look keeps it; Look's panel offers to remove them.) */
     /* #1243 S12: the project's Look layer is never drawn as an item, but Full can select it and hand that selection over: its tray is
@@ -580,10 +609,11 @@ window.FM = window.FM || {};
          Volume, Reverse and Take sound out (or Put sound back) are the clip's own tools, in the main section, not repeated later (R decision 2).
          #1243 S32 (his words: "you should have a replace button as well, so you can replace the media with whatever you want"): Replace is
          4th on a video clip, 2nd on a picture, inside the first screen at 380 (it was 9th, four swipes in, where he could not find it). */
-      const hasTwin = isVid && (R.followers[id] || []).some(f => S.isTwinOf(FM.layerById(FM.scene, f), l, R.eps));
-      /* the sound commands make or remove a layer: the tray is drawn again when they are done (the redraw during the command saw a half-done
-         scene), so the button that was pressed turns into its opposite where it was */
-      const again = async p => { const ok = await p; if (FM.layerById(FM.scene, id)) { lastSig = ''; FM.refreshAll(); } return ok; };
+      /* release 8b review (R8b-2): Quieter background's cleaned copy rides the clip like a taken-out sound but is not one (Quieter background
+         puts it back), so it never turns Take sound out into Put sound back; with it on the clip is muted, so neither shows */
+      const NR = FM.noiseReduction, nrCopy = t => !!(NR && NR.isTwin && NR.isTwin(t));
+      const hasTwin = isVid && (R.followers[id] || []).some(f => { const t = FM.layerById(FM.scene, f); return !nrCopy(t) && S.isTwinOf(t, l, R.eps); });
+      /* (`again`, the redraw after a sound command, is above: Quieter background uses it too) */
       const soundT = !isVid ? null : hasTwin ? { id: 'putSound', label: w.putSound || 'Put sound back', icon: 'soundback', run: () => again(S.cmd.putSoundBack(id)) }
         : S.canTakeSound(R, id) ? { id: 'takeSound', label: w.takeSound || 'Take sound out', icon: 'soundout', run: () => again(S.cmd.takeSoundOut(id)) } : null;
       const reverseT = isVid ? { id: 'reverse', label: w.reverse || 'Reverse', icon: 'reverse', pressed: !!l.reversed, run: () => S.cmd.reverse(id) } : null;
@@ -609,9 +639,9 @@ window.FM = window.FM || {};
       /* 2.7 (DESIGN :522, §12.1): a clip that fades in over the one before it (a crossfade seam) offers Turn into a transition; the ◇ on
          that crossfade selects it. Only with More transition controls on (S.trExtras, #545): his sheet never showed it. */
       if (sb && sb.kind === 'blend' && S.cmd.turnTransition && trExtras()) out.push({ id: 'turnTr', key: 'turnTr:' + id, label: w.turnTr || 'Turn into a transition', icon: 'transition', run: () => S.cmd.turnTransition(id) });
-      /* R (a): main | Opacity (Match, Motion blur, Smooth skin later) | Crop · Transform (Steady later) | (the sound and Hold frame
-         sections come with their tools, release 8b and later) | Delete */
-      return secs([out, [opacityT], [crop, transformT], [del]]);
+      /* R (a): main | Opacity · Motion blur · Smooth skin (Match later) | Crop · Transform (Steady later) | Quieter background · Sound
+         styles · Clear voice (release 8b; a picture clip has no sound, so the section drops) | (Hold frame · Mask later) | Delete */
+      return secs([out, [opacityT, motionT, skinT], [crop, transformT], soundSec, [del]]);
     }
     const k = u ? u.kind : '';
     /* R (a) "Text: Split · Edit words · Style · Effects · Stay put | Opacity · Transform | Delete". Style is the text's font, colour and
@@ -642,16 +672,17 @@ window.FM = window.FM || {};
     /* R (a) "Sound: Split · Volume · Replace · Fade · [Speed if from a video] · Pulse · Stay put · [Follow clips] | (Quieter background · Sound
        styles · Clear voice, release 8b) | Delete" (Pulse is S29's, later). #1243 S32: Replace after Volume (FM.pickReplacement gives a song the
        sound picker); never on a sound taken out of a clip, which is that clip's own sound */
-    /* review R8-2: More was the only way in Simple to a sound's Remove vocals, Reduce noise and Audio effects (Full's panel for it). Until
-       release 8b gives them Simple tools (Quieter background, Sound styles, Clear voice), Open in Full ends the main section, as it does on
-       a segment of several effects */
-    if (k === 'audio') return secs([[splitT, volumeT, ...(l.sm && l.sm.twin ? [] : [replaceT]), fadeT, ...(l.type === 'video' ? [speedT] : []), stay, ...(stayOn && hasCurve ? [rideT] : []), openFullT(w)], [del]]);
+    /* review R8-2: More was the only way in Simple to a sound's Remove vocals, Reduce noise and Audio effects (Full's panel for it), so Open
+       in Full ended the main section "until 8b". Release 8b gives a sound Quieter background (Reduce noise), Sound styles (the Voices of
+       Audio effects) and Clear voice in their own section (R (a)). Open in Full KEEPS a job there, so it stays, as that section's last tool:
+       Remove vocals, the other audio effects one by one and the settings of what these three put on are still only in Full's panel. */
+    if (k === 'audio') return secs([[splitT, volumeT, ...(l.sm && l.sm.twin ? [] : [replaceT]), fadeT, ...(l.type === 'video' ? [speedT] : []), stay, ...(stayOn && hasCurve ? [rideT] : [])], soundSec.concat([openFullT(w)]), [del]]);
     if (k === 'effect') return segmentTray(id, l, stay);   // Phase 3 · Effect segments: Change effect · Strength · Stay put | Delete
     if (k === 'block' || k === 'fullOnly') return secs([[openFullT(w)], [del]]);
     if (k === 'undecided') return [];
     const inCard = !!(u && u.host && String(u.host).indexOf('slot:') === 0);   // a card between clips: no Into row until its slot form exists (§3.6)
     /* overlays, stickers, pictures, a background. R (a) "Overlay: Split · Into row · Replace · Effects · Stay put · [video: Speed · Volume ·
-       Slide] · Forward · Back | Opacity · Motion blur | Crop · Transform | Delete" (Slide is S27's and Motion blur release 8b's, later).
+       Slide] · Forward · Back | Opacity · Motion blur | Crop · Transform | Delete" (Slide is S27's, later; Motion blur came in release 8b).
        #1243 S32: Replace after Into row, on a photo or a video (planReplace refuses a shape) */
     return secs([[
       splitT,
@@ -662,7 +693,7 @@ window.FM = window.FM || {};
       ...(isVid ? [speedT, volumeT] : []),
       { id: 'forward', label: w.forward || 'Forward', icon: 'forward', run: () => S.cmd.z(id, 1) },
       { id: 'backward', label: w.backward || 'Back', icon: 'backward', run: () => S.cmd.z(id, -1) }],
-      [opacityT], [crop, transformT], [del]]);
+      [opacityT, motionT], [crop, transformT], [del]]);
   }
   /* (Length's row lived here until #1243 S25 took Length off the tray: "you just grab the end and drag it". S.cmd.length and
      S.cmd.trimStartBy stay, for the grips' commands and the keyboard.) */
@@ -762,6 +793,18 @@ window.FM = window.FM || {};
     put(run, { id: 'centre', label: w.centre || 'Centre', icon: 'centre', title: w.centreTitle, run: () => S.cmd.transform(id, 'centre') });
     put(run, { id: 'tfReset', label: w.reset || 'Reset', icon: 'reset', title: w.resetTitle, run: () => S.cmd.transform(id, 'reset') });
   }
+  /* #1243 R release 8b, SOUND STYLES (his S33 words: "audio effects"; 1243-F S33 "Sound styles", a door to the 31 effects plus the voice
+     presets): None, then every style — his own saved voices first, then the shipped ones (the Voice category of Full's audio effects
+     browser) — each one tap and ONE step, the one on now pressed. A style takes the place of the one before it; his own effects stay. A
+     style's name is his own words for his own voices: it goes in as text (tool() writes it with textContent). */
+  function soundStylesRow(R, s, run) {
+    const S = FM.spine, w = W(), id = s.id, L = S.soundFxTarget ? S.soundFxTarget(R, id) : null;
+    if (!L) return;
+    const now = S.soundStyleOf(L), unlock = () => { if (FM.audioFxLive && FM.audioFxLive.resume) { try { FM.audioFxLive.resume(); } catch (e) {} } };
+    put(run, { id: 'style-none', label: w.soundStylesNone || 'None', icon: null, pressed: !now, run: () => S.cmd.soundStyle(id, null) });   // words only, as the Transition row's None
+    S.soundStyles().forEach(st => put(run, { id: 'style-' + st.key, label: st.name, icon: null, title: st.desc ? st.name + ' · ' + st.desc : st.name, pressed: now === st.key,
+      run: () => { unlock(); S.cmd.soundStyle(id, st.key); } }));
+  }
   function fadeRow(R, s, run) {
     const S = FM.spine, w = W(), id = s.id, tid = S.soundTargetId(R, id), t = tid && FM.layerById(FM.scene, tid);
     if (!t) return;
@@ -812,6 +855,7 @@ window.FM = window.FM || {};
     volume:     { fill: volumeRow,     opener: () => 'volume',   word: 'volume' },
     opacity:    { fill: opacityRow,    opener: () => 'opacity',  word: 'opacity' },     // #1243 R release 8
     transform:  { fill: transformRow,  opener: () => 'transform', word: 'transform' },  // #1243 R release 8
+    soundstyles: { fill: soundStylesRow, opener: () => 'soundStyles', word: 'soundStyles' },   // #1243 R release 8b
     fade:       { fill: fadeRow,       opener: () => 'fade',     word: 'fade' },
     transition: { fill: transitionRow, opener: () => 'transition', word: 'transition' },   // #1243 S1 A: from the ◇, or the clip's own Transition
     strength:   { fill: strengthRow,   opener: () => 'strength', word: 'strength' }
@@ -1387,6 +1431,14 @@ window.FM = window.FM || {};
   }
   /* what sync's signature needs from this block: the picker, and the selected segment's effect and strength (Change effect and Undo
      move the pressed tile; a strength step or its Undo moves the slider) */
+  /* #1243 R release 8b: what Motion blur, Smooth skin, Quieter background, Sound styles and Clear voice show pressed is read from the item's
+     effects and its sound's audio effects and Reduce noise state, so a change to any of them (a press, an undo, an edit in Full) redraws */
+  function fxSig(R, l, one) {
+    if (!l || !one) return '';
+    const S = FM.spine, t = S.soundFxTarget ? S.soundFxTarget(R, one) : null, N = FM.noiseReduction;
+    try { return JSON.stringify([(l.effects || []).map(f => f && [f.type, f.enabled !== false]), t ? [t.id, t.audioFx || null, N && N.state ? N.state(t) : ''] : null], FM.jsonReplacer); }
+    catch (e) { return ''; }
+  }
   function segSig(l) {
     const a = subFor && (subFor.key === 'effects' || subFor.key === 'itemfx') ? 'fx/' + (subFor.id || '') + (subFor.key === 'itemfx' ? '/on' : '') : '';   // '/on': the item picker (Phase 3 · Effects on an item)
     const b = (l && l.type === 'adjustment') ? JSON.stringify([(l.effects || []).map(f => f && f.type), l.transform ? l.transform.opacity : 1]) : '';
@@ -1703,7 +1755,7 @@ window.FM = window.FM || {};
          has never heard of it, and drew the overlay tray (Into row, Crop) under a text or a sound; the rebuild's own sync then
          computed the same signature and kept it. Its kind from the fresh read differs, so the tray is drawn again.
          #1243 S9: every change of mode refills (tool()'s double-click guard counts the fills). */
-      const sig = [ids.join(','), mode, extrasUp(), subFor ? subFor.key + '/' + (subFor.id || '') + '/' + (subFor.from || '') : '', panelFor, panelKind, rowSig, l ? [l.reversed, l.muted, (R.followers[one] || []).length].join('|') : '', trExtras(), FM.spine.muteMode && FM.spine.muteMode(), FM.spine.linkMode && FM.spine.linkMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null), l.type, l.audioOnly, JSON.stringify(l.trIn || null)].join('|') : '', one && R.units[one] ? R.units[one].kind + '/' + (R.units[one].host || '') + '/' + (R.isMain(one) ? 'm' : 'o') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd, segSig(l), (l && !subFor) ? splitAt(l) : ''].join('#');
+      const sig = [ids.join(','), mode, extrasUp(), subFor ? subFor.key + '/' + (subFor.id || '') + '/' + (subFor.from || '') : '', panelFor, panelKind, rowSig, l ? [l.reversed, l.muted, (R.followers[one] || []).length].join('|') : '', trExtras(), FM.spine.muteMode && FM.spine.muteMode(), FM.spine.linkMode && FM.spine.linkMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null), l.type, l.audioOnly, JSON.stringify(l.trIn || null)].join('|') : '', one && R.units[one] ? R.units[one].kind + '/' + (R.units[one].host || '') + '/' + (R.isMain(one) ? 'm' : 'o') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd, segSig(l), (l && !subFor) ? splitAt(l) : '', fxSig(R, l, one)].join('#');
       splitDrawn = (l && !subFor) ? splitAt(l) : null;   // the 11 Nov verifiers' V2: Split rests while the line is outside the item
       if (sig === lastSig) return;
       lastSig = sig;

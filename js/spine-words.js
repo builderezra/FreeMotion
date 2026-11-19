@@ -148,6 +148,16 @@ window.FM = window.FM || {};
       noTransform: 'Only a picture, a video or a text can change here',
       noCentre: 'It moves with a layer squashed flat, so it can’t be centred',   /* review R8-2: a parent with no inverse */
       mutedOne: 'Muted', unmutedOne: 'Sound on',
+      /* #1243 R release 8b: the rest of S33's first wave (his "motion blur… retouch… reduce noise, audio effects, enhance voice") */
+      motionBlurOn: 'Motion blur on', motionBlurOff: 'Motion blur off', smoothSkinOn: 'Smooth skin on', smoothSkinOff: 'Smooth skin off',
+      clearVoiceOn: 'Clear voice on', clearVoiceOff: 'Clear voice off',
+      soundStyleSet: name => name + ' on the sound', soundStyleOff: 'No sound style',
+      quieterOn: 'Background noise turned down · press Quieter background again for the original', quieterOff: 'Original sound back',
+      quieterBlocked: 'Remove vocals is on this sound · turn it off in Full first', quieterBusy: 'Still turning the noise down on another sound',
+      quieterBusyHere: 'Still turning the noise down on this sound',
+      quieterNoVoice: 'No voice found, so all of it was treated as noise · press Quieter background again if that took too much',
+      quieterNoPauses: 'No clear pauses between words, so the noise was learned from the quietest moments · press Quieter background again for the original',
+      noSoundFx: 'This has no sound to change', soundFxFull: 'This sound holds 16 effects already · take some off in Full first',
       reverseSlow: 'Couldn’t prepare the reversed clip, it will play slowly',
       soundTaken: 'Sound taken out · it sits on the clip as its own track', alreadyOut: 'Its sound is already out · Put sound back first',
       noSound: 'This clip has no sound to take out', noTwin: 'No sound was taken out of this clip', soundBack: 'Sound back in the clip',
@@ -215,6 +225,12 @@ window.FM = window.FM || {};
       mirror: 'Mirror', mirrorTitle: 'Mirror side to side', flipV: 'Flip', flipVTitle: 'Flip upside down', turn: 'Turn', turnTitle: 'Turn a quarter clockwise',
       size: 'Size', sizeLabel: 'Size in percent', centre: 'Centre', centreTitle: 'Put it in the middle of the picture',
       reset: 'Reset', resetTitle: 'Back to its first size, centred, no turn or flip', mute: 'Mute',
+      /* #1243 R release 8b: S33's look and sound doors (our own names, 1243-F S33's table: not CapCut's) */
+      motionBlur: 'Motion blur', motionBlurTitle: 'Blur what moves, as a camera does',
+      smoothSkin: 'Smooth skin', smoothSkinTitle: 'Soften skin and small marks, keep the edges sharp',
+      quieter: 'Quieter background', quieterTitle: 'Turn down the hiss, hum and room noise behind a voice',
+      soundStyles: 'Sound styles', soundStylesTitle: 'Robot, deep, radio, cave and more', soundStylesNone: 'None',
+      clearVoice: 'Clear voice', clearVoiceTitle: 'A cleaner voice: less rumble, more presence, even level, softer s sounds',
       newLength: s => s.toFixed(1) + ' s', transitionTitle: 'The transition at this clip’s cut',
       /* #1243 S3 · S9: the ‹s' spoken names (a sub-row's and a panel's go back one level; an item's lets the selection go) and the tray's own */
       back: 'Back', backItem: 'Back · nothing selected', clipTools: 'Clip tools',

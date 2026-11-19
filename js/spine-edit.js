@@ -1362,7 +1362,7 @@ window.FM = window.FM || {};
       case 'cutShort': text = line('cutShort', o.name); buttons = [full]; break;
       case 'insertFade': text = line('insertFade', o.a, o.b); break;   // 2.2: the two clip numbers (DESIGN §3.11)
       default: text = line(kind) || line('failed');
-        if (kind === 'splitBlock' || kind === 'trimBlock' || kind === 'liftBlock' || kind === 'slotIntoRow' || kind === 'speedBlock' || kind === 'replaceBlock' || kind === 'replaceInGroup' || kind === 'cameraRest') buttons = [full];
+        if (kind === 'splitBlock' || kind === 'trimBlock' || kind === 'liftBlock' || kind === 'slotIntoRow' || kind === 'speedBlock' || kind === 'replaceBlock' || kind === 'replaceInGroup' || kind === 'cameraRest' || kind === 'quieterBlocked' || kind === 'soundFxFull') buttons = [full];   /* 8b: Remove vocals and the 16th effect are Full's to take off */
     }
     S.say(text, Object.assign({ buttons: buttons, refusal: kind, ids: o.ids }, long ? { ms: 10000, wrap: true } : {}));
     S.lastRefusal = kind;
@@ -2356,10 +2356,18 @@ window.FM = window.FM || {};
   /* VOLUME and FADE act on the sound twin when the clip has one (the original is muted, the twin carries the sound), else on the
      clip. A keyed level keeps its shape (FM.shiftProp: no key at the playhead, the count never changes). A volume above 0 on a muted
      clip is a wish to hear it, so it un-mutes (and drops the Mute clip sound mark, which only ever stood for "muted by that switch"). */
+  /* release 8b review (R8b-1): …and on to the copy that plays in its place when there is one (Full's Reduce noise or Remove vocals
+     mutes the sound and adds a companion with karaokeOf = its id). A song or a taken-out sound has no twin of its own, so before this
+     Volume un-muted the original under the cleaned copy (the song twice) and Clear voice / Sound styles changed a muted sound. */
+  function playingCopyOf(L) {
+    const N = FM.noiseReduction, c = (N && N.twinOf && N.twinOf(L)) || (FM.karaokeTwinOf && FM.karaokeTwinOf(L)) || null;
+    return c && c !== L ? c : null;
+  }
   function soundTarget(R, id, map) {
     const L = map.get(id); if (!L) return null;
-    if (R.isMain(id)) { const t = twinsOf(R, R.main[mainIdx(R, id)], map)[0]; if (t) return t; }
-    return L;
+    let T = L;
+    if (R.isMain(id)) { const t = twinsOf(R, R.main[mainIdx(R, id)], map)[0]; if (t) T = t; }
+    return playingCopyOf(T) || T;
   }
   S.soundTargetId = function (R, id) { const t = soundTarget(R, id, byIdMap()); return t ? t.id : null; };
   S.planVolume = function (R, id, v) {
@@ -2432,10 +2440,13 @@ window.FM = window.FM || {};
   S.planPutSoundBack = function (R, id) {
     const map = byIdMap(), L = map.get(id);
     if (!L || !R.isMain(id)) return refusePlan('gone');
-    const twins = twinsOf(R, R.main[mainIdx(R, id)], map);
+    /* release 8b review (R8b-2): a Quieter background copy is not a taken-out sound (Quieter background itself puts it back); a taken-out
+       sound's own cleaned copy goes with it, never left behind pointing at nothing */
+    const N = FM.noiseReduction, isNr = t => !!(N && N.isTwin && N.isTwin(t));
+    const twins = twinsOf(R, R.main[mainIdx(R, id)], map).filter(t => !isNr(t));
     if (!twins.length) return refusePlan('noTwin');
     const plan = newPlan('Put sound back'); plan.arranges = false; plan.adopts = false; plan.touched.add(id); plan.keepSel = true;
-    twins.forEach(t => { plan.touched.add(t.id); plan.removes.add(t.id); });
+    twins.forEach(t => { plan.touched.add(t.id); plan.removes.add(t.id); const c = N && N.twinOf ? N.twinOf(t) : null; if (c) { plan.touched.add(c.id); plan.removes.add(c.id); } });
     plan.writes.push(() => { L.muted = false; S.setFlag(L, 'muteByMode', false); });
     plan.after = () => { if (FM.reconcileAudio) FM.reconcileAudio(); };
     plan.live = line('soundBack');
@@ -2546,6 +2557,203 @@ window.FM = window.FM || {};
     opacity(id, v) { return S.edit('Change opacity', R => S.planOpacity(R, id, v)); },
     transform(id, op, val) { return S.edit('Transform', R => S.planTransform(R, id, op, val)); },
     mute(id, on) { return S.edit(on ? 'Mute' : 'Sound on', R => S.planMute(R, id, on)); }
+  });
+
+  /* ═══ #1243 R RELEASE 8b: THE REST OF S33's FIRST WAVE (1243-R (c) row 8b; 1243-F S33 change 2 "doors to features we already have…
+     Each is a Simple command or row, with one undo step"). His words: "a second section where it's got stuff like makeup, like retouch…
+     opacity, motion blur… another section which is more like an audio section where they've got extract audio, isolate voice, which we
+     have, I'm pretty sure, reduce noise, audio effects, enhance voice". NO NEW ENGINE: each door drives what Full already has.
+       · Motion blur (his "motion blur") and Smooth skin (his "retouch"): Full's own effects (js/compositor.js motionflow / objectblur, and
+         softskin) put on the item exactly as Simple's Add effect puts one (planItemEffect: one registry instance, sm 1, at the end of the
+         item's stack), or taken off. On a video the footage's own movement is what blurs (Motion Blur (Footage)); on anything else it is the
+         item's movement (Motion Blur (Object)) — a still has no movement inside it.
+       · Sound styles (his "audio effects") and Clear voice (his "enhance voice"): stacks of Full's audio effects (js/audio-fx.js) on the
+         sound the item plays (soundTarget: a clip's taken-out sound when it has one). A sound style is one of Full's Voices
+         (FM.audioVoices, the Voice category); Clear voice is F S33's chain without its first and last links (high-pass, a presence EQ,
+         Compressor, De-esser): Reduce noise is Quieter background's own button, and Loudness Match measures the file first and shows what
+         it did only in Full's panel. NOTHING marks what Simple put on: a stack is found again by what it IS (the same effects in a row,
+         each value the same), so a project saved, undone, synced or edited in Full reads the same, and no stored field is added.
+       · Quieter background (his "reduce noise"): Full's own Reduce noise (js/noise-reduction.js FM.noiseReduction.toggle, its own one
+         undo step: a cleaned copy rides the sound, pressed again it puts the original back). ═══ */
+  const FX_TOGGLES = {
+    motionBlur: { types: ['motionflow', 'objectblur'], pick: L => (L.type === 'video' && !L.audioOnly ? 'motionflow' : 'objectblur'), name: 'Motion blur', on: 'motionBlurOn', off: 'motionBlurOff' },
+    smoothSkin: { types: ['softskin'], pick: () => 'softskin', name: 'Smooth skin', on: 'smoothSkinOn', off: 'smoothSkinOff' }
+  };
+  /* whether this item can take it (a picture: S.canTransform, and the registry's own word for this layer) and whether it has one on now */
+  S.fxToggleOk = function (L, which) {
+    const d = FX_TOGGLES[which], X = FM.fxRegistry;
+    return !!(d && L && S.canTransform(L) && X && X.supportsLayer && X.supportsLayer(d.pick(L), L));
+  };
+  S.fxToggleOn = function (L, which) {
+    const d = FX_TOGGLES[which];
+    return !!(d && L && Array.isArray(L.effects) && L.effects.some(f => f && d.types.indexOf(f.type) >= 0 && f.enabled !== false));
+  };
+  S.planFxToggle = function (R, id, which, on) {
+    const d = FX_TOGGLES[which], L = byIdMap().get(id);
+    if (!L || !d) return refusePlan('gone');
+    if (!S.fxToggleOk(L, which)) return refusePlan('itemFxUnsuited');
+    if (!!on === S.fxToggleOn(L, which)) return refusePlan('nothingChanged');
+    let inst = null;
+    if (on) { try { inst = FM.fxRegistry.makeInstance(d.pick(L)); } catch (e) { inst = null; } if (!inst) return refusePlan('itemFxUnsuited'); inst.sm = 1; }
+    const plan = newPlan(on ? d.name : d.name + ' off'); plan.arranges = false; plan.adopts = false; plan.keepSel = true; plan.touched.add(id);
+    plan.writes.push(() => {
+      if (on) { if (!Array.isArray(L.effects)) L.effects = []; L.effects.push(inst); return; }
+      for (let i = L.effects.length - 1; i >= 0; i--) if (L.effects[i] && d.types.indexOf(L.effects[i].type) >= 0) L.effects.splice(i, 1);   // off: every one of them, on or resting
+    });
+    plan.after = () => { if (FM.requestRender) FM.requestRender(); };
+    plan.live = line(on ? d.on : d.off);
+    return plan;
+  };
+  /* THE SOUND'S EFFECTS. The sound the item plays, when it can carry audio effects (a video layer: a clip, a song, a taken-out sound) and
+     its file is not known to be silent; null for a picture, a title or a clip with no sound track. */
+  S.soundFxTarget = function (R, id) {
+    const L = soundTarget(R, id, byIdMap()), A = FM.audioFxRegistry;
+    if (!L || !A || !A.supportsLayer || !A.supportsLayer('eq3', L)) return null;
+    const m = FM.media && FM.media.get ? FM.media.get(L.id) : null;
+    return (m && m.hasAudio === false) ? null : L;
+  };
+  /* Clear voice (1243-F S33 "Enhance voice … LOCAL as a chain"): rumble out under 90 Hz, a little less boom and more presence, the loud and
+     quiet words brought together, the harsh s sounds turned down. Values reasoned, not yet heard by him: a tweak here, never a rebuild. */
+  const CLEAR_VOICE = [
+    { type: 'highpass', params: { freq: 90, q: 0.7 } },
+    { type: 'eq3', params: { low: -2, mid: 3, midFreq: 3000, midWidth: 1.5, high: 2 } },
+    { type: 'compressor', params: { threshold: -24, ratio: 3, attack: 0.01, release: 0.2, knee: 10 } },
+    { type: 'deesser', params: {} }
+  ];
+  /* fresh instances of a stack: Full's makeInstance, then the stack's values written the way Full writes a preset (clamped, snapped) */
+  function afxStack(stack) {
+    const A = FM.audioFxRegistry, out = [];
+    for (let i = 0; i < stack.length; i++) {
+      const inst = A && A.makeInstance ? A.makeInstance(stack[i].type) : null;
+      if (!inst) return null;
+      if (FM.audioFxPresets && FM.audioFxPresets.apply) FM.audioFxPresets.apply(inst, { params: stack[i].params });
+      out.push(inst);
+    }
+    return out;
+  }
+  /* the styles, his own first (the Voice category's order, audio-fx-browser.js voiceOrder), each with its instances */
+  S.soundStyles = function () {
+    const V = FM.audioVoices;
+    if (!V || !V.all) return [];
+    return (V.mine ? V.mine() : []).concat(V.all()).map(v => ({ key: v.id, name: v.name, desc: v.desc || '', inst: V.instances(v.id) || [] })).filter(s => s.inst.length);
+  };
+  /* one effect is a stack's member when it is ON, of the member's type, with every one of its controls at the member's plain value */
+  function sameFx(f, g) {
+    if (!f || !g || f.type !== g.type || f.enabled === false || !f.params) return false;
+    return FM.audioFxRegistry.paramsOf(g.type).every(p => { const a = f.params[p.key], b = g.params[p.key]; return typeof a === 'number' && typeof b === 'number' && Math.abs(a - b) < 1e-6; });
+  }
+  /* where the stacks sit in a sound's list: [{at, n, key}], never overlapping, the longest stack that fits at each place */
+  function runsOf(list, stacks) {
+    const out = [];
+    let i = 0;
+    while (i < list.length) {
+      let best = null;
+      stacks.forEach(s => { if (s.inst.length && i + s.inst.length <= list.length && (!best || s.inst.length > best.inst.length) && s.inst.every((g, k) => sameFx(list[i + k], g))) best = s; });
+      if (best) { out.push({ at: i, n: best.inst.length, key: best.key }); i += best.inst.length; } else i++;
+    }
+    return out;
+  }
+  const afxList = L => (L && Array.isArray(L.audioFx)) ? L.audioFx : [];
+  const clearStacks = () => { const inst = afxStack(CLEAR_VOICE); return inst ? [{ key: 'clear', inst: inst }] : []; };
+  S.soundStyleOf = function (L) { const r = runsOf(afxList(L), S.soundStyles()); return r.length ? r[0].key : null; };
+  S.clearVoiceOn = function (L) { return runsOf(afxList(L), clearStacks()).length > 0; };
+  function afxPlan(name, R, id) {
+    const L = S.soundFxTarget(R, id);
+    if (!L) return { refuse: refusePlan(byIdMap().get(id) ? 'noSoundFx' : 'gone') };
+    const plan = newPlan(name); plan.arranges = false; plan.adopts = false; plan.keepSel = true; plan.touched.add(L.id);
+    plan.after = () => { if (FM.reconcileAudio) FM.reconcileAudio(); };
+    return { L: L, plan: plan };
+  }
+  const afxRoom = () => (FM.audioVoices && FM.audioVoices.max) || 16;   // storage.js AFX_MAX: the sanitiser keeps the first 16
+  function dropRuns(L, runs) { for (let r = runs.length - 1; r >= 0; r--) L.audioFx.splice(runs[r].at, runs[r].n); }
+  S.planClearVoice = function (R, id, on) {
+    const p = afxPlan(on ? 'Clear voice' : 'Clear voice off', R, id); if (p.refuse) return p.refuse;
+    const L = p.L, list = afxList(L), runs = runsOf(list, clearStacks());
+    if (!!on === runs.length > 0) return refusePlan('nothingChanged');
+    if (on) {
+      const add = afxStack(CLEAR_VOICE);
+      if (!add) return refusePlan('noSoundFx');
+      if (list.length + add.length > afxRoom()) return refusePlan('soundFxFull');
+      p.plan.writes.push(() => { if (!Array.isArray(L.audioFx)) L.audioFx = []; add.forEach(f => L.audioFx.push(f)); });
+    } else p.plan.writes.push(() => dropRuns(L, runs));
+    p.plan.live = line(on ? 'clearVoiceOn' : 'clearVoiceOff');
+    return p.plan;
+  };
+  /* key: a style's id, or null for None. A new style takes the place of the one on now (every style found is taken off), at the end of
+     the list; anything else on the sound (his own effects, Clear voice) stays where it is */
+  S.planSoundStyle = function (R, id, key) {
+    const p = afxPlan(key ? 'Sound style' : 'No sound style', R, id); if (p.refuse) return p.refuse;
+    const L = p.L, list = afxList(L), styles = S.soundStyles(), runs = runsOf(list, styles);
+    if (key ? (runs.length === 1 && runs[0].key === key) : !runs.length) return refusePlan('nothingChanged');
+    const st = key ? styles.filter(s => s.key === key)[0] : null;
+    if (key && !st) return refusePlan('gone');
+    const add = st ? st.inst : [], left = list.length - runs.reduce((a, r) => a + r.n, 0);
+    if (left + add.length > afxRoom()) return refusePlan('soundFxFull');
+    p.plan.writes.push(() => { if (!Array.isArray(L.audioFx)) L.audioFx = []; dropRuns(L, runs); add.forEach(f => L.audioFx.push(f)); });
+    p.plan.live = st ? line('soundStyleSet', st.name) : line('soundStyleOff');
+    return p.plan;
+  };
+  /* Quieter background's state for an item: the sound it would clean, and whether it is cleaned now ('on' — or this IS the cleaned copy)
+     or cannot be (Remove vocals is on it: a sound has one of the two) */
+  S.quieterState = function (R, id) {
+    const L = S.soundFxTarget(R, id), N = FM.noiseReduction;
+    if (!L || !N || !N.state || !N.toggle) return null;
+    const st = N.state(L);
+    return { L: L, on: st === 'on' || st === 'twin', blocked: st === 'blocked' };
+  };
+  /* review R8b-3: Full's Reduce noise copied the original's volume, fades and audio effects onto the cleaned copy, and every sound tool
+     works on that copy while it plays (soundTarget); Full's restore deletes it and copies nothing back. So, just before it: the copy's
+     mix goes back onto the original, and its mute becomes the mute the original gets back. Only what differs is written. */
+  function keepCopyEdits(N, L) {
+    const cp = N.isTwin && N.isTwin(L) ? L : (N.twinOf ? N.twinOf(L) : null), src = cp && N.sourceOf ? N.sourceOf(cp) : null;
+    if (!cp || !src || src === cp) return;
+    const js = v => JSON.stringify(v === undefined ? null : v, FM.jsonReplacer), cl = v => (v && typeof v === 'object') ? JSON.parse(js(v)) : v;
+    const vol = cp.volume == null ? 1 : cp.volume;
+    if (js(src.volume == null ? 1 : src.volume) !== js(vol)) src.volume = cl(vol);
+    ['fadeIn', 'fadeOut'].forEach(k => { if ((+src[k] || 0) !== (+cp[k] || 0)) src[k] = +cp[k] || 0; });
+    const fx = Array.isArray(cp.audioFx) ? cp.audioFx : [];
+    if (js(Array.isArray(src.audioFx) ? src.audioFx : []) !== js(fx)) src.audioFx = cl(fx);
+    cp.twinSourceWasMuted = !!cp.muted;
+  }
+  Object.assign(S.cmd, {
+    fxToggle(id, which, on) { const d = FX_TOGGLES[which]; return S.edit(d ? (on ? d.name : d.name + ' off') : 'Effect', R => S.planFxToggle(R, id, which, on)); },
+    clearVoice(id, on) { return S.edit(on ? 'Clear voice' : 'Clear voice off', R => S.planClearVoice(R, id, on)); },
+    soundStyle(id, key) { return S.edit(key ? 'Sound style' : 'No sound style', R => S.planSoundStyle(R, id, key)); },
+    /* Full's Reduce noise is its own step (it holds the history around the copy it adds, js/noise-reduction.js apply / restore) and can
+       take seconds with its own "tap to stop" line, so it runs beside the runner, never inside it; it waits for a running edit. What it
+       says when done is Simple's own line ("Restore original audio" is Full's button; here the same tool puts it back). */
+    async quieter(id, opts) {
+      const ro = S.roReason(); if (ro) return refuse(ro);
+      if (S.running) { S.say(line('wait')); return false; }
+      const R = S.classify(FM.scene), q = S.quieterState(R, id), N = FM.noiseReduction;
+      if (!q) return refuse(FM.layerById(FM.scene, id) ? 'noSoundFx' : 'gone');
+      if (q.blocked) return refuse('quieterBlocked');
+      /* review R8b-4: the runner's own checks (a newer project, a locked item with its Do it anyway, a friend holding it), on the item, the
+         sound it cleans and that sound's original */
+      if (S.newerSchema()) return refuse('newer', {}, R);
+      const map = byIdMap(), ids = [id, q.L.id, q.L.karaokeOf].filter((x, i, a) => x && a.indexOf(x) === i && map.get(x));
+      const lk = ids.filter(x => unitLayers(x, map).some(l => l.locked));
+      if (lk.length && !(opts && opts.unlock)) return refuse('locked', { ids: lk, retry: () => S.cmd.quieter(id, { unlock: true }) }, R);
+      const bk = S.blockers({ touched: new Set(ids) }); if (bk) return refuse('busy', bk, R);
+      /* review R8b-7: the same sound still being cleaned is "this sound", not "another" */
+      const jb = !q.on && N.job ? N.job() : null;
+      if (jb) return refuse(jb.layerId === q.L.id ? 'quieterBusyHere' : 'quieterBusy');
+      /* review R8b-3: what he changed on the cleaned copy while it played (Volume, Mute, Fade, Clear voice, a Sound style) goes back onto the
+         original before Full's restore deletes the copy, inside restore's own one step (nothing commits in between) */
+      if (q.on) keepCopyEdits(N, q.L);
+      let ok = false;
+      try { ok = await N.toggle(q.L, q.on ? undefined : (N.settingsFor ? N.settingsFor(q.L) : undefined)); } catch (e) { ok = false; }
+      if (ok) {
+        /* review R8b-6: Full's warning that no voice (or no pause) was found is said in Simple's words, where he sees it; only the plain
+           result is a live line */
+        const tEl = document.getElementById('toast'), said = (!q.on && tEl) ? String(tEl.textContent || '') : '';   // Full's apply ends on its result line
+        if (FM.hideToast) FM.hideToast();
+        const warn = /^No voice found/.test(said) ? 'quieterNoVoice' : /^No clear pauses/.test(said) ? 'quieterNoPauses' : '';
+        if (warn) S.say(line(warn), { ms: 8000, wrap: true });
+        else S.say(line(q.on ? 'quieterOff' : 'quieterOn'), { live: true });
+      }
+      return !!ok;
+    }
   });
 
   /* MUTE CLIP SOUND (the clip row's 🔈): the mode lives on the document (project.sm.muteClips, it syncs: the mute is part of the
