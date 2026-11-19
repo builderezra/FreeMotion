@@ -4580,4 +4580,86 @@ window.FM = window.FM || {};
       return S.edit('Replace clip', R => S.planFillReplace(R, id, nrec));
     }
   });
+
+  /* ═══ #1243 R RELEASE 10 · S27 A, SLIDE (1243-R (c) row 10; 1243-B "S27"; R (a) "Slide: ‹ · filmstrip · ±1 frame"). His words, 8 Nov:
+     "it should have a button on the layer or it should have a button in the settings menu that lets you actually slide it along, because we
+     have the slide option in the complex editor. I feel like the simple editor should have that as well. So instead of like you want to like
+     get a different scene and like for the clip to like start a second earlier, you now have to drag and extend both sides and like blah blah
+     blah. Instead you can just slide it and then it's like super simple and easy."
+     SLIDE changes WHICH part of the footage a video shows (its trimStart) and nothing else: the clip keeps its place and its length, its keys
+     stay where they are, nothing ripples (a look, not an arrangement). The maths is Full's ⇄ pill's (js/timeline.js, the SLIP block:
+     max = m.duration − FM.layerSourceAdvance(layer, layer.duration), the drag clamped to [0, max], shown only past 0.05 s of spare footage);
+     Full's own code is not touched. What Simple adds, because "the clip's own sound slips with it": the sound taken out of the clip (its
+     twin, §4.6, matched by the clip's exact clock) gets the same trimStart, so sound and picture stay together and it stays the clip's twin;
+     and a copy that plays in a sound's place (Full's Reduce noise, Quieter background's copy, or Remove vocals: the WHOLE file on the same
+     clock, tied by karaokeOf) goes with its sound — exactly when Full's own history sync would carry it (its clock still the sound's). ═══ */
+  const SLIDE_MIN = 0.05;   // Full's pill: `m.duration - advTotal > 0.05`, nothing to slip otherwise
+  const isSlideKind = L => !!L && L.type === 'video' && L.audioOnly !== true && !(L.sm && (L.sm.snd === true || L.sm.twin === true));
+  /* the range a video's trimStart can take, [0, max] (max: the footage the clip does not show), or null with no footage of known length */
+  S.slideRange = function (L) {
+    if (!isSlideKind(L)) return null;
+    const m = FM.media && FM.media.get ? FM.media.get(L.id) : null;
+    if (!m || !(m.duration > 0) || !isFinite(m.duration)) return null;
+    const d = +L.duration || 0, adv = FM.layerSourceAdvance ? FM.layerSourceAdvance(L, d) : d * FM.speedAt(L, +L.start || 0);
+    if (!isFinite(adv) || !(adv > 0)) return null;
+    return { src: m.duration, adv: adv, max: Math.max(0, m.duration - adv), trim: Math.max(0, +L.trimStart || 0) };
+  };
+  /* null (not a video picture), 'unknown' (its footage not read yet), 'missing' (no footage on this device and none being read in: spine.js
+     mediaState's 'missing', e.g. a file saved without it — waiting will not bring it, review R10-4/R10-5), 'whole' (it already shows all of
+     its footage: nothing spare on either side, so it cannot slide), or 'ok' */
+  S.slideState = function (L) {
+    if (!isSlideKind(L)) return null;
+    const r = S.slideRange(L);
+    if (r) return r.max > SLIDE_MIN ? 'ok' : 'whole';
+    const m = FM.media && FM.media.get ? FM.media.get(L.id) : null, hyd = !!(FM.storage && FM.storage.hydrating && FM.storage.hydrating());
+    return !m && !hyd ? 'missing' : 'unknown';
+  };
+  /* the copies that play in place of `src` on its own clock (history.js commit's FM.syncKaraokeTimingFrom rule: an untouched copy) */
+  const slideClock = l => [+l.start || 0, +l.duration || 0, +l.trimStart || 0, !!l.reversed, JSON.stringify(l.speed == null ? 1 : l.speed)].join('|');
+  function sameClockCopies(src) {
+    const k = slideClock(src);
+    return FM.scene.layers.filter(c => c && c !== src && c.karaokeOf === src.id && c.type === 'video' && slideClock(c) === k);
+  }
+  /* THE LAYERS A SLIDE MOVES TOGETHER: the clip, its own taken-out sound wherever that sound is — a main clip's, a lifted clip's, one set to
+     Stay put (S.isTwinOf, found in the whole scene as planIntoRow finds them: R.followers lists only a main clip's, review R10-1) — and the
+     copies that play in place of either on its clock. Slide's row previews all of them and the command writes all of them, so the picture
+     and its sound never part, not even mid-drag (a redraw then still reads the sound as the clip's own, review R10-4). */
+  S.slideMovers = function (L, eps) {
+    const twins = FM.scene.layers.filter(t => S.isTwinOf(t, L, eps));
+    const movers = [L].concat(twins), copies = [];
+    movers.forEach(x => sameClockCopies(x).forEach(c => { if (movers.indexOf(c) < 0 && copies.indexOf(c) < 0) copies.push(c); }));
+    return movers.concat(copies);
+  };
+  S.planSlide = function (R, id, ts) {
+    const map = byIdMap(), L = map.get(id);
+    if (!L) return refusePlan('gone');
+    const st = S.slideState(L);
+    if (!st) return refusePlan('noSlide');
+    if (st !== 'ok') return refusePlan(st === 'whole' ? 'slideWhole' : st === 'missing' ? 'slideMissing' : 'slideUnknown');
+    if (typeof ts !== 'number' || !isFinite(ts)) return refusePlan('gone');
+    const r = S.slideRange(L), to = Math.max(0, Math.min(r.max, ts));
+    if (Math.abs(to - r.trim) < 1e-6) return refusePlan(ts < -1e-9 || ts > r.max + 1e-9 ? 'slideEnd' : 'nothingChanged');
+    const all = S.slideMovers(L, R.eps);
+    const plan = newPlan('Slide'); plan.arranges = false; plan.adopts = false; plan.keepSel = true;
+    all.forEach(x => plan.touched.add(x.id));
+    plan.writes.push(() => { all.forEach(x => { x.trimStart = to; }); });
+    plan.after = () => { if (FM.seekVideosToTime) FM.seekVideosToTime(); if (FM.requestRender) FM.requestRender(); if (FM.reconcileAudio) FM.reconcileAudio(); };
+    const from = L.reversed ? to + r.adv : to;
+    plan.live = line('slid', from);
+    /* a caption track that follows this clip was timed to the words it showed: say so, change nothing (1243-B S27 change 1) */
+    if ((R.followers[id] || []).some(f => R.units[f] && R.units[f].kind === 'captions')) plan.say = line('slid', from) + ' · ' + line('slideCaptions');
+    return plan;
+  };
+  Object.assign(S.cmd, {
+    slide(id, ts) { return S.edit('Slide', R => S.planSlide(R, id, ts)); },
+    /* ±n frames (the project's frames) in the order the picture plays: a reversed clip shows its footage backwards, so the frame after its
+       first is EARLIER in the file, and "+1 frame" moves its window down the file */
+    slideFrames(id, n) {
+      return S.edit('Slide', R => {
+        const L = FM.layerById(FM.scene, id), r = L ? S.slideRange(L) : null;
+        if (!L || !r) return S.planSlide(R, id, NaN);
+        return S.planSlide(R, id, r.trim + (L.reversed ? -n : n) / fps());
+      });
+    }
+  });
 })(window.FM);

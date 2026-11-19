@@ -22,6 +22,11 @@ window.FM = window.FM || {};
     list = list || [];
     return list.length > 1 ? list.length + ' files couldn’t be added · ' + cantAddOne(list[0], true) : cantAddOne(list[0], low);
   }
+  /* #1243 R release 10 (S27 A): a place in the footage as m:ss.t (Slide's readout and its line), rounded once so 9.96 s reads 0:10.0 */
+  function smClock(s) {
+    const t = Math.max(0, Math.round((+s || 0) * 10) / 10), m = Math.floor(t / 60), r = Math.round((t - m * 60) * 10) / 10;
+    return m + ':' + (r < 10 ? '0' : '') + r.toFixed(1);
+  }
   FM.spineWords = {
     editor: {   // the ⚙ cog's third block (DESIGN.md §6; 1 Oct: no ⇄ in any play bar, no ⋯ item, no back button)
       simple: 'Simple', full: 'Full', title: 'Editor',
@@ -169,6 +174,12 @@ window.FM = window.FM || {};
       /* #1243 S17: Text › Draw */
       drawingAdded: 'Drawing added', drawingGone: 'That drawing was just deleted',
       replaced: name => name + ' replaced',
+      /* #1243 R release 10 (S27 A): Slide — his "slide it along… for the clip to like start a second earlier" */
+      slid: s => 'Now plays the video from ' + smClock(s), slideCaptions: 'its captions may no longer match',
+      noSlide: 'Only a video can slide', slideUnknown: 'Can’t slide yet · the video is still loading',
+      slideMissing: 'Can’t slide · this clip’s video isn’t on this device',   /* review R10-4/5: no footage here, and none on its way */
+      slideWhole: 'Nothing to slide · this clip already shows all of its video. Make it shorter first, then slide it',
+      slideEnd: 'Can’t slide further · that’s as far as the video goes',   /* review R10-6: both ends say it (a press at the START said "the end") */
       /* release 2.7: transitions (#1122, his pick A) */
       trNone: 'No transition', noTransition: 'A transition needs two clips that meet, with nothing between them',
       trSet: (type, d) => ({ crossfade: 'Crossfade', dipblack: 'Dip to black', dipwhite: 'Dip to white' }[type] || 'Transition') + ' ' + d.toFixed(1) + ' s',
@@ -232,6 +243,10 @@ window.FM = window.FM || {};
       soundStyles: 'Sound styles', soundStylesTitle: 'Robot, deep, radio, cave and more', soundStylesNone: 'None',
       clearVoice: 'Clear voice', clearVoiceTitle: 'A cleaner voice: less rumble, more presence, even level, softer s sounds',
       newLength: s => s.toFixed(1) + ' s', transitionTitle: 'The transition at this clip’s cut',
+      /* #1243 R release 10 (S27 A): Slide, its row's filmstrip and the two frame steps (his words: "slide it along") */
+      slide: 'Slide', slideTitle: 'Show another part of the video, same place and length', slideLabel: 'Slide the video inside the clip',
+      slideFrom: s => 'from ' + smClock(s), slidePrev: '−1 frame', slideNext: '+1 frame',
+      slidePrevTitle: 'Start one frame earlier in the video', slideNextTitle: 'Start one frame later in the video',
       /* #1243 S3 · S9: the ‹s' spoken names (a sub-row's and a panel's go back one level; an item's lets the selection go) and the tray's own */
       back: 'Back', backItem: 'Back · nothing selected', clipTools: 'Clip tools',
       /* #1243 S26: a grip whose footage has run out (its spoken name's tail) and the drag tip when he pulls it past the end */

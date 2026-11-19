@@ -12741,6 +12741,13 @@ body.ed-simple #sm-bar:has(> #sm-say.sm-saying) > .sm-hint { display: none; }
 /* review R8-5: Transform's Size slider covers 10–400 %, so it keeps a 140 px track (about 2.8 % a pixel) and the strip scrolls on to Centre
    and Reset, rather than the slider shrinking to Volume's 70 px floor at 380 */
 .sm-vol-r.sm-size-r { flex: 0 0 140px; }
+/* #1243 R release 10 (S27 A, R (a) "Slide: ‹ · filmstrip · ±1 frame"): the filmstrip takes the room the two frame steps leave, its readout
+   under it; the strip takes the finger itself (no pan of the row under a drag). Simple only: every rule is under body.ed-simple #sm-tray. */
+body.ed-simple #sm-tray .sm-slide { flex: 1 1 170px; min-width: 150px; align-self: center; display: flex; flex-direction: column; align-items: stretch; gap: 3px;
+  margin: 0 6px; touch-action: none; cursor: ew-resize; border-radius: 6px; outline-offset: 2px; -webkit-tap-highlight-color: transparent; }
+body.ed-simple #sm-tray .sm-slide-film { display: block; width: 100%; height: 32px; border-radius: 5px; background: #12161d; pointer-events: none; }
+body.ed-simple #sm-tray .sm-slide-v { font: 600 10px/1 system-ui, sans-serif; color: var(--text-dim); text-align: center; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: none; }
+body.ed-simple #sm-tray .sm-tool[data-tool="slidePrev"], body.ed-simple #sm-tray .sm-tool[data-tool="slideNext"] { flex: 0 0 58px; min-width: 58px; }
 
 /* ═══ Simple mode release 2.3: speed, sound and replacing ═══ */
 .sm-twinband { position: absolute; left: 0; right: 0; bottom: 0; height: 6px; pointer-events: none; opacity: .85;

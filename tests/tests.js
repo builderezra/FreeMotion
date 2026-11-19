@@ -65574,10 +65574,13 @@
      (his option E is reversed by his own S28 words). The strip reads its children in order, a section line as '|'.
      #1243 R RELEASE 8b (S33's first wave, R (a)): Motion blur and Smooth skin join Opacity's section, and the sound section (Quieter
      background, Sound styles, Clear voice) comes between Transform's and Delete. It replaced '1243 R8 · decision 2 a main video clip’s tray
-     reads Split, Speed, Volume, Replace, Transition, Reverse, Take sound out, Lift off, Duplicate | Opacity | Crop, Transform | Delete — …'. */
-  test('1243 R8b · decision 2 a main video clip’s tray reads Split, Speed, Volume, Replace, Transition, Reverse, Take sound out, Lift off, Duplicate | Opacity, Motion blur, Smooth skin | Crop, Transform | Quieter background, Sound styles, Clear voice | Delete — no Audio, More, Look, Length or Move — on ONE 56 px row at 1280×800, 1024×600 and 380, with Split, Speed, Volume and Replace pressable at the strip’s start; next to a gap Close gap follows Duplicate', { item: '980', budgetMs: 150000 }, async function () {
+     reads Split, Speed, Volume, Replace, Transition, Reverse, Take sound out, Lift off, Duplicate | Opacity | Crop, Transform | Delete — …'.
+     #1243 R RELEASE 10 (S27 A, R (a) "… Transition · Slide · Reverse …"): Slide comes between Transition and Reverse (here it rests: the
+     suite's clips have no footage of known length). It replaced '1243 R8b · decision 2 a main video clip’s tray reads Split, Speed, Volume,
+     Replace, Transition, Reverse, Take sound out, … — …'. */
+  test('1243 R10 · decision 2 a main video clip’s tray reads Split, Speed, Volume, Replace, Transition, Slide, Reverse, Take sound out, Lift off, Duplicate | Opacity, Motion blur, Smooth skin | Crop, Transform | Quieter background, Sound styles, Clear voice | Delete — no Audio, More, Look, Length or Move — on ONE 56 px row at 1280×800, 1024×600 and 380, with Split, Speed, Volume and Replace pressable at the strip’s start; next to a gap Close gap follows Duplicate', { item: '980', budgetMs: 150000 }, async function () {
     smNeedP2();
-    const WANT = ['split', 'speed', 'volume', 'replace', 'transition', 'reverse', 'takeSound', 'lift', 'duplicateClip', '|', 'opacity', 'motionBlur', 'smoothSkin', '|', 'crop', 'transform', '|', 'quieter', 'soundStyles', 'clearVoice', '|', 'delete'];
+    const WANT = ['split', 'speed', 'volume', 'replace', 'transition', 'slide', 'reverse', 'takeSound', 'lift', 'duplicateClip', '|', 'opacity', 'motionBlur', 'smoothSkin', '|', 'crop', 'transform', '|', 'quieter', 'soundStyles', 'clearVoice', '|', 'delete'];
     const read = () => { const r = document.querySelector('#sm-tray > .sm-runbox > .sm-run'); return r ? Array.from(r.children).map(c => c.classList.contains('sm-div') ? '|' : (c.dataset.tool || c.className)) : []; };
     for (const [w, h] of SM9_SIZES) {
       await sm9At(w, h, async function () {
@@ -206600,6 +206603,241 @@
       if (dT) Object.defineProperty(N, 'toggle', dT); else delete N.toggle;
       [aId, twId].forEach(x => { if (x && FM.media.get(x)) { try { FM.media.remove(x); } catch (e) {} } });
     }
+  });
+
+  /* ═══ #1243 R RELEASE 10 · S27 A, SLIDE (1243-R (c) row 10; 1243-B S27; R (a) "Slide: ‹ · filmstrip · ±1 frame") ═══
+     His words, 8 Nov: "it should have a button on the layer or it should have a button in the settings menu that lets you actually slide it
+     along, because we have the slide option in the complex editor… for the clip to like start a second earlier… Instead you can just slide
+     it". Red on v18.44: no tray holds Slide and FM.spine has no slide command. The footage is a record of known length (smRec), its strip
+     frames set to none so nothing decodes; every press goes through the page, every drag through the strip itself. */
+  const r10Rec = (dur, name) => smRec(dur, name, { stripFrames: [], width: 320, height: 240 });   /* smP2's own 320 × 240 frame: a clip that fills it reads as a clip of the row */
+  const r10Ix = () => FM.history._steps().index;
+  /* a drag of Slide's filmstrip by dx px (window-level moves, as the row listens): returns the release */
+  async function r10Drag(dx) {
+    const b = document.querySelector('#sm-tray .sm-slide');
+    if (!b) throw new Error('Slide’s row has no filmstrip to drag');
+    const r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+    const ev = (type, X) => b.dispatchEvent(new PointerEvent(type, { pointerId: 7, pointerType: 'mouse', button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: X, clientY: y, bubbles: true, cancelable: true }));
+    ev('pointerdown', x); await r4Settle(20);
+    ev('pointermove', x + dx / 2); ev('pointermove', x + dx); await r4Settle(40);
+    return () => { if (b.isConnected) ev('pointerup', x + dx); };
+  }
+  /* the strip's own scale (js/simple-tools.js slideRow): the whole video across 90 % of the strip, the window at least 35 % of it */
+  const r10Scale = (B, src, adv) => Math.max(0.9 * B / src, 0.35 * B / adv);
+
+  test('1243 R10 · S27 Slide at 380 and 1280: a video clip’s tray has Slide right after Transition and a video overlay’s right after Volume; on a 4 s clip from a 10 s video Slide opens a row of ‹, a filmstrip, −1 frame and +1 frame, all on screen; a drag of the strip shows another part of the video with no step, its release slides the clip in ONE step with its place and length kept, +1 frame is one step more, on a reversed clip the same drag goes the way its picture plays, and a clip that already shows all of its video rests and says so (CONTROL: a picture clip has no Slide)', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    for (const width of [380, 1280]) {
+      await r4At(width, width > 700 ? 800 : 0, async function () {
+        await smP2((W, H) => [smV('O', 1.01, 2, W, H, { muted: false }), smV('Rv', 9, 2, W, H, { reversed: true, trimStart: 3 }), smV('Wh', 6, 3, W, H), smPic('Z', 4, 2, W, H), smV('A', 0, 4, W, H, { muted: false, trimStart: 2 })], async function (v) {
+          const at = width + ' px: ', A = () => v.L('A'), mode = () => FM.simpleTools.mode() + '/' + (document.getElementById('sm-bar').getAttribute('data-sub') || '');
+          FM.selectLayer(v.L('Z').id); await r4Settle(150);
+          if (!smTool('split')) throw new Error('CONTROL ' + at + 'the picture clip’s tray is not drawn (' + r8Kids().join(' ') + ')');
+          if (smTool('slide')) throw new Error('CONTROL ' + at + 'a picture clip offers Slide (' + r8Kids().join(' ') + ')');
+          /* the video clip: Slide after Transition, before Reverse (R (a)), not resting */
+          FM.selectLayer(null); FM.selectLayer(A().id); await r4Settle(150);
+          const k = r8Kids(), i = k.indexOf('slide');
+          if (i < 0) { fails.push(at + 'the video clip’s tray has no Slide (' + k.join(' ') + ')'); return; }
+          if (k[i - 1] !== 'transition' || k[i + 1] !== 'reverse') fails.push(at + 'the video clip’s Slide sits between ' + k[i - 1] + ' and ' + k[i + 1] + ', want right after Transition and before Reverse (' + k.join(' ') + ')');
+          if (smTool('slide').getAttribute('aria-disabled') === 'true') fails.push(at + 'Slide rests on a 4 s clip from a 10 s video');
+          await r8bPress('slide', at + 'the video clip’s Slide'); await r4Settle(150);
+          const ids = Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool).join(), film = document.querySelector('#sm-tray .sm-slide'), cv = film && film.querySelector('canvas');
+          if (mode() !== 'sub/slide' || ids !== 'rowBack,slidePrev,slideNext' || !cv) { fails.push(at + 'Slide opened ' + mode() + ' holding ' + ids + (cv ? ' and a filmstrip' : ' and no filmstrip') + ', want its own row of ‹, the filmstrip, −1 frame and +1 frame'); return; }
+          for (const [el, what] of [[film, 'the filmstrip'], [smTool('slidePrev'), '−1 frame'], [smTool('slideNext'), '+1 frame']]) {
+            try { smMustHit(el, at + what); } catch (e) { fails.push(e.message); }
+            if (el.getBoundingClientRect().right > document.getElementById('sm-tray').getBoundingClientRect().right + 0.5) fails.push(at + what + ' runs past the bar’s edge');
+          }
+          if (cv.getBoundingClientRect().width < 120) fails.push(at + 'the filmstrip is ' + Math.round(cv.getBoundingClientRect().width) + ' px wide, want at least 120');
+          const out = () => (film.querySelector('.sm-slide-v') || {}).textContent;
+          if (out() !== 'from 0:02.0') fails.push(at + 'the strip reads “' + out() + '”, want from 0:02.0 (the clip starts 2 s into its video)');
+          /* the drag: the film follows the finger, so a drag to the left shows LATER video; nothing is a step until the release */
+          const B = cv.clientWidth, want = 2 + 40 / r10Scale(B, 10, 4), n0 = r10Ix();
+          const up = await r10Drag(-40);
+          if (!(Math.abs(A().trimStart - want) < 1e-6) || r10Ix() !== n0) fails.push(at + 'mid-drag the clip plays from ' + A().trimStart + ' after ' + (r10Ix() - n0) + ' steps, want ' + want.toFixed(4) + ' on show and no step yet');
+          up(); await v.idle(); await r4Settle(150);
+          if (!(Math.abs(A().trimStart - want) < 1e-6) || r10Ix() !== n0 + 1 || A().start !== 0 || A().duration !== 4) fails.push(at + 'the release left the clip at ' + A().start + ' for ' + A().duration + ' s from ' + A().trimStart + ' after ' + (r10Ix() - n0) + ' steps, want 0 for 4 s from ' + want.toFixed(4) + ' in ONE step');
+          if (mode() !== 'sub/slide') fails.push(at + 'after the release the bar is ' + mode() + ', want Slide’s row still open');
+          const n1 = r10Ix(), t1 = A().trimStart;
+          await r8bPress('slideNext', at + '+1 frame'); await v.idle(); await r4Settle(120);
+          if (!(Math.abs(A().trimStart - (t1 + 1 / 30)) < 1e-6) || r10Ix() !== n1 + 1) fails.push(at + '+1 frame moved the clip from ' + t1 + ' to ' + A().trimStart + ' in ' + (r10Ix() - n1) + ' steps, want one frame (1/30 s) later in ONE step');
+          FM.history.undo(); FM.history.undo(); await r4Settle(150);
+          if (A().trimStart !== 2) fails.push(at + 'two Undos left the clip from ' + A().trimStart + ', want 2');
+          const reopenA = async what => { FM.selectLayer(null); FM.selectLayer(A().id); await r4Settle(150); await r8bPress('slide', at + what); await r4Settle(150); };
+          /* review R10-1 (safety): a step the runner refuses (the clip locked, not done anyway) leaves the strip where the clip still plays from */
+          A().locked = true;
+          try {
+            await reopenA('the locked clip’s Slide');
+            const n4 = r10Ix(), up4 = await r10Drag(-40); up4(); await v.idle(); await r4Settle(150);
+            const o4 = (document.querySelector('#sm-tray .sm-slide-v') || {}).textContent;
+            if (!/locked/.test(r8bLine())) fails.push(at + 'CONTROL: the slide of the locked clip was not refused for its lock (it said “' + r8bLine() + '”)');
+            if (A().trimStart !== 2 || r10Ix() !== n4 || o4 !== 'from 0:02.0') fails.push(at + 'a refused slide of the locked clip left it from ' + A().trimStart + ' after ' + (r10Ix() - n4) + ' steps with the strip reading “' + o4 + '”, want from 2, no step, and the strip back at from 0:02.0');
+          } finally { A().locked = false; }
+          /* review R10-3 (safety): a drag cut short by another selection: the preview goes back with no step, and the finger's later lift takes none */
+          await reopenA('the video clip’s Slide again');
+          {
+            const n5 = r10Ix();
+            await r10Drag(-40);
+            const mid5 = A().trimStart;
+            FM.selectLayer(v.L('Z').id); await r4Settle(150);
+            const back5 = A().trimStart;
+            document.body.dispatchEvent(new PointerEvent('pointerup', { pointerId: 7, pointerType: 'mouse', button: 0, buttons: 0, clientX: 5, clientY: 5, bubbles: true, cancelable: true }));
+            await v.idle(); await r4Settle(120);
+            if (Math.abs(mid5 - 2) < 1e-6) fails.push(at + 'CONTROL: the drag before the new selection showed nothing (the clip still plays from 2)');
+            else if (back5 !== 2 || A().trimStart !== 2 || r10Ix() !== n5) fails.push(at + 'a drag cut short by selecting another clip left the clip from ' + back5 + ', then from ' + A().trimStart + ' after the finger lifted, ' + (r10Ix() - n5) + ' steps, want it back at 2 with no step');
+          }
+          /* review R10-3 (words): two fingers on the strip: the second takes it over, the first one's lift takes no step, the second still drags */
+          await reopenA('the video clip’s Slide for two fingers');
+          {
+            const b6 = document.querySelector('#sm-tray .sm-slide'), c6 = b6 && b6.querySelector('canvas');
+            if (!c6) fails.push(at + 'Slide’s row has no filmstrip for two fingers');
+            else {
+              const r6 = b6.getBoundingClientRect(), x6 = r6.left + r6.width / 2, y6 = r6.top + r6.height / 2, sc6 = r10Scale(c6.clientWidth, 10, 4), n6 = r10Ix();
+              const pe = (type, pid, X) => { if (b6.isConnected) b6.dispatchEvent(new PointerEvent(type, { pointerId: pid, pointerType: 'touch', isPrimary: pid === 11, button: 0, buttons: type === 'pointerup' ? 0 : 1, clientX: X, clientY: y6, bubbles: true, cancelable: true })); };
+              pe('pointerdown', 11, x6); pe('pointermove', 11, x6 - 20); await r4Settle(20);
+              pe('pointerdown', 12, x6); pe('pointermove', 12, x6 - 40); await r4Settle(20);
+              pe('pointerup', 11, x6 - 20); await v.idle(); await r4Settle(60);
+              const lift6 = A().trimStart, n6b = r10Ix();
+              pe('pointermove', 12, x6 - 60); await r4Settle(20);
+              const more6 = A().trimStart;
+              pe('pointerup', 12, x6 - 60); await v.idle(); await r4Settle(150);
+              const w40 = 2 + 40 / sc6, w60 = 2 + 60 / sc6;
+              if (n6b !== n6 || Math.abs(lift6 - w40) > 1e-6) fails.push(at + 'lifting the first of two fingers took ' + (n6b - n6) + ' steps and left the clip from ' + lift6 + ', want no step and the second finger’s ' + w40.toFixed(4) + ' still on show');
+              else if (Math.abs(more6 - w60) > 1e-6 || r10Ix() !== n6 + 1 || Math.abs(A().trimStart - w60) > 1e-6) fails.push(at + 'the second finger, moved on after the first lifted, showed the clip from ' + more6 + ' and its lift left it from ' + A().trimStart + ' after ' + (r10Ix() - n6) + ' steps, want ' + w60.toFixed(4) + ' in ONE step');
+              if (r10Ix() > n6) FM.history.undo();
+              await r4Settle(150);
+            }
+          }
+          /* a reversed clip plays its video backwards: the strip runs that way, so the same drag shows EARLIER video in the file */
+          FM.selectLayer(null); FM.selectLayer(v.L('Rv').id); await r4Settle(150);
+          await r8bPress('slide', at + 'the reversed clip’s Slide'); await r4Settle(150);
+          const cv2 = document.querySelector('#sm-tray .sm-slide canvas');
+          if (!cv2) { fails.push(at + 'the reversed clip’s Slide opened no filmstrip'); return; }
+          const wantR = 3 - 40 / r10Scale(cv2.clientWidth, 10, 2), n2 = r10Ix();
+          const up2 = await r10Drag(-40); up2(); await v.idle(); await r4Settle(150);
+          if (!(Math.abs(v.L('Rv').trimStart - wantR) < 1e-6) || r10Ix() !== n2 + 1) fails.push(at + 'the reversed clip, dragged left, plays from ' + v.L('Rv').trimStart + ' after ' + (r10Ix() - n2) + ' steps, want ' + wantR.toFixed(4) + ' (earlier in the file: what its picture plays next) in ONE step');
+          /* the video overlay: Slide right after Volume */
+          FM.selectLayer(null); FM.selectLayer(v.L('O').id); await r4Settle(150);
+          const ko = r8Kids(), io = ko.indexOf('slide');
+          if (io < 0 || ko[io - 1] !== 'volume' || ko[io + 1] !== 'forward') fails.push(at + 'the video overlay’s tray reads ' + ko.join(' ') + ', want Slide right after Volume and before Forward');
+          else {
+            /* review R10-6: at the START of its video −1 frame rests and says it is as far as the video goes (it said “the end”); review R10-2:
+               with the playhead elsewhere, a frame step brings the overlay onto the stage, on its first frame INSIDE it (it starts between two
+               frames, at 1.01 s, and the nearest frame, 1.0 s, is before it) */
+            FM.setTime(0); await r4Settle(60);
+            await r8bPress('slide', at + 'the video overlay’s Slide'); await r4Settle(150);
+            const pv = smTool('slidePrev');
+            if (!pv || pv.getAttribute('aria-disabled') !== 'true') fails.push(at + 'at the start of the overlay’s video −1 frame does not rest');
+            else {
+              const nP = r10Ix();
+              await r8bPress('slidePrev', at + '−1 frame at the start'); await v.idle(); await r4Settle(100);
+              if (r10Ix() !== nP || !/as far as the video goes/.test(r8bLine()) || /end of the video/.test(r8bLine())) fails.push(at + '−1 frame at the START of the video took ' + (r10Ix() - nP) + ' steps and said “' + r8bLine() + '”, want none and that it is as far as the video goes (not its end)');
+            }
+            const nO = r10Ix();
+            await r8bPress('slideNext', at + 'the video overlay’s +1 frame'); await v.idle(); await r4Settle(120);
+            const oL = v.L('O'), tO = FM.time || 0;
+            if (r10Ix() !== nO + 1 || Math.abs((+oL.trimStart || 0) - 1 / 30) > 1e-6) fails.push(at + 'CONTROL: +1 frame on the overlay took ' + (r10Ix() - nO) + ' steps to ' + oL.trimStart + ', want one frame (1/30 s) in ONE step');
+            if (!(tO >= oL.start - 1e-9 && tO < oL.start + oL.duration)) fails.push(at + 'Slide on the overlay that starts at 1.01 s put the playhead at ' + tO.toFixed(4) + ', want it inside the overlay (from 1.01 s) so its picture is on the stage');
+          }
+          /* a clip that already shows all of its video: Slide rests, a press says why and changes nothing */
+          FM.selectLayer(null); FM.selectLayer(v.L('Wh').id); await r4Settle(150);
+          const ws = smTool('slide');
+          if (!ws || ws.getAttribute('aria-disabled') !== 'true') { fails.push(at + 'the clip that shows all of its 3 s video has ' + (ws ? 'a Slide that does not rest' : 'no Slide') + ' (' + r8Kids().join(' ') + ')'); return; }
+          const doc0 = v.doc(), n3 = r10Ix();
+          await r8bPress('slide', at + 'the resting Slide'); await v.idle(); await r4Settle(150);
+          if (!/already shows all of its video/.test(r8bLine()) || v.doc() !== doc0 || r10Ix() !== n3 || mode() !== 'item/') fails.push(at + 'the resting Slide said “' + r8bLine() + '” and left the bar ' + mode() + (v.doc() !== doc0 ? ' with the project changed' : '') + ', want it to say the clip already shows all of its video and change nothing');
+        }, { media: [{ name: 'A', rec: r10Rec(10, 'r10-a.mp4') }, { name: 'O', rec: r10Rec(5, 'r10-o.mp4') }, { name: 'Wh', rec: r10Rec(3, 'r10-w.mp4') }, { name: 'Rv', rec: r10Rec(10, 'r10-r.mp4') }] });
+      });
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1243 R10 · S27 Slide moves only which part of the video a clip plays, inside Full’s own range: the clip keeps its place, length and keys, a slide past the end stops at it, the sound taken out of the clip and the cleaned copy that plays in its place slide with it in the same ONE step, a 2× clip slides inside what is left at 2×, and on a reversed clip +1 frame shows the frame its picture plays next (CONTROL: before, the taken-out sound and its copy play the clip’s own part of the video)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    let ids = [];
+    /* Slide's row for one clip, opened from its tray as a finger would (its own sentence when the tray has no Slide) */
+    const open = async (v, n) => {
+      FM.selectLayer(null); FM.selectLayer(v.L(n).id); await r4Settle(150);
+      if (!smTool('slide')) throw new Error('clip ' + n + '’s tray has no Slide (' + r8Kids().join(' ') + ')');
+      await r8bPress('slide', 'clip ' + n + '’s Slide'); await r4Settle(150);
+      if (!document.querySelector('#sm-tray .sm-slide')) throw new Error('clip ' + n + '’s Slide opened no filmstrip (' + FM.simpleTools.mode() + ')');
+    };
+    try {
+      await smFakeLoad(() => smP2((W, H) => [smV('C', 7, 2, W, H, { reversed: true, trimStart: 3 }), smV('B', 4, 3, W, H, { speed: 2 }), smV('A', 0, 4, W, H, { muted: false, trimStart: 2, transform: Object.assign(FM.makeLayer('video', {}).transform, { x: W / 2, y: H / 2, opacity: smKf([[1, 1], [3, 0.5]]) }) })], async function (v) {
+        const S = FM.spine, aId = v.L('A').id, fails = [];
+        ['B', 'C'].forEach(n => { FM.media.set(v.L(n).id, r10Rec(10, 'r10-' + n + '.mp4')); ids.push(v.L(n).id); });
+        await S.cmd.takeSoundOut(aId); await v.idle();
+        /* the sound is known as the clip's own by its file, so the clip and its sound share one record (as the 8b review test does) */
+        const tw = FM.scene.layers.find(l => l.sm && l.sm.twin === true && l.audioOnly === true), rec = r10Rec(10, 'r10-a.mp4');
+        if (tw) { FM.media.set(aId, rec); FM.media.set(tw.id, Object.assign({}, rec)); ids.push(aId, tw.id); FM.refreshAll(); await v.sleep(40); }
+        if (!tw || S.soundTargetId(S.classify(FM.scene), aId) !== tw.id) throw new Error('CONTROL: Take sound out made no sound the clip plays (it said ' + v.say() + ')');
+        r8bFakeApply(tw, ''); await v.sleep(40);   /* Quieter background's copy of that sound: the whole file on the sound's clock */
+        const cp = FM.scene.layers.find(l => l.karaokeOf === tw.id);
+        const trims = () => [v.L('A').trimStart, FM.layerById(FM.scene, tw.id).trimStart, cp && FM.layerById(FM.scene, cp.id) ? FM.layerById(FM.scene, cp.id).trimStart : null];
+        if (!cp || trims().join() !== '2,2,2') throw new Error('CONTROL: the clip, its sound and the sound’s copy play from ' + trims().join(' / ') + ', want 2 each');
+        /* Full's ⇄ pill (js/timeline.js SLIP): the farthest it goes is the video's length − the footage the clip plays (FM.layerSourceAdvance) */
+        const fullMax = 10 - FM.layerSourceAdvance(v.L('A'), v.L('A').duration);
+        const keys0 = JSON.stringify(v.L('A').transform.opacity);
+        await open(v, 'A');
+        const n0 = r10Ix(), up = await r10Drag(-2000);   /* far past the end of the video */
+        if (Math.abs(trims()[0] - fullMax) > 1e-9) fails.push('mid-drag far past the end the clip is shown from ' + trims()[0] + ', want it stopped at the end, ' + fullMax);
+        /* review R10-4: mid-drag the clip's own sound and the copy that plays in its place are on show WITH the picture, so a redraw while the
+           finger is down (a friend's edit, the timeline finishing its strip) still reads the sound as the clip's own and keeps the drag */
+        if (trims()[1] !== trims()[0] || trims()[2] !== trims()[0] || r10Ix() !== n0) fails.push('mid-drag the clip, its taken-out sound and the copy are shown from ' + trims().join(' / ') + ' after ' + (r10Ix() - n0) + ' steps, want all three on show together and no step yet');
+        FM.refreshAll(); await r4Settle(60);
+        if (!document.querySelector('#sm-tray .sm-slide') || Math.abs(trims()[0] - fullMax) > 1e-9) fails.push('a redraw mid-drag took the drag back: the clip is shown from ' + trims()[0] + (document.querySelector('#sm-tray .sm-slide') ? '' : ' and the strip was drawn again') + ', want it still at ' + fullMax);
+        up(); await v.idle(); await r4Settle(150);
+        const t = trims();
+        if (Math.abs(t[0] - fullMax) > 1e-9 || t[1] !== t[0] || t[2] !== t[0] || r10Ix() !== n0 + 1) fails.push('a drag far past the end left the clip, its taken-out sound and the copy at ' + t.join(' / ') + ' after ' + (r10Ix() - n0) + ' steps, want all three at Full’s end ' + fullMax + ' in ONE step');
+        if (v.L('A').start !== 0 || v.L('A').duration !== 4 || JSON.stringify(v.L('A').transform.opacity) !== keys0) fails.push('Slide moved the clip to ' + v.L('A').start + ' for ' + v.L('A').duration + ' s or changed its keys, want 0 for 4 s with its keys as they were');
+        if (!S.isTwinOf(FM.layerById(FM.scene, tw.id), v.L('A'), S.classify(FM.scene).eps)) fails.push('after Slide the taken-out sound is no longer the clip’s own (its clock no longer matches the clip’s)');
+        /* at the end +1 frame rests, and a press says why and takes no step */
+        const n1 = r10Ix(), nx = smTool('slideNext');
+        if (!nx || nx.getAttribute('aria-disabled') !== 'true') fails.push('at the end of the video +1 frame does not rest');
+        else { await r8bPress('slideNext', '+1 frame at the end'); await v.idle(); await r4Settle(100); if (r10Ix() !== n1 || !/as far as the video goes/.test(r8bLine())) fails.push('+1 frame at the end took ' + (r10Ix() - n1) + ' steps and said “' + r8bLine() + '”, want none and that it is as far as the video goes'); }
+        /* …and the keyboard's → on the strip (the same frame step, which nothing greys out) stops there too */
+        const fb = document.querySelector('#sm-tray .sm-slide');
+        if (fb) {
+          const lv = document.getElementById('sm-live'), ln = document.querySelector('#sm-say .sm-line'); if (lv) lv.textContent = ''; if (ln) ln.textContent = '';
+          fb.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', code: 'ArrowRight', bubbles: true, cancelable: true })); await v.idle(); await r4Settle(100);
+          if (r10Ix() !== n1 || Math.abs(trims()[0] - fullMax) > 1e-9 || !/as far as the video goes/.test(r8bLine())) fails.push('→ on the strip at the end took ' + (r10Ix() - n1) + ' steps to ' + trims()[0] + ' and said “' + r8bLine() + '”, want none, still ' + fullMax + ', and that it is as far as the video goes');
+        } else fails.push('Slide’s row lost its filmstrip after the drag');
+        FM.history.undo(); await r4Settle(150);
+        if (trims().join() !== '2,2,2') fails.push('one Undo left ' + trims().join(' / ') + ', want 2 each');
+        /* a 2× clip plays 6 s of its 10 s video in 3 s: it can start at most 4 s in */
+        await open(v, 'B');
+        { const upB = await r10Drag(-2000); upB(); await v.idle(); await r4Settle(150); }
+        if (Math.abs(v.L('B').trimStart - 4) > 1e-9 || v.L('B').duration !== 3 || v.L('B').start !== 4) fails.push('the 2× clip dragged to the end plays from ' + v.L('B').trimStart + ' for ' + v.L('B').duration + ' s at ' + v.L('B').start + ', want from 4 (what is left at 2×) for 3 s at 4');
+        /* a reversed clip plays from the end of its window backwards: its next frame is one frame EARLIER in the file, and the strip says
+           where it starts: the end of its window */
+        await open(v, 'C');
+        const out = () => (document.querySelector('#sm-tray .sm-slide-v') || {}).textContent;
+        if (out() !== 'from 0:05.0') fails.push('the reversed clip’s strip reads “' + out() + '”, want from 0:05.0 (it plays its 3–5 s backwards, from 5)');
+        const nC = r10Ix();
+        await r8bPress('slideNext', 'the reversed clip’s +1 frame'); await v.idle(); await r4Settle(120);
+        if (Math.abs(v.L('C').trimStart - (3 - 1 / 30)) > 1e-9 || r10Ix() !== nC + 1) fails.push('+1 frame on the reversed clip left it at ' + v.L('C').trimStart + ' after ' + (r10Ix() - nC) + ' steps, want one frame earlier in the file (' + (3 - 1 / 30).toFixed(4) + ') in ONE step');
+        /* review R10-1 (words): a LIFTED clip keeps its taken-out sound (Lift off leaves it with its picture), and Slide carries that sound too */
+        FM.selectLayer(null); await r4Settle(60);
+        await S.cmd.lift(aId); await v.idle(); await r4Settle(120);
+        const R5 = S.classify(FM.scene), tw5 = () => FM.layerById(FM.scene, tw.id);
+        if (R5.isMain(aId) || !tw5() || !S.isTwinOf(tw5(), v.L('A'), R5.eps)) fails.push('CONTROL: after Lift off the clip is ' + (R5.isMain(aId) ? 'still in the row' : 'an overlay') + ' and its taken-out sound is ' + (tw5() && S.isTwinOf(tw5(), v.L('A'), R5.eps) ? 'still its own' : 'no longer its own'));
+        else {
+          const n5 = r10Ix(), a5 = v.L('A').trimStart;
+          await S.cmd.slideFrames(aId, 1); await v.idle(); await r4Settle(100);
+          if (r10Ix() !== n5 + 1 || Math.abs(v.L('A').trimStart - (a5 + 1 / 30)) > 1e-9 || tw5().trimStart !== v.L('A').trimStart) fails.push('+1 frame on the lifted clip left it from ' + v.L('A').trimStart + ' and its taken-out sound from ' + tw5().trimStart + ' after ' + (r10Ix() - n5) + ' steps, want both one frame later (' + (a5 + 1 / 30).toFixed(4) + ') in ONE step');
+        }
+        /* review R10-4/R10-5: a clip whose video is not on this device (no record, nothing being read in) rests and says so, never “still loading” */
+        FM.media.remove(v.L('B').id); FM.refreshAll(); await r4Settle(60);
+        FM.selectLayer(null); FM.selectLayer(v.L('B').id); await r4Settle(150);
+        const nb = smTool('slide');
+        if (!nb || nb.getAttribute('aria-disabled') !== 'true') fails.push('the clip with no video on this device has ' + (nb ? 'a Slide that does not rest' : 'no Slide') + ' (' + r8Kids().join(' ') + ')');
+        else {
+          await r8bPress('slide', 'the Slide of the clip with no video'); await v.idle(); await r4Settle(100);
+          if (!/isn’t on this device/.test(r8bLine()) || /still loading/.test(r8bLine())) fails.push('the clip with no video on this device said “' + r8bLine() + '” for Slide, want that its video isn’t on this device');
+        }
+        if (fails.length) throw new Error(fails.join(' · '));
+      }));
+    } finally { ids.forEach(x => { if (x && FM.media.get(x)) { try { FM.media.remove(x); } catch (e) {} } }); }
   });
 
   /* ═══ #1253 · THE DRAWN EFFECT PICTURES IN THE APP'S EFFECT MENUS ═══

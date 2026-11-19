@@ -81,7 +81,9 @@ window.FM = window.FM || {};
     smoothskin: '<circle cx="11" cy="13" r="7.5"/><path d="M8 15a3.6 3.6 0 0 0 6 0"/><path d="M19 2.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z"/>',
     quieter: '<path d="M2.5 12h2l1.5-5 2 10 2-8 1.5 3h2"/><path d="M18.5 5.5v11M15.5 13.5l3 3 3-3"/>',
     soundstyles: '<rect x="7.5" y="3" width="6" height="10.5" rx="3"/><path d="M4.5 10.5a6 6 0 0 0 12 0M10.5 16.5v4M7.5 20.5h6"/><path d="M19.5 3l.6 1.5 1.5.6-1.5.6-.6 1.5-.6-1.5-1.5-.6 1.5-.6z"/>',
-    clearvoice: '<rect x="9" y="3" width="6" height="10.5" rx="3"/><path d="M6 10.5a6 6 0 0 0 12 0M12 16.5v4"/><path d="M2.5 8v5M21.5 8v5"/>'
+    clearvoice: '<rect x="9" y="3" width="6" height="10.5" rx="3"/><path d="M6 10.5a6 6 0 0 0 12 0M12 16.5v4"/><path d="M2.5 8v5M21.5 8v5"/>',
+    /* #1243 R release 10 (S27 A): Slide — a fixed window over a strip of film, an arrow each way under it (our own drawing) */
+    slide: '<rect x="7" y="3.5" width="10" height="11" rx="1.5"/><path d="M2.5 6v6M21.5 6v6"/><path d="M4 19.5h16M7 17l-3 2.5L7 22M17 17l3 2.5-3 2.5"/>'
   };
   const svg = n => '<svg viewBox="0 0 24 24" class="sm-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICON[n] || ICON.more) + '</svg>';
   const W = () => (FM.spineWords && FM.spineWords.tools) || {};
@@ -91,7 +93,7 @@ window.FM = window.FM || {};
   /* #1243 S9: THE SUB-ROW ON THE BAR ({key: a SUBS key, id: the item it acts on or null, from: the sub ‹ returns to, sel: the
      selection it was opened with — any other selection closes it}); the data-tool focus goes to after a ‹ */
   let subFor = null, backTo = '';
-  const ROW_KEYS = new Set(['speed', 'volume', 'opacity', 'transform', 'fade', 'transition', 'strength', 'soundstyles']);   // the item rows rowFor() still names (#1243 S28: Audio's went; 8b: Sound styles)
+  const ROW_KEYS = new Set(['speed', 'volume', 'opacity', 'transform', 'fade', 'transition', 'strength', 'soundstyles', 'slide']);   // the item rows rowFor() still names (#1243 S28: Audio's went; 8b: Sound styles; 10: Slide)
   let fills = 0, lastPress = null;   // how many times the tray was refilled; the tool a pointer's last single click pressed
   let rowN = 0;                      // how many times the bar has shown another row (_fill): tool()'s double-tap hold (HW5)
   let hintUp = false;              // 2.7: the first-run hint floats above the bar now (hintSync)
@@ -588,6 +590,13 @@ window.FM = window.FM || {};
     const clearT = sndL ? { id: 'clearVoice', label: w.clearVoice, icon: 'clearvoice', title: w.clearVoiceTitle, pressed: S.clearVoiceOn(sndL),
       run: () => { unlock(); const t = S.soundFxTarget(S.read(FM.scene), id); S.cmd.clearVoice(id, !(t && S.clearVoiceOn(t))); } } : null;
     const soundSec = [quietT, stylesT, clearT];
+    /* #1243 R release 10 (S27 A; R (a) "… Transition · Slide · Reverse …" on a video clip, "[video: Speed · Volume · Slide]" on an overlay). His
+       words: "a button on the layer or… in the settings menu that lets you actually slide it along, because we have the slide option in the
+       complex editor": the tool opens its own row (filmstrip, −1 frame, +1 frame). A video that already shows all of its footage has nothing
+       spare on either side: Slide rests and a press says so in plain words (as Full's ⇄ pill is not drawn then). */
+    const slSt = S.slideState ? S.slideState(l) : null;
+    const slideT = slSt ? { id: 'slide', label: w.slide || 'Slide', icon: 'slide', title: w.slideTitle, disabled: slSt !== 'ok', why: slSt === 'whole' ? Ln.slideWhole : slSt === 'missing' ? Ln.slideMissing : Ln.slideUnknown,
+      run: () => FM.simpleTools.openRow('slide', id) } : null;
     /* (Phase 3 · Look sat third in a clip's tray, after Audio, until #1243 S12 put Look on the project row for the whole video: "you
        shouldn't have the look menu on each layer". A clip that already carries a look keeps it; Look's panel offers to remove them.) */
     /* #1243 S12: the project's Look layer is never drawn as an item, but Full can select it and hand that selection over: its tray is
@@ -627,7 +636,7 @@ window.FM = window.FM || {};
         splitT,
         ...(isVid ? [speedT, volumeT] : []),
         ...(l.type === 'video' || l.type === 'image' ? [replaceT] : []),
-        trT, reverseT, soundT,
+        trT, slideT, reverseT, soundT,
         { id: 'lift', label: w.lift || 'Lift off', icon: 'lift', title: w.liftTitle, run: () => S.cmd.lift(id) },
         { id: 'duplicateClip', label: w.duplicate || 'Duplicate', icon: 'duplicate', run: () => S.cmd.duplicate(id) }
       ].filter(Boolean);
@@ -682,7 +691,7 @@ window.FM = window.FM || {};
     if (k === 'undecided') return [];
     const inCard = !!(u && u.host && String(u.host).indexOf('slot:') === 0);   // a card between clips: no Into row until its slot form exists (§3.6)
     /* overlays, stickers, pictures, a background. R (a) "Overlay: Split · Into row · Replace · Effects · Stay put · [video: Speed · Volume ·
-       Slide] · Forward · Back | Opacity · Motion blur | Crop · Transform | Delete" (Slide is S27's, later; Motion blur came in release 8b).
+       Slide] · Forward · Back | Opacity · Motion blur | Crop · Transform | Delete" (Motion blur came in release 8b, Slide in release 10).
        #1243 S32: Replace after Into row, on a photo or a video (planReplace refuses a shape) */
     return secs([[
       splitT,
@@ -690,7 +699,7 @@ window.FM = window.FM || {};
       ...(l.type === 'video' || l.type === 'image' ? [replaceT] : []),
       addFxT,   /* Phase 3 · Effects on an item, R (a)'s "Effects" */
       stay,
-      ...(isVid ? [speedT, volumeT] : []),
+      ...(isVid ? [speedT, volumeT, slideT] : []),
       { id: 'forward', label: w.forward || 'Forward', icon: 'forward', run: () => S.cmd.z(id, 1) },
       { id: 'backward', label: w.backward || 'Back', icon: 'backward', run: () => S.cmd.z(id, -1) }],
       [opacityT, motionT], [crop, transformT], [del]]);
@@ -805,6 +814,148 @@ window.FM = window.FM || {};
     S.soundStyles().forEach(st => put(run, { id: 'style-' + st.key, label: st.name, icon: null, title: st.desc ? st.name + ' · ' + st.desc : st.name, pressed: now === st.key,
       run: () => { unlock(); S.cmd.soundStyle(id, st.key); } }));
   }
+  /* ═══ #1243 R release 10 · SLIDE'S ROW (S27 A; R (a) "Slide: ‹ · filmstrip · ±1 frame"; 1243-B S27 change 2). His words: "lets you actually
+     slide it along… for the clip to like start a second earlier… Instead you can just slide it and then it's like super simple and easy".
+     THE FILMSTRIP is the whole footage (FM.buildClipStrip's frames, each at its own place in the file) moving under a FIXED bright window the
+     size of what the clip plays, laid out in the order the clip plays it (a reversed clip's strip runs backwards, so a drag and the frame
+     steps go the way the picture shows). Dragging the strip only previews — the clip's trimStart on show, the picture sought, no step — and
+     the release takes the preview back to the byte and runs ONE command (S.cmd.slide), as Speed's slider commits on release. −1 frame and
+     +1 frame are one step each. The readout under the strip says where the clip starts in its video. ═══ */
+  /* {id, pid: the finger that owns it, pre: the clip's trimStart to put back, at: the trimStart on show, keep: [{id, had: the field existed,
+     pre}] for every layer the preview moves (S.slideMovers: the clip, its own sound and their copies, review R10-4)} */
+  let slideDrag = null;
+  function slideUndrag() {
+    if (!slideDrag) return;
+    const d = slideDrag;
+    slideDrag = null;
+    /* only while each still holds exactly what the preview put there: a step that landed meanwhile is never written over */
+    d.keep.forEach(k => {
+      const L = FM.layerById && FM.scene ? FM.layerById(FM.scene, k.id) : null;
+      if (L && L.trimStart === d.at) { if (k.had) L.trimStart = k.pre; else delete L.trimStart; }
+    });
+    if (FM.seekVideosToTime) FM.seekVideosToTime();
+    if (FM.requestRender) FM.requestRender();
+  }
+  /* what Slide's row is drawn from (sync's row signature): the footage the clip shows, read through a drag's preview (the value it puts back),
+     so a refresh while the finger is down never redraws the strip from under it */
+  function slideSig(l) {
+    const tr = slideDrag && slideDrag.id === l.id ? slideDrag.pre : l.trimStart;
+    return [tr, l.duration, !!l.reversed, JSON.stringify(l.speed == null ? 1 : l.speed), FM.spine.slideState ? FM.spine.slideState(l) : ''].join('|');
+  }
+  /* the playhead onto the clip when it is elsewhere, so the picture he slides is on the stage (its first frame: "start a second earlier") */
+  function slideShow(L) {
+    const t = FM.time || 0, s = +L.start || 0, e = s + (+L.duration || 0), fps = (FM.scene.project && FM.scene.project.fps) || 30;
+    if (!((t < s - 1e-9 || t >= e - 1e-9) && FM.setTime)) return;
+    /* the first frame INSIDE the clip: FM.setTime snaps to the NEAREST frame, which for a clip starting between two frames (a clip added at
+       its file's own length) is often the frame before it, so the stage kept showing the clip before (review R10-2) */
+    const f = Math.ceil(s * fps - 1e-6) / fps;
+    FM.setTime(f < e - 1e-9 ? f : s, true);
+  }
+  function slideRow(R, s, run) {
+    const S = FM.spine, w = W(), Ln = (FM.spineWords && FM.spineWords.lines) || {}, id = s.id, l = FM.layerById(FM.scene, id);
+    const r = l && S.slideRange ? S.slideRange(l) : null, st = l && S.slideState ? S.slideState(l) : null;
+    if (!l || !st) return;
+    if (st !== 'ok' || !r) { put(run, el('div', 'sm-quiet', st === 'whole' ? Ln.slideWhole : st === 'missing' ? Ln.slideMissing : Ln.slideUnknown)); return; }
+    const rev = !!l.reversed, m = FM.media.get(l.id);
+    const pos = t => rev ? r.max - t : t;   // the window's place along the strip, in the order the clip plays its footage
+    const box = el('div', 'sm-slide'), cv = el('canvas', 'sm-slide-film'), out = el('span', 'sm-slide-v');
+    box.append(cv, out);
+    /* data-tool: sync's focus rule finds it again after a step's redraw, so ← → keep working from the keyboard (it is not a .sm-tool) */
+    box.dataset.tool = 'slideFilm'; box.tabIndex = 0; box.setAttribute('role', 'slider'); box.setAttribute('aria-label', w.slideLabel || 'Slide the video inside the clip');
+    box.setAttribute('aria-valuemin', '0'); box.setAttribute('aria-valuemax', String(Math.round(r.max * 10) / 10));
+    /* the scale: the whole footage across 90 % of the strip, unless that makes the window under 35 % of it (a short clip from a long file);
+       then the window keeps 35 % and the film runs past the strip's edges (each drag moves about three windows' worth at most) */
+    const scaleOf = B => Math.max(0.9 * B / r.src, 0.35 * B / r.adv);
+    const fromOf = t => rev ? t + r.adv : t;
+    const say = t => {
+      const f = (w.slideFrom || (x => 'from ' + x.toFixed(1)))(fromOf(t));
+      out.textContent = f;
+      box.setAttribute('aria-valuenow', String(Math.round(t * 100) / 100)); box.setAttribute('aria-valuetext', f);
+    };
+    const draw = t => {
+      say(t);
+      const B = cv.clientWidth || 160, H = cv.clientHeight || 32, dpr = Math.min(2, window.devicePixelRatio || 1);
+      const bw = Math.max(1, Math.round(B * dpr)), bh = Math.max(1, Math.round(H * dpr));
+      if (cv.width !== bw) cv.width = bw;
+      if (cv.height !== bh) cv.height = bh;
+      const g = cv.getContext && cv.getContext('2d'); if (!g) return;
+      g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, B, H);
+      const sc = scaleOf(B), ww = Math.max(2, r.adv * sc), wx = (B - ww) / 2, fx = wx - pos(t) * sc, fw = r.src * sc;
+      const frames = (m && m.stripFrames) || [], N = frames.length, aspect = (m && m.width && m.height) ? m.width / m.height : 16 / 9;
+      const tileW = Math.max(18, Math.round(H * aspect));
+      for (let x = 0; x < fw; x += tileW) {   // each tile shows the frame at its own place in the file (mirrored for a reversed clip)
+        const X = fx + x, tw = Math.min(tileW, fw - x);
+        if (X + tw < 0 || X > B) continue;
+        const frac = (x + tw / 2) / fw, f = N ? frames[Math.min(N - 1, Math.max(0, Math.floor((rev ? 1 - frac : frac) * N)))] : null;
+        if (f) { try { g.drawImage(f, X, 0, tw, H); } catch (e) { /* a frame that was let go draws nothing */ } }
+        else { g.fillStyle = 'rgba(120,130,150,.32)'; g.fillRect(X, 0, tw - 1, H); }
+        g.fillStyle = 'rgba(0,0,0,.3)'; g.fillRect(X + tw - 1, 0, 1, H);
+      }
+      /* what the clip does not show is dimmed; the window stays bright (a plain overlay: canvas filters are not on every phone) */
+      g.fillStyle = 'rgba(8,11,16,.62)';
+      g.fillRect(0, 0, Math.max(0, wx), H); g.fillRect(wx + ww, 0, Math.max(0, B - wx - ww), H);
+      const atEnd = pos(t) <= 1e-4 || pos(t) >= r.max - 1e-4;
+      g.strokeStyle = atEnd ? '#ff9042' : '#4da3ff'; g.lineWidth = 2;   // orange: up against an end of the video (Full's slip ghost's colour)
+      g.strokeRect(wx + 1, 1, ww - 2, H - 2);
+    };
+    /* a drag: window listeners (a synthetic or captured pointer alike), the preview on the layer, one command on release */
+    box.addEventListener('pointerdown', e => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const L0 = FM.layerById(FM.scene, id); if (!L0) return;
+      e.preventDefault(); e.stopPropagation();
+      slideUndrag();
+      if (FM.playing && FM.pause) FM.pause();
+      slideShow(L0);
+      const B = cv.clientWidth || 160, sc = scaleOf(B), x0 = e.clientX, pid = e.pointerId, t0 = Math.max(0, +L0.trimStart || 0);
+      const keep = (S.slideMovers ? S.slideMovers(L0) : [L0]).map(x => ({ id: x.id, had: Object.prototype.hasOwnProperty.call(x, 'trimStart'), pre: x.trimStart }));
+      slideDrag = { id: id, pid: pid, pre: L0.trimStart, at: L0.trimStart, keep: keep };
+      const off = () => { window.removeEventListener('pointermove', move, true); window.removeEventListener('pointerup', end, true); window.removeEventListener('pointercancel', end, true); };
+      const move = ev => {
+        if (ev.pointerId !== pid) return;
+        const L2 = FM.layerById(FM.scene, id);
+        if (!slideDrag || slideDrag.id !== id || slideDrag.pid !== pid || !L2) { off(); return; }
+        const p = Math.max(0, Math.min(r.max, pos(t0) - (ev.clientX - x0) / sc)), t = rev ? r.max - p : p;   // the film follows the finger
+        slideDrag.keep.forEach(k => { const x = FM.layerById(FM.scene, k.id); if (x) x.trimStart = t; });
+        slideDrag.at = t;
+        draw(t);
+        if (FM.scrubTime) FM.scrubTime(FM.time || 0, true); else if (FM.requestRender) FM.requestRender();
+      };
+      const end = ev => {
+        if (ev.pointerId !== pid) return;
+        off();
+        if (slideDrag && slideDrag.pid !== pid) return;   // review R10-3: a second finger took the strip over; its drag goes on, this one is over
+        const d = slideDrag && slideDrag.id === id ? slideDrag : null, t = d ? +d.at : t0, moved = !!d && Math.abs(t - t0) > 1e-6;
+        slideUndrag();
+        /* a step the runner refuses (locked, view only, busy) redraws nothing, so the strip goes back to where the clip still plays from
+           (review R10-1); a queued step returns false too, and its own commit redraws the row later */
+        if (ev.type === 'pointerup' && moved) {
+          Promise.resolve(S.cmd.slide(id, t)).then(ok => {
+            if (ok || !cv.isConnected || slideDrag) return;
+            const Lr = FM.layerById(FM.scene, id);
+            draw(Lr ? Math.max(0, +Lr.trimStart || 0) : t0);
+          }).catch(() => {});
+        } else if (cv.isConnected) draw(t0);
+      };
+      window.addEventListener('pointermove', move, true);
+      window.addEventListener('pointerup', end, true);
+      window.addEventListener('pointercancel', end, true);
+    });
+    /* the keyboard: ← and → are the frame steps; they stay here (Full's window keys would nudge the clip's picture) */
+    const step = n => { const Lx = FM.layerById(FM.scene, id); if (Lx) slideShow(Lx); return S.cmd.slideFrames(id, n); };
+    box.addEventListener('keydown', e => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault(); e.stopPropagation();
+      step(e.key === 'ArrowRight' ? 1 : -1);
+    });
+    box.addEventListener('keyup', e => { if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') e.stopPropagation(); });
+    run.appendChild(box);
+    draw(r.trim);
+    requestAnimationFrame(() => { if (cv.isConnected && !slideDrag) draw(r.trim); });   // drawn again at the size the row settled at
+    if (m && m.stripFrames === undefined && FM.buildClipStrip) FM.buildClipStrip(m, 8).then(() => { if (cv.isConnected && !slideDrag) draw(r.trim); }).catch(() => {});
+    const p0 = pos(r.trim), endWhy = Ln.slideEnd;
+    put(run, { id: 'slidePrev', label: w.slidePrev || '−1 frame', icon: null, title: w.slidePrevTitle, disabled: p0 <= 1e-6, why: endWhy, run: () => step(-1) });
+    put(run, { id: 'slideNext', label: w.slideNext || '+1 frame', icon: null, title: w.slideNextTitle, disabled: p0 >= r.max - 1e-6, why: endWhy, run: () => step(1) });
+  }
   function fadeRow(R, s, run) {
     const S = FM.spine, w = W(), id = s.id, tid = S.soundTargetId(R, id), t = tid && FM.layerById(FM.scene, tid);
     if (!t) return;
@@ -856,6 +1007,7 @@ window.FM = window.FM || {};
     opacity:    { fill: opacityRow,    opener: () => 'opacity',  word: 'opacity' },     // #1243 R release 8
     transform:  { fill: transformRow,  opener: () => 'transform', word: 'transform' },  // #1243 R release 8
     soundstyles: { fill: soundStylesRow, opener: () => 'soundStyles', word: 'soundStyles' },   // #1243 R release 8b
+    slide:      { fill: slideRow,      opener: () => 'slide',    word: 'slide' },           // #1243 R release 10 (S27 A)
     fade:       { fill: fadeRow,       opener: () => 'fade',     word: 'fade' },
     transition: { fill: transitionRow, opener: () => 'transition', word: 'transition' },   // #1243 S1 A: from the ◇, or the clip's own Transition
     strength:   { fill: strengthRow,   opener: () => 'strength', word: 'strength' }
@@ -1447,6 +1599,7 @@ window.FM = window.FM || {};
   /* …taken back only while the value is still exactly what the preview made it: an edit that landed meanwhile is never written over.
      #1243 R release 8: the key it previews (Strength and Opacity: opacity; Size: scale) */
   function segUndrag() {
+    slideUndrag();   // #1243 R release 10: every way a slider's preview is taken back takes Slide's back too (a redraw, a ‹, the switch, _reset)
     if (!segDrag) return;
     const d = segDrag, k = d.key || 'opacity', L = FM.layerById && FM.scene ? FM.layerById(FM.scene, d.id) : null;
     segDrag = null;
@@ -1749,13 +1902,13 @@ window.FM = window.FM || {};
       /* (the project row keeps its place across the trips to the other modes by itself: Chrome keeps a hidden strip's offset, measured by
          the 1243 R4 S15 test with a restore here taken out, so none is kept here; runSeen puts its fades right when it comes back) */
       const rowTarget = subFor && subFor.id && ROW_KEYS.has(subFor.key) && FM.spine.soundTargetId ? FM.layerById(FM.scene, FM.spine.soundTargetId(R, subFor.id)) : null;   // 2.3: a row redraws when what it shows changes
-      const rowSig = subFor ? [subFor.key, subFor.id || '', subFor.from || '', rowTarget ? [rowTarget.fadeIn, rowTarget.fadeOut, JSON.stringify(rowTarget.volume), JSON.stringify(rowTarget.speed), rowTarget.duration, rowTarget.muted].join('|') : '', (l && (subFor.key === 'opacity' || subFor.key === 'transform')) ? JSON.stringify([l.transform, !!l.flipH, !!l.flipV]) : '', subFor.key === 'captions' ? FM.scene.layers.some(isCapTrack) : '', subFor.key === 'caplooks' ? (() => { const T = capTrackNow(); return T ? T.id + '/' + (FM.spine.captionLookOf ? FM.spine.captionLookOf(T) : '') : ''; })() : '', subFor.key === 'yourmedia' ? (demoOn() ? 'demo' : 'shown') : ''].join('#') : '';   // #1243 S8: the pressed look follows the track; review L4-1: Your media redraws when Demo mode flips
+      const rowSig = subFor ? [subFor.key, subFor.id || '', subFor.from || '', rowTarget ? [rowTarget.fadeIn, rowTarget.fadeOut, JSON.stringify(rowTarget.volume), JSON.stringify(rowTarget.speed), rowTarget.duration, rowTarget.muted].join('|') : '', (l && (subFor.key === 'opacity' || subFor.key === 'transform')) ? JSON.stringify([l.transform, !!l.flipH, !!l.flipV]) : '', subFor.key === 'captions' ? FM.scene.layers.some(isCapTrack) : '', subFor.key === 'caplooks' ? (() => { const T = capTrackNow(); return T ? T.id + '/' + (FM.spine.captionLookOf ? FM.spine.captionLookOf(T) : '') : ''; })() : '', subFor.key === 'yourmedia' ? (demoOn() ? 'demo' : 'shown') : '', (l && subFor.key === 'slide') ? slideSig(l) : ''].join('#') : '';   // #1243 S8: the pressed look follows the track; review L4-1: Your media redraws when Demo mode flips; release 10: Slide's row follows the clip's footage
       /* the selected item's KIND, HOST and ROW from this read (queue 980, verify medium-tray; ported from BX1d 5f10fdb): a layer
          made in the same refresh (Text, Sound effects, Record voice) is synced first from the timeline's previous read, which
          has never heard of it, and drew the overlay tray (Into row, Crop) under a text or a sound; the rebuild's own sync then
          computed the same signature and kept it. Its kind from the fresh read differs, so the tray is drawn again.
          #1243 S9: every change of mode refills (tool()'s double-click guard counts the fills). */
-      const sig = [ids.join(','), mode, extrasUp(), subFor ? subFor.key + '/' + (subFor.id || '') + '/' + (subFor.from || '') : '', panelFor, panelKind, rowSig, l ? [l.reversed, l.muted, (R.followers[one] || []).length].join('|') : '', trExtras(), FM.spine.muteMode && FM.spine.muteMode(), FM.spine.linkMode && FM.spine.linkMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null), l.type, l.audioOnly, JSON.stringify(l.trIn || null)].join('|') : '', one && R.units[one] ? R.units[one].kind + '/' + (R.units[one].host || '') + '/' + (R.isMain(one) ? 'm' : 'o') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd, segSig(l), (l && !subFor) ? splitAt(l) : '', fxSig(R, l, one)].join('#');
+      const sig = [ids.join(','), mode, extrasUp(), subFor ? subFor.key + '/' + (subFor.id || '') + '/' + (subFor.from || '') : '', panelFor, panelKind, rowSig, l ? [l.reversed, l.muted, (R.followers[one] || []).length].join('|') : '', trExtras(), FM.spine.muteMode && FM.spine.muteMode(), FM.spine.linkMode && FM.spine.linkMode(), l ? [l.start, l.duration, l.locked, JSON.stringify(l.sm || null), l.type, l.audioOnly, JSON.stringify(l.trIn || null)].join('|') : '', one && R.units[one] ? R.units[one].kind + '/' + (R.units[one].host || '') + '/' + (R.isMain(one) ? 'm' : 'o') : '', R.main.map(e => e.id + (e.seam ? e.seam.kind : '')).join(','), R.trackEnd, segSig(l), (l && !subFor) ? splitAt(l) : '', fxSig(R, l, one), (l && FM.spine.slideState) ? FM.spine.slideState(l) || '' : ''].join('#');   // release 10: Slide rests until the footage's length is known
       splitDrawn = (l && !subFor) ? splitAt(l) : null;   // the 11 Nov verifiers' V2: Split rests while the line is outside the item
       if (sig === lastSig) return;
       lastSig = sig;
