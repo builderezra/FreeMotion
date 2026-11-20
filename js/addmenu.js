@@ -1140,7 +1140,13 @@ window.FM = window.FM || {};
         }
         var splitTab = (tab.key === 'media' || tab.key === 'audio');
         var pinnedOpts = [];
-        if (splitTab && opts.some(function (o) { return o.mid; })) {
+        /* #1243 F1, his words: "when you have no media or audio added, like all the buttons in those sections are massive.
+           They shouldn't go massive. They should stay small." With no imports every button used to land in the page grid,
+           which the sheet then stretched to fill (queue 428's fill). On the phone sheet the tab's own buttons now ALWAYS sit
+           in the small pinned strip, imports or not, and the empty library under them says one faint line (below). The PC
+           panel keeps its fitted layout exactly as it was, and a caller with its own tab list (`own`) is left alone. */
+        var stripAlways = splitTab && variant === 'sheet' && !own;
+        if (splitTab && (stripAlways || opts.some(function (o) { return o.mid; }))) {
           pinnedOpts = opts.filter(function (o) { return !o.mid; });
           opts = opts.filter(function (o) { return o.mid; });
         }
@@ -1324,6 +1330,21 @@ window.FM = window.FM || {};
           else perPage = Math.max(1, 3 * COLS);
         }
         var pager = document.createElement('div'); pager.className = 'addmenu-pager';
+        /* #1243 F4, his words: "when you only have one template, it's like a massive picture in the template menu… in the
+           add menu… make it like the size it should be." A page of PICTURES (template thumbs, library frames) on the phone
+           sheet never fills or drops to two columns: one picture is one tile of the 3-column grid, the same size it is
+           beside eight others (`addmenu-grid--pics`, styles.css). Same guard as F1: the sheet only, Full's own menu only.
+           The Template tab counts whatever its thumbs: a template saved before thumbs existed (or whose capture failed) shows
+           the glyph instead, and on its own it was still one card stretched over the whole sheet (review of F4). */
+        var picsPage = variant === 'sheet' && !own && (tab.key === 'template' || opts.some(function (o) { return o.mid || o.thumb; }));
+        /* #1243 F1: the library half of Media / Audio with nothing imported yet is one ordinary page holding one faint line
+           (queue 275: every tab still renders a body and a pager). Words only, built as text. */
+        if (stripAlways && !opts.length) {
+          var lePage = document.createElement('div'); lePage.className = 'addmenu-page';
+          var le = document.createElement('div'); le.className = 'am-lib-empty';
+          le.textContent = 'Your imports show up here';
+          lePage.appendChild(le); pager.appendChild(lePage);
+        }
         for (var i = 0; i < opts.length; i += perPage) {
           var page = document.createElement('div'); page.className = 'addmenu-page';
           var grid = document.createElement('div'); grid.className = 'addmenu-grid' + (iconOnly ? ' addmenu-grid--ico' : '');
@@ -1355,7 +1376,9 @@ window.FM = window.FM || {};
            * The odd card out spans the full width rather than leaving a hole, so the grid reads as
            * finished instead of interrupted. */
           var _rows = Math.ceil(pageOpts.length / COLS);
-          if (_rows >= 2) grid.classList.add('addmenu-grid--fill');
+          /* #1243 F4: pictures keep their size, never --fill / --cols2 */
+          if (picsPage) grid.classList.add('addmenu-grid--pics');
+          else if (_rows >= 2) grid.classList.add('addmenu-grid--fill');
           else if (pageOpts.length >= 1) grid.classList.add('addmenu-grid--fill', 'addmenu-grid--cols2');
           page.appendChild(grid); pager.appendChild(page);
         }

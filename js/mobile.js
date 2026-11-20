@@ -416,7 +416,10 @@ window.FM = window.FM || {};
        Re-rendering here rather than subscribing to the settings listener, because `render()` also runs
        for the PC inspector and a listener added there would leak one per re-render. The menu remembers
        its tab and page, so a redraw returns to where you were — only the CONTENT is re-derived. */
-    var addOpts = { variant: 'sheet', onAfterAdd: closeAdd, onClose: closeAdd };
+    /* #1243 F5 — "an animation to close… the add layer on the complex editor whenever you actually add something… takes so
+       long… instantly disappears and shows you your thing". A tile that ADDS closes the sheet at once (closeAddNow, below);
+       every dismissal (the grab, a swipe, the +, onClose) keeps the animation it has (queue 773, #1084). */
+    var addOpts = { variant: 'sheet', onAfterAdd: function () { closeAddNow(); }, onClose: closeAdd };
     function redrawAdd() { if (addGrid && FM.addMenu) FM.addMenu.render(addGrid, addOpts); }
     /* Publish the canvas's bottom edge as the sheet's top (queue 404). Measured rather than derived from
        a constant, because the stage's height depends on the project's aspect and on whether the layout is
@@ -838,6 +841,25 @@ window.FM = window.FM || {};
         var done = function () { addSheet.classList.remove('closing'); addSheet.removeEventListener('transitionend', done); addSheet._closeTimer = 0; };
         addSheet.addEventListener('transitionend', done);
         addSheet._closeTimer = setTimeout(done, 400);
+      });
+    }
+    /* #1243 F5: GONE IN ONE FRAME after something was added — no circle back to the tap, no stretch back onto the row, no
+       slide. Every trace of an open animation goes first (endGrow / endStretch: the clip, the dim, the skin, the edge, the
+       rings), then the sheet is put off the screen with its motion switched off, that frame is committed, and the motion is
+       handed back a frame later so the NEXT open slides as it always has. No `.closing` linger: nothing is moving. */
+    function closeAddNow() {
+      if (!addSheet) return;
+      if (addSheet._closeTimer) { clearTimeout(addSheet._closeTimer); addSheet._closeTimer = 0; }
+      if (addSheet._grow || addSheet._growAnims || addSheet.classList.contains('add-grow')) endGrow();
+      if (addSheet._stretch) endStretch(false);
+      addSheet.style.transition = 'none';
+      addSheet.classList.remove('open', 'closing');
+      addSheet.style.transform = '';
+      document.body.classList.remove('add-open');
+      void addSheet.offsetHeight;   // commit the off-screen frame with no transition, so nothing slides
+      requestAnimationFrame(function () {
+        if (addSheet.classList.contains('open')) return;   // reopened in between: openAdd already tidied
+        addSheet.style.transition = '';
       });
     }
     FM._addSheetClose = closeAdd;   // suite seam (queue 773)

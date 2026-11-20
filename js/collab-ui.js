@@ -22,9 +22,9 @@
  *
  * 📐 …AND TWO DOORS, SINCE #967 BATCH 2 (§23 relaxed, his pick). Asked "is it OK to show one sharing door while the
  * feature is off?", the recommended answer he builds by was yes: one button that only opens the explanation and the
- * switch, with no network and no listeners. So with Labs off there is the phone's person+ on the video (#btn-share on
- * #stage, `.cs-door`, hidden above 700px) and Home's profile menu Join action (#hm-join-btn remains the internal
- * click target). Everything below still waits for the switch. The suite's rule for
+ * switch, with no network and no listeners. That was the phone's person+ on the video (#btn-share) and Home's profile
+ * menu Join action (#hm-join-btn remains the internal click target); #1243 G9 removed the person+, so with Labs off Home's
+ * Join is the one door left, and the cog's Friends block explains the switch. Everything below still waits for the switch. The suite's rule for
  * it is `doors23` in tests/tests.js.
  *
  * ⚠️ EVERY PIECE OF TEXT THAT CAME FROM ANOTHER DEVICE GOES IN AS `textContent` (§14.9). Names and
@@ -51,7 +51,7 @@ window.FM = window.FM || {};
   function roleItem(p) { return p[1] + ' — ' + p[2]; }
 
   let installed = false;
-  let shareBtn = null, joinBtn = null;
+  let joinBtn = null;
   let scrim = null, card = null;             // the one card on screen, whichever it is
   let bannerEl = null, bannerTimer = null;
   let knockQueue = [];                       // §19.3: requests queue one at a time
@@ -1144,12 +1144,13 @@ window.FM = window.FM || {};
     placeLive();
   }
   /* Just past the chip, whose width is whatever the faces make it — the banner's own rule (placeBanner) in the other
-     direction. The chip is #collab-people once a session draws it, the person+ before. */
+     direction. The chip is #collab-people once a session draws it; with nobody in it has no box and LIVE takes the corner
+     (#1243 G9 removed the person+ that used to sit there). */
   function placeLive() {
     const p = liveEl;
     if (!p || !p.parentNode) return;
     const stage = p.parentNode;
-    const chip = [document.getElementById('collab-people'), document.getElementById('btn-share')].filter(function (n) {
+    const chip = [document.getElementById('collab-people')].filter(function (n) {
       return n && n.parentNode === stage && n.offsetWidth;
     })[0];
     const sr = stage.getBoundingClientRect();
@@ -1206,12 +1207,12 @@ window.FM = window.FM || {};
     placeCmt();
   }
   U.syncCmt = syncCmt;
-  /* Just past whatever is last in the corner: LIVE when it is up, else the chip, else the person+. */
+  /* Just past whatever is last in the corner: LIVE when it is up, else the chip, else the corner itself (#1243 G9: no person+). */
   function placeCmt() {
     const b = cmtEl;
     if (!b || !b.parentNode) return;
     const stage = b.parentNode;
-    const prev = [liveEl, document.getElementById('collab-people'), document.getElementById('btn-share')].filter(function (n) {
+    const prev = [liveEl, document.getElementById('collab-people')].filter(function (n) {
       return n && n.parentNode === stage && n.offsetWidth;
     })[0];
     const sr = stage.getBoundingClientRect();
@@ -1560,7 +1561,7 @@ window.FM = window.FM || {};
     });
     if (people.length > 3) faces.appendChild(el('span', 'cv-fr-more', '+' + (people.length - 3)));
   };
-  /* The people door — the stage's person+ and the faces chip, the LIVE pill, Home's "Share live…": Canvas settings with
+  /* The people door — the faces chip, the LIVE pill, Home's "Share live…" (the stage's person+ was one until #1243 G9): Canvas settings with
      Friends big, at EVERY width (#978 — on a PC it used to be the Share card, which armed a room on the first press). A second
      press closes it (the 944 rule); it NEVER arms, and never falls back to U.share(), which does (critic's finding) — only the
      block's Start sharing starts anything.
@@ -1586,8 +1587,8 @@ window.FM = window.FM || {};
       c = mountHost(host);
       if (shareStep === 'main') fhostShowedCode = true;
     } else {
-      const anchor = shareBtn && shareBtn.getBoundingClientRect().width > 0 ? shareBtn : null;
-      c = openCard('collab-share', { label: 'Share this project live', anchor: anchor });
+      /* no anchor: the person+ this card used to hang from went with #1243 G9 */
+      c = openCard('collab-share', { label: 'Share this project live', anchor: null });
       /* S8 review: "stops working 30 minutes after you close this" — so the half hour starts at the close, not at
          the last redraw (a panel left open 25 minutes used to leave the code 5). */
       if (shareStep === 'main') c._onclose = function () { touchCode(); };
@@ -3468,8 +3469,9 @@ window.FM = window.FM || {};
 
   /* ═══ 3. THE JOIN SHEET (§19.2) ═══════════════════════════════════════════════════════════════ */
 
-  /* #967: the owner's way to a connection code, as the controls on a phone actually read. */
-  const CODE_DOOR = 'the round person+ on their video → Start sharing → Swap codes';
+  /* #967: the owner's way to a connection code, as the controls on a phone actually read. #1243 G9 removed the round person+
+     this used to name, so it names the cog's Friends, the door that is left at every width. */
+  const CODE_DOOR = 'the cog → Friends → Start sharing → Swap codes';
   const STEPS = ['Reading the swap code…', 'Connecting…', 'Checking the swap code…',
     'Waiting for them to let you in…', 'Downloading the project…'];
   let joinLink = null;             // the RtcLink a join in flight is using
@@ -3504,7 +3506,7 @@ window.FM = window.FM || {};
        pinned — gets no [Scan QR] (a control that can only ever refuse) and is told what does work. */
     const canScan = !C.signal.codesOnly() && !!(C.qr && C.qr.reader && (!C.qr.canRead || C.qr.canRead()));
     jb.appendChild(el('div', 'collab-sub', C.signal.codesOnly()
-      /* #967: "tap Share" named a button a phone does not have — the owner's door there is the round person+. */
+      /* #967: "tap Share" named a button a phone does not have — the owner's door is the cog's Friends (#1243 G9). */
       ? 'Swap codes only is on: ask them to tap ' + CODE_DOOR + ', then paste the swap code they send you.'
       : 'Paste the link they sent, or type their short code. A swap code works here too.'
         + (canScan ? '' : ' To use their QR code, point your camera app at it.')));
@@ -4460,7 +4462,7 @@ window.FM = window.FM || {};
     const b = bannerEl;
     if (!b || !b.parentNode) return;
     b.style.left = ''; b.style.transform = ''; b.style.maxWidth = ''; b.style.top = '';
-    const corner = [document.getElementById('collab-people'), document.getElementById('btn-share'), liveEl, cmtEl].filter(function (n) { return n && n.parentNode === b.parentNode && n.offsetWidth; });
+    const corner = [document.getElementById('collab-people'), liveEl, cmtEl].filter(function (n) { return n && n.parentNode === b.parentNode && n.offsetWidth; });
     if (!corner.length) return;
     const sr = b.parentNode.getBoundingClientRect(), br = b.getBoundingClientRect();
     let minL = 0, cTop = Infinity, cBot = -Infinity;
@@ -5357,46 +5359,16 @@ window.FM = window.FM || {};
      the four bar icons narrowed (breaks the #189 notes/cog gap he approved) — see COLLAB-DESIGN.md §19.
      On a desktop nothing moves: beside Export, wherever Export currently lives.
      #983: …and now the desktop is gone from this too — the one home is the video, at every width (the note above). */
-  function shareHost() {
-    const st = document.getElementById('stage');
-    return st ? { parent: st } : null;
-  }
-
-  const INVITE_SVG = 'M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5M19 8v6M16 11h6';
-  /* `door` (#967 batch 2): the Labs-off door, wearing `.cs-door`. Since #983 the button is on the video with the feature on
-     as well, so the class is all that differs — and neither needs a width listener: above 700 px styles.css hides both. */
-  function makeShareButton(door) {
-    const at = shareHost();
-    let b = document.getElementById('btn-share');
-    if (!at) return b || null;
-    if (!b) {
-      b = el('button', 'btn icon-btn');
-      b.id = 'btn-share';
-      b.type = 'button';
-      // a second press on the button that opened the card CLOSES it (queue 944) — wherever the card sits
-      /* queue 945 / #978: it opens Canvas settings with Friends big (U.openPeople), which never arms. On a phone only since
-         #983 — on a PC the cog is the way in, and this button has no box there. */
-      b.addEventListener('click', function (e) { e.stopPropagation(); if (card && card.isConnected) { closeCard(); return; } U.openPeople(b); });
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('viewBox', '0 0 24 24');
-      svg.setAttribute('fill', 'none');
-      svg.setAttribute('stroke', 'currentColor');
-      svg.setAttribute('stroke-width', '1.9');
-      svg.setAttribute('stroke-linecap', 'round');
-      svg.setAttribute('stroke-linejoin', 'round');
-      svg.setAttribute('class', 'cp-plus');
-      const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      path.setAttribute('d', INVITE_SVG);
-      svg.appendChild(path);
-      b.appendChild(svg);
-      b.title = 'Share this project live — invite people';
-      b.setAttribute('aria-label', 'Share live');   // #967 B4: the action's one name
-    }
-    /* It wears the people chip's own classes, so it IS that chip at rest: the same size, place and glass, and the same rules
-       hide it (text editing, a live session's faces, and — #983 — any width above a phone's). */
-    b.className = 'collab-people cp-invite cs-stagebtn' + (door ? ' cs-door' : '');
-    if (b.parentNode !== at.parent) at.parent.appendChild(b);
-    return b;
+  /* #1243 G9 — THE PERSON+ ON THE VIDEO IS GONE, AT EVERY WIDTH, ON OR OFF. His words: "the friends button with like a plus. In
+     the top left… get rid of that… make sure it's gone in everything, like not a single trace." So nothing builds #btn-share any
+     more (makeShareButton, its INVITE_SVG and its three callers are deleted), and this by-id sweep runs wherever one used to be
+     made, so a button an older session left in the page goes too. The people stay reachable: the cog opens Friends beside
+     Canvas settings (#978), Home's profile menu has Join, and while a session is live the LIVE pill and the faces chip (only
+     once somebody is in — collab-presence.js) open the same Friends block. */
+  function sweepShare() {
+    const b = document.getElementById('btn-share');
+    if (b && b.parentNode) b.parentNode.removeChild(b);
+    return null;
   }
 
   /* The Join door remains available with the feature off. Home's new profile menu is its visible
@@ -5419,7 +5391,7 @@ window.FM = window.FM || {};
   /* THE TWO DOORS WITH THE FEATURE OFF (§23 as relaxed — see the note at the top of this file). One button each, a click and
      nothing else: no listener on the document, no timer, no socket. */
   function syncDoors() {
-    shareBtn = makeShareButton(true);
+    sweepShare();                                // #1243 G9: Home's Join is the one door left with the feature off
     if (!joinBtn || !joinBtn.isConnected) joinBtn = makeJoinButton();
   }
   /* The one way in for a friend — Home's Join and the Friends block's "Got an invite?". An invite he was sent and put away
@@ -5446,7 +5418,7 @@ window.FM = window.FM || {};
   U.install = function () {
     const first = !installed;
     installed = true;
-    shareBtn = makeShareButton();            // an ENSURE: the Labs-off door becomes the feature's person+ (it drops .cs-door)
+    sweepShare();                            // #1243 G9: no person+ on the video with the feature on either
     /* S7: comments and the role courtesies exist while Labs is on — the ruler marks for a project that has
        comments, and whatever the current session's role says. */
     if (C.comments && C.comments.install) { try { C.comments.install(); } catch (e) { C.lastError = e; } }
@@ -5476,10 +5448,9 @@ window.FM = window.FM || {};
        is IN THE PAGE, not about what this file remembers putting there. (queue 921 S3)
        #967 batch 2: the bar's Share goes (a node the transport row borrowed must never come back — pcTransportTeardown
        skips a detached one); the person+ on the video and Home's Join STAY, as the two doors syncDoors keeps with Labs off.
-       #983: there is no bar's Share any more, so this only ever finds the person+ and leaves it — kept as the guard. */
-    const sb = document.getElementById('btn-share');
-    if (sb && sb.parentNode && sb.parentNode.id !== 'stage') sb.parentNode.removeChild(sb);
-    shareBtn = null;
+       #983: there is no bar's Share any more, so this only ever finds the person+ and leaves it — kept as the guard.
+       #1243 G9: and now the person+ goes too, wherever it is (none is built any more). */
+    sweepShare();
     if (tillTapOff) tillTapOff();               // #967 batch 2 review: the sticky "You're in"'s listener goes with the switch
     dropOffer();
     shareNote = null;

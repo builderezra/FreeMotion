@@ -1634,6 +1634,12 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
    from it down has to be definite for any of this to reach the cards. */
 .addmenu--sheet .addmenu-pager { height: 100%; }
 .addmenu--sheet .addmenu-page { min-height: 100%; }
+/* #1243 F4 — "when you only have one template, it's like a massive picture… make it like the size it should be". A page of
+   pictures on the phone sheet is always the 3-column grid at the library's row height, top-aligned: one template is one tile,
+   the size it is beside eight others (js/addmenu.js adds the class and never --fill / --cols2 with it). */
+.addmenu--sheet .addmenu-page .addmenu-grid--pics { grid-template-columns: repeat(3, 1fr); grid-auto-rows: clamp(50px, 8.5vh, 64px); align-content: start; }
+/* #1243 F1 — the library under Media / Audio's small strip, before anything is imported: one faint line, not a box. */
+.am-lib-empty { padding: 14px 8px 0; text-align: center; font-size: 12px; line-height: 1.4; color: var(--text-faint, var(--text-dim)); }
 .cat-back:hover { color: var(--text); }
 .insp-sub-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .8px; color: var(--text-faint); font-weight: 700; margin: 14px 0 8px; }
 /* Outline & Shadows sections (queue 564): a hairline above each feature's label so two open features read as two blocks. */
@@ -9843,10 +9849,25 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
 .tl-addrow--empty .tl-addrow-plus svg { width: 40px; height: 40px; }
 .tl-addrow--empty .tl-addrow-plus svg path { stroke-width: 2.2; }
 .tl-addrow--empty .tl-addrow-label { font-size: 15px; color: var(--text); }
-.tl-addrow:hover, .tl-addrow:focus-visible {
+/* #1243 G7 — "when you tap on the tap to add layer… the bottom line goes solid, but the top line stays dotted". This rule used
+   to recolour the ROW's own border on :hover / :focus-visible: dashed on three sides and the queue-633 separator (solid) on
+   the fourth, round the separate dashed box — so a press (a phone's sticky :hover) lit a solid bottom and a dotted top. The
+   ROW's border is no longer touched (the separator keeps its soft colour); the lit look is on the dashed box itself, all four
+   edges solid (the plan's recommended A: the dotted outline fills in), while a finger is down (.is-pressed, js/timeline.js), on a key's
+   focus, and on a mouse's hover only where the device really hovers. The PC line variant keeps its own look. */
+.tl-addrow:focus-visible { outline: none; }
+.tl-addrow:not(.tl-addrow--line).is-pressed::before,
+.tl-addrow:not(.tl-addrow--line):focus-visible::before {
+  border-style: solid;
   border-color: rgba(150, 232, 255, .8);
   box-shadow: 0 0 14px rgba(90, 199, 237, .30);
-  outline: none;
+}
+@media (hover: hover) {
+  .tl-addrow:not(.tl-addrow--line):hover::before {
+    border-style: solid;
+    border-color: rgba(150, 232, 255, .8);
+    box-shadow: 0 0 14px rgba(90, 199, 237, .30);
+  }
 }
 /* ⚠️ ON THE EMPTY SCREEN THAT BOX IS DRAWN ON `#timeline`, NOT THE ROW — queue 600, and it is MY
    regression. Ezra: *"This box that pops up when you tap on the add area is bad coz it only shows the
@@ -10926,9 +10947,9 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 #hm-dialog, #fm-ask { animation: hm-bloom .24s ease backwards; }
 
 /* INSIDE THE INSPECTOR — both layouts. The classes are added by js/inspector.js ONLY on the rebuild
-   that moved somewhere (refresh() runs on every slider drag and must not replay these). */
-#inspector .cat-in      { animation: sb-panel-in  190ms cubic-bezier(.16, 1, .3, 1) backwards; }
-#inspector .cat-in-back { animation: sb-panel-inL 190ms cubic-bezier(.16, 1, .3, 1) backwards; }
+   that moved somewhere (refresh() runs on every slider drag and must not replay these).
+   #1243 F8: the drill-in wipe (sb-panel-in / -inL on .cat-in / .cat-in-back) is gone — "get rid of the animation that's like
+   a black swipe". A level or a tab now appears at once; only a tile's rows still drop in. */
 .insp-drop-in { animation: fxb-fav-in .2s cubic-bezier(0, 0, .2, 1) backwards; }
 /* '+ Add behavior' toggles display rather than rebuilding, so the display change replays it for free. */
 .be-picker { animation: fxb-fav-in .2s cubic-bezier(0, 0, .2, 1) backwards; }
@@ -10998,9 +11019,8 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
   /* The select bar is Home's, so it rises like Home's content does. */
   #hm-selbar { animation: hm-rise .22s cubic-bezier(.22, .9, .32, 1) backwards; }
 
-  /* The effects browsers sit OVER the inspector column here, so opening one reads as going a level
-     deeper in that column — it moves exactly like the inspector's own drill-in. */
-  #fx-browser.fxb-sheet, #afx-browser.fxb-sheet { animation: sb-panel-in 190ms cubic-bezier(.16, 1, .3, 1) backwards; }
+  /* (#1243 F8: the effects browsers over the inspector column no longer wipe in with sb-panel-in — the layer panel has no
+     clip wipes at all, his "black swipe". They appear at once, like the inspector's own levels.) */
   /* The elements browser is a centred card over a scrim: the scrim fades, the card drops in. */
   #el-browser { animation: fxb-fav-fade 200ms linear backwards; }
   #el-browser > .fxb-top, #el-browser > .fxb-scroll, #el-browser > .fxb-catview-scroll,
@@ -11016,7 +11036,7 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 @media (prefers-reduced-motion: reduce) {
   #toast.toast-in, #draw-bar, #pe-bar, #crop-bar, #mask-bar, #mpath-bar, #touchup-bar, #trk-bar,
   #hm-searchbar .hm-search-wrap, #hm-searchbar .hm-search-hint, #hm-dialog, .hm-dlg-card, #fm-ask, .fm-ask-card, #hm-selbar,
-  #inspector .cat-in, #inspector .cat-in-back, .insp-drop-in, .be-picker,
+  .insp-drop-in, .be-picker,
   .fxb-catview:not(.fxb-favview), #tpl-fill, #tpl-fill > *,
   .np-card, .np-card:not(.pop-card), #canvas-dialog, #export-dialog, #export-overlay, #export-ready, #shortcuts-overlay,
   #canvas-dialog .export-card, #canvas-dialog #cv-friends, #canvas-dialog #cv-editor, #canvas-dialog #cv-app, #export-dialog .export-card, #export-overlay .export-card, #export-ready .export-card,
@@ -11795,7 +11815,9 @@ body.text-editing .collab-people { display: none; }
    There's already another button for on PC". Alone, the chip is only an invite (+ and a person), and on a desktop the Share button
    beside Export already is one. With people in the room it shows their faces, and that stays.
    (#983: that Share button is gone too — the PC's invite is the cog, which opens Friends beside Canvas settings, #978.) */
-@media (min-width: 701px) { #collab-people.cp-invite { display: none; } }
+/* #1243 G9: …and now at no width — "the friends button with like a plus… get rid of that… not a single trace". Alone, the chip
+   has no box at all (cp-empty, js/collab-presence.js); the .cp-invite / .cp-plus look is deleted. */
+.collab-people.cp-empty { display: none; }
 .collab-people .cp-av {
   position: relative; flex: 0 0 auto; width: 24px; height: 24px; border-radius: 50%;
   display: grid; place-items: center; background: var(--peer); color: #0b0d12;
@@ -11819,13 +11841,10 @@ body.text-editing .collab-people { display: none; }
   margin-left: 4px; padding: 0 6px; height: 20px; border-radius: 10px; display: grid; place-items: center;
   background: rgba(255, 255, 255, .14); font: 700 10.5px/1 -apple-system, BlinkMacSystemFont, sans-serif;
 }
-.collab-people.cp-invite { width: 28px; padding: 0; justify-content: center; }
-.collab-people .cp-plus { width: 17px; height: 17px; }
 @media (min-width: 701px) {
   .collab-people { top: 10px; left: 12px; height: 32px; border-radius: 16px; }
   .collab-people .cp-av { width: 28px; height: 28px; font-size: 10.5px; }
   .collab-people .cp-av.joining::after { -webkit-mask: radial-gradient(circle, transparent 15px, #000 15.5px); mask: radial-gradient(circle, transparent 15px, #000 15.5px); }
-  .collab-people.cp-invite { width: 32px; }
 }
 
 /* ── the inspector line (§18.6) ── */
@@ -11986,10 +12005,7 @@ body.text-editing .collab-people { display: none; }
    #545); the picked ones and why are in COLLAB-DESIGN.md §19 and §17 "as built (S7)". Mobile first: the
    phone rules are the base, and nothing here scrolls sideways at 380 px. */
 
-/* The phone's Share button is the people chip at rest (collab-ui.js `shareHost`): once the chip is on the
-   stage — a session is live — it IS the way in, and two circles in one corner would be one too many. */
-#stage:has(> #collab-people) > #btn-share.cs-stagebtn { display: none; }
-#btn-share.cs-stagebtn { color: var(--text); }
+/* (#1243 G9 deleted the phone's Share button on the video, #btn-share.cs-stagebtn, and every rule that drew or hid it.) */
 
 /* ═══ #967 BATCH 2 — DOORS AND SWITCHES HE CAN SEE ═══════════════════════════════════════════════════════════════════
    Built to the RECOMMENDED pick of every question on the options sheet (tools/design/967-options.html; pictures in
@@ -12002,8 +12018,7 @@ body.text-editing .collab-people { display: none; }
    as we now have it built into the settings cog". The Share beside Export is gone (it is not in the transport row in any
    state), and the one #btn-share left is this person+, on the video at every width — so above a phone's width it has no box,
    on or off, sharing or not. The PC's way in is the cog: Friends beside Canvas settings (#978). */
-#btn-share.cs-stagebtn::before { inset: -8px; }
-@media (min-width: 701px) { #btn-share { display: none; } }
+/* #1243 G9: and now the person+ is gone at every width — its ::before target and its PC hide went with it. */
 /* LIVE on the video (his pick A): a red pill right of the chip while he shares — even with nobody in, so shared and not
    shared no longer look the same — and a dark one with a green dot, "Live · <owner>", for a friend. Placed by collab-ui.js
    (placeLive) just past the chip, whose width is whatever the faces make it. A tap opens the people / Leave. */

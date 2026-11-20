@@ -49,8 +49,8 @@ window.FM = window.FM || {};
                              // the timeline. Desktop only: the CSS is gated behind (min-width: 701px), so a
                              // phone keeps its sheet layout whatever this says.
     /* ⚠️ OFF, AND OFF IS A PROMISE (queue 921 S3, spec §19.8 / §23). With this false there is no
-       collaboration DOM in the page but the two doors #967 batch 2 allows (the phone's person+ on the video and Home's
-       worded Join — one button each, no network, no listeners; COLLAB-DESIGN.md §23) — no card — and nothing in
+       collaboration DOM in the page but the doors #967 batch 2 allows (Home's worded Join — the phone's person+ on the
+       video was the other until #1243 G9 removed it; no network, no listeners; COLLAB-DESIGN.md §23) — no card — and nothing in
        js/collab-*.js runs beyond defining its namespace. It is the switch the whole feature hangs off,
        so it started where a solo user cannot feel it. The three sibling keys §4.2 lists —
        collabCursors, collabSelections, collabCodesOnly — arrive with the stages that READ them (S5

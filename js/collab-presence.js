@@ -36,8 +36,9 @@
  *     avatar; 2 s means three have to go missing in a row. The cost is one ~200-byte frame every 2 s.
  *   · THE PEOPLE CHIP EXISTS ONLY WHILE A SESSION IS LIVE. §18.5 has it as a "person+" Share button
  *     whenever Labs is on, but the Share button already exists in both top bars (S3), and §23/this
- *     stage's brief promise no presence DOM without a session. So: live and alone shows "person+",
- *     live with people shows their faces, and no session shows nothing at all.
+ *     stage's brief promise no presence DOM without a session. So: live with people shows their faces,
+ *     and no session shows nothing at all. (Live and alone showed "person+" until #1243 G9; now the
+ *     chip has no box while it is empty — cp-empty — and LIVE takes the corner.)
  *   · THE INSPECTOR CHIP IS A SLIM LINE ABOVE THE INSPECTOR, not inside `.panel-title`. Measured at
  *     1280: that strip is 306 px and the A/S/D key rail already sits at 158–294 inside it, so a chip
  *     "to the right of #proj-name-s" lands on the keys. On a phone `.panel-title` is display:none.
@@ -1145,7 +1146,7 @@ window.FM = window.FM || {};
   }
 
   /* ── who is here (§18.5) ── */
-  /* queue 945: the chip is the phone's people door once somebody is in — the same pair the person+ opens, never an arm. */
+  /* queue 945: the chip is the phone's people door once somebody is in — the same pair LIVE and the cog's Friends open, never an arm. */
   function openPanel() { if (!C.ui) return; if (C.ui.openPeople) C.ui.openPeople(); else if (C.ui.share) C.ui.share(); }
   function drawChip() {
     const stage = document.getElementById('stage');
@@ -1161,6 +1162,10 @@ window.FM = window.FM || {};
     const hidden = canvasTaken();
     chipEl.classList.toggle('cp-hidden', hidden);
     const list = remote();
+    /* #1243 G9 — "the friends button with like a plus. In the top left… get rid of that… not a single trace." Alone in a session
+       the chip used to turn into that same person+; now it has no box until somebody is in (cp-empty, styles.css), and the LIVE
+       pill, which opens the same people door, takes the corner. Not cp-hidden: that one also hides LIVE and the comments. */
+    chipEl.classList.toggle('cp-empty', !list.length);
     const s = sig(list.map(function (p) { return [p.mid, p.name, p.color, p.dup, stateOf(p), p.pr ? p.pr.md : null]; }));
     if (s !== chipEl._sig) { chipEl._sig = s; fillChip(list); }
     /* The session banner shares this corner of the stage and has to clear the chip, whose width is
@@ -1173,13 +1178,10 @@ window.FM = window.FM || {};
   function fillChip(list) {
     chipEl.textContent = '';
     if (!list.length) {
-      chipEl.classList.add('cp-invite');
-      chipEl.setAttribute('aria-label', S && S.isOwner ? 'Nobody else is here yet — share this project' : 'Who is here');
-      chipEl.title = chipEl.getAttribute('aria-label');
-      chipEl.appendChild(inviteSvg());
+      chipEl.setAttribute('aria-label', 'Who is here');   // #1243 G9: no person+ drawn; the chip has no box while it is empty
+      chipEl.title = '';
       return;
     }
-    chipEl.classList.remove('cp-invite');
     const names = list.map(function (p) { return cleanName(p.name) || 'Someone'; });
     chipEl.setAttribute('aria-label', 'Here: ' + names.join(', '));
     chipEl.title = names.join(', ');
@@ -1194,17 +1196,6 @@ window.FM = window.FM || {};
       chipEl.appendChild(a);
     });
     if (list.length > 3) chipEl.appendChild(el('span', 'cp-more', '+' + (list.length - 3)));
-  }
-  function inviteSvg() {
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('viewBox', '0 0 24 24');
-    svg.setAttribute('class', 'cp-plus');
-    svg.setAttribute('fill', 'none'); svg.setAttribute('stroke', 'currentColor'); svg.setAttribute('stroke-width', '1.9');
-    svg.setAttribute('stroke-linecap', 'round');
-    const a = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-    a.setAttribute('d', 'M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM3 20c.6-3.6 3.2-5.5 6.5-5.5s5.9 1.9 6.5 5.5M19 8v6M16 11h6');
-    svg.appendChild(a);
-    return svg;
   }
 
   /* ── the inspector line (§18.6) ── */

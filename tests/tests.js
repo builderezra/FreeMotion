@@ -35147,8 +35147,10 @@
          boot AND on every change. `syncLabs()` is deliberately NOT called here \u2014 if it had to be, the
          switch would only work when something remembered to call it. */
       FM.settings.set('collabLabs', true);
-      const sb = document.getElementById('btn-share');
-      if (!sb || sb.classList.contains('cs-door')) throw new Error('CONTROL: turning the setting on did not add the share button (or left it the Labs-off door), so either the emptiness above is absence rather than a working gate, or settings.apply() does not sync the Labs UI and the switch does nothing on its own');
+      /* #1243 G9: the control used to be the person+ appearing; there is no person+ any more ("not a single trace"), so the
+         control is the UI reporting itself installed — settings.apply() synced it on its own. */
+      if (!C.ui.isInstalled()) throw new Error('CONTROL: turning the setting on did not install the collaboration UI, so either the emptiness above is absence rather than a working gate, or settings.apply() does not sync the Labs UI and the switch does nothing on its own');
+      if (document.getElementById('btn-share')) throw new Error('turning the setting on put a share button on the video (#1243 G9: "get rid of that… not a single trace")');
       rtc = 0; ws = 0; offsite = [];
       await solo();
       if (rtc || ws || offsite.length) throw new Error('Labs on but nothing shared still constructed ' + rtc + ' RTCPeerConnection, ' + ws + ' WebSocket and called out to ' + JSON.stringify(offsite) + ' — S3 ships no rendezvous driver and must reach nothing at all until he taps Share');
@@ -36004,37 +36006,34 @@
     if (L.a.sent === 0) throw new Error('CONTROL: an ordinary host handshake sent nothing either, so "sent 0" above is not a measurement of the refusal');
   });
 
-  test('921 S3 there is a Share button on a phone, in the bar a phone actually shows', { item: '921', budgetMs: 120000 }, async function () {
+  /* #1243 G9 RENAMED THIS — it was '921 S3 there is a Share button on a phone, in the bar a phone actually shows'. His words:
+     "the friends button with like a plus. In the top left… get rid of that… make sure it's gone in everything, like not a single
+     trace." What the old test was FOR still holds — a live owner on a phone can reach his sharing — through the doors that are
+     left: the LIVE pill on the video and the people door (U.openPeople, the cog's Friends). */
+  test('921 S3 with Labs on there is no share button on the video at 380 or 1280, and a live owner on a phone still reaches his sharing through LIVE (#1243 G9)', { item: '921', budgetMs: 120000 }, async function () {
     await withLabs921(async function (ui) {
       await withCollab921([layer921('A')], async function () {
         await atPhoneWidth(async function () {
-          ui.install();
-          await settle921(80);
-          /* queue 921 S7: with a session live, the people chip IS the phone's way in (the round Share button
-             hands its corner over to the faces), so the thing to press is whichever of the two is showing. */
-          const b0 = document.getElementById('btn-share');
-          if (!b0) throw new Error('with Labs on, at 380px, there is no #btn-share in the page at all');
-          const chip = document.getElementById('collab-people');
-          const b = (b0.getBoundingClientRect().width > 0 || !chip) ? b0 : chip;
-          const r = b.getBoundingClientRect();
-          if (!(r.width > 0 && r.height > 0)) throw new Error('#btn-share is in the page at 380px but has no box (parent ' +
-            (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ') — it was inserted beside #btn-export inside <header id="topbar">, which styles.css sets to display:none at every phone width. He turns the switch on, opens a project, and there is nothing to tap: the whole owner half is unreachable, and so is the guest’s Leave button, because this is the only door to the guest panel');
-          /* queue 921 S7: the phone's Share moved OFF #topbar-m — it squeezed the project name to "U.." — and onto
-             the stage's top-left corner, where the people chip lives (D18, §18.5). What this test is for is
-             unchanged: on a phone there is a Share button, on screen, that he can press. */
-          const stage = document.getElementById('stage');
-          if (!stage || b.parentNode !== stage) throw new Error('#btn-share is visible at 380px but not on the stage (it is in ' +
-            (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ') — on a phone it is the round invite in the stage’s corner');
-          if (r.top > window.innerHeight || r.bottom < 0) throw new Error('#btn-share is off screen vertically at 380px');
+          ui.install(); ui.syncBanner(); if (FM.collab.presence && FM.collab.presence.refresh) FM.collab.presence.refresh();
+          await settle921(250);
+          if (document.getElementById('btn-share')) throw new Error('with Labs on, at 380px, #btn-share is in the page — he asked for the person+ on the video to be gone, not a single trace (#1243 G9)');
+          const live = document.getElementById('collab-live');
+          if (!live || !live.getClientRects().length) throw new Error('CONTROL: sharing at 380px, there is no LIVE pill on the video — with the person+ gone it is the owner’s door on the video');
+          const r = live.getBoundingClientRect();
+          if (!(r.width > 0 && r.height > 0) || r.top > window.innerHeight || r.bottom < 0) throw new Error('the LIVE pill is in the page at 380px but not on screen');
+          /* …and pressing it reaches his sharing: Canvas settings with Friends big, holding his Share panel (Stop sharing). */
+          await with945(async function () {
+            const dlg = document.getElementById('canvas-dialog');
+            live.click();
+            await until921S6('the Share panel', function () { return !dlg.classList.contains('hidden') && dlg.classList.contains('cv-fr-big') ? 1 : 0; }, 4000)
+              .catch(function () { throw new Error('at 380px tapping LIVE opened nothing — with the person+ gone it is the owner’s door to his sharing on the video'); });
+            await land945();
+            if (!document.querySelector('#cv-fr-body .cs-stop')) throw new Error('at 380px tapping LIVE did not open his Share panel (no Stop sharing in the Friends block)');
+          });
         }, 380);
-        /* CONTROL, retuned by #983 (it held the desktop's Share beside Export, which he took away — "on pc get rid of the
-           button that was originally to invite friends, as we now have it built into the settings cog"): the phone's button
-           is the ONLY one — at 1280 it is still the person+ on the video, and it has no box there. */
         await atWideWidth(async function () {
           ui.install();
-          const b = document.getElementById('btn-share'), t = document.getElementById('transport');
-          if (!b || b.parentNode !== document.getElementById('stage')) throw new Error('CONTROL: at 1280 the one #btn-share is not the person+ on the video (it is in ' + (b && b.parentNode && (b.parentNode.id || b.parentNode.className)) + ')');
-          if (b.getClientRects().length || (t && t.contains(b))) throw new Error('at 1280 a Share button is on screen or in the transport row — on a PC the cog is the way in (#983)');
+          if (document.getElementById('btn-share')) throw new Error('at 1280 #btn-share is in the page (#1243 G9: not a single trace)');
         }, 1280);
       });
     });
@@ -38351,14 +38350,17 @@
     C.presence._clock(null);
   });
 
-  test('921 S5 the people chip shows three faces and +N, the ones away or silent go grey, and alone it is an invite', { item: '921', budgetMs: 60000 }, async function () {
+  /* #1243 G9 RENAMED THIS — it was '…and alone it is an invite'. Alone, the chip used to draw the person+ he asked to lose ("get
+     rid of that… not a single trace"); now it has no box until somebody is in, and the faces below are its control. */
+  test('921 S5 the people chip shows three faces and +N, the ones away or silent go grey, and alone it has no box and draws no person+ (#1243 G9)', { item: '921', budgetMs: 60000 }, async function () {
     const C = need921S5('the people chip');
     await withCollab921([layer921('A')], async function (c) {
       const k = clock921(C);
       C.presence.tick();
       C.presence._draw();
       const chip = document.getElementById('collab-people');
-      if (!chip || !chip.classList.contains('cp-invite')) throw new Error('alone in a live session the chip is not the invite (' + (chip ? chip.className : 'no #collab-people') + ')');
+      if (!chip) throw new Error('alone in a live session there is no #collab-people at all — presence draws it, empty, until somebody is in');
+      if (chip.getClientRects().length || chip.querySelector('svg')) throw new Error('alone in a live session the chip is on screen (' + chip.className + ', ' + chip.querySelectorAll('svg').length + ' svg) — it was the person+ he asked to lose (#1243 G9)');
       if (chip.parentNode !== document.getElementById('stage')) throw new Error('#collab-people is not a child of #stage (§18.5, D18)');
       const names = [['Sam Lee', '#f472b6'], ['Mia', '#a3e635'], ['Jo Park', '#a78bfa'], ['Kai', '#ff6b6b'], ['Ana', '#6366f1']];
       const gs = names.map(function (n) { return rawGuest921(c, n[0], n[1]); });
@@ -38368,6 +38370,7 @@
       C.presence._draw();
       const av = function () { return Array.prototype.slice.call(chip.querySelectorAll('.cp-av')); };
       if (av().length !== 3) throw new Error('five people show ' + av().length + ' faces, not 3');
+      if (!chip.getClientRects().length) throw new Error('CONTROL: with five people in, the faces chip has no box either — it must show who is here (#1243 G9 hid only the empty one)');
       const more = chip.querySelector('.cp-more');
       if (!more || more.textContent !== '+2') throw new Error('five people show ' + (more ? JSON.stringify(more.textContent) : 'no') + ' overflow pill, not “+2”');
       if (av().map(function (a) { return a.textContent; }).join() !== 'SL,M,JP') throw new Error('the faces are ' + av().map(function (a) { return a.textContent; }).join() + ', not the first three in, as initials');
@@ -42305,7 +42308,11 @@
   /* #983 RENAMED THIS, ON HIS WORD: it was '921 S7 … (queue 945), and on a PC it stays beside Export'. He took that button away —
      "on pc get rid of the button that was originally to invite friends, as we now have it built into the settings cog" — so the
      control at the end asserts a PC has no Share button at all, and the phone half is unchanged. */
-  test('921 S7 with Labs on, a phone’s top bar keeps the project name whole — Share is the round invite on the stage, which opens Canvas settings with Friends big and never starts sharing (queue 945), and a PC has none — the cog is its way in', { item: '921', budgetMs: 120000 }, async function () {
+  /* #1243 G9 RENAMED THIS — it was '…Share is the round invite on the stage, which opens Canvas settings with Friends big and
+     never starts sharing (queue 945), and a PC has none — the cog is its way in'. The round invite is gone ("get rid of that…
+     not a single trace"); the people door it used to press (U.openPeople, the door LIVE and the faces chip still call) keeps
+     queue 945's promise, and is pressed here instead. */
+  test('921 S7 with Labs on, a phone’s top bar keeps the project name whole, there is no share button on the stage at 380 or 1280 (#1243 G9), and the people door opens Canvas settings with Friends big and never starts sharing (queue 945)', { item: '921', budgetMs: 120000 }, async function () {
     const C = need921S7('the phone top bar');
     const wasLabs = FM.settings.get('collabLabs');
     let wasPair = null; try { wasPair = localStorage.getItem('fm.cvPair'); } catch (e) {}
@@ -42320,43 +42327,23 @@
           await settle921(120);
           const on = name.getBoundingClientRect().width;
           if (on < off - 1) throw new Error('with Labs on the project name is ' + Math.round(on) + ' px, with it off ' + Math.round(off) + ' px — the Share button squeezes it (it read “U..” for “Untitled”)');
-          const b = document.getElementById('btn-share');
-          if (!b || b.parentNode !== document.getElementById('stage')) throw new Error('the phone’s Share is not on the stage (it is in ' + (b && b.parentNode && (b.parentNode.id || b.parentNode.className)) + ')');
-          const r = b.getBoundingClientRect();
-          if (!(r.width >= 24 && r.height >= 24)) throw new Error('the phone’s Share has no box');
-          /* Where the people chip is, and clear of what the chip is kept clear of (the S5 placement test's
-             two shapes of canvas, and the view bar open). */
-          const hit = function (a, c) { return a.left < c.right - 0.5 && c.left < a.right - 0.5 && a.top < c.bottom - 0.5 && c.top < a.bottom - 0.5; };
-          const vb = document.getElementById('view-bar'), vbtn = document.getElementById('btn-amfit');
-          for (const d of [[1080, 1920], [1920, 1080]]) {
-            FM.scene.project.width = d[0]; FM.scene.project.height = d[1];
-            if (FM.resizeCanvas) FM.resizeCanvas();
-            if (FM.setSideBar && vb && vbtn) FM.setSideBar(vb, vbtn, true);
-            await settle921(420);
-            const rb = b.getBoundingClientRect();
-            if (hit(rb, document.getElementById('preview').getBoundingClientRect())) throw new Error('the phone’s Share sits on a ' + d.join('×') + ' canvas');
-            if (vb && vb.getBoundingClientRect().width && hit(rb, vb.getBoundingClientRect())) throw new Error('the phone’s Share sits on the view bar');
-            if (FM.setSideBar && vb && vbtn) FM.setSideBar(vb, vbtn, false);
-            await settle921(220);
-          }
-          /* queue 945: the phone's person+ opens Canvas settings with the Friends block big — and opening it arms nothing. */
-          b.click();
+          if (document.getElementById('btn-share')) throw new Error('with Labs on a share button is on the stage — #1243 G9: "get rid of that… not a single trace"');
+          /* queue 945: the people door opens Canvas settings with the Friends block big — and opening it arms nothing. */
+          ui.openPeople();
           const dlg945 = await until921S6('Canvas settings with Friends big', function () { const d = document.getElementById('canvas-dialog'); return d && !d.classList.contains('hidden') && d.classList.contains('cv-fr-big') ? d : null; }, 4000);
-          if (!document.querySelector('#cv-fr-body .cs-start')) throw new Error('the Friends block the person+ opened has no Start sharing');
-          if (C.session || ui._relay()) throw new Error('the phone person+ started sharing just by being pressed');
-          if (document.getElementById('collab-share')) throw new Error('the phone person+ still opened the old Share card as well');
+          if (!document.querySelector('#cv-fr-body .cs-start')) throw new Error('the Friends block the people door opened has no Start sharing');
+          if (C.session || ui._relay()) throw new Error('the people door started sharing just by being pressed');
+          if (document.getElementById('collab-share')) throw new Error('the people door still opened the old Share card as well');
           ui.close();
           if (!dlg945.classList.contains('hidden') || document.getElementById('cv-fr-body').children.length) throw new Error('ui.close() left the Friends block up');
           if (C.session) C.end();
         });
       }, 380);
-      /* On a PC there is none (#983): the one #btn-share is this person+, and above 700 px it has no box. */
+      /* On a PC there is none (#983), and since #1243 G9 not on the video either. */
       await withLabs921(async function (ui) {
         await atWideWidth(async function () {
           ui.install();
-          const b = document.getElementById('btn-share'), t = document.getElementById('transport');
-          if (!b || b.parentNode !== document.getElementById('stage')) throw new Error('at 1280 the one #btn-share is not the person+ on the video (it is in ' + (b && b.parentNode && (b.parentNode.id || b.parentNode.className)) + ')');
-          if (b.getClientRects().length || (t && t.querySelector('#btn-share'))) throw new Error('at 1280 a Share button is on screen or in the transport row — on a PC the cog is the way in (#983)');
+          if (document.getElementById('btn-share')) throw new Error('at 1280 #btn-share is in the page (#1243 G9: not a single trace)');
         }, 1280);
       });
     }); } finally {
@@ -46191,7 +46178,11 @@
    * last row of Elements. The trap is overcorrecting: filling the sheet on a ONE-row tab makes a
    * 111x260 sliver, which is the opposite of what he asked for. Both halves are asserted. */
 
-  test('the add sheet leaves no dead band under a full grid, and the cards get squarer', { item: 'addsheet-fill' }, async function () {
+  /* #1243 F1 REVERSES QUEUE 428'S FILL FOR MEDIA AND AUDIO, and F4 for a page of pictures. His words: "when you have no media
+     or audio added, like all the buttons in those sections are massive. They shouldn't go massive. They should stay small." and
+     "when you only have one template, it's like a massive picture… make it like the size it should be." So those tabs are
+     skipped here (their own tests are the 1243 F1 / F4 ones); every other tab still fills, as queue 428 asked. */
+  test('the add sheet leaves no dead band under a full grid of buttons, and the cards get squarer (Media and Audio keep small buttons since #1243 F1, a page of pictures keeps its size since F4)', { item: 'addsheet-fill' }, async function () {
     const frame = () => new Promise(r => setTimeout(r, 140));
     return atPhoneWidth(async function () {
       const fab = document.getElementById('add-fab');
@@ -46203,9 +46194,11 @@
         const tabs = Array.prototype.slice.call(document.querySelectorAll('.addmenu--sheet .addmenu-tab'));
         let checkedFull = 0, checkedShort = 0;
         for (const t of tabs) {
+          if (t.dataset.key === 'media' || t.dataset.key === 'audio') continue;   // #1243 F1: small buttons, never filled
           t.click(); await frame();
           const grid = document.querySelector('.addmenu--sheet .addmenu-grid');
           if (!grid || !grid.children.length) continue;
+          if (grid.classList.contains('addmenu-grid--pics')) continue;              // #1243 F4: pictures keep their size
           /* Measured against the PAGER, not the body. Until queue 275 the two had the same bottom edge
              — the pager took `height: 100%` and the page dots simply overflowed past it — so `body`
              was a correct stand-in. Now the body's stated height is shared between the pager and the
@@ -82441,7 +82434,26 @@
     });
   });
 
-  test('912 the effects browser opens with an animation on PC', { item: '912' }, async function () {
+  /* #1243 F8 REVERSES #912 FOR THE LAYER PANEL. His words: "get rid of the animation that's like a black swipe… whenever you…
+     open up any menu in… the settings… when you tap on a layer… effects and speed… don't have that little wipe effect." This
+     was '912 the effects browser opens with an animation on PC', which pinned the very sb-panel-in wipe he asked to lose. */
+  function clipWipes1243(el) {
+    if (!el || !el.getAnimations) return [];
+    return el.getAnimations().filter(function (a) {
+      try { return a.effect.getKeyframes().some(function (k) { return k.clipPath && k.clipPath !== 'none'; }); } catch (e) { return false; }
+    });
+  }
+  /* CONTROL for every F8 reading: the same reader, on a probe running the old wipe (sb-panel-in), finds it. */
+  function wipeReaderControl1243() {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position:fixed;left:0;top:0;width:40px;height:40px;pointer-events:none;animation:sb-panel-in 190ms cubic-bezier(.16, 1, .3, 1) backwards';
+    document.body.appendChild(probe);
+    try {
+      if (!clipWipes1243(probe).length) throw new Error('CONTROL: the reader saw no clip wipe on a probe running sb-panel-in, so a wipe on the panel could not be seen either');
+    } finally { probe.remove(); }
+  }
+  test('1243 F8 · on PC the effects browser opens over the layer panel with no black wipe, no clip-path animation on it (CONTROL: the same reader finds the wipe on a probe running sb-panel-in)', { item: '1243' }, async function () {
+    wipeReaderControl1243();
     await editorWithShape(async function (L) {
       const realMount = FM.fxThumbs && FM.fxThumbs.mountFilter, realMountFx = FM.fxThumbs && FM.fxThumbs.mount;
       if (FM.fxThumbs) { FM.fxThumbs.mountFilter = function () {}; FM.fxThumbs.mount = function () {}; }   // LOOP rule 17: no thumbnail queue left behind
@@ -82450,9 +82462,8 @@
           FM.fxBrowser.open(L);
           const root = document.getElementById('fx-browser');
           if (!root || root.classList.contains('hidden')) throw new Error('the effects browser did not open');
-          const a = entrance(root);
-          if (!a.length) throw new Error('the effects browser appears on PC in one frame, with no animation — the hinge it has on the phone was gated to phone widths');
-          if (!a.some(x => x.animationName === 'sb-panel-in')) throw new Error('over the inspector column it should move like the inspector\'s own drill-in (sb-panel-in), got ' + animNames(a));
+          const w = clipWipes1243(root);
+          if (w.length) throw new Error('on PC the effects browser still wipes in over the layer panel (' + animNames(w) + ') — the black swipe he asked to lose');
         });
       } finally {
         if (FM.fxBrowser && FM.fxBrowser.close) FM.fxBrowser.close();
@@ -82465,24 +82476,49 @@
 
   /* ⚠️ THE HALF THAT MATTERS AS MUCH AS THE ENTRANCE: refresh() rebuilds this panel on every slider drag, so
      an entrance that replayed on a rebuild would flicker under his finger. Both are asserted. */
-  test('912 an inspector category drills in, back drills out, and a plain redraw does not replay either', { item: '912' }, async function () {
+  /* #1243 F8 (was '912 an inspector category drills in, back drills out, and a plain redraw does not replay either'): his pick
+     is the plan's recommended A, no animation at all. Opening a category, ‹ back to the grid, and Visual → Filters: after each
+     the new level (and every pane under the tab row) is on screen with no entrance and no clip wipe anywhere in the panel. */
+  test('1243 F8 · a layer’s category opens, ‹ back returns to the grid and Visual to Filters switches with no wipe and no entrance, at the suite width, and a plain redraw replays nothing (CONTROL: the reader finds the wipe on a probe)', { item: '1243' }, async function () {
+    wipeReaderControl1243();
     await editorWithShape(async function () {
+      const insp = document.getElementById('inspector');
+      const panelWipes = function () { return document.getAnimations().filter(function (a) { const t = a.effect && a.effect.target; return t && t.nodeType === 1 && insp.contains(t); }).filter(function (a) { return clipWipes1243(a.effect.target).indexOf(a) >= 0; }); };
+      const still = function (el, what) {
+        if (!el) throw new Error(what + ': nothing to look at');
+        const a = entrance(el);
+        if (a.length) throw new Error(what + ' arrives with an animation (' + animNames(a) + ') — he asked for none: "get rid of the animation that\'s like a black swipe"');
+        const w = panelWipes();
+        if (w.length) throw new Error(what + ': a clip-path wipe runs in the layer panel (' + animNames(w) + ')');
+      };
       const card = document.querySelector('#inspector .cat-card');
       if (!card) throw new Error('no category cards in the inspector for a selected shape');
       card.click();
-      const body = document.querySelector('#inspector > .cat-body');
-      if (!body) throw new Error('opening a category built no .cat-body');
-      const inA = entrance(body);
-      if (!inA.some(a => a.animationName === 'sb-panel-in')) throw new Error('the category opened with no drill-in animation (' + animNames(inA) + ')');
+      still(document.querySelector('#inspector > .cat-body'), 'the category');
       FM.inspector.refresh();
-      const again = entrance(document.querySelector('#inspector > .cat-body'));
-      if (again.length) throw new Error('a plain redraw of the SAME category replayed its entrance (' + animNames(again) + ') — every slider drag would flicker it');
+      still(document.querySelector('#inspector > .cat-body'), 'a plain redraw of the same category');
       const back = document.querySelector('#inspector .cat-back');
       if (!back) throw new Error('the category has no ‹ back');
       back.click();
-      const grid = document.querySelector('#inspector > .cat-wrap');
-      const outA = entrance(grid);
-      if (!outA.some(a => a.animationName === 'sb-panel-inL')) throw new Error('‹ back returned to the grid with no animation (' + animNames(outA) + ')');
+      still(document.querySelector('#inspector > .cat-wrap'), '‹ back to the grid');
+      const realMount = FM.fxThumbs && FM.fxThumbs.mountFilter, realMountFx = FM.fxThumbs && FM.fxThumbs.mount;
+      if (FM.fxThumbs) { FM.fxThumbs.mountFilter = function () {}; FM.fxThumbs.mount = function () {}; }   // LOOP rule 17: no thumbnail queue left behind
+      const modeBtn = function (label) { return [].filter.call(document.querySelectorAll('#inspector .fxmode-btn'), function (b) { return b.textContent.trim() === label; })[0]; };
+      try {
+        FM.inspector.openCategory('effects');
+        const vis = modeBtn('Visual');
+        if (vis && !vis.classList.contains('on')) vis.click();
+        const filters = modeBtn('Filters');
+        if (!filters || filters.classList.contains('off')) throw new Error('setup: the Effects card of a shape has no live Filters tab to switch to');
+        filters.click();
+        const bar = document.querySelector('#inspector .fxmode');
+        if (!bar || !bar.nextElementSibling) throw new Error('setup: switching to Filters left nothing under the tab row');
+        for (let n = bar.nextElementSibling; n; n = n.nextElementSibling) still(n, 'Visual to Filters (' + (n.className || n.tagName) + ')');
+      } finally {
+        const v = modeBtn('Visual'); if (v && !v.classList.contains('on')) v.click();   // the Effects card's tab is remembered: put Visual back
+        if (FM.fxThumbs) { if (realMount) FM.fxThumbs.mountFilter = realMount; if (realMountFx) FM.fxThumbs.mount = realMountFx; }
+        if (FM.fxThumbs && FM.fxThumbs.stopAll) FM.fxThumbs.stopAll();
+      }
     });
   });
 
@@ -88802,7 +88838,7 @@
          adds the markup; the inertness test will name them itself if it is ever left behind. */
       'collab-people': 'queue 921 — the people chip arrives in S3; a test checks it is absent until then',
       'hm-join-btn':   'queue 921 — Home\'s Join button, same stage, same reason',
-      'btn-share':     'queue 921 — the topbar Share button, same stage, same reason (S2 ships the engine and no UI at all)'
+      'btn-share':     '#1243 G9 — the person+ on the video is gone at every width, on or off ("not a single trace"); tests check it never comes back (it was queue 921’s Share button)'
     };
     const [tests, html] = await Promise.all([
       fetch('tests/tests.js', { cache: 'no-store' }).then(r => r.text()),
@@ -113734,7 +113770,8 @@
       /* CONTROL: with one window, what he adds survives a reload */
       await R.rpc(tag, 'addLayer', { name: 'Before' });
       await R.sleep(1500);
-      await R.reboot(tag);
+      const back0 = await R.reboot(tag);
+      if (!back0 || back0.landed !== true) throw new Error('setup: the CONTROL reload never finished opening its project (' + hd5Say(back0) + ')');
       const n0 = await names(tag);
       if (n0.indexOf('Before') < 0) throw new Error('CONTROL: with one window open, a layer he added did not survive a reload (' + hd5Say(n0) + ') — this fixture cannot see the bug');
       await R.sleep(2500);   // the first window has been open a while — its own opening save is long done, as it is on his PC
@@ -113750,11 +113787,21 @@
       await R.sleep(1500);
       const toast = await R.rpc(tag, 'dom', { sel: '#toast' });
       await R.rpc(tag, 'flush');
-      await R.reboot(tag);
+      const back = await R.reboot(tag);
+      /* 20 Nov (#1243 F-1's full pass): this read [] once — Title and Before gone as well, which a window that stopped saving
+         cannot do (they were saved before the second window opened and survived the CONTROL's reload). It was the agent's
+         `ready` answering before the reloaded window had loaded its project; it now waits for the app's FM_LANDED. Said here
+         too, so a reload that never finished opening is never read as lost work again, and a red names what is ON DISK. */
+      if (!back || back.landed !== true) throw new Error('setup: the first window’s reload never finished opening its project (' + hd5Say(back) + ') — nothing about saving can be read from it');
       const n1 = await names(tag);
       if (n1.indexOf('After') < 0) {
+        let disk = '?';
+        try {
+          const all = await R.rpc(tag, 'projects');
+          disk = Object.keys(all.docs).map(function (k) { let d = null; try { d = JSON.parse(all.docs[k]); } catch (e) {} return k + ' ' + (d ? hd5Say((d.layers || []).map(function (l) { return l.name; })) : 'unreadable'); }).join('; ');
+        } catch (e) { disk = 'unread: ' + e.message; }
         throw new Error('he opened FreeMotion in a second window only to look at his project and closed it again, then added a layer (After) in the first window — after a reload it is gone: the project has ' +
-          hd5Say(n1) + '. The first window stopped saving the moment the other one opened, although nothing was changed there' + (toast && toast.text ? ' (the one sign: ' + hd5Say(toast.text) + ')' : ''));
+          hd5Say(n1) + ' (on disk: ' + disk + '). The first window stopped saving the moment the other one opened, although nothing was changed there' + (toast && toast.text ? ' (the one sign: ' + hd5Say(toast.text) + ')' : ''));
       }
     } finally { R.drop(tag); R.drop(tag + 'b'); }
   });
@@ -117591,23 +117638,25 @@
      Ezra, 26 Sep: *"On PC, get rid of the little plus at the top left to add friends. There's already another button for on PC
      and also for some reason with that button when I click on it to open it and click on the same button again to close it, it
      doesn't close it, it just reopens it"*. */
-  test('944 on PC the people chip offers no second invite — alone it is hidden beside the Share button, with people it shows them; on a phone it stays', { item: '944', budgetMs: 30000 }, async function () {
+  /* #1243 G9 RENAMED THIS — it was '944 on PC the people chip offers no second invite — alone it is hidden beside the Share
+     button, with people it shows them; on a phone it stays'. The phone half was the person+ he has now asked to lose everywhere:
+     "the friends button with like a plus. In the top left… get rid of that… not a single trace". So alone it is hidden at every
+     width; with people in it shows them at every width (the control). */
+  test('944 the people chip offers no invite at any width — alone it is hidden at 1280 and on a phone (#1243 G9), with people it shows them at both', { item: '944', budgetMs: 30000 }, async function () {
     const stage = document.getElementById('stage');
     if (!stage) throw new Error('setup: no stage');
     let chip = document.getElementById('collab-people'), made = false;
     if (!chip) { chip = document.createElement('button'); chip.id = 'collab-people'; chip.className = 'collab-people'; stage.appendChild(chip); made = true; }
     const cls0 = chip.className;
     try {
-      chip.className = 'collab-people cp-invite';
-      await atWideWidth(async function () {
-        if (getComputedStyle(chip).display !== 'none') throw new Error('on PC the people chip still shows its invite + at the top left of the preview — the Share button beside Export already invites; his words: get rid of the little plus at the top left');
-        chip.className = 'collab-people';
-        if (getComputedStyle(chip).display === 'none') throw new Error('control: on PC the chip with people in the room is hidden too — it must still show who is here');
-      }, 1280);
-      chip.className = 'collab-people cp-invite';
-      await atPhoneWidth(async function () {
-        if (getComputedStyle(chip).display === 'none') throw new Error('control: on a phone the chip invite is gone as well — the phone has no Share button beside Export, so the chip is its invite');
-      });
+      for (const at of [function (fn) { return atWideWidth(fn, 1280); }, function (fn) { return atPhoneWidth(fn, 380); }]) {
+        await at(async function () {
+          chip.className = 'collab-people cp-empty';
+          if (getComputedStyle(chip).display !== 'none') throw new Error('at ' + innerWidth + ' px the empty people chip is still on the video — the person+ he asked to lose (#1243 G9)');
+          chip.className = 'collab-people';
+          if (getComputedStyle(chip).display === 'none') throw new Error('control: at ' + innerWidth + ' px the chip with people in the room is hidden too — it must still show who is here');
+        });
+      }
     } finally { chip.className = cls0; if (made) chip.remove(); }
   });
 
@@ -117870,7 +117919,9 @@
     });
   });
 
-  test('945 opening Friends never starts sharing — not the cog, not ⤢, not the person+ — and only Start sharing does; Stop leaves the block showing Start sharing and nothing re-arms', { item: '945', budgetMs: 120000 }, async function () {
+  /* #1243 G9 RENAMED THIS — it was '…not the cog, not ⤢, not the person+ —…'. The person+ is gone ("not a single trace"); the
+     people door it pressed (U.openPeople, which LIVE and the faces chip still call) is pressed instead. */
+  test('945 opening Friends never starts sharing — not the cog, not ⤢, not the people door — and only Start sharing does; Stop leaves the block showing Start sharing and nothing re-arms', { item: '945', budgetMs: 120000 }, async function () {
     const C = need921S7('the Friends block');
     await withFakeNet921(async function (net) {
       await withCollab921([layer921('A')], async function () {
@@ -117897,12 +117948,11 @@
               if (pr && /Owner/.test(pr.textContent)) throw new Error('before anything is shared his row reads "' + pr.textContent + '"');
               quiet('the cog and ⤢');
               document.getElementById('cv-cancel').click(); await settle921(80);
-              const b = document.getElementById('btn-share');
-              if (!b) throw new Error('setup: no phone person+ with Labs on');
-              b.click(); await entranceDone(dlg); await settle921(150);
-              if (!open945(dlg) || !dlg.classList.contains('cv-fr-big')) throw new Error('the phone person+ did not open Canvas settings with Friends big');
-              if (document.getElementById('collab-share')) throw new Error('the phone person+ still opened the old Share card');
-              quiet('the phone person+');
+              if (document.getElementById('btn-share')) throw new Error('a person+ is on the video with Labs on (#1243 G9: not a single trace)');
+              ui.openPeople(); await entranceDone(dlg); await settle921(150);
+              if (!open945(dlg) || !dlg.classList.contains('cv-fr-big')) throw new Error('the people door did not open Canvas settings with Friends big');
+              if (document.getElementById('collab-share')) throw new Error('the people door still opened the old Share card');
+              quiet('the people door');
               document.getElementById('cv-cancel').click(); await settle921(80);
               document.getElementById('m-settings').click(); await entranceDone(dlg); await settle921(100);
               if (!dlg.classList.contains('cv-none')) throw new Error('the cog did not open all closed (#1132)');
@@ -118301,8 +118351,9 @@
               if (C.ui.isInstalled()) throw new Error('the collab UI installed itself with Labs off');
               sws[0].click(); await settle921(200);
               if (FM.settings.get('collabLabs') !== true) throw new Error('the switch in the block did not turn Labs on');
-              const on945 = document.getElementById('btn-share');
-              if (!on945 || on945.classList.contains('cs-door')) throw new Error('CONTROL: Labs is on but the phone person+ is not in the page (or is still the Labs-off door)');
+              /* #1243 G9: the control used to be the person+ appearing; it is gone, so the control is the UI installing itself. */
+              if (!C.ui.isInstalled()) throw new Error('CONTROL: Labs is on but the collaboration UI did not install');
+              if (document.getElementById('btn-share')) throw new Error('turning Labs on put a person+ on the video (#1243 G9: not a single trace)');
               if (!bodyEl.querySelector('.cs-start')) throw new Error('after turning it on the block does not offer Start sharing');
               if (C.session) throw new Error('turning Labs on from the block started sharing');
               if (net.constructed !== c0) throw new Error('turning Labs on from the block opened ' + (net.constructed - c0) + ' relay socket(s)');
@@ -119320,7 +119371,7 @@
     });
   });
 
-  test('967 12 nothing points at a place that is not there — no “Settings → Labs”, no “tap Share”, no cursor, no button that does nothing, and the Join hint names the long code', { item: '967', budgetMs: 90000 }, async function () {
+  test('967 12 nothing points at a place that is not there — no “Settings → Labs”, no “tap Share”, no cursor, no button that does nothing, and the Join hint names the long code', { item: '967', budgetMs: 150000 }, async function () {
     /* J1-2, J2-3, J2-10, J2-12, J5-1, J5-7, J1-7, J4-14. */
     const C = need921S6('the words');
     const S = C.signal;
@@ -119379,7 +119430,10 @@
           await ui.join();
           const sub = document.querySelector('#collab-join .collab-sub').textContent;
           bad(sub, 'the Codes-only Join sheet');
-          if (!/round person\+/.test(sub)) throw new Error('the Codes-only Join sheet does not name the phone’s door: “' + sub + '”');
+          /* #1243 G9 removed the round person+ this used to name ("not a single trace"). The way to a swap code is now the cog →
+             the Friends bar → Start sharing → Swap codes, and that path is WALKED below at 380 and 1280, so these words are
+             checked against controls that exist, not against themselves. */
+          if (/person\+/.test(sub) || !/the cog → Friends → Start sharing → Swap codes/.test(sub)) throw new Error('the Codes-only Join sheet does not name the door that exists (the cog → Friends → Start sharing → Swap codes): “' + sub + '”');
           document.querySelector('#collab-join .cj-code').value = S.inviteLink(inv);
           document.querySelector('#collab-join .cj-go').click();
           await settle921(100);
@@ -119396,8 +119450,42 @@
           const b = Array.prototype.filter.call(st.querySelectorAll('button'), function (x) { return /code/i.test(x.textContent); })[0];
           if (b) throw new Error('“' + b.textContent + '” is a button whose only effect is to replace itself with instructions for the other person (J2-10)');
           bad(st.textContent, 'the relays-down line');
-          if (!/round person\+/.test(st.textContent) || !/Start sharing/.test(st.textContent) || !/Swap codes/.test(st.textContent)) throw new Error('the relays-down line does not name the phone path: “' + st.textContent + '”');
+          if (/person\+/.test(st.textContent) || !/the cog → Friends → Start sharing → Swap codes/.test(st.textContent)) throw new Error('the relays-down line does not name the door that exists (the cog → Friends → Start sharing → Swap codes): “' + st.textContent + '”');
           ui.close();
+        });
+        /* THE DOOR THOSE WORDS NAME, WALKED (#1243 G9). The words are only true if, at a phone’s width and a PC’s, there is a cog on
+           screen, it opens a bar called Friends, Friends offers Start sharing, and sharing offers Swap codes. Walked as the owner
+           would, on a throwaway project over the fake network, and ended with Stop sharing so nothing is left armed. */
+        const C7 = need921S7('the cog → Friends → Start sharing → Swap codes walk');
+        await withFakeNet921(async function () {
+          await withCollab921([layer921('A')], async function () {
+            C7.end();
+            await with945(async function () {
+              const dlg = document.getElementById('canvas-dialog');
+              const walk = async function (w) {
+                const cog = ['m-settings', 'btn-settings'].map(function (id) { return document.getElementById(id); }).filter(function (b) { return b && b.getBoundingClientRect().width > 0; })[0];
+                if (!cog || !cog.querySelector('svg circle')) throw new Error('at ' + w + ' px there is no cog on screen, and the swap-code words send them to one');
+                cog.click(); await entranceDone(dlg); await land945();
+                const bar = document.getElementById('cv-fr-bar'), bt = bar && bar.querySelector('.cv-mini-t');
+                if (!open945(dlg) || !bar || !bar.getClientRects().length || !bt || bt.textContent.trim() !== 'Friends') throw new Error('at ' + w + ' px the cog (#' + cog.id + ') did not open a bar called Friends (' + (bt ? '“' + bt.textContent + '”' : 'none') + ')');
+                document.getElementById('cv-fr-exp').click(); await land945();
+                const go = document.querySelector('#cv-fr-body .cs-start');
+                if (!go || !go.getClientRects().length || go.textContent.trim() !== 'Start sharing') throw new Error('at ' + w + ' px Friends offers no Start sharing (' + (go ? '“' + go.textContent + '”' : 'none') + ')');
+                go.click();
+                await until921S6('Start sharing to arm a room at ' + w + ' px', function () { return C7.session && C7.session.isOwner ? C7.session : null; }, 8000);
+                const sw = await until921S6('a Swap codes button in Friends at ' + w + ' px', function () {
+                  return Array.prototype.filter.call(document.querySelectorAll('#cv-fr-body button'), function (b) { return /Swap codes/.test(b.textContent) && b.getClientRects().length; })[0] || null;
+                }, 4000);
+                if (!(sw.getBoundingClientRect().width > 0)) throw new Error('at ' + w + ' px the Swap codes button has no box');
+                document.querySelector('#cv-fr-body .cs-stop').click();
+                (await askOk921()).click();
+                await until921S6('Stop sharing to end the room at ' + w + ' px', function () { return C7.session ? null : true; }, 4000);
+                FM.closeCanvasDialog(); await settle921(80);
+              };
+              await atPhoneWidth(async function () { await walk(380); }, 380);
+              await atWideWidth(async function () { await walk(1280); }, 1280);
+            });
+          });
         });
         /* Settings: the Join hint names what a friend may have been sent. */
         FM.settings.open(); await sleep(350);
@@ -120943,12 +121031,10 @@
       if (document.getElementById(id)) throw new Error('#' + id + ' is in the page ' + st + ' (' + where + ') — §23 allows the two doors and nothing else');
     });
     if (document.querySelector('.collab-scrim')) throw new Error('a collab scrim is in the page ' + st + ' (' + where + ')');
-    if (document.querySelectorAll('#btn-share').length > 1 || document.querySelectorAll('#hm-join-btn').length > 1) throw new Error('a door is in the page twice (' + where + ')');
+    if (document.querySelectorAll('#hm-join-btn').length > 1) throw new Error('a door is in the page twice (' + where + ')');
+    /* #1243 G9: the person+ on the video is gone at every width — "the friends button with like a plus… not a single trace". */
     const b = document.getElementById('btn-share');
-    if (b) {
-      if (!b.parentNode || b.parentNode.id !== 'stage') throw new Error(st + ' #btn-share is in ' + (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ' (' + where + ') — the one share door allowed is the person+ on the video');
-      if (!matchMedia('(max-width: 700px)').matches && b.getClientRects().length) throw new Error(st + ' a PC shows the share door (' + where + ') — it is the phone’s door; a PC keeps its layout');
-    }
+    if (b) throw new Error(st + ' #btn-share is in ' + (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ' (' + where + ') — the person+ on the video is gone (#1243 G9), Home’s Join is the one door left');
     const j = document.getElementById('hm-join-btn');
     if (j && j.textContent.trim() !== 'Join') throw new Error('Home’s door reads “' + j.textContent.trim() + '” (' + where + ')');
   }
@@ -121088,12 +121174,20 @@
     });
   });
 
-  test('967 B2 2 on a phone the round person+ is on the video even with the feature off — a 44 px target that opens the explanation and its switch and connects nothing — it stays with a layer selected, and a PC gets no door', { item: '967', budgetMs: 90000 }, async function () {
-    /* R3 / J1-1, J1-10, J1-11 — his picks: A (the door on the video, always), yes (one door with the feature off: no network,
-       no listeners) and A (the chip stays with a layer selected). Measured at v17.06: no door at all with the feature off, and
-       display:none in Select (styles.css `body.sel-mode .collab-people`). */
-    const C = need921S7('the always-there share door');
+  /* #1243 G9 RENAMED THIS — it was '967 B2 2 on a phone the round person+ is on the video even with the feature off — a 44 px
+     target that opens the explanation and its switch and connects nothing — it stays with a layer selected, and a PC gets no
+     door'. His words: "the friends button with like a plus. In the top left… get rid of that… make sure it's gone in
+     everything, like not a single trace." So the person+ is checked ABSENT in every state the old test put it in (feature off
+     and on, a layer selected, Select, 390 and 1280), and the explanation-and-switch half is kept on the door that is left for
+     it — the cog's Friends block — which still connects nothing. */
+  test('967 B2 2 the person+ on the video is gone (#1243 G9) — feature off or on, nothing selected, a layer selected or in Select, at 390 and 1280 there is no share door on the video, and the cog’s Friends still opens the explanation and its switch and connects nothing', { item: '967', budgetMs: 90000 }, async function () {
+    const C = need921S7('the doors with the feature off');
     const was = FM.settings.get('collabLabs');
+    const noTrace = function (where) {
+      if (document.getElementById('btn-share')) throw new Error(where + ': #btn-share is in the page — the person+ on the video he asked to lose');
+      const left = document.querySelector('.cp-invite, .cs-door, .cs-stagebtn');
+      if (left) throw new Error(where + ': ' + (left.id || left.className) + ' still wears the person+ look');
+    };
     await withFakeNet921(async function (net) {
       await editorWithShape(async function (L) {
         await with945(async function () {
@@ -121102,66 +121196,48 @@
             FM.settings.set('collabLabs', false); C.ui.syncLabs();
             await atPhoneWidth(async function () {
               FM.selectLayer(null); FM.refreshAll(); await settle921(150);
-              const st = document.getElementById('stage');
-              const b = document.getElementById('btn-share');
-              if (!b) throw new Error('with the feature off a phone has no way in on the video — every door appeared only after a switch buried in Settings (J1-1)');
-              if (b.parentNode !== st) throw new Error('the door is in ' + (b.parentNode && (b.parentNode.id || b.parentNode.className)) + ', not on the video');
-              const r = b.getBoundingClientRect();
-              if (!(r.width >= 24 && r.height >= 24)) throw new Error('the door is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' — not on screen, or under a 24 px target');
-              /* 44 px to hit: every point of a 44 px square centred on the drawn circle that is on the video lands on the door. */
-              const sr = st.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-              const miss = [];
-              for (let dx = -21; dx <= 21; dx += 7) for (let dy = -21; dy <= 21; dy += 7) {
-                const x = cx + dx, y = cy + dy;
-                if (x < sr.left + 1 || y < sr.top + 1) continue;          // off the video: the phone's bar, not the door's to claim
-                const h = document.elementFromPoint(x, y);
-                if (!h || (h !== b && !b.contains(h))) miss.push(dx + ',' + dy + '→' + (h ? (h.id || String(h.className) || h.tagName) : 'nothing'));
-              }
-              if (miss.length) throw new Error('the door is not a 44 px target — ' + miss.length + ' points of the square around it land elsewhere: ' + miss.slice(0, 4).join(' | '));
+              noTrace('the phone editor, feature off');
               doors23('the phone editor, feature off');
             }, 390);
             const c0 = net.constructed;
             await atPhoneWidth(async function () {
-              await onScreen924(async function () { await hd5Tap(document.getElementById('btn-share'), 'the person+ on the video'); });
+              /* the door that is left: the cog, then ⤢ to Friends */
+              document.getElementById('m-settings').click(); await entranceDone(dlg);
+              document.getElementById('cv-fr-exp').click();
               await until921S6('the Friends block', function () { return !dlg.classList.contains('hidden') && dlg.classList.contains('cv-fr-big') ? 1 : 0; }, 5000)
-                .catch(function () { throw new Error('with the feature off, the person+ on the video opened nothing'); });
+                .catch(function () { throw new Error('with the feature off, the cog and ⤢ did not open the Friends block'); });
               await land945();
               const body = document.getElementById('cv-fr-body');
               const sw = body.querySelector('[role=switch]');
-              if (!sw || sw.getAttribute('aria-checked') !== 'false' || !/edit it together/i.test(body.textContent)) throw new Error('the door did not open the explanation and its switch: “' + body.textContent.slice(0, 140) + '”');
-              if (net.constructed !== c0) throw new Error('the door opened ' + (net.constructed - c0) + ' socket(s) with the feature off');
-              if (C.ui.isInstalled() || C.bridge.installed() || (C.presence && C.presence.attached && C.presence.attached())) throw new Error('the door installed the collaboration UI, the bridge or presence with the feature off');
-              if (document.querySelector('.collab-scrim')) throw new Error('the door put a card over the editor instead of opening the Friends block');
+              if (!sw || sw.getAttribute('aria-checked') !== 'false' || !/edit it together/i.test(body.textContent)) throw new Error('the Friends block did not open the explanation and its switch: “' + body.textContent.slice(0, 140) + '”');
+              if (net.constructed !== c0) throw new Error('opening Friends opened ' + (net.constructed - c0) + ' socket(s) with the feature off');
+              if (C.ui.isInstalled() || C.bridge.installed() || (C.presence && C.presence.attached && C.presence.attached())) throw new Error('opening Friends installed the collaboration UI, the bridge or presence with the feature off');
+              if (document.querySelector('.collab-scrim')) throw new Error('opening Friends put a card over the editor instead of the Friends block');
+              noTrace('the Friends block open, feature off');
               FM.closeCanvasDialog(); await settle921(100);
             }, 360);
-            /* A layer selected (the phone's edited layer), then Select: the door stays. */
+            /* A layer selected (the phone's edited layer), then Select: still no person+, feature off or on. */
             for (const on of [false, true]) {
               FM.settings.set('collabLabs', on); C.ui.syncLabs();
               await atPhoneWidth(async function () {
                 FM.selectLayer(L.id); FM.refreshAll(); await settle921(150);
                 if (!document.body.classList.contains('m-editing')) throw new Error('setup: selecting the layer did not make it the phone’s edited layer');
-                let b = document.getElementById('btn-share');
-                if (!b || !b.getClientRects().length || !(b.getBoundingClientRect().width > 0)) throw new Error('with a layer selected the person+ is hidden' + (on ? '' : ' (feature off)'));
+                noTrace('a layer selected' + (on ? '' : ' (feature off)'));
                 FM.selectMode = true; FM.syncSelectionChrome(); await settle921(100);
                 if (!document.body.classList.contains('sel-mode')) throw new Error('setup: Select mode did not come on');
-                b = document.getElementById('btn-share');
-                if (!b || !b.getClientRects().length || !(b.getBoundingClientRect().width > 0)) throw new Error('in Select the person+ is hidden' + (on ? '' : ' (feature off)') + ' — display:none whenever layers are being selected (J1-10)');
+                noTrace('in Select' + (on ? '' : ' (feature off)'));
                 FM.selectMode = false; FM.selectLayer(null); FM.syncSelectionChrome(); FM.refreshAll(); await settle921(100);
               }, 390);
             }
-            /* A PC keeps its layout: no door with the feature off — and, since #983, none with it on either. It had its own Share
-               beside Export with the feature on, and he took it away: "on pc get rid of the button that was originally to invite
-               friends, as we now have it built into the settings cog". */
+            /* A PC: none with the feature off, none with it on (#983, and now #1243 G9). */
             FM.settings.set('collabLabs', false); C.ui.syncLabs();
             await atWideWidth(async function () {
               if (FM.pcTransportLayout) FM.pcTransportLayout();
-              const b = document.getElementById('btn-share');
-              if (b && b.getClientRects().length) throw new Error('with the feature off a PC shows a share door — the phone’s door; a PC keeps its layout');
+              noTrace('a PC, feature off');
               doors23('a PC, feature off');
               FM.settings.set('collabLabs', true); C.ui.syncLabs(); await settle921(80);
-              const b2 = document.getElementById('btn-share');
-              if (!b2 || b2.parentNode.id !== 'stage') throw new Error('CONTROL: with the feature on the one #btn-share is not the person+ on the video (it is in ' + (b2 && b2.parentNode && (b2.parentNode.id || b2.parentNode.className)) + ')');
-              if (b2.getClientRects().length) throw new Error('with the feature on a PC shows a Share button — the cog is the PC’s way in (#983)');
+              if (!C.ui.isInstalled()) throw new Error('CONTROL: the feature did not come on at 1280');
+              noTrace('a PC, feature on');
             }, 1280);
           } finally { FM.selectMode = false; FM.settings.set('collabLabs', !!was); C.ui.syncLabs(); }
         });
@@ -121282,7 +121358,10 @@
     });
   });
 
-  test('967 B2 5 the video says it is live — a red ● LIVE by the person chip while he shares, even with nobody in; “● Live · Ezra” for a friend, which opens their panel with Leave; the chip stays with a layer selected; and “You’re in” stays until the first tap', { item: '967', budgetMs: 90000 }, async function () {
+  /* #1243 G9 RENAMED THIS — it was '…a red ● LIVE by the person chip while he shares, even with nobody in; …; the chip stays with
+     a layer selected; …'. With nobody in, the "person chip" WAS the person+ he asked to lose ("not a single trace"), so LIVE now
+     takes the corner itself, and it is LIVE that stays with a layer selected and in Select. */
+  test('967 B2 5 the video says it is live — a red ● LIVE in the top-left corner while he shares, even with nobody in (no person+ beside it, #1243 G9); “● Live · Ezra” for a friend, which opens their panel with Leave; LIVE stays with a layer selected; and “You’re in” stays until the first tap', { item: '967', budgetMs: 90000 }, async function () {
     /* J1-3, J3-4, J2-8, J5-11 — his picks A (a red pill for him, "Live · Ezra" for a friend) and A (a layer selected).
        Measured at v17.06: the person+ looked pixel-identical shared or not, a friend saw nothing saying whose project it was,
        and "You're in" was gone after 3 s. */
@@ -121300,17 +121379,16 @@
             if (p.textContent.trim() !== 'LIVE') throw new Error('his marker reads “' + p.textContent.trim() + '”');
             const bg = (getComputedStyle(p).backgroundColor.match(/\d+/g) || []).map(Number);
             if (!(bg[0] > 180 && bg[1] < 120 && bg[2] < 120)) throw new Error('his marker is ' + getComputedStyle(p).backgroundColor + ', not red');
+            /* #1243 G9: nobody is in, so nothing is drawn in the corner but LIVE — no person+, and the empty chip has no box. */
             const chip = [document.getElementById('collab-people'), document.getElementById('btn-share')].filter(function (n) { return n && n.getClientRects().length; })[0];
-            if (!chip) throw new Error('setup: no person chip on the video');
-            const pr = p.getBoundingClientRect(), cr = chip.getBoundingClientRect();
-            if (pr.left < cr.right - 0.5 || pr.left - cr.right > 14 || pr.bottom < cr.top || pr.top > cr.bottom) throw new Error('the LIVE pill is not beside the person chip (' + Math.round(pr.left) + ',' + Math.round(pr.top) + ' vs the chip ending at ' + Math.round(cr.right) + ')');
+            if (chip) throw new Error('with nobody in, a person chip is on the video beside LIVE (' + (chip.id || chip.className) + ') — the person+ he asked to lose (#1243 G9)');
+            const pr = p.getBoundingClientRect(), sr = document.getElementById('stage').getBoundingClientRect();
+            if (pr.left - sr.left < 2 || pr.left - sr.left > 14) throw new Error('with nothing beside it the LIVE pill does not take the corner (it starts ' + Math.round(pr.left - sr.left) + ' px into the video)');
             if (pr.height < 18) throw new Error('the LIVE pill is ' + Math.round(pr.height) + ' px tall');
-            /* It stays with a layer selected, and in Select — the chip too. */
+            /* It stays with a layer selected, and in Select. */
             FM.selectLayer(ctx.ids[0]); FM.refreshAll(); await settle921(150);
             FM.selectMode = true; FM.syncSelectionChrome(); await settle921(120);
             if (!document.body.classList.contains('sel-mode')) throw new Error('setup: Select mode did not come on');
-            const ch2 = document.getElementById('collab-people');
-            if (!ch2 || !ch2.getClientRects().length) throw new Error('in Select the person chip is hidden — display:none whenever layers are being selected (J1-10)');
             if (!document.getElementById('collab-live').getClientRects().length) throw new Error('in Select the LIVE pill is hidden');
             FM.selectMode = false; FM.selectLayer(null); FM.syncSelectionChrome(); FM.refreshAll(); await settle921(100);
             /* A tap opens his Share panel. */
@@ -122421,7 +122499,9 @@
   }
   function menuLabels967b4() { return Array.prototype.map.call(document.querySelectorAll('#ctx-menu .ctx-item'), function (x) { return x.textContent.trim(); }); }
 
-  test('967 B4 1 one name — the Settings switch is “Work with friends” and no screen says it is still being tested any more; the Friends block, its bar, the Join sheet, the person+ on the video, the Share card and the turn-off question all use the same family; and no screen says session, preview, Labs or relay', { item: '967', budgetMs: 180000 }, async function () {
+  /* #1243 G9 RENAMED THIS — it named "the person+ on the video" among the family; the person+ is gone ("not a single trace"),
+     so it is checked absent where its label used to be read. */
+  test('967 B4 1 one name — the Settings switch is “Work with friends” and no screen says it is still being tested any more; the Friends block, its bar, the Join sheet, the Share card and the turn-off question all use the same family (the person+ on the video is gone, #1243 G9); and no screen says session, preview, Labs or relay', { item: '967', budgetMs: 180000 }, async function () {
     /* J5-6 (major): "Live collaboration (preview)", "Work on this with friends", "Share it live with friends", "Join a live project",
        "Turn off live collaboration?", an aria-label of plain "Share", and "being tested" three times on the off card. */
     const C = need921S7('one name');
@@ -122481,8 +122561,7 @@
                 jargon967b4(fr, 'the live Share panel');
                 const t2 = fr.querySelector('.fm-ask-title').textContent;
                 if (!/^Share “.+” live$/.test(t2)) throw new Error('live, the block is titled “' + t2 + '”');
-                const b = document.getElementById('btn-share');
-                if (!b || b.getAttribute('aria-label') !== 'Share live') throw new Error('the person+ on the video is announced as “' + (b && b.getAttribute('aria-label')) + '” — the action is Share live');
+                if (document.getElementById('btn-share')) throw new Error('a person+ is on the video while live — #1243 G9: "get rid of that… not a single trace"');
                 fr.querySelector('.cs-gear').click(); await settle921(100);
                 if (!fr.querySelector('.cs-sgroup')) throw new Error('setup: the gear did not open Sharing settings');
                 jargon967b4(fr, 'Sharing settings');
@@ -123013,10 +123092,11 @@
             if (document.getElementById('collab-live') && document.getElementById('collab-live').getClientRects().length) throw new Error('setup: LIVE is still up after the session ended');
             const after = cmtDoor967b5();
             if (!after) throw new Error('after Stop sharing the comments bubble went, and the project’s comments with it (J4-5 “stranded”)');
+            /* #1243 G9: after the stop nothing else is in the corner (the person+ is gone), so the bubble takes the corner itself. */
             const chip = [document.getElementById('collab-people'), document.getElementById('btn-share')].filter(function (n) { return n && n.getClientRects().length; })[0];
-            if (!chip) throw new Error('setup: no person chip after the stop');
-            const ar = after.getBoundingClientRect(), chr = chip.getBoundingClientRect();
-            if (ar.left < chr.right - 0.5 || ar.left - chr.right > 14) throw new Error('after the stop the bubble is not beside the person+ (it starts at ' + Math.round(ar.left) + ', the person+ ends at ' + Math.round(chr.right) + ')');
+            if (chip) throw new Error('after the stop a person chip is on the video (' + (chip.id || chip.className) + ') — the person+ he asked to lose (#1243 G9)');
+            const ar = after.getBoundingClientRect(), stR = document.getElementById('stage').getBoundingClientRect();
+            if (ar.left - stR.left < 2 || ar.left - stR.left > 14) throw new Error('after the stop the bubble does not take the corner (it starts ' + Math.round(ar.left - stR.left) + ' px into the video)');
             /* …and once there are none, not live, it goes (the positive control is everything above). */
             C.comments.list().forEach(function (c) { C.comments.remove(c.id); });
             await settle921(120);
@@ -126900,17 +126980,13 @@
           await dropFixture967(C, fxIds.splice(0));
         });
       });
-      /* CONTROL: the phone keeps its person+ on the video, with the feature on and off. */
+      /* #1243 G9: this used to be a CONTROL that the phone kept its person+ on the video; he has since asked for it gone
+         everywhere ("not a single trace"), so at 380 with the feature on and off there is none either. */
       for (const on of [true, false]) {
         FM.settings.set('collabLabs', on); C.ui.syncLabs();
         await atPhoneWidth(async function () {
           await settle921(80);
-          const b = document.getElementById('btn-share'), st = document.getElementById('stage');
-          if (!b || b.parentNode !== st) throw new Error('CONTROL: at 380 with the feature ' + (on ? 'on' : 'off') + ' the person+ is not on the video (' + (b && b.parentNode && b.parentNode.id) + ')');
-          const r = b.getBoundingClientRect();
-          if (!(r.width >= 24 && r.height >= 24)) throw new Error('CONTROL: at 380 with the feature ' + (on ? 'on' : 'off') + ' the person+ has no box');
-          const cl = b.classList;
-          if (!cl.contains('collab-people') || !cl.contains('cp-invite') || !cl.contains('cs-stagebtn') || cl.contains('cs-door') === on || b.getAttribute('aria-label') !== 'Share live') throw new Error('CONTROL: at 380 the person+ changed — “' + b.className + '” / “' + b.getAttribute('aria-label') + '”');
+          if (document.getElementById('btn-share') || document.querySelector('.cp-invite, .cs-door, .cs-stagebtn')) throw new Error('at 380 with the feature ' + (on ? 'on' : 'off') + ' a person+ is on the video (#1243 G9)');
         }, 380);
       }
     } finally {
@@ -126920,7 +126996,10 @@
     }
   });
 
-  test('983 on a PC the settings cog is the way in — Friends beside Canvas settings, hung off the cog with the cog sharp, a second click closes it — and every other door lands there too: the people chip, LIVE, Home’s Share live…, and a pair the phone’s person+ opened when the window widens', { item: '983', budgetMs: 150000 }, async function () {
+  /* #1243 G9 RENAMED THIS — it was '…and a pair the phone’s person+ opened when the window widens'. The person+ is gone ("not a
+     single trace"); the same widen is now made from a pair the people door (U.openPeople, which LIVE and the faces chip call)
+     opened on a phone, and on a PC that door with no button to hang from still hangs the pair from the cog. */
+  test('983 on a PC the settings cog is the way in — Friends beside Canvas settings, hung off the cog with the cog sharp, a second click closes it — and every other door lands there too: the people chip, LIVE, Home’s Share live…, and a pair the people door opened on a phone when the window widens', { item: '983', budgetMs: 150000 }, async function () {
     const C = need921S7('the PC doors to Friends');
     const wasHome = FM.home.isOpen();
     if (wasHome) { FM.home.close(); await sleep(450); }
@@ -126945,9 +127024,8 @@
         await editorWithShape(async function () {
           await atWideWidth(async function () {
             const cog = document.getElementById('btn-settings');
-            /* The one #btn-share on a PC is the phone's person+ on the video, with no box. */
-            const pb = document.getElementById('btn-share');
-            if (!pb || !pb.parentNode || pb.parentNode.id !== 'stage') throw new Error('on a PC with the feature on the one #btn-share is in #' + (pb && pb.parentNode && pb.parentNode.id) + ' — it should be the phone’s person+ on the video, with no box here (his words: "on pc get rid of the button that was originally to invite friends, as we now have it built into the settings cog")');
+            /* #1243 G9: there is no #btn-share at all now, on a PC or a phone. */
+            if (document.getElementById('btn-share')) throw new Error('on a PC with the feature on #btn-share is in the page — the person+ is gone everywhere (#1243 G9)');
             /* CONTROL: the cog opens the pair; ⤢ makes Friends big; a second click closes it (the 944 rule, as the browser delivers
                a click); and the cog opens again ALL CLOSED (#1132), from where ⤢ brings Friends up hung off the cog as before. */
             press978(cog); await entranceDone(dlg); await sleep(60);
@@ -126962,26 +127040,26 @@
             document.getElementById('cv-fr-exp').click(); await land945();
             hung('the cog opening again, then ⤢');
             await shut();
-            /* A JAVASCRIPT-ONLY GUARD, NOT A USER DOOR (#983 review): on a PC the person+ has no box, so nobody can press it here.
-               It pins cvPlace's own rule — a door with no box on a PC hangs the pair from the cog — which the widen below needs. */
-            ui.openPeople(pb); await opened();
-            hung('cvPlace given the box-less person+ on a PC (a JavaScript call, not a press)');
+            /* A JAVASCRIPT-ONLY GUARD, NOT A USER DOOR (#983 review): the people door with no button to hang from. It pins
+               cvPlace's own rule — with no door box on a PC the pair hangs from the cog — which the widen below needs. */
+            ui.openPeople(); await opened();
+            hung('the people door with no button, on a PC (a JavaScript call, not a press)');
             await shut();
           }, 1280);
-          /* A pair the phone's person+ opened, and then the window widened to a PC's. */
+          /* A pair the people door opened on a phone, and then the window widened to a PC's. */
           await atPhoneWidth(async function () {
             /* #983 review: TEAR THE ROW DOWN AS THE APP DOES. Any edit at phone width runs refreshAll, which gives the PC row's
                controls back to the hidden top bar; a resize alone never does, so without this the harness kept the cog's box
                through the narrowing and the widen below passed for a reason the app never meets. */
             FM.refreshAll(); await sleep(60);
             if (document.getElementById('t-far') || document.getElementById('btn-settings').getBoundingClientRect().width > 0) throw new Error('setup: at 380 after a refresh the PC row is still built (#t-far ' + !!document.getElementById('t-far') + ') — the widen below would not start from a phone’s state');
-            const pb = document.getElementById('btn-share');
-            pb.click(); await opened();
-            if (!open945(dlg) || !dlg.classList.contains('cv-fr-big')) throw new Error('CONTROL: at 380 the person+ did not open Friends big');
+            if (document.getElementById('btn-share')) throw new Error('at 380 #btn-share is in the page — the person+ is gone everywhere (#1243 G9)');
+            ui.openPeople(); await opened();
+            if (!open945(dlg) || !dlg.classList.contains('cv-fr-big')) throw new Error('CONTROL: at 380 the people door did not open Friends big');
             if (document.body.classList.contains('cv-anchored')) throw new Error('CONTROL: at 380 the pair is hung off a button — a phone centres it');
             await atWideWidth(async function () {
               await sleep(250);   // cvOnWidth re-hangs it on a setTimeout, once the row has laid out at the new width
-              hung('a pair the phone’s person+ opened, the window then widened to 1280');
+              hung('a pair the people door opened on a phone, the window then widened to 1280');
             }, 1280);
             await shut();
           }, 380);
@@ -126998,7 +127076,7 @@
               ui.syncBanner(); C.presence.tick(); C.presence._draw(); await settle921(200);
               const live = document.getElementById('collab-live'), chip = document.getElementById('collab-people');
               if (!live || !chip) throw new Error('setup: sharing, there is no LIVE pill (' + !!live + ') or people chip (' + !!chip + ') in the page');
-              if (!chip.getClientRects().length || chip.classList.contains('cp-invite')) throw new Error('setup: with a friend in, the faces chip is not on screen at 1280 (' + chip.className + ')');
+              if (!chip.getClientRects().length || chip.classList.contains('cp-empty')) throw new Error('setup: with a friend in, the faces chip is not on screen at 1280 (' + chip.className + ')');
               const got = press978(chip);
               if (got.down !== chip && !chip.contains(got.down)) throw new Error('setup: the press did not land on the faces chip (' + (got.down && (got.down.id || got.down.className)) + ')');
               await opened();
@@ -207584,5 +207662,354 @@
       const db = diff1253(b, o.frame(staged, o.still(staged)));
       if (!(db < 2)) throw new Error('control: the ' + staged + ' tile did not end on its still (it differs by ' + db.toFixed(1) + ' levels)');
     } finally { T._sliceMs(null); h.remove(); T.stopAll(); T._picsStill(was); o.done(); }
+  });
+
+  /* ═══ #1243 STAGE F-1 — SIX SMALL ONES IN THE FULL EDITOR (F1, F4, F5, G7, G9; F8's two are the rewritten #912 pair) ═══════════
+     His words, one clause each, are quoted in every test. Each fails on v18.46 by its own sentence. */
+
+  /* The phone's Add sheet opened plainly (no grow) at 380, with the media library index and the menu's memory put back after. */
+  async function phoneSheet1243(fn) {
+    const KEYS = ['fm.medialib', 'fm.addmenu'];
+    const saved = {};
+    KEYS.forEach(function (k) { try { saved[k] = localStorage.getItem(k); } catch (e) { saved[k] = null; } });
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const sheet = document.getElementById('add-sheet');
+    try {
+      if (homeWasOpen) FM.home.close();
+      return await atPhoneWidth(async function () {
+        try {
+          FM.mobile.openAdd(); await sleep(450);
+          if (!sheet || !sheet.classList.contains('open')) throw new Error('setup: the phone Add sheet did not open');
+          const s = {
+            sheet: sheet,
+            lib: function (list) { localStorage.setItem('fm.medialib', JSON.stringify(list)); },
+            tab: async function (key) {
+              const b = sheet.querySelector('.addmenu-tab[data-key="' + key + '"]');
+              if (!b) throw new Error('setup: no ' + key + ' tab on the phone sheet');
+              b.click(); await sleep(140);
+            }
+          };
+          return await fn(s);
+        } finally { try { FM.mobile.closeAdd(); } catch (e) {} await sleep(450); }
+      }, 380);
+    } finally {
+      KEYS.forEach(function (k) { try { if (saved[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, saved[k]); } catch (e) {} });
+      if (homeWasOpen && FM.home && FM.home.open) FM.home.open();
+    }
+  }
+  /* The PC's Add panel (nothing selected, so the inspector column holds the Add menu) at 1280, the same keys put back after.
+     F1 and F4 change the phone sheet only; this is their control that the PC panel keeps what it had. */
+  async function pcAddPanel1243(fn) {
+    const KEYS = ['fm.medialib', 'fm.addmenu'];
+    const saved = {};
+    KEYS.forEach(function (k) { try { saved[k] = localStorage.getItem(k); } catch (e) { saved[k] = null; } });
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const sel0 = FM.scene && FM.scene.selectedId;
+    try {
+      if (homeWasOpen) FM.home.close();
+      return await atWideWidth(async function () {
+        const panel = document.getElementById('inspector-panel');
+        FM.selectLayer(null);
+        if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh();
+        await sleep(150);
+        if (!panel || !panel.querySelector('.addmenu')) throw new Error('setup: at 1280 with nothing selected the inspector panel holds no Add menu');
+        return await fn({
+          panel: panel,
+          lib: function (list) { localStorage.setItem('fm.medialib', JSON.stringify(list)); },
+          tab: async function (key) {
+            const b = panel.querySelector('.addmenu .addmenu-tab[data-key="' + key + '"]');
+            if (!b) throw new Error('setup: no ' + key + ' tab in the PC Add panel');
+            b.click(); await sleep(160);
+          }
+        });
+      }, 1280);
+    } finally {
+      KEYS.forEach(function (k) { try { if (saved[k] == null) localStorage.removeItem(k); else localStorage.setItem(k, saved[k]); } catch (e) {} });
+      try { if (sel0 && FM.layerById(FM.scene, sel0)) FM.selectLayer(sel0); } catch (e) {}
+      if (homeWasOpen && FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open();
+    }
+  }
+  const IMP_VIDEO1243 = { mid: 't1243v', key: 'k1243v', name: 'Clip.mp4', kind: 'video', audio: false, w: 1080, h: 1920, dur: 4, added: 2 };
+  const IMP_SONG1243 = { mid: 't1243a', key: 'k1243a', name: 'Song.mp3', kind: 'video', audio: true, w: 0, h: 0, dur: 95, added: 1 };
+  const lbl1243 = function (c) { return ((c.querySelector('.addmenu-lbl') || {}).textContent || '').trim(); };
+
+  /* #1243 F1 — his words: "when you have no media or audio added, like all the buttons in those sections are massive. They
+     shouldn't go massive. They should stay small." (complex mode). */
+  test('1243 F1 · on a phone with nothing imported the Media and Audio buttons stay small — on one row in the strip at the top, none taller than 72 px, each the same size as with an import, and the empty library says one faint line (CONTROLS: Elements still fills the sheet, and at 1280 the PC panel keeps its grid)',{ item: '1243', budgetMs: 30000 }, async function () {
+    await phoneSheet1243(async function (s) {
+      const strip = async function (key) {
+        await s.tab(key);
+        return [].map.call(s.sheet.querySelectorAll('.addmenu-pinned .addmenu-card'), function (c) { return { label: lbl1243(c), r: c.getBoundingClientRect() }; });
+      };
+      for (const [key, imp] of [['media', IMP_VIDEO1243], ['audio', IMP_SONG1243]]) {
+        s.lib([]);
+        const empty = await strip(key);
+        if (!empty.length) throw new Error(key + ': with nothing imported its buttons are not in the small strip at the top — they are in the page grid the sheet stretches, his "massive" ones');
+        const below = s.sheet.querySelectorAll('.addmenu-body .addmenu-card');
+        if (below.length) throw new Error(key + ': with nothing imported ' + below.length + ' button(s) still sit in the page grid under the strip');
+        const big = empty.filter(function (c) { return c.r.height > 72; });
+        if (big.length) throw new Error(key + ': with nothing imported ' + big.map(function (c) { return c.label + ' is ' + Math.round(c.r.height) + ' px tall'; }).join(', ') + ' — "they should stay small"');
+        if (empty.some(function (c) { return Math.abs(c.r.top - empty[0].r.top) > 1; })) throw new Error(key + ': the buttons are not on one row');
+        const line = s.sheet.querySelector('.addmenu-body .am-lib-empty');
+        if (!line || line.textContent.trim() !== 'Your imports show up here') throw new Error(key + ': the empty library under the strip does not say one faint line (' + (line ? line.textContent : 'nothing there') + ')');
+        s.lib([imp]);
+        const one = await strip(key);
+        empty.forEach(function (c) {
+          const o = one.filter(function (x) { return x.label === c.label; })[0];
+          if (!o) throw new Error(key + ': ' + c.label + ' left the strip once something was imported');
+          if (Math.abs(o.r.height - c.r.height) > 1 || Math.abs(o.r.width - c.r.width) > 1) throw new Error(key + ': ' + c.label + ' is ' + Math.round(c.r.width) + '×' + Math.round(c.r.height) + ' with nothing imported and ' + Math.round(o.r.width) + '×' + Math.round(o.r.height) + ' with one import — it should be one size');
+        });
+      }
+      s.lib([]);
+      await s.tab('object');
+      const g = s.sheet.querySelector('.addmenu-body .addmenu-grid');
+      if (!g || !g.classList.contains('addmenu-grid--fill')) throw new Error('CONTROL: the Elements tab no longer fills the sheet (' + (g ? g.className : 'no grid') + '), so the small Media / Audio buttons above could be a fill that broke everywhere');
+    });
+    /* CONTROL at 1280: the PC panel is not the phone sheet and keeps its own fitted layout — with nothing imported Media's
+       buttons are still the page grid there, with no strip and no faint line (the plan: "At 1280 (control) … unchanged"). */
+    await pcAddPanel1243(async function (p) {
+      p.lib([]);
+      await p.tab('media');
+      const pinned = p.panel.querySelectorAll('.addmenu .addmenu-pinned .addmenu-card').length;
+      const grid = p.panel.querySelectorAll('.addmenu .addmenu-body .addmenu-grid .addmenu-card').length;
+      if (pinned || !grid || p.panel.querySelector('.am-lib-empty')) throw new Error('CONTROL: at 1280 the PC panel changed too — Media with nothing imported has ' + pinned + ' button(s) in a strip, ' + grid + ' in the grid' + (p.panel.querySelector('.am-lib-empty') ? ' and the faint line' : '') + '; F1 is the phone sheet only');
+    });
+  });
+
+  /* #1243 F4 — his words: "when you only have one template, it's like a massive picture in the template menu… in the add
+     menu… make it like the size it should be." */
+  test('1243 F4 · on a phone one template in the Add menu is one small tile — at most a third of the grid wide and 66 px tall, the same size as each of three, and the same with no picture saved — and one import in Media is the same small tile (CONTROLS: a page of buttons still fills, and at 1280 the PC panel never takes the picture grid)', { item: '1243', budgetMs: 40000 }, async function () {
+    if (!FM.templates || typeof FM.templates.list !== 'function') throw new Error('setup: FM.templates.list is missing');
+    const PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    const d0 = Object.getOwnPropertyDescriptor(FM.templates, 'list');
+    let n = 1, thumb = PNG;
+    Object.defineProperty(FM.templates, 'list', { configurable: true, writable: true, value: function () {
+      const out = []; for (let i = 0; i < n; i++) out.push({ id: 't1243_' + i, name: 'Look ' + (i + 1), thumb: thumb }); return out;
+    } });
+    try {
+      await phoneSheet1243(async function (s) {
+        const tiles = async function (key) {
+          await s.tab(key);
+          const grid = s.sheet.querySelector('.addmenu-body .addmenu-grid');
+          if (!grid) throw new Error('setup: the ' + key + ' tab drew no grid');
+          const gap = parseFloat(getComputedStyle(grid).columnGap) || 0, gw = grid.getBoundingClientRect().width;
+          return { grid: grid, maxW: (gw - 2 * gap) / 3 + 1, cards: [].map.call(grid.querySelectorAll('.addmenu-card'), function (c) { return c.getBoundingClientRect(); }) };
+        };
+        const small = function (t, what) {
+          const r = t.cards[0];
+          if (!r) throw new Error('setup: ' + what + ' drew no tile');
+          if (r.height > 66 || r.width > t.maxW) throw new Error(what + ' is a ' + Math.round(r.width) + '×' + Math.round(r.height) + ' picture (the grid is ' + Math.round(t.grid.getBoundingClientRect().width) + ' px wide) — "make it like the size it should be": one tile of three, at most ' + Math.floor(t.maxW) + '×66');
+          return r;
+        };
+        n = 1;
+        const r1 = small(await tiles('template'), 'one template');
+        n = 3;
+        const t3 = await tiles('template');
+        if (t3.cards.length !== 3) throw new Error('setup: three templates drew ' + t3.cards.length + ' tiles');
+        t3.cards.forEach(function (r, i) { if (Math.abs(r.width - r1.width) > 1 || Math.abs(r.height - r1.height) > 1) throw new Error('template ' + (i + 1) + ' of three is ' + Math.round(r.width) + '×' + Math.round(r.height) + ', the one on its own ' + Math.round(r1.width) + '×' + Math.round(r1.height) + ' — one template should be the size it is beside others'); });
+        /* A template saved before thumbs existed (or whose capture failed) has no picture and shows the glyph: on its own it
+           is still one small tile, not one card over the whole sheet (review of F4). */
+        n = 1; thumb = null;
+        const t0 = await tiles('template');
+        if (t0.grid.querySelector('img')) throw new Error('setup: the template with no thumb still drew a picture, so this is not the no-picture case');
+        small(t0, 'one template with no picture saved');
+        thumb = PNG;
+        s.lib([IMP_VIDEO1243]);
+        small(await tiles('media'), 'one import in Media');
+        n = 1;
+        await s.tab('object');
+        const g = s.sheet.querySelector('.addmenu-body .addmenu-grid');
+        if (!g || !g.classList.contains('addmenu-grid--fill')) throw new Error('CONTROL: a page of buttons (Elements) no longer fills the sheet (' + (g ? g.className : 'no grid') + '), so the small tiles above could be a fill that broke everywhere');
+      });
+      /* CONTROL at 1280: the PC panel keeps its fitted layout — one template there never takes the phone's picture grid. */
+      n = 1; thumb = PNG;
+      await pcAddPanel1243(async function (p) {
+        await p.tab('template');
+        const pg = p.panel.querySelector('.addmenu .addmenu-body .addmenu-grid');
+        if (!pg || !pg.querySelector('.addmenu-card')) throw new Error('setup: the PC panel’s Template tab drew no tile');
+        if (pg.classList.contains('addmenu-grid--pics')) throw new Error('CONTROL: at 1280 the PC panel took the phone’s picture grid too (' + pg.className + ') — F4 is the phone sheet only');
+      });
+    } finally {
+      if (d0) Object.defineProperty(FM.templates, 'list', d0); else delete FM.templates.list;
+    }
+  });
+
+  /* #1243 F5 — his words: "there's like an animation to close like the add layer on the complex editor whenever you actually
+     add something. And I hate that because it just takes so long. Just make it so it instantly disappears and shows you your
+     thing that you want to be working on." */
+  test('1243 F5 · on a phone, adding something from the Add menu closes it at once — after the row’s stretch, the empty project’s circle and with the switch off, the menu is off the screen in the same task with no animation and no dim, skin, edge or ring left (CONTROL: closing it with the grab still animates)', { item: '1243', budgetMs: 40000 }, async function () {
+    let mem = null; try { mem = localStorage.getItem('fm.addmenu'); } catch (e) {}
+    const twoFrames = function () { return new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); }); };
+    const pick = function (sheet) {
+      const tb = sheet.querySelector('.addmenu-tab[data-key="shape"]');
+      if (!tb) throw new Error('setup: no Shape tab on the phone sheet');
+      tb.click();
+      const card = sheet.querySelector('.addmenu-body .addmenu-card');
+      if (!card) throw new Error('setup: the Shape tab has no card to add');
+      card.click();
+    };
+    const gone = function (sheet, how) {
+      if (sheet.classList.contains('open')) throw new Error(how + ': adding a shape left the Add menu open');
+      const a = sheet.getAnimations();
+      if (a.length) throw new Error(how + ': the menu is still animating after the add (' + a.map(function (x) { return x.id || x.animationName || x.transitionProperty || '?'; }).join(', ') + ') — his words: "instantly disappears and shows you your thing"');
+      const left = document.querySelector('.add-stretch-dim, .add-stretch-skin, .add-stretch-edge, .add-grow-ring');
+      if (left) throw new Error(how + ': ' + left.className + ' is still on the screen after the add');
+      const top = sheet.getBoundingClientRect().top;
+      if (top < window.innerHeight - 1) throw new Error(how + ': after the add the menu’s top is at ' + Math.round(top) + ', not off the bottom of the screen (' + window.innerHeight + ')');
+    };
+    try {
+      await grow1084(true, function () { return onRows1084(async function (c) {
+        try {
+          c.tap();
+          if (!clipAnim1084(c.sheet)) throw new Error('setup: the row did not stretch into the menu, so this is not the stretch case');
+          pick(c.sheet);
+          gone(c.sheet, 'after the row’s stretch');
+          await twoFrames();
+          gone(c.sheet, 'two frames after the add, after the row’s stretch');
+        } finally { await shutRow1084(c); }
+      }); });
+      await grow1084(true, function () { return onEmptyArea964(async function (c) {
+        const sheet = document.getElementById('add-sheet');
+        try {
+          tap1084(c, 0.5, 0.6);
+          if (!clipAnim1084(sheet)) throw new Error('setup: the empty project’s tap did not grow the menu as a circle, so this is not the circle case');
+          pick(sheet);
+          gone(sheet, 'after the empty project’s circle');
+        } finally { await shut1084(c); }
+      }); });
+      await grow1084(false, function () { return onRows1084(async function (c) {
+        try {
+          c.tap(); await sleep(420);
+          if (!c.sheet.classList.contains('open')) throw new Error('setup: with the switch off the row did not open the menu');
+          pick(c.sheet);
+          gone(c.sheet, 'with the switch off');
+          await twoFrames();
+          gone(c.sheet, 'two frames after the add, with the switch off');
+          /* CONTROL (queue 773): a DISMISSAL keeps its motion — the grab slides it down. */
+          FM.mobile.openAdd(); await sleep(420);
+          document.getElementById('add-grab').click();
+          await twoFrames();
+          if (!c.sheet.getAnimations().length) throw new Error('CONTROL: closing with the grab ran no animation either, so the empty list above proves nothing');
+        } finally { await shutRow1084(c); }
+      }); });
+    } finally { try { if (mem == null) localStorage.removeItem('fm.addmenu'); else localStorage.setItem('fm.addmenu', mem); } catch (e) {} }
+  });
+
+  /* #1243 G7 — his words: "when you tap on the tap to add layer, the like bottom line goes solid, but the top line stays dotted.
+     I don't like that. Like, if you tap and hold on it, you can notice that." */
+  test('1243 G7 · on a phone, holding Tap to add a layer lights the dashed box’s four edges the same solid way while the row’s own top and sides stay unlit, letting go puts it back, and no rule lights the row’s own border on a sticky hover (CONTROLS: at rest the box is dashed, and the stylesheet reader finds the row’s own rule)', { item: '1243', budgetMs: 20000 }, async function () {
+    const rules = [];
+    const walk = function (list, hov) {
+      [].forEach.call(list, function (r) {
+        if (r.media && r.cssRules) walk(r.cssRules, hov || /\(\s*hover\s*:\s*hover\s*\)/.test(r.media.mediaText));
+        else if (r.selectorText) rules.push({ r: r, hov: hov });
+        else if (r.cssRules) walk(r.cssRules, hov);
+      });
+    };
+    [].forEach.call(document.styleSheets, function (sh) { if (/styles\.css/.test(sh.href || '')) { try { walk(sh.cssRules, false); } catch (e) {} } });
+    /* getPropertyValue, not .borderBottomStyle: the separator's colour is a var(), and a longhand of a shorthand holding a var()
+       reads empty in the CSSOM */
+    if (!rules.some(function (x) { return x.r.selectorText === '.tl-addrow' && /\bsolid\b/.test(x.r.style.getPropertyValue('border-bottom')); })) throw new Error('CONTROL: the stylesheet reader did not find the row’s own rule (its solid separator), so it could not find a bad one either');
+    const bad = rules.filter(function (x) {
+      return !x.hov && x.r.style.borderColor && x.r.selectorText.split(',').some(function (s) { return /^\.tl-addrow:(hover|focus-visible)$/.test(s.trim()); });
+    });
+    if (bad.length) throw new Error('a rule outside (hover: hover) still recolours the row’s own border on :hover / :focus-visible (' + bad.map(function (x) { return x.r.selectorText; }).join(' | ') + ') — on a phone a press is a sticky hover, and that lights a dotted top over a solid bottom');
+    return onRows1084(async function (c) {
+      const row = c.rowNow();
+      const pre = function () { return getComputedStyle(row, '::before'); };
+      if (pre().borderTopStyle !== 'dashed') throw new Error('CONTROL: at rest the add row’s box is not dashed (' + pre().borderTopStyle + '), so this cannot see it change');
+      const b = row.getBoundingClientRect();
+      const o = { bubbles: true, cancelable: true, clientX: Math.round(b.left + Math.min(b.width * 0.6, 220)), clientY: Math.round(b.top + b.height / 2), pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0 };
+      row.dispatchEvent(new PointerEvent('pointerdown', Object.assign({}, o, { buttons: 1 })));
+      try {
+        const p = pre(), cs = getComputedStyle(row);
+        const styles = ['Top', 'Right', 'Bottom', 'Left'].map(function (k) { return p['border' + k + 'Style']; });
+        if (styles.some(function (st) { return st !== 'solid'; })) throw new Error('held, the box’s edges are ' + styles.join(' / ') + ' (top / right / bottom / left) — his words: "the bottom line goes solid, but the top line stays dotted"; held, all four should be solid');
+        if (p.borderTopColor !== p.borderBottomColor) throw new Error('held, the box’s top is ' + p.borderTopColor + ' and its bottom ' + p.borderBottomColor + ' — two different lines');
+        ['Top', 'Left', 'Right'].forEach(function (k) {
+          const col = cs['border' + k + 'Color'];
+          if (!/rgba\(0, 0, 0, 0\)|transparent/.test(col)) throw new Error('held, the row’s own ' + k.toLowerCase() + ' edge is lit (' + col + ') around the box — a second outline');
+        });
+      } finally { row.dispatchEvent(new PointerEvent('pointerup', Object.assign({}, o, { buttons: 0 }))); }
+      if (row.classList.contains('is-pressed')) throw new Error('letting go left the row pressed');
+      if (pre().borderTopStyle !== 'dashed') throw new Error('letting go did not put the dashed box back (' + pre().borderTopStyle + ')');
+    });
+  });
+
+  /* #1243 G9 — his words: "you have the friends button with like a plus. In the top left in there, get rid of that. We do not
+     need that. All right, and make sure it's gone in everything, like not a single trace of it found." */
+  test('1243 G9 · no friends person+ anywhere — at 380 and 1280, in Full and in Simple, the feature off and on, and in a live session with nobody in, there is no #btn-share, no person+ look and no person+ drawing in the page (CONTROLS: with a friend in the faces chip shows, and the people door still opens Friends)', { item: '1243', budgetMs: 120000 }, async function () {
+    const C = need921S7('the person+ sweep');
+    const was = FM.settings.get('collabLabs');
+    const homeWasOpen = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const PLUS = 'M19 8v6M16 11h6';
+    const noTrace = function (where) {
+      if (document.getElementById('btn-share')) throw new Error(where + ': #btn-share is in the page — "get rid of that… not a single trace"');
+      const look = document.querySelector('.cp-invite, .cs-door, .cs-stagebtn');
+      if (look) throw new Error(where + ': ' + (look.id || look.className) + ' still wears the person+ look');
+      const path = [].filter.call(document.querySelectorAll('svg path'), function (p) { return (p.getAttribute('d') || '').indexOf(PLUS) >= 0; })[0];
+      if (path) throw new Error(where + ': the person+ drawing (' + PLUS + ') is in the page');
+      const chip = document.getElementById('collab-people');
+      if (chip && chip.getClientRects().length && !chip.querySelector('.cp-av')) throw new Error(where + ': an empty people chip is on the video — it was the person+');
+    };
+    const wasSimple = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
+    try {
+      if (homeWasOpen) FM.home.close();
+      /* In Full and in Simple (the plan's G9 tests): both editors draw the same #stage, and "gone in everything" is both. */
+      for (const ed of ['full', 'simple']) {
+        if (!FM.editor || !FM.editor.apply) throw new Error('setup: no editor switch to reach ' + ed);
+        FM.editor.apply(ed, { force: true, quiet: true }); await sleep(250);
+        const inEd = function (where) {
+          if (document.body.classList.contains('ed-simple') !== (ed === 'simple')) throw new Error('setup: ' + where + ' is not in the ' + ed + ' editor, so this did not look at it');
+          return ed + ', ' + where;
+        };
+        for (const on of [false, true]) {
+          FM.settings.set('collabLabs', on); C.ui.syncLabs();
+          await atPhoneWidth(async function () { await settle921(120); noTrace(inEd('380, the feature ' + (on ? 'on' : 'off'))); }, 380);
+          await atWideWidth(async function () { await settle921(120); noTrace(inEd('1280, the feature ' + (on ? 'on' : 'off'))); }, 1280);
+        }
+        if (ed === 'simple') {
+          await withLabs921(async function (ui) {
+            await withCollab921([layer921('A')], async function () {
+              /* the session's project opens in its own editor (Full): put this one in Simple too */
+              FM.editor.apply('simple', { force: true, quiet: true }); await sleep(250);
+              await atPhoneWidth(async function () { ui.syncBanner(); C.presence.tick(); C.presence._draw(); await settle921(150); noTrace(inEd('a live session with nobody in, at 380')); }, 380);
+              await atWideWidth(async function () { ui.syncBanner(); C.presence.tick(); C.presence._draw(); await settle921(150); noTrace(inEd('a live session with nobody in, at 1280')); }, 1280);
+            });
+          });
+        }
+      }
+      FM.editor.apply('full', { force: true, quiet: true }); await sleep(250);
+      await withLabs921(async function (ui) {
+        await withCollab921([layer921('A')], async function (ctx) {
+          const k = clock921(C);
+          try {
+            await atPhoneWidth(async function () { ui.syncBanner(); C.presence.tick(); C.presence._draw(); await settle921(150); noTrace('a live session with nobody in, at 380'); }, 380);
+            await atWideWidth(async function () { ui.syncBanner(); C.presence.tick(); C.presence._draw(); await settle921(150); noTrace('a live session with nobody in, at 1280'); }, 1280);
+            rawGuest921(ctx, 'Sam', C.presence.PALETTE[0]).pr({});
+            k.step(100);
+            await atPhoneWidth(async function () {
+              C.presence.tick(); C.presence._draw(); await settle921(150);
+              const chip = document.getElementById('collab-people');
+              if (!chip || !chip.getClientRects().length || !chip.querySelector('.cp-av')) throw new Error('CONTROL: with a friend in, the faces chip is not on the video (' + (chip ? chip.className : 'no chip') + ') — it must still say who is here');
+              noTrace('a friend in, at 380');
+            }, 380);
+          } finally { C.presence._clock(null); }
+        });
+        await with945(async function () {
+          await atPhoneWidth(async function () {
+            const dlg = document.getElementById('canvas-dialog');
+            ui.openPeople(); await entranceDone(dlg); await land945();
+            if (!open945(dlg) || !dlg.classList.contains('cv-fr-big')) throw new Error('CONTROL: the people door did not open Canvas settings with Friends big — the feature must stay reachable');
+            noTrace('Friends open at 380');
+            FM.closeCanvasDialog(); await settle921(80);
+          }, 380);
+        });
+      });
+    } finally {
+      try { FM.editor.apply(wasSimple ? 'simple' : 'full', { force: true, quiet: true }); } catch (e) {}
+      FM.settings.set('collabLabs', !!was); C.ui.syncLabs();
+      if (homeWasOpen && FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open();
+    }
   });
 })();

@@ -83,13 +83,20 @@
         /* …and the collab UI (5 Oct): a relaunched frame under load can have its project before js/collab-ui.js has run, and
            every act that reads C.ui then threw "Cannot read properties of undefined (reading '_relay')" — v17.23's phone
            pass went red on 967 5 for exactly that, and the test passed alone twice. Ready means the whole app is there. */
-        if (FM.scene && FM.scene.project && FM.storage && FM.projects && FM.projects.currentId() && (!FM.collab || FM.collab.ui)) break;
+        /* …and LANDED (20 Nov, #1243 F-1's full pass). FM.scene.project exists from app.js's first line (FM.newScene(), no
+           layers) and currentId() reads fm.currentProject, which a reload keeps — so both held BEFORE the boot's
+           storage.load() had put the project into the scene. This agent is a dynamically inserted async=false script: it runs
+           as soon as it is fetched, which can be before DOMContentLoaded and init(). Measured: 3 reboots in 10 answered ready
+           with the boot's load not finished (FM_LANDED false), and in a full pass 690's second-window test read a reloaded
+           window's layers as [] — Title and Before gone too, which no refused save can do. window.FM_LANDED is the app's
+           own "the boot's load has finished" (app.js sets it on every path, a failed load and a fresh start included). */
+        if (FM.scene && FM.scene.project && FM.storage && FM.projects && FM.projects.currentId() && (!FM.collab || FM.collab.ui) && window.FM_LANDED === true) break;
         /* queue 936: a real fresh start (`fmseed=0`) has NO project and never will until one is made — the boot is
            done when Home is up. A seeded instance still has its project first: migrate() sets it before Home opens. */
         if (/(^|[?&])fmseed=0(&|$)/.test(location.search) && FM.home && FM.home.isOpen && FM.home.isOpen()) break;
         await sleep(100);
       }
-      return { tag: TAG, pid: FM.projects.currentId(), phone: !!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()), w: window.innerWidth };
+      return { tag: TAG, pid: FM.projects.currentId(), phone: !!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()), w: window.innerWidth, landed: window.FM_LANDED === true };
     },
     state: function () {
       const S = C.session;

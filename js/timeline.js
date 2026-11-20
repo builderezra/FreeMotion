@@ -3446,6 +3446,15 @@ window.FM = window.FM || {};
     pulse.addEventListener('animationend', () => pulse.classList.remove('is-pulsing'));
     // queue 964: on the empty screen the AREA pulse answers a press; this row-sized band would be a second box
     if (!empty) row.addEventListener('pointerdown', firePulse);
+    /* #1243 G7 — his words: "when you tap on the tap to add layer… the bottom line goes solid, but the top line stays dotted…
+       tap and hold… you can notice that." The press used to be the row's :hover (sticky on a phone), which lit the ROW's own
+       border — dashed on three sides, the solid separator on the fourth — round the separate dashed box. Now the press is a
+       class while the finger is down, and it lights only the dashed box (::before, styles.css): all four edges go solid. */
+    if (!empty) {
+      const unpress = () => row.classList.remove('is-pressed');
+      row.addEventListener('pointerdown', () => row.classList.add('is-pressed'));
+      ['pointerup', 'pointercancel', 'pointerleave', 'lostpointercapture'].forEach(ev => row.addEventListener(ev, unpress));
+    }
     const open = (e) => {
       if (e) { e.preventDefault(); e.stopPropagation(); }
       /* On a phone this is the sheet the + button used to open. On PC there is no + and no sheet — the

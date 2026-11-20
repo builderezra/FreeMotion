@@ -4067,24 +4067,16 @@ window.FM = window.FM || {};
   /* #912 clause 4 — "Any static menu that's doesnt have any animation when u open it up give it one."
      refresh() rebuilds the whole panel on EVERY edit (a slider drag is dozens a second), so an entrance
      cannot live on a class the builders always add — it would replay under his finger. Both of these
-     say what CHANGED instead, and each is spent by exactly one rebuild:
-     `lastAnim` is where the panel was (layer, view, depth), so moving between levels can be told apart
-     from redrawing the same one; `pendingReveal` is set by the one control that just opened something
-     inline (a blend group, a tile's rows, a tab) and names what to bring in. */
-  let lastAnim = null, pendingReveal = null;
-  /* The drill-in is the options rails' own motion (sb-panel-in, styles.css) — the new level is revealed
-     from the right, and ‹ back reveals the level you return to from the left, the way the arrow points.
-     Depth, not view, decides the direction: grid 0, a category 1, an easing curve inside it 2. Only a
-     move on the SAME layer counts; picking another layer is not a drill and already has its own motion
-     (the phone sheet slides, the PC column swaps). */
-  function animateNav(root, layer) {
-    const depth = view === 'home' ? 0 : (root.querySelector('.es-inline') ? 2 : 1);
-    const sig = view + '/' + depth;
-    if (lastAnim && lastAnim.layer === layer.id && lastAnim.sig !== sig) {
-      const target = root.querySelector(depth === 0 ? ':scope > .cat-wrap' : ':scope > .cat-body');
-      if (target) target.classList.add(depth < lastAnim.depth ? 'cat-in-back' : 'cat-in');
-    }
-    lastAnim = { layer: layer.id, sig: sig, depth: depth };
+     say what CHANGED instead, and is spent by exactly one rebuild: `pendingReveal` is set by the one control
+     that just opened something inline (a blend group, a tile's rows) and names what to drop in. */
+  let pendingReveal = null;
+  /* #1243 F8 — REVERSES #912's DRILL-IN FOR THE LAYER PANEL. His words: "get rid of the animation that's like a black
+     swipe… whenever you… open up any menu in… the settings… when you tap on a layer… effects and speed… don't have that
+     little wipe effect." #912 revealed a new level (a category, ‹ back to the grid, an easing curve) and a tab's panes with
+     the options rails' clip-path wipe (sb-panel-in); they now simply appear, with no class and no record of where the panel
+     was. A tile's rows and an opened blend group still drop in (insp-drop-in, a drop, not a wipe). The same panel draws
+     the other editor's More / Style panel for an item, so the wipe is gone there too — his words cover any layer menu. */
+  function animateNav(root) {
     const rv = pendingReveal; pendingReveal = null;
     if (!rv) return;
     if (rv.sel) {   // one element that just opened (the accordion keeps at most one of each)
@@ -4093,9 +4085,6 @@ window.FM = window.FM || {};
     } else if (rv.sub) {   // a tile switched on: its heading and every row under it, up to the next heading
       const head = [].slice.call(root.querySelectorAll('.bs-sub')).filter(h => h.textContent === rv.sub)[0];
       for (let n = head; n && (n === head || !n.classList.contains('bs-sub')); n = n.nextElementSibling) n.classList.add('insp-drop-in');
-    } else if (rv.after) {   // a tab: everything below the tab row, from the side the new tab sits on
-      const bar = root.querySelector(rv.after);
-      for (let n = bar && bar.nextElementSibling; n; n = n.nextElementSibling) n.classList.add(rv.left ? 'cat-in-back' : 'cat-in');
     }
   }
   function homeRowSig() {
@@ -7321,7 +7310,7 @@ window.FM = window.FM || {};
       // Audio Effects go" is the first thing on screen.
       const tab = fxTabFor(layer);
       const TABS = ['visual', 'filters', 'audio'];
-      body.appendChild(fxModeToggle(layer, tab, k => { clearFilterPreview(); pendingReveal = { after: '.fxmode', left: TABS.indexOf(k) < TABS.indexOf(tab) }; fxTab = k; FM._fxEasing = null; kfNavSync(); FM.inspector.refresh(); }));   // queue 729; #912 reveal. kfNavSync (queue 690): the audio side arms a different stack's keyframes
+      body.appendChild(fxModeToggle(layer, tab, k => { clearFilterPreview(); fxTab = k; FM._fxEasing = null; kfNavSync(); FM.inspector.refresh(); }));   // queue 729; no reveal since #1243 F8. kfNavSync (queue 690): the audio side arms a different stack's keyframes
       // An unknown audio answer rendered as available; settle it and demote the toggle if it's a no.
       probeAudioSide(layer, id => { const cur = FM.selectedLayer(FM.scene); if (cur && cur.id === id && view === 'effects') FM.inspector.refresh(); });
       if (tab === 'filters') {
@@ -8021,7 +8010,7 @@ window.FM = window.FM || {};
         // Clearing lastLayerId means re-selecting a layer (even the SAME one) reopens at the category
         // GRID, not the sub-menu you last had open — deselecting is a clean reset (Ezra).
         lastLayerId = null;
-        lastAnim = null; pendingReveal = null;   // #912: nothing to drill from, and nothing left to reveal
+        pendingReveal = null;   // #912: nothing left to reveal
         if (FM.pointEdit && FM.pointEdit.isActive() && FM.pointEdit.isEmbedded()) FM.pointEdit.stop();   // deselect ends Edit Points
         if (FM.fillDrag && FM.fillDrag.isActive()) FM.fillDrag.stop();                                   // …and hands the canvas back from the fill drag
         if (title) title.textContent = 'Add';
