@@ -252,7 +252,12 @@ window.FM = window.FM || {};
       /* #1243 S26: a grip whose footage has run out (its spoken name's tail) and the drag tip when he pulls it past the end */
       footageEnds: 'the footage ends here', footageEndTip: 'End of the footage',
       addWhere: 'Add clips', atEnd: 'At the end', afterClip: 'After ', afterCard: 'After the card', beforeFirst: 'Before Clip 1',
-      exportAt: p => p + 'p · Export', exportTitle: 'Export video',   // 2.7 (SU1 #20): Simple's Export list
+      /* #1243 S6 A: Simple's Export panel (his words: "Just make an export menu, but make it simple and easy to read"): the panel's name, its
+         two rows and their choices, the size and the one button. No explanations (his H3). */
+      exportTitle: 'Export video', exportHead: 'Export', exportQuality: 'Quality', exportSmooth: 'Smoothness',
+      exportRung: p => p >= 2160 ? '4K' : p + 'p', exportFps: f => (Math.round(f * 100) / 100) + ' fps',
+      exportSize: s => 'About ' + s, exportGo: 'Save video', exportEmpty: 'Add a clip first, then export it',
+      exportLen: s => { s = Math.max(0, +s || 0); if (s > 0 && s < 1) return (Math.round(s * 10) / 10) + ' s'; s = Math.round(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); },
       music: 'Music from your files', sfx: 'Sound effects', voice: 'Record voice', closeAll: 'Close all gaps',   // (moreOpts went with Simple's ⋯, #1243 S5; review L3-10)
       /* #1243 S4 step 4: "Its tools are below" everywhere (no More to open the rest; the PC's two rows went in release 8) */
       selected: n => n + ' selected', bandHint: 'Tap a clip to see its tools', bandHintSel: 'Its tools are below',

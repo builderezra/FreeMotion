@@ -6,7 +6,7 @@
  *   item    — the selection's tools (#sm-tray), a ‹ first that clears the selection;
  *   sub     — a row that replaces the bar (#sm-tray again): a ‹ back one level, then that row's choices (Clips, Sound,
  *             Captions, the effects pickers, Speed, Volume, Opacity, Transform, Fade, Strength, Transition — the SUBS table);
- *   panel   — a panel is up (a text's Style, Edit lines, Extras, and Look, the project's since #1243 S12): the bar hides, the panel has the room.
+ *   panel   — a panel is up (a text's Style, Edit lines, Extras, and Look, the project's since #1243 S12; Export, from the Export button, since #1243 S6): the bar hides, the panel has the room.
  * Every row is one strip that scrolls sideways with fades at the edge that hides tools (S15: "make it like CapCut where you
  * can scroll it"), never squeezed. Simple's spoken lines float as a 44 px strip just above the bar (#sm-say), so nothing moves.
  * #1243 R release 8 (THE TRAYS): one tray order with section lines between its groups and Delete last, scrolling with the rest (S31);
@@ -88,7 +88,7 @@ window.FM = window.FM || {};
   const svg = n => '<svg viewBox="0 0 24 24" class="sm-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICON[n] || ICON.more) + '</svg>';
   const W = () => (FM.spineWords && FM.spineWords.tools) || {};
   const phone = window.matchMedia ? window.matchMedia('(max-width: 700px)') : { matches: false };
-  let bar = null, tray = null, tools = null, menu = null;
+  let bar = null, tray = null, tools = null;   // (the floating list, `menu`, went with its last user: Export is a panel since #1243 S6)
   let panelFor = null, lastSig = '', lastSel = null;
   /* #1243 S9: THE SUB-ROW ON THE BAR ({key: a SUBS key, id: the item it acts on or null, from: the sub ‹ returns to, sel: the
      selection it was opened with — any other selection closes it}); the data-tool focus goes to after a ‹ */
@@ -214,21 +214,21 @@ window.FM = window.FM || {};
        and Loop and preview speed stays Full's. #1243 S34 A: LINK takes the play row's first place, one switch for the whole project. */
     const lk = document.getElementById('btn-sm-link');
     if (lk) lk.addEventListener('click', () => { if (isSimple() && FM.spine && FM.spine.cmd && FM.spine.linkMode) FM.spine.cmd.link(!FM.spine.linkMode()); });
-    document.addEventListener('pointerdown', e => { if (menu && !menu.contains(e.target)) closeMenu(); }, true);
     /* 2.7 (SU1 #13): the first-run hint goes on the first tap anywhere, and only then is it remembered (hintSync) */
     window.addEventListener('pointerdown', () => { if (hintUp && isSimple()) dismissHint(); }, true);
-    /* 2.7 (SU1 #20, his "2A" 14 Oct): SIMPLE'S EXPORT IS ONE SHORT LIST, not Full's dialog (120 fps, Custom, "Export just this layer",
-       the loop region). Capture phase on the button both editors share (the phone's ⬆ clicks it), only while Simple is on screen (as
-       Simple's ⋯ did until #1243 S5 took it off the play row). Pressed again it closes the list, as Full's button closes its dialog (queue 925): the outside-tap close above runs
-       first on a press, so the press remembers whether the list was up. */
+    /* 2.7 (SU1 #20, his "2A" 14 Oct): SIMPLE'S EXPORT IS ITS OWN, not Full's dialog (120 fps, Custom, "Export just this layer", the loop
+       region). Capture phase on the button both editors share (the phone's ⬆ clicks it), only while Simple is on screen (as Simple's ⋯
+       did until #1243 S5 took it off the play row). #1243 S6 (his words: "Just make an export menu, but make it simple and easy to
+       read"): it opens Simple's Export PANEL (exportPanel below), and pressed again it closes it, as Full's button closes its dialog
+       (queue 925). In Full this listener returns at once, so Full's Export is today's. */
     const xb = document.getElementById('btn-export');
-    let xUpAt = 0;
-    window.addEventListener('pointerdown', () => { xUpAt = (menu && menu.dataset.kind === 'export') ? Date.now() : 0; }, true);
     if (xb) xb.addEventListener('click', e => {
       if (!isSimple()) return;
       e.stopImmediatePropagation(); e.preventDefault();
-      if ((menu && menu.dataset.kind === 'export') || Date.now() - xUpAt < 800) { closeMenu(); xUpAt = 0; return; }
-      exportMenu(['m-export', 'btn-export'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length) || xb);
+      if (exportUp()) { FM.simpleTools.closePanel(); return; }
+      /* a viewer whose owner turned exporting off is told at once, as Full's dialog tells him before it opens (js/app.js exportTurnedOff) */
+      if (FM.exportTurnedOff && FM.exportTurnedOff()) { if (FM.sayExportTurnedOff) FM.sayExportTurnedOff(); return; }
+      FM.simpleTools.openExport();
     }, true);
     /* A PLAIN MOUSE WHEEL SCROLLS THE TRAY SIDEWAYS (review finding 22, his #976: "on pc without trackpad there seems to be no
        way to slide"). Only a vertical wheel over a row that overflows, and only while it can still move; a trackpad's own
@@ -289,7 +289,7 @@ window.FM = window.FM || {};
           Math.abs(e.clientX - lastPress.x) < 24 && Math.abs(e.clientY - lastPress.y) < 24) return;
       if (e.detail >= 1) lastPress = { key: key, fill: fills, row: rowN, at: performance.now(), x: e.clientX, y: e.clientY };
       if (b.getAttribute('aria-disabled') === 'true') { if (t.rest) t.rest(b, e); else if (t.why && FM.spine) FM.spine.say(t.why); return; }   // t.rest: a resting tool whose why has a button (release 8b review)
-      closeMenu(); t.run(b, e);
+      t.run(b, e);
     });
     return b;
   }
@@ -1112,52 +1112,173 @@ window.FM = window.FM || {};
     lastSig = ''; FM.simpleTools.sync();   // the hint goes (hintSync)
   }
 
-  /* ═══ Simple's Export: a small list above the button, one ≥ 44 px row per choice (Clips', Sound's and Captions' lists are sub-rows
-     since #1243 S9, and ⋯'s left Simple with #1243 S5; this one stays a list until #1243 S6). ═══ */
-  function closeMenu() { if (menu) { menu.remove(); menu = null; } }
-  function openMenu(anchor, items) {
-    closeMenu();
-    menu = el('div', 'sm-menu'); menu.setAttribute('role', 'menu');
-    items.forEach(it => { const b = el('button', 'sm-menu-i', it.label); b.type = 'button'; b.setAttribute('role', 'menuitem'); b.addEventListener('click', e => { e.stopPropagation(); closeMenu(); it.run(); }); menu.appendChild(b); });
-    /* THE LIST OWNS ITS KEYS (review finding 26; the pattern of js/contextmenu.js's role=menu): ↑/↓/Home/End move between
-       choices, Esc closes it and gives focus back to the button that opened it, and Space / Enter / Backspace / Delete stay
-       with the focused choice. Without this they reached Full's window handler: ↓ nudged the selected clip's picture a
-       pixel (a hidden canvas edit), Backspace deleted the clip, Esc deselected it and left the list open. Letter
-       shortcuts (A / S / D, ⌘Z) still reach the app. */
-    menu.addEventListener('keydown', e => {
-      const its = Array.from(menu.querySelectorAll('.sm-menu-i')), i = its.indexOf(document.activeElement);
-      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMenu(); if (anchor && anchor.isConnected) anchor.focus({ preventScroll: true }); return; }
-      if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
-        e.preventDefault(); e.stopPropagation();
-        const n = e.key === 'Home' ? 0 : e.key === 'End' ? its.length - 1 : e.key === 'ArrowDown' ? (i + 1) % its.length : (i - 1 + its.length) % its.length;
-        if (its[n]) its[n].focus({ preventScroll: true });
-        return;
-      }
-      if (e.key === ' ' || e.key === 'Enter' || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') e.stopPropagation();
-    });
-    /* …and their keyups: Full's arrow keyup commits a pending nudge, which is not the list's to commit */
-    menu.addEventListener('keyup', e => { if (/^(Arrow|Home$|End$|Escape$|Enter$| $|Backspace$|Delete$)/.test(e.key)) e.stopPropagation(); });
-    document.body.appendChild(menu);
-    const r = anchor.getBoundingClientRect(), mr = menu.getBoundingClientRect();
-    const left = Math.max(8, Math.min(window.innerWidth - mr.width - 8, r.left));
-    const top = r.top - mr.height - 6 >= 8 ? r.top - mr.height - 6 : r.bottom + 6;
-    menu.style.left = left + 'px'; menu.style.top = top + 'px';
-    const first = menu.querySelector('button'); if (first) first.focus({ preventScroll: true });
+  /* ═══ #1243 S6 A: SIMPLE'S EXPORT MENU (1243-B "S6", 1243-R (c) row 12). ═══
+     His words (8 Nov): "the export on simple mode is really bad… it literally just says, do you want 1080p export or 720p export? And then
+     it starts exporting. Just make an export menu, but make it simple and easy to read."
+     Option A (RECOMMENDED; B: three tiles Small · Standard · Best that export on one tap, C: A plus "More options ›" into Full's dialog):
+     ONE card, top to bottom: the frame at the playhead and the video's length; Quality (720p · 1080p · 4K); Smoothness (30 · 60 fps, and the
+     project's own rate when it is neither); "About 28 MB"; one big Save video. No explanations (his H3). It is a PANEL (1243-R rule 3): on a
+     phone the sheet from the stage's bottom edge (js/mobile.js raises it through projectPanel, as for Look), on a PC the whole left band (D20
+     A), the bar hidden; nothing starts until Save video is pressed (his "And then it starts exporting" is the fault).
+     It runs through what js/app.js already exposes (FM.exportSimple: the dialog's own gates, then runExport with these fixed settings, an
+     MP4, never saved as the dialog's defaults) — js/exporter.js and js/app.js are not touched, so Full's Export is exactly today's. */
+  const EXPORT_Q = 0.18;                 // Full's High quality, the one Simple has always used (2.7, SU1 #20)
+  const EXPORT_KEY = 'fm.sm.export';     // his last pick on this device ({p, fps}); never the dialog's own memory (fm.exportPrefs)
+  let expP = 0, expFps = 0, posterAt = NaN, posterCv = null;
+  const exportUp = () => {
+    if (panelFor !== PROJECT || panelKind !== 'export' || (FM.selectionIds ? FM.selectionIds() : []).length) return false;
+    if (!phone.matches) return true;
+    const s = document.getElementById('inspector-panel');
+    return !!(s && s.classList.contains('open'));
+  };
+  /* the Export button on screen (the phone's ⬆ or the PC's), where focus goes back to when the panel closes */
+  const exportBtn = () => ['m-export', 'btn-export'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length) || null;
+  const expShort = () => { const P = FM.scene.project || {}; return Math.min(+P.width || 0, +P.height || 0); };
+  /* Quality's rungs, by the frame's short side, NEVER an upscale (today's rule, 2.7): 720p and 1080p when the frame is that big, 4K only
+     when its short side is 2160 or more (1243-B S6 change 2), and a frame below 4K that is not a rung also offers its own size, so the
+     file can always be the frame's own size (a 900 px frame: 720p · 900p; a 240 px one: 240p alone; a 1440 px one: 720p · 1080p · 1440p;
+     review R12-5: an own size only under 1080 left a 1440p project no way to export at its size) */
+  function exportRungs() {
+    const short = expShort(), out = [720, 1080, 2160].filter(p => p <= short);
+    if (short > 0 && short < 2160 && out.indexOf(short) < 0) out.push(short);
+    return out.sort((a, b) => a - b);
   }
-
-  /* 2.7 (SU1 #20): "1080p · Export" (and 720p when the frame is bigger than that; a smaller frame offers its own size, never an upscale):
-     an MP4 at the project's frame rate and Full's default High quality, of the clips (and an end card after them: #1243 S37 review, it is
-     content and his timeline says it is kept) — 0 to the end of the last clip, so the black a song or a title runs on into is never in the file. app.js runs it through the dialog's own gates and exporter (FM.exportSimple), and
-     never saves it as the dialog's defaults. */
-  function exportMenu(anchor) {
-    const P = FM.scene.project || {}, w = W(), short = Math.min(+P.width || 0, +P.height || 0);
+  /* Smoothness: 30 and 60, and the project's own rate when it is neither (24, 25, …) */
+  function exportRates() {
+    const pf = +(FM.scene.project || {}).fps || 30, out = [30, 60];
+    if (!out.some(f => Math.abs(f - pf) < 1e-6)) out.push(pf);
+    return out.sort((a, b) => a - b);
+  }
+  /* 0 to the end of the last clip (and an end card after them: #1243 S37 review, it is content and his timeline says it is kept), so the
+     black a song or a title runs on into is never in the file — what Simple's export has always covered (2.7) */
+  function exportEnd() {
+    const P = FM.scene.project || {}, R = FM.spine.read(FM.scene), cards = R.trackEnd > 0 ? FM.spine.overrun(R).ends.map(l => (+l.start || 0) + (+l.duration || 0)) : [];
+    return R.trackEnd > 0 ? Math.max.apply(null, [R.trackEnd].concat(cards)) : (+P.duration || 0);
+  }
+  /* "About 28 MB": what runExport (js/app.js) hands the encoder — min(80 Mb/s, W·H·fps·quality) at this scale — plus the 160 kb/s sound
+     track the exporter adds when the project has sound (FM.projectHasAudio), over the length. The same arithmetic as Full's Export card
+     (js/export-card.js mp4Bytes); the plan wanted ONE helper exported from js/exporter.js, which this release may not edit, so the
+     '1243 R12' test pins this number to the bitrate the exporter is really given. */
+  function exportBytes(p, fps, len) {
+    const P = FM.scene.project || {}, s = p / expShort();
+    const br = Math.min(80e6, Math.round((+P.width || 0) * s * (+P.height || 0) * s * fps * EXPORT_Q));
+    const snd = (FM.projectHasAudio && FM.projectHasAudio()) ? 160e3 : 0;
+    return (br + snd) * Math.max(0, len) / 8;
+  }
+  /* what the panel starts on: his last pick on this device when this project offers it, else the top rung and the project's own rate */
+  function exportInit() {
+    let mem = null;
+    try { mem = JSON.parse(localStorage.getItem(EXPORT_KEY) || 'null'); } catch (e) { mem = null; }
+    const rungs = exportRungs(), rates = exportRates(), pf = +(FM.scene.project || {}).fps || 30;
+    expP = (mem && rungs.indexOf(+mem.p) >= 0) ? +mem.p : rungs[rungs.length - 1];
+    expFps = (mem && rates.some(f => Math.abs(f - +mem.fps) < 1e-6)) ? +mem.fps : pf;
+  }
+  /* review R12-1 / R12-C1: the pick is checked against the project as it is NOW wherever it is used (the panel drawn again, Save video):
+     a panel left up while the frame size or rate changed under it (Canvas from the cog, an undo, Home and another project) kept the old
+     pick, showed nothing pressed, and Save video exported 2160 / 1080 = an upscale. A pick this project no longer offers starts over. */
+  function exportCheck() {
+    if (exportRungs().indexOf(expP) < 0 || !exportRates().some(f => Math.abs(f - expFps) < 1e-6)) exportInit();
+  }
+  function exportKeep() { try { localStorage.setItem(EXPORT_KEY, JSON.stringify({ p: expP, fps: expFps })); } catch (e) {} }
+  /* THE PICTURE: the frame at the playhead as the FILE will hold it, rendered (never copied off #preview, which carries guides and the
+     isolate) the way Full's Export card draws its own (js/export-card.js drawThumb): the isolate, the crop tool's whole-frame view and the
+     effects sheet's preview held aside for the one render and put back. Drawn again only when the playhead has moved (or the project or
+     its frame size changed under the panel: review R12-C1). A playhead past the clips' end (the black a song runs on into, which the file
+     leaves out) shows the file's last frame instead (review R12-2). */
+  function exportPoster() {
+    const P = FM.scene.project || {}, t0 = FM._endInstantTime ? FM._endInstantTime(FM.scene, FM.time || 0) : (FM.time || 0);
+    const t = Math.max(0, Math.min(t0, exportEnd() - 1 / (+P.fps || 30)));
+    const at = [FM.storage && FM.storage.openProjectId ? FM.storage.openProjectId() : '', P.width, P.height, t].join('|');
+    if (posterCv && posterAt === at) return posterCv;
+    const c = posterCv || el('canvas', 'sm-exp-pic');
+    c.setAttribute('aria-hidden', 'true');
+    posterCv = c; posterAt = at;
+    if (!(P.width > 0) || !(P.height > 0)) return c;
+    const k = Math.min(260 / P.width, 144 / P.height);   // twice the phone's 72 px frame (styles.css .sm-exp-pic)
+    c.width = Math.max(1, Math.round(P.width * k)); c.height = Math.max(1, Math.round(P.height * k));
+    const g = c.getContext('2d');
+    if (!g || !FM.renderScene) return c;
+    const isoWas = FM.isolate, pvWas = FM._fxPreview, cmpWas = FM._fxCompare, held = (FM.scene.layers || []).filter(l => l && l._cropEditing);
+    FM.isolate = null; FM._fxPreview = null; FM._fxCompare = null; held.forEach(l => { l._cropEditing = false; });
+    try { g.clearRect(0, 0, c.width, c.height); FM.renderScene(g, FM.scene, t); }
+    catch (e) { try { g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, c.width, c.height); } catch (x) {} }
+    finally { FM.isolate = isoWas; FM._fxPreview = pvWas; FM._fxCompare = cmpWas; held.forEach(l => { l._cropEditing = true; }); }
+    return c;
+  }
+  /* "About 28 MB" for the pick on show (Full's card's own rounding: KB under 1 MB, one decimal under 10 MB) */
+  function exportSizeText() {
+    const w = W(), n = exportBytes(expP, expFps, exportEnd()) / 1e6;
+    const s = !(n > 0) ? '0 KB' : n < 1 ? Math.max(1, Math.round(n * 1000)) + ' KB' : (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10) + ' MB';
+    return typeof w.exportSize === 'function' ? w.exportSize(s) : 'About ' + s;
+  }
+  /* one segmented row: its name, then a button per choice (aria-pressed: the one picked). A press picks it, keeps it for next time and
+     puts the size right, in place, so focus stays on the button pressed */
+  function exportSeg(box, key, label, list, cur, name, pick) {
+    const row = el('div', 'sm-exp-row'); row.dataset.row = key;
+    row.appendChild(el('span', 'sm-exp-l', label));
+    const seg = el('div', 'sm-exp-seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', label);
+    list.forEach(v => {
+      const b = el('button', 'sm-exp-b', name(v)); b.type = 'button'; b.dataset.exp = key + '-' + v;
+      b.setAttribute('aria-pressed', Math.abs(v - cur) < 1e-6 ? 'true' : 'false');
+      b.addEventListener('click', e => {
+        e.stopPropagation();
+        pick(v); exportKeep();
+        seg.querySelectorAll('.sm-exp-b').forEach(x => x.setAttribute('aria-pressed', x === b ? 'true' : 'false'));
+        const sz = box.querySelector('.sm-exp-size'); if (sz) sz.textContent = exportSizeText();
+      });
+      seg.appendChild(b);
+    });
+    row.appendChild(seg);
+    box.appendChild(row);
+  }
+  /* Save video: the panel goes, focus goes back to the Export button, and the export runs through FM.exportSimple — the dialog's gates
+     (pause, the owner's export switch, the notepad, clips still arriving), then an MP4 at this size and smoothness. With nothing to export
+     it says so in Simple's line instead (runExport's own refusal is a browser alert). */
+  function exportGo() {
+    const w = W(), short = expShort(), to = exportEnd();
+    if (!(FM.scene.layers || []).length || !(to > 0)) { if (FM.spine && FM.spine.say) FM.spine.say(w.exportEmpty || 'Add a clip first, then export it'); return; }
     if (!(short > 0) || !FM.exportSimple) return;
-    const R = FM.spine.read(FM.scene), cards = R.trackEnd > 0 ? FM.spine.overrun(R).ends.map(l => (+l.start || 0) + (+l.duration || 0)) : [];
-    const end = R.trackEnd > 0 ? Math.max.apply(null, [R.trackEnd].concat(cards)) : (+P.duration || 0);
-    const top = Math.min(1080, short), rungs = top > 720 ? [top, 720] : [top];
-    openMenu(anchor, rungs.map(p => ({ label: w.exportAt ? w.exportAt(p) : p + 'p · Export',
-      run: () => FM.exportSimple({ scale: p / short, fps: +P.fps || 30, quality: 0.18, from: 0, to: end }) })));
-    if (menu) { menu.dataset.kind = 'export'; menu.setAttribute('aria-label', w.exportTitle || 'Export video'); }
+    exportCheck();   // review R12-1: never a pick this frame no longer offers (an upscale)
+    const o ={ scale: expP / short, fps: expFps, quality: EXPORT_Q, from: 0, to: to };
+    exportKeep();
+    FM.simpleTools.closePanel();
+    const x = exportBtn(); if (x) x.focus({ preventScroll: true });
+    FM.exportSimple(o);
+  }
+  function exportPanel(root) {
+    exportCheck();   // review R12-1: drawn again after the frame size or rate changed, a choice is still pressed and it is one on offer
+    const w = W(), box = el('div', 'sm-exp');
+    box.setAttribute('role', 'group'); box.setAttribute('aria-label', w.exportTitle || 'Export video');
+    /* the first row: the way back (#1243 S9: in the panel's own first row), the frame, and the panel's name over the video's length — one
+       row, so the whole card fits the phone's sheet (about 330 px at 380 × 800) with Save video on screen */
+    const top = el('div', 'sm-exp-top'), what = el('div', 'sm-exp-what');
+    what.append(el('span', 'sm-exp-h', w.exportHead || 'Export'), el('span', 'sm-exp-len', typeof w.exportLen === 'function' ? w.exportLen(exportEnd()) : String(Math.round(exportEnd())) + ' s'));
+    top.append(panelBack(), exportPoster(), what);
+    box.appendChild(top);
+    exportSeg(box, 'q', w.exportQuality || 'Quality', exportRungs(), expP, p => typeof w.exportRung === 'function' ? w.exportRung(p) : p + 'p', v => { expP = v; });
+    exportSeg(box, 'fps', w.exportSmooth || 'Smoothness', exportRates(), expFps, f => typeof w.exportFps === 'function' ? w.exportFps(f) : f + ' fps', v => { expFps = v; });
+    /* the size, then Save video: stacked on a phone, side by side in the PC band (styles.css), so the whole card fits its ~206 px at 1280 × 800 */
+    const foot = el('div', 'sm-exp-foot');
+    const go = el('button', 'sm-exp-go', w.exportGo || 'Save video'); go.type = 'button'; go.dataset.exp = 'go';
+    go.addEventListener('click', e => { e.stopPropagation(); exportGo(); });
+    foot.append(el('div', 'sm-exp-size', exportSizeText()), go);
+    box.appendChild(foot);
+    /* THE PANEL OWNS ITS KEYS (as the Export list did, review finding 26): Space / Enter / Backspace / Delete and the arrows stay with the
+       panel, so they never reach Full's window handler (play, a nudge, a delete); ← / → move between a row's choices. Escape goes on to
+       FM.simpleTools.escape, which closes the panel on a PC with focus back on Export. */
+    box.addEventListener('keydown', e => {
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        const a = document.activeElement, seg = a && a.closest ? a.closest('.sm-exp-seg') : null;
+        if (seg) {
+          const bs = Array.from(seg.querySelectorAll('.sm-exp-b')), i = bs.indexOf(a), n = bs[(i + (e.key === 'ArrowRight' ? 1 : bs.length - 1)) % bs.length];
+          if (n) n.focus({ preventScroll: true });
+          e.preventDefault();
+        }
+      }
+      if (/^(Arrow| $|Enter$|Backspace$|Delete$|Home$|End$)/.test(e.key)) e.stopPropagation();
+    });
+    box.addEventListener('keyup', e => { if (/^(Arrow| $|Enter$|Backspace$|Delete$|Home$|End$)/.test(e.key)) e.stopPropagation(); });
+    root.appendChild(box);
   }
 
   /* What the tray holds (#1243 S3, S9): in a sub-row its ‹ and that row's controls; with something selected (item mode, or a panel
@@ -1833,7 +1954,7 @@ window.FM = window.FM || {};
   /* THE PANEL'S WAY BACK, for the focus rule (the 9 Nov review, MODE-3): the band title's ‹ (More, Extras on a PC), Look's or Edit lines'
      own ‹, the phone sheet's grab bar, the phone's Add sheet (Extras) — the first one on screen */
   function panelBackEl() {
-    const sel = ['#inspector-panel > .panel-title > .sm-pback', '#inspector .sm-look-tabs > .sm-pback', '#inspector .sm-cap-top > .sm-pback', '#inspector-panel.open > #insp-grab', '#add-sheet.open button'];
+    const sel = ['#inspector-panel > .panel-title > .sm-pback', '#inspector .sm-look-tabs > .sm-pback', '#inspector .sm-cap-top > .sm-pback', '#inspector .sm-exp-top > .sm-pback', '#inspector-panel.open > #insp-grab', '#add-sheet.open button'];   // #1243 S6: Export's ‹
     for (const s of sel) { const n = document.querySelector(s); if (n && n.getClientRects().length) return n; }
     return null;
   }
@@ -1870,7 +1991,7 @@ window.FM = window.FM || {};
       if (!mount()) return;
       const ae = document.activeElement;   // read before anything below takes a ‹ out of the page (pbackSync), for the focus rule
       if (!isSimple()) {
-        home(); closeMenu(); if (lookDrag) lookUndrag(); if (subFor || segDrag) { subFor = null; segUndrag(); } extrasOpen = false;
+        home(); if (lookDrag) lookUndrag(); if (subFor || segDrag) { subFor = null; segUndrag(); } extrasOpen = false;
         pbackSync(null); bar.removeAttribute('data-mode'); bar.removeAttribute('data-sub'); bar.style.removeProperty('--sm-sheet-b'); hintSync('off');
         return;
       }
@@ -1978,7 +2099,7 @@ window.FM = window.FM || {};
        js/mobile.js raises for it (projectPanel). Only while Simple is on screen. */
     openLook() {
       if (!isSimple() || !mount()) return;
-      lookUndrag(); closeMenu();
+      lookUndrag();
       if (subFor) { subFor = null; segUndrag(); }
       if (extrasOpen) { extrasOpen = false; extrasMark(); }
       extrasSheetOff();
@@ -1987,13 +2108,35 @@ window.FM = window.FM || {};
       if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch();
       FM.refreshAll(); armSheet();
     },
+    /* #1243 S6 A: Simple's Export panel (exportPanel), from the Export button: a project panel like Look's — nothing selected (a selection
+       is let go first, a row or Extras closes: one menu at a time), the whole left band on a PC, on a phone the sheet from the sheet line.
+       It starts on his last pick on this device, else the top rung and the project's rate. Only while Simple is on screen and the frame
+       has a size; false when it opened nothing. */
+    openExport() {
+      if (!isSimple() || !mount() || !(expShort() > 0) || !FM.exportSimple) return false;
+      /* review R12-4: with nothing to export it says so on Simple's line and opens nothing (a card reading 0:00 and About 0 KB whose
+         Save video only said this) */
+      if (!(FM.scene.layers || []).length || !(exportEnd() > 0)) { const w = W(); if (FM.spine && FM.spine.say) FM.spine.say(w.exportEmpty || 'Add a clip first, then export it'); return false; }
+      lookUndrag();
+      if (subFor) { subFor = null; segUndrag(); }
+      if (extrasOpen) { extrasOpen = false; extrasMark(); }
+      extrasSheetOff();
+      if (FM.selectionIds && FM.selectionIds().length && FM.selectLayer) FM.selectLayer(null);
+      panelFor = PROJECT; panelKind = 'export'; exportInit(); posterCv = null; posterAt = NaN; lastSig = '';
+      if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch();
+      FM.refreshAll(); armSheet();
+      return true;
+    },
+    /* the Export panel is up (on a phone: its sheet is really open) */
+    exportOpen: () => exportUp(),
     /* js/mobile.js asks this with nothing selected: the project's Look panel is open, so its sheet rises with no selection */
-    projectPanel() { return isSimple() && panelFor === PROJECT && panelKind === 'look' && !((FM.selectionIds ? FM.selectionIds() : []).length); },
+    projectPanel() { return isSimple() && panelFor === PROJECT && (panelKind === 'look' || panelKind === 'export') && !((FM.selectionIds ? FM.selectionIds() : []).length); },   // #1243 S6: or Export's
     /* js/inspector.js asks this before drawing its layer editor (or, with nothing selected, its Add menu): true when it drew one of
        Simple's panels instead. False whenever Simple is not on screen or none is open there, so Full's panel is exactly today's. */
     drawPanel(root, layer, title) {
       if (root && !layer && isSimple() && extrasOpen) return drawExtras(root, title);   // Phase 3 · Clips › Extras: the band with nothing selected (PC)
       if (root && layer && isSimple() && panelKind === 'lines' && panelFor === layer.id) return this._drawLines(root, layer, title);   // Phase 3 · Captions
+      if (root && !layer && isSimple() && panelFor === PROJECT && panelKind === 'export') { if (title) title.textContent = ''; exportPanel(root); return true; }   // #1243 S6: Export's, for no layer
       if (!root || layer || !isSimple() || panelKind !== 'look' || panelFor !== PROJECT) return false;   // #1243 S12: Look's is drawn for no layer
       lookUndrag();   // a redraw while a finger is still on a slider (a refresh from elsewhere) never leaves its preview in the document
       if (title) title.textContent = '';
@@ -2068,6 +2211,8 @@ window.FM = window.FM || {};
       const ids = FM.selectionIds ? FM.selectionIds() : [];
       if (modeOf(ids) === 'panel') {
         if (extrasUp()) { backTo = 'extras'; this.closeExtras(); return; }
+        /* #1243 S6: Export's panel was opened from the Export button, which is not on the bar: focus goes back there */
+        if (panelKind === 'export') { backTo = ''; this.closePanel(); const x = exportBtn(); if (x) x.focus({ preventScroll: true }); return; }
         backTo = panelKind === 'look' ? 'look' : panelKind === 'lines' ? 'editlines' : panelKind === 'more' ? (tray.querySelector('[data-tool="style"]') ? 'style' : 'capstyle') : '';   // 'more': Full's own panel for the item (a text's Style, a caption track's Style)
         this.closePanel(); return;
       }
@@ -2101,7 +2246,6 @@ window.FM = window.FM || {};
        is on screen: in Full openExtras opens nothing. A panel: the Clips row it was opened from stays under it. */
     openExtras() {
       if (!isSimple() || !mount()) return false;
-      closeMenu();
       if (subFor && subFor.key !== 'clips') { subFor = null; segUndrag(); }   // one menu at a time
       if (FM.selectionIds && FM.selectionIds().length && FM.selectLayer) FM.selectLayer(null);
       if (phone.matches) {
@@ -2140,8 +2284,7 @@ window.FM = window.FM || {};
     bandWords: bandWords,
     /* suite seam (sm3 review, lens 6: Look's remembered focus and scroll and the #1171 arm time are state too, so one test's
        Look panel can no longer hand focus, or a held press, to the next) */
-    _reset() { lookUndrag(); segUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; lookLeft = 0; lookTop = 0; lookFocus = ''; sheetArmAt = -1e9; shutArmAt = -1e9; sheetPressAt = -1e9; lastPress = null; clearTimeout(sheetOff); sheetListen(false); linesSeen = ''; linesTop = 0; subFor = null; backTo = ''; extrasOpen = false; extrasSheetOff(); pbackSync(null); hintSync('off'); tfClear(); lastSig = ''; stripKey = ''; closeMenu(); },
-    _menu: () => menu,
+    _reset() { lookUndrag(); segUndrag(); panelFor = null; panelKind = null; lookTab = 'filters'; lookSeen = ''; lookLeft = 0; lookTop = 0; lookFocus = ''; sheetArmAt = -1e9; shutArmAt = -1e9; sheetPressAt = -1e9; lastPress = null; clearTimeout(sheetOff); sheetListen(false); linesSeen = ''; linesTop = 0; subFor = null; backTo = ''; extrasOpen = false; extrasSheetOff(); pbackSync(null); hintSync('off'); tfClear(); lastSig = ''; stripKey = ''; posterCv = null; posterAt = NaN; },
     ICON: ICON
   };
 })(window.FM);

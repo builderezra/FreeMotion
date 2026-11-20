@@ -12618,7 +12618,7 @@ body.ed-simple #sm-sections .sm-item, body.ed-simple #sm-sections .sm-grip, body
 body.sm-running #sm-timeline, body.sm-running #stage, body.sm-running #inspector-panel { pointer-events: none; }
 
 /* ═══ SIMPLE MODE, PHASE 2.2 — the tray row and the project tools (D10), Simple's ⋯ menu and the black band ══════════════
-   (BUILD-PLAN-PHASE2.md §4). Every rule hangs on an element only Simple builds (#sm-bar, #sm-tray, #sm-tools, .sm-menu,
+   (BUILD-PLAN-PHASE2.md §4). Every rule hangs on an element only Simple builds (#sm-bar, #sm-tray, #sm-tools,
    .sm-band, .sm-band-hint) or on body.ed-simple, so Full matches none of them. */
 #sm-bar { display: none; }
 body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; background: var(--panel); }
@@ -12662,10 +12662,6 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
    when they all fit and never shrink below 64 px; past that the row scrolls in its strip, the cut-off last tool and the end fade the
    only "more" cue (6 × 64 = 384 at 380, so Effects is just cut; the PC band's 371 px overflows by about 13 and 420 spreads them) */
 #sm-tools .sm-tool { flex: 1 0 64px; min-width: 64px; box-sizing: border-box; }
-.sm-menu { position: fixed; z-index: 120; min-width: 210px; padding: 6px; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line);
-  box-shadow: 0 16px 40px rgba(0,0,0,.5); display: flex; flex-direction: column; }
-.sm-menu-i { min-height: 44px; text-align: left; padding: 0 14px; border: 0; border-radius: 8px; background: transparent; color: var(--text); font: 600 14px/1 system-ui, sans-serif; cursor: pointer; }
-.sm-menu-i:hover, .sm-menu-i:focus-visible { background: rgba(255,255,255,.07); }
 /* ═══ #1243 S3 · S9 · S15 · rule 3 (release 4): ONE BAR, FOUR MODES, ONE STRIP, ONE SHEET LINE ═════════════════════════════════════
    His words (8 Nov): "when you actually tap on a layer, that first row goes away", "I don't want two menus at once", "make it like
    CapCut where you can scroll it". #sm-bar is ONE 56 px row (and its 1 px edge and the safe area) whose contents swap by
@@ -12803,6 +12799,43 @@ body.ed-simple #sm-tray .sm-tool[data-tool="slidePrev"], body.ed-simple #sm-tray
 .sm-look-line { display: flex; align-items: center; gap: 8px; color: var(--text-dim); font: 500 11.5px/1.3 system-ui, sans-serif; }
 .sm-look-line > .sm-look-note-t { flex: 1 1 auto; min-width: 0; }
 .sm-look-line > .sm-look-full { flex: none; }
+
+/* ═══ #1243 S6 A: SIMPLE'S EXPORT PANEL (his words: "Just make an export menu, but make it simple and easy to read"), drawn by
+   js/simple-tools.js exportPanel in #inspector where Look's panel docks (the phone's sheet from the sheet line, the PC's whole band). One
+   card: the frame and the length, two segmented rows (Quality, Smoothness), the size, one big Save video. Every rule is under
+   body.ed-simple and hangs on a class only Simple makes (.sm-exp…): Full matches none of them, and Full's Export is untouched. ═══ */
+body.ed-simple .sm-exp { padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+body.ed-simple .sm-exp-top { display: flex; align-items: center; gap: 12px; min-width: 0; }
+body.ed-simple .sm-exp-top > .sm-pback { flex: 0 0 44px; min-width: 44px; min-height: 44px; margin: 0 -6px 0 -8px; padding: 0; border: 0; background: transparent; color: var(--text);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+body.ed-simple .sm-exp-pic { display: block; flex: none; height: 72px; width: auto; max-width: 45%; object-fit: contain; border-radius: 8px; background: #000; box-shadow: 0 0 0 1px var(--line); }
+/* (object-fit, review R12-3: a frame wider than the 45% cap allows at 72 px, 2.39:1 at 380, was squashed to the box; it keeps its shape) */
+body.ed-simple .sm-exp-what { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+body.ed-simple .sm-exp-h { color: var(--text-dim); font: 600 13px/1.2 system-ui, sans-serif; }
+body.ed-simple .sm-exp-len { color: var(--text); font: 700 24px/1 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+body.ed-simple .sm-exp-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+body.ed-simple .sm-exp-l { flex: 0 0 86px; color: var(--text-dim); font: 600 13px/1.2 system-ui, sans-serif; }
+body.ed-simple .sm-exp-seg { flex: 1 1 auto; min-width: 0; display: flex; gap: 2px; padding: 3px; border-radius: 12px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); }
+body.ed-simple .sm-exp-b { flex: 1 1 0; min-width: 0; min-height: 38px; padding: 0 4px; border: 0; border-radius: 9px; background: transparent; color: var(--text-dim);
+  font: 600 14px/1 system-ui, sans-serif; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+body.ed-simple .sm-exp-b[aria-pressed="true"] { background: var(--text); color: var(--panel); }
+body.ed-simple .sm-exp-foot { display: flex; flex-direction: column; gap: 8px; }
+body.ed-simple .sm-exp-size { text-align: center; color: var(--text-dim); font: 600 13px/1.2 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+body.ed-simple .sm-exp-go { min-height: 48px; padding: 0 16px; border: 0; border-radius: 12px; background: var(--accent, #29d9bb); color: #04140f;
+  font: 700 16px/1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+body.ed-simple .sm-exp-b:focus-visible, body.ed-simple .sm-exp-go:focus-visible { outline: 2px solid var(--accent, #29d9bb); outline-offset: 2px; }
+/* THE PC BAND IS SHORT (#inspector is about 206 px at 1280 × 800, under the band's title row): a smaller frame, 30 px choices (a mouse's
+   floor), and the size beside Save video, so the whole card and its button are on screen without scrolling */
+@media (min-width: 701px) {
+  body.ed-simple .sm-exp { gap: 6px; padding: 2px 12px 8px; }
+  body.ed-simple .sm-exp-pic { height: 56px; }
+  body.ed-simple .sm-exp-what { gap: 4px; }
+  body.ed-simple .sm-exp-len { font-size: 20px; }
+  body.ed-simple .sm-exp-b { min-height: 30px; font-size: 13px; }
+  body.ed-simple .sm-exp-foot { flex-direction: row; align-items: center; gap: 12px; }
+  body.ed-simple .sm-exp-foot > .sm-exp-size { flex: none; text-align: left; }
+  body.ed-simple .sm-exp-foot > .sm-exp-go { flex: 1 1 auto; min-height: 40px; }
+}
 
 /* ═══ Simple mode Phase 3 · CAPTIONS (queue 980; DESIGN §8.5 the caption-track tray's Edit lines, D20 A): the lines panel, drawn in
    #inspector where More's and Look's panels dock. One 44 px row per line — its time, its words (one line, cut with an ellipsis), and

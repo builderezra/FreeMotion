@@ -68284,27 +68284,30 @@
     }, 380);
   });
 
-  /* 2A, row 20: Simple's Export is one short list — “1080p · Export” and “720p · Export” — and what it exports is an MP4 of the clips only
-     (0 to the end of the last clip), so the 3 s of black the song runs on into is not in the file; no dialog, nothing saved as the dialog's
-     defaults. FM.exporter.run is stubbed to record what it was asked for (no encoder runs). Red on c41-dock: the button opens Full's dialog
-     and no list, so “Simple’s Export shows …” is the failing assertion. CONTROL: in Full the same button opens today's dialog. */
-  test('simple P2.7 · 2A row 20 Simple’s Export is a list of 1080p · Export and 720p · Export that exports an MP4 of the clips only (no black tail) at fixed settings; Full’s Export opens today’s dialog', { item: '980', budgetMs: 60000 }, async function () {
+  /* 2A, row 20: Simple's Export is its own, not Full's dialog, and what it exports is an MP4 of the clips only (0 to the end of the last
+     clip), so the 3 s of black the song runs on into is not in the file; nothing saved as the dialog's defaults. FM.exporter.run is stubbed
+     to record what it was asked for (no encoder runs). #1243 S6 A: the short list became Simple's Export panel, whose Save video starts it
+     (opened on 1080p, the top rung, at the project's rate; his last pick on this device is put aside for the test). CONTROL: in Full the
+     same button opens today's dialog. */
+  test('simple P2.7 · 2A row 20 Simple’s Export opens its own panel (not Full’s dialog) whose Save video exports an MP4 of the clips only (no black tail) at fixed settings, never saved as the dialog’s defaults; Full’s Export opens today’s dialog', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     const ex = FM.exporter, run0 = ex.run, dlg = document.getElementById('export-dialog');
     let got = null;
     let prefs0 = null; try { prefs0 = localStorage.getItem('fm.exportPrefs'); } catch (e) {}
+    let mem0 = null; try { mem0 = localStorage.getItem('fm.sm.export'); localStorage.removeItem('fm.sm.export'); } catch (e) {}
     ex.run = async o => { got = o; };
     try {
       await smP2((W, H) => smClips3(W, H).concat([smSong('song', 0, 9, W, H)]), async function (v) {
         FM.refreshAll(); await v.sleep(60);
         if (!(FM.scene.project.duration > 8.9) || Math.abs(FM.spine.read(FM.scene).trackEnd - 6) > 1e-6) throw new Error('setup: the project is ' + FM.scene.project.duration + ' s with clips to ' + FM.spine.read(FM.scene).trackEnd);
         document.getElementById('btn-export').click(); await v.sleep(150);
-        const items = Array.from(document.querySelectorAll('.sm-menu .sm-menu-i')).map(b => b.textContent);
-        if (items.join(', ') !== '1080p · Export, 720p · Export') throw new Error('Simple’s Export shows ' + (items.length ? 'the list “' + items.join(', ') + '”' : 'no list') + (dlg && !dlg.classList.contains('hidden') ? ' and Full’s dialog' : '') + ', want 1080p · Export, 720p · Export');
+        const go = document.querySelector('#inspector .sm-exp .sm-exp-go');
+        if (!go) throw new Error('Simple’s Export shows no Export panel with Save video' + (dlg && !dlg.classList.contains('hidden') ? ' (Full’s dialog instead)' : ''));
         if (dlg && !dlg.classList.contains('hidden')) throw new Error('Simple’s Export opened Full’s dialog as well');
-        document.querySelector('.sm-menu .sm-menu-i').click();
+        if (got) throw new Error('Simple’s Export started exporting before Save video was pressed');
+        go.click();
         for (let i = 0; i < 50 && !got; i++) await v.sleep(20);
-        if (!got) throw new Error('1080p · Export did not start an export');
+        if (!got) throw new Error('Save video did not start an export');
         const P = FM.scene.project, fails = [];
         if (Math.abs(got.scale - 1080 / Math.min(P.width, P.height)) > 1e-9) fails.push('scale ' + got.scale);
         if (got.from !== 0 || Math.abs(got.to - 6) > 1e-6) fails.push('range ' + got.from + '–' + got.to + ' s, want 0–6 (the black tail to 9 s left out)');
@@ -68319,9 +68322,12 @@
         const up = dlg && !dlg.classList.contains('hidden');
         if (up) document.getElementById('btn-export').click(); await v.sleep(100);
         if (!up) throw new Error('CONTROL: Full’s Export no longer opens its dialog');
-        if (document.querySelector('.sm-menu') || got) throw new Error('CONTROL: Full’s Export showed Simple’s list or exported');
+        if (document.querySelector('.sm-exp') || got) throw new Error('CONTROL: Full’s Export showed Simple’s panel or exported');
       }, { W: 1080, H: 1920 });
-    } finally { ex.run = run0; if (dlg && !dlg.classList.contains('hidden') && FM.showExportDialog) document.getElementById('btn-export').click(); }
+    } finally {
+      ex.run = run0; if (dlg && !dlg.classList.contains('hidden') && FM.showExportDialog) document.getElementById('btn-export').click();
+      try { if (mem0 === null) localStorage.removeItem('fm.sm.export'); else localStorage.setItem('fm.sm.export', mem0); } catch (e) {}
+    }
   });
 
   /* 2A, row 16: the room under Simple's tools goes to the preview while no panel is up — at 380×800 and 380×667 the stage (#main, the
@@ -141179,53 +141185,41 @@
 
 
   /* (#1243 S9: Sound's choices are the bar's own row now, inside #sm-bar, which app.js's keep-list already holds; #1243 S5 took the ⋯
-     list away, so Export's is the one floating list left to test here: the same openMenu) */
-  test('simple P2.2 · review a tap on the edge of Simple’s Export list, between its choices, keeps the selection (the list is not empty background)', { item: '980', budgetMs: 60000 }, async function () {
+     list away. #1243 S6 A made Export's list a PROJECT panel, opened with nothing selected, and the test that a tap between the list's
+     choices kept the selection was retired then (review R12-T2): there is no selection left to lose, and nothing in the app closes a
+     project panel on a tap of its padding, so no change could turn it red by its own sentence.) */
+
+
+  /* #1243 S6 A: the keys that Export's list kept from Full's window handler stay in the panel: → moves between a row's choices instead of
+     stepping the playhead, Space starts no playback; Escape closes the panel (on a PC: a phone's panel goes by its grab bar) with focus back
+     on Export. CONTROL: the same → pressed outside the panel steps the playhead, so the probe can see a step. (Backspace is still kept from
+     Full's handler, but it is not checked here, review R12-T3: the panel opens with nothing selected, so a Backspace that leaked would take
+     no step either way. Space is pressed BEFORE →, so a Space that leaks fails by its own sentence.) */
+  test('simple P2.2 · review keys in Simple’s Export panel stay in the panel at 1280: Space on a choice starts no playback, → moves to the next choice and does not step the playhead, Esc closes it and gives focus back to Export (CONTROL: → outside the panel steps the playhead)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
-    await smP2((W, H) => [smV('C', 7, 2, W, H), smV('B', 3, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
-      const tap = el => { const r = el.getBoundingClientRect(), x = r.left + 3, y = r.top + 3, o = { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 0, pointerType: 'touch', isPrimary: true };
-        el.dispatchEvent(new PointerEvent('pointerdown', o)); el.dispatchEvent(new PointerEvent('pointerup', o)); };
-      const B = v.L('B');
-      for (const open of ['export']) {
-        FM.selectLayer(B.id); await v.sleep(60);
-        document.getElementById('btn-export').click();
-        await v.sleep(60);
-        const menu = document.querySelector('.sm-menu[data-kind="export"]');
-        if (!menu) throw new Error('CONTROL: the ' + open + ' list did not open');
-        tap(menu); await v.sleep(60);
-        if (FM.scene.selectedId !== B.id) throw new Error('a tap on the padding of Simple’s Export list deselected the clip');
-        if (FM.simpleTools._menu()) FM.simpleTools._reset();
-      }
-      /* CONTROL: the same tap on the empty page still clears the selection, as in Full */
-      FM.selectLayer(B.id); await v.sleep(60);
-      tap(document.body); await v.sleep(60);
-      if (FM.scene.selectedId) throw new Error('CONTROL: a tap on empty background no longer deselects');
+    await smTrayBAt(1280, 800, async function () {
+      await smP2((W, H) => [smV('B', 4, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
+        const press = (k, t) => { t = t || document.activeElement; ['keydown', 'keyup'].forEach(ty => t.dispatchEvent(new KeyboardEvent(ty, { key: k === 'Space' ? ' ' : k, code: k, bubbles: true, cancelable: true }))); };
+        FM.setTime(1); await v.sleep(40);
+        press('ArrowRight', document.body); await v.sleep(40);
+        if (!(Math.abs(FM.time - (1 + 1 / 30)) < 1e-6)) throw new Error('CONTROL: → outside the panel left the playhead at ' + FM.time + ' (want one frame on from 1 s), so the probe cannot see a step');
+        FM.setTime(1); await v.sleep(40);
+        const anchor = ['m-export', 'btn-export'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length) || document.getElementById('btn-export');
+        anchor.focus();
+        document.getElementById('btn-export').click(); await v.sleep(150);
+        const bs = Array.from(document.querySelectorAll('#inspector .sm-exp .sm-exp-row[data-row="q"] .sm-exp-b'));
+        if (bs.length < 2) throw new Error('CONTROL: the Export panel did not open with two Quality choices (' + bs.length + ')');
+        bs[0].focus();
+        press('Space'); await v.sleep(60);
+        if (FM.playing) { FM.pause(); FM.setTime(1); throw new Error('Space on a choice in the panel started playback'); }
+        press('ArrowRight'); await v.sleep(30);
+        if (Math.abs(FM.time - 1) > 1e-9) throw new Error('→ in the panel stepped the playhead to ' + FM.time);
+        if (document.activeElement !== bs[1]) throw new Error('→ did not move to the next choice (focus on ' + (document.activeElement && (document.activeElement.dataset.exp || document.activeElement.id || document.activeElement.tagName)) + ')');
+        press('Escape'); await v.sleep(80);
+        if (document.querySelector('#inspector .sm-exp') || FM.simpleTools.exportOpen()) throw new Error('Esc left the Export panel open');
+        if (document.activeElement !== anchor) throw new Error('Esc did not give focus back to Export (#' + anchor.id + '), focus is on ' + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)));
+      }, { W: 1920, H: 1080 });   // two Quality rungs only when the project's short side is 1080 or more (a 320×240 test project has one)
     });
-  });
-
-
-  test('simple P2.2 · review keys in Simple’s Export list stay in the list: ↓ moves to the next choice, Backspace deletes nothing, Esc closes it, keeps the selection and gives focus back to Export', { item: '980', budgetMs: 60000 }, async function () {
-    smNeedP2();
-    await smP2((W, H) => [smV('B', 4, 3, W, H), smV('A', 0, 3, W, H)], async function (v) {
-      const A = v.L('A'); FM.selectLayer(A.id); await v.idle();
-      const y0 = JSON.stringify(A.transform.y), n0 = v.steps();
-      const press = k => { const t = document.activeElement; ['keydown', 'keyup'].forEach(ty => t.dispatchEvent(new KeyboardEvent(ty, { key: k, code: k, bubbles: true, cancelable: true }))); };
-      /* #1243 S5: the ⋯ list left Simple; Export's list is the same openMenu, anchored to the Export button on screen (the phone's ⬆ or the PC's) */
-      const anchor = ['m-export', 'btn-export'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length);
-      if (!anchor) throw new Error('CONTROL: no Export button is on screen');
-      document.getElementById('btn-export').click(); await v.sleep(60);
-      const items = Array.from(document.querySelectorAll('.sm-menu[data-kind="export"] .sm-menu-i'));
-      if (items.length < 2 || document.activeElement !== items[0]) throw new Error('CONTROL: the Export list did not open with two choices and focus on its first (' + items.length + ' choices)');
-      press('ArrowDown'); await v.sleep(30);
-      if (JSON.stringify(v.L('A').transform.y) !== y0 || v.steps() !== n0) throw new Error('↓ in the list nudged the selected clip’s picture or committed a step (a hidden canvas edit in Simple): y ' + y0 + ' → ' + JSON.stringify(v.L('A').transform.y) + ', ' + (v.steps() - n0) + ' step(s)');
-      if (document.activeElement !== items[1]) throw new Error('↓ did not move to the next choice');
-      press('Backspace'); await v.idle();
-      if (!v.L('A') || v.steps() !== n0) throw new Error('Backspace in the list deleted the selected clip');
-      press('Escape'); await v.sleep(30);
-      if (document.querySelector('.sm-menu')) throw new Error('Esc left the list open');
-      if (FM.scene.selectedId !== A.id) throw new Error('Esc reached through the list and deselected the clip');
-      if (document.activeElement !== anchor) throw new Error('Esc did not give focus back to Export (#' + anchor.id + '), focus is on ' + (document.activeElement && (document.activeElement.id || document.activeElement.tagName)));
-    }, { W: 1920, H: 1080 });   // the Export list has two rungs only when the project's short side is over 720 (a 320×240 test project has one)
   });
 
 
@@ -203726,14 +203720,16 @@
         const R3 = FM.spine.read(FM.scene);
         if (FM.spine.overrun(R3).ends.indexOf(v.L('Card')) < 0) fails.push('setup: the card is not an end card to S.overrun');
         /* the line says it is kept, so it has to be in the file: Simple's export runs to the end of the card */
-        const ex0 = FM.exportSimple; let asked = null;
+        const ex0 = FM.exportSimple; let asked = null, mem = null;
         FM.exportSimple = o => { asked = o; };
+        /* Save video keeps the pick on this device (fm.sm.export): his own is put aside and given back (review R12-T1) */
+        try { mem = localStorage.getItem('fm.sm.export'); localStorage.removeItem('fm.sm.export'); } catch (e) {}
         try {
-          document.getElementById('m-export').click(); await v.sleep(60);
-          const row = document.querySelector('.sm-menu[data-kind="export"] .sm-menu-i');
-          if (!row) throw new Error('setup: Export opened no list in Simple · ' + fails.join(' · '));
+          document.getElementById('m-export').click(); await v.sleep(120);
+          const row = document.querySelector('#inspector .sm-exp .sm-exp-go');   // #1243 S6 A: Export's panel and its Save video
+          if (!row) throw new Error('setup: Export opened no panel with Save video in Simple · ' + fails.join(' · '));
           row.click(); await v.sleep(40);
-        } finally { FM.exportSimple = ex0; }
+        } finally { FM.exportSimple = ex0; try { if (mem === null) localStorage.removeItem('fm.sm.export'); else localStorage.setItem('fm.sm.export', mem); } catch (e) {} }
         if (!asked || Math.abs(asked.to - 5) > 1e-6) fails.push('Simple’s export runs to ' + (asked && asked.to) + ', want 5: the end card it calls kept is left out of the file');
         if (fails.length) throw new Error(fails.join(' · '));
       });
@@ -203902,9 +203898,9 @@
 
   /* N2 · S9: ONE MENU AT A TIME, every opener on the project row and in a clip's, a title's and an overlay video's tray, and the ◇ over a
      cut. Red on v18.36: Clips opens a floating list over the project row and the tray's quiet line, and a clip's tray sits on the project
-     row. CONTROL: Simple's Export list over the project row counts two (the ⋯ list until #1243 S5), so the probe can count past one. */
-  /* #1243 S12 (R9): Look is the project row's, its panel one menu like Extras' */
-  test('1243 R4 · S9 one menu at a time at 380 and 1280: Clips, Clips › Extras, Captions, Sound, Look and Effects; a clip’s tray, its Speed and its Transform; a title’s Add effect and Style; an overlay video’s Volume, Add effect and Opacity; and the ◇ over a cut (at 1280 with a title’s Style open too) each leave exactly one menu on screen, and the bar says which (CONTROL: Simple’s Export list over the project row counts two)', { item: '1243', budgetMs: 240000 }, async function () {
+     row. CONTROL: a floating list over the project row counts two (Export's own list until #1243 S6), so the probe can count past one. */
+  /* #1243 S12 (R9): Look is the project row's, its panel one menu like Extras'; #1243 S6 A: Export's panel too */
+  test('1243 R4 · S9 one menu at a time at 380 and 1280: Clips, Clips › Extras, Captions, Sound, Look, Effects and Export; a clip’s tray, its Speed and its Transform; a title’s Add effect and Style; an overlay video’s Volume, Add effect and Opacity; and the ◇ over a cut (at 1280 with a title’s Style open too) each leave exactly one menu on screen, and the bar says which (CONTROL: a floating list over the project row counts two)', { item: '1243', budgetMs: 240000 }, async function () {
     smNeedP2();
     const fails = [], ctl = [];
     for (const width of [380, 1280]) {
@@ -203962,12 +203958,15 @@
           await sel(OV); await step('the overlay video’s Add effect', () => press('addfx'), 'tray', 'sub', 'itemfx'); await clean();
           await sel(OV); await step('the overlay video’s Opacity', () => press('opacity'), 'tray', 'sub', 'opacity'); await clean();
           await step('the ◇ over the cut before Clip 2', () => { const c = document.querySelector('.sm-chip-tr[data-tr="' + B + '"]'); if (!c) throw new Error('there is no ◇ over the cut before Clip 2'); c.click(); }, 'tray', 'sub', 'transition'); await clean();
-          /* CONTROL: Simple's Export list over the project row is two menus, and the probe counts both (it was the ⋯ list until #1243 S5) */
+          /* #1243 S6 A: Export (the phone's ⬆ or the PC's button) opens its panel, one menu like Look's */
+          await step('Export', () => document.getElementById('btn-export').click(), panelMenu, 'panel', ''); await clean();
+          /* CONTROL: a floating list over the project row is two menus, and the probe counts both (Simple's last one, Export's list, became a
+             panel in #1243 S6, so the test lays a stand-in .sm-menu over the row and takes it away again) */
           FM.selectLayer(null); await r4Settle(100);
-          document.getElementById('btn-export').click(); await r4Settle(150);
-          const c = r4Menus();
-          FM.simpleTools._reset(); await r4Settle(100);
-          if (c.length !== 2 || c.indexOf('menu') < 0 || c.indexOf('tools') < 0) ctl.push('CONTROL ' + at + 'Simple’s Export list over the project row reads as ' + c.join(' + ') + ', want tools + menu, so the probe cannot count menus');
+          const fake = document.createElement('div'); fake.className = 'sm-menu'; document.body.appendChild(fake);
+          let c;
+          try { c = r4Menus(); } finally { fake.remove(); }
+          if (c.length !== 2 || c.indexOf('menu') < 0 || c.indexOf('tools') < 0) ctl.push('CONTROL ' + at + 'a floating list over the project row reads as ' + c.join(' + ') + ', want tools + menu, so the probe cannot count menus');
         });
       });
     }
@@ -206838,6 +206837,234 @@
         if (fails.length) throw new Error(fails.join(' · '));
       }));
     } finally { ids.forEach(x => { if (x && FM.media.get(x)) { try { FM.media.remove(x); } catch (e) {} } }); }
+  });
+
+  /* ═══ #1243 R RELEASE 12 · S6 A, SIMPLE'S EXPORT MENU (1243-R (c) row 12; 1243-B "S6") ═══
+     His words, 8 Nov: "the export on simple mode is really bad… it literally just says, do you want 1080p export or 720p export? And then it
+     starts exporting. Just make an export menu, but make it simple and easy to read." Export opens a PANEL (rule 3: the phone's sheet from
+     the stage's bottom edge, the PC's left band): the frame and the length, Quality, Smoothness, the size and one Save video; nothing starts
+     until Save video. FM.exporter.run is stubbed to record what it is handed (no encoder runs on this laptop, and none is needed to see the
+     settings). His last pick on this device (fm.sm.export) is put aside for each case and put back after. Red on v18.45: Export opens the
+     floating list of 1080p · Export and 720p · Export, so “Export opened no panel” is the failing sentence. */
+  const r12Mem = () => { let m = null; try { m = localStorage.getItem('fm.sm.export'); localStorage.removeItem('fm.sm.export'); } catch (e) {} return () => { try { if (m === null) localStorage.removeItem('fm.sm.export'); else localStorage.setItem('fm.sm.export', m); } catch (e) {} }; };
+  const r12Btn = () => ['m-export', 'btn-export'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length) || document.getElementById('btn-export');
+  const r12Box = () => document.querySelector('#inspector .sm-exp');
+  const r12Row = k => Array.from(document.querySelectorAll('#inspector .sm-exp .sm-exp-row[data-row="' + k + '"] .sm-exp-b'));
+  const r12Words = k => r12Row(k).map(b => b.textContent).join(', ');
+  const r12On = k => r12Row(k).filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.textContent).join(', ');
+  /* Full's Export card's rounding (js/export-card.js mb): KB under 1 MB, one decimal under 10 MB */
+  const r12Mb = bytes => { const n = bytes / 1e6; return !(n > 0) ? '0 KB' : n < 1 ? Math.max(1, Math.round(n * 1000)) + ' KB' : (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10) + ' MB'; };
+
+  test('1243 R12 · S6 Export at 380 and 1280 opens a panel (the sheet from the stage’s bottom edge on a phone, the left band on a PC) with the frame, the length, Quality 720p · 1080p and Smoothness 30 fps · 60 fps, its size and Save video all on screen, and starts nothing until Save video; picking 60 fps changes the size to what the exporter is then given, Save video exports the clips only at 1080p and 60 fps and closes the panel, the pick is there next time, and Export pressed again closes it (CONTROL: before the press no panel is up and the bar is the project row)', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    const ex = FM.exporter, run0 = ex.run, dlg = document.getElementById('export-dialog'), fails = [], put = r12Mem();
+    let got = null;
+    ex.run = async o => { got = o; };
+    try {
+      for (const width of [380, 1280]) {
+        await r4At(width, width > 700 ? 800 : 0, async function () {
+          await smP2((W, H) => smClips3(W, H).concat([smSong('song', 0, 9, W, H)]), async function (v) {
+            const at = width + ' px: ', ph = width <= 700;
+            try { localStorage.removeItem('fm.sm.export'); } catch (e) {}
+            got = null;
+            FM.selectLayer(null); await r4Settle(150);
+            if (r12Box() || r4Mode() !== 'project') { fails.push('CONTROL ' + at + 'before Export is pressed the bar is “' + r4Mode() + '”' + (r12Box() ? ' with an Export panel up' : '')); return; }
+            const xb = r12Btn();
+            xb.click(); await r4Settle(350);
+            const box = r12Box();
+            if (!box) { fails.push(at + 'Export opened no panel (the bar is “' + r4Mode() + '”' + (document.querySelector('.sm-menu') ? ', a floating list instead' : '') + ')'); return; }
+            if (r4Mode() !== 'panel') fails.push(at + 'with Export’s panel up the bar is “' + r4Mode() + '”, want panel (one menu at a time)');
+            if (got) fails.push(at + 'pressing Export started an export before Save video');
+            if (dlg && !dlg.classList.contains('hidden')) fails.push(at + 'Simple’s Export opened Full’s dialog');
+            /* where it is: the phone's sheet from the stage's bottom edge, the PC's band */
+            const host = document.getElementById('inspector-panel'), hr = host.getBoundingClientRect();
+            if (ph) {
+              if (!host.classList.contains('open')) fails.push(at + 'the phone’s sheet is not up under Export’s panel');
+              else if (FM.mobile && FM.mobile.sheetLine && Math.abs(hr.top - FM.mobile.sheetLine()) > 1.5) fails.push(at + 'the sheet starts at ' + Math.round(hr.top) + ', not at the stage’s bottom edge (' + Math.round(FM.mobile.sheetLine()) + ')');
+            } else if (hr.left > 1 || hr.width < 300) fails.push(at + 'Export’s panel is not in the left band (' + Math.round(hr.left) + ', ' + Math.round(hr.width) + ' wide)');
+            /* every part on screen and inside its sheet or band, and every button pressable where it is */
+            const parts = [['the frame', '.sm-exp-pic'], ['the length', '.sm-exp-len'], ['the size', '.sm-exp-size'], ['Save video', '.sm-exp-go'], ['the ‹', '.sm-exp-top > .sm-pback']]
+              .map(p => [p[0], box.querySelector(p[1])]).concat(r12Row('q').concat(r12Row('fps')).map(b => [b.textContent, b]));
+            parts.forEach(p => {
+              const e = p[1];
+              if (!e) { fails.push(at + 'the panel has no ' + p[0]); return; }
+              const r = e.getBoundingClientRect();
+              if (r.width < 1 || r.top < -0.5 || r.left < -0.5 || r.bottom > innerHeight + 0.5 || r.right > innerWidth + 0.5) fails.push(at + p[0] + ' is not fully on screen (' + r4Txt(r4Box(e)) + ' in ' + innerWidth + '×' + innerHeight + ')');
+              else if (r.top < hr.top - 0.5 || r.bottom > hr.bottom + 0.5) fails.push(at + p[0] + ' lies outside the ' + (ph ? 'sheet' : 'band') + ' (' + r4Txt(r4Box(e)) + ', the ' + (ph ? 'sheet' : 'band') + ' ' + Math.round(hr.top) + '–' + Math.round(hr.bottom) + ')');
+              else if (e.tagName === 'BUTTON' && !r4Hits(e)) fails.push(at + p[0] + ' is covered at its centre');
+            });
+            /* what it says, simply */
+            if (r12Words('q') !== '720p, 1080p' || r12On('q') !== '1080p') fails.push(at + 'Quality reads “' + r12Words('q') + '” with “' + r12On('q') + '” picked, want 720p, 1080p with 1080p picked (a 1920×1080 frame: no 4K)');
+            if (r12Words('fps') !== '30 fps, 60 fps' || r12On('fps') !== '30 fps') fails.push(at + 'Smoothness reads “' + r12Words('fps') + '” with “' + r12On('fps') + '” picked, want 30 fps, 60 fps with the project’s 30 picked');
+            const len = box.querySelector('.sm-exp-len');
+            if (!len || len.textContent !== '0:06') fails.push(at + 'the length reads “' + (len && len.textContent) + '”, want 0:06 (the clips, not the song’s 9 s)');
+            const pic = box.querySelector('.sm-exp-pic');
+            if (!pic || !(pic.width > 0 && pic.height > 0) || Math.abs(pic.width / pic.height - 16 / 9) > 0.05) fails.push(at + 'the frame is ' + (pic ? pic.width + '×' + pic.height : 'missing') + ', want the project’s 16:9 shape');
+            const size = () => { const s = box.querySelector('.sm-exp-size'); return s ? s.textContent : ''; };
+            const s30 = size();
+            const b60 = box.querySelector('.sm-exp-b[data-exp="fps-60"]');
+            if (!b60) { fails.push(at + 'Smoothness has no 60 fps'); return; }
+            b60.click(); await r4Settle(80);
+            const s60 = size();
+            if (r12On('fps') !== '60 fps') fails.push(at + 'pressing 60 fps leaves “' + r12On('fps') + '” picked');
+            if (s60 === s30) fails.push(at + 'the size stays “' + s30 + '” when 60 fps is picked');
+            const go = box.querySelector('.sm-exp-go');
+            go.click();
+            for (let i = 0; i < 60 && !got; i++) await v.sleep(20);
+            if (!got) { fails.push(at + 'Save video did not start an export'); return; }
+            const P = FM.scene.project;
+            if (Math.abs(got.scale - 1080 / Math.min(P.width, P.height)) > 1e-9 || got.fps !== 60 || got.from !== 0 || Math.abs(got.to - 6) > 1e-6 || got.outW || got.outH) fails.push(at + 'Save video exported scale ' + got.scale + ' at ' + got.fps + ' fps from ' + got.from + ' to ' + got.to + ' s' + (got.outW ? ' at a custom ' + got.outW + '×' + got.outH : '') + ', want 1080p (scale 1) at 60 fps from 0 to 6 s');
+            /* the size he read is the size of what the exporter was given: its bitrate (and the sound track when there is sound) over the length */
+            const want = 'About ' + r12Mb((got.bitrate + ((FM.projectHasAudio && FM.projectHasAudio()) ? 160e3 : 0)) * 6 / 8);
+            if (s60 !== want) fails.push(at + 'at 60 fps the panel said “' + s60 + '”, but the exporter was given ' + got.bitrate + ' b/s, which is “' + want + '”');
+            await r4Settle(150);
+            if (r12Box() || r4Mode() !== 'project') fails.push(at + 'after Save video the panel is ' + (r12Box() ? 'still up' : 'gone') + ' and the bar is “' + r4Mode() + '”, want the project row');
+            /* the pick is kept on this device, and Export pressed again closes the panel without exporting */
+            got = null;
+            r12Btn().click(); await r4Settle(300);
+            if (!r12Box()) { fails.push(at + 'Export did not open the panel a second time'); return; }
+            if (r12On('fps') !== '60 fps') fails.push(at + 'opened again, Smoothness has “' + r12On('fps') + '” picked, not the 60 fps picked last time');
+            r12Btn().click(); await r4Settle(300);
+            if (r12Box() || r4Mode() !== 'project') fails.push(at + 'Export pressed again left the panel up (the bar “' + r4Mode() + '”)');
+            if (got) fails.push(at + 'Export pressed again exported');
+          }, { W: 1920, H: 1080 });
+        });
+      }
+    } finally { ex.run = run0; put(); if (dlg && !dlg.classList.contains('hidden')) { const x = document.getElementById('exp-cancel'); if (x) x.click(); } }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1243 R12 · S6 Export never offers more than the frame: a 3840×2160 frame offers 720p · 1080p · 4K and opens on 4K, a 2560×1440 one offers 720p · 1080p and its own 1440p and opens on it, a 1920×1080 one stops at 1080p, a 1600×900 one offers 720p and its own 900p, a 320×240 one only its own 240p; Smoothness adds a 25 fps project’s own rate beside 30 and 60 and opens on it, and Save video on 4K exports the frame at its own size at 25 fps (CONTROL: a 30 fps project offers just 30 fps and 60 fps)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const ex = FM.exporter, run0 = ex.run, fails = [], put = r12Mem();
+    let got = null;
+    ex.run = async o => { got = o; };
+    const cases = [
+      { W: 3840, H: 2160, fps: 25, q: '720p, 1080p, 4K', on: '4K', f: '25 fps, 30 fps, 60 fps', fon: '25 fps', save: true },
+      { W: 2560, H: 1440, fps: 30, q: '720p, 1080p, 1440p', on: '1440p' },
+      { W: 1920, H: 1080, fps: 30, q: '720p, 1080p', on: '1080p', f: '30 fps, 60 fps', fon: '30 fps', control: true },
+      { W: 1600, H: 900, fps: 30, q: '720p, 900p', on: '900p' },
+      { W: 320, H: 240, fps: 30, q: '240p', on: '240p' }
+    ];
+    try {
+      for (const c of cases) {
+        await smP2((W, H) => smClips3(W, H), async function (v) {
+          const at = c.W + '×' + c.H + ' at ' + c.fps + ' fps: ';
+          try { localStorage.removeItem('fm.sm.export'); } catch (e) {}
+          got = null;
+          document.getElementById('btn-export').click(); await r4Settle(300);
+          if (!r12Box()) { fails.push(at + 'Export opened no panel' + (document.querySelector('.sm-menu') ? ' (a floating list instead)' : '')); return; }
+          if (r12Words('q') !== c.q || r12On('q') !== c.on) fails.push(at + 'Quality reads “' + r12Words('q') + '” with “' + r12On('q') + '” picked, want ' + c.q + ' with ' + c.on);
+          if (c.f && (r12Words('fps') !== c.f || r12On('fps') !== c.fon)) fails.push((c.control ? 'CONTROL ' : '') + at + 'Smoothness reads “' + r12Words('fps') + '” with “' + r12On('fps') + '” picked, want ' + c.f + ' with ' + c.fon);
+          if (c.save) {
+            const go = document.querySelector('#inspector .sm-exp .sm-exp-go');
+            if (go) go.click();
+            for (let i = 0; i < 60 && !got; i++) await v.sleep(20);
+            if (!got) fails.push(at + 'Save video did not start an export');
+            else if (got.scale !== 1 || got.fps !== 25) fails.push(at + 'Save video exported scale ' + got.scale + ' at ' + got.fps + ' fps, want the frame’s own size (scale 1) at 25 fps');
+          }
+          FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(100);
+        }, { W: c.W, H: c.H, fps: c.fps });
+      }
+    } finally { ex.run = run0; put(); }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* Review R12-1 / R12-C1: the panel's pick was worked out only when Export opened, so a frame size or rate changed under the open panel
+     (Canvas from the cog, an undo, Home and another project) left nothing pressed and Save video exported the old 2160 rung over the new
+     1080 short side: scale 2, an upscale. The change is made the way Canvas's Apply makes it (the project's numbers, then refreshAll). */
+  test('1243 R12 · S6 Export follows the frame under it: with the panel up on a 3840×2160 25 fps frame, the frame changed to 1920×1080 at 30 fps leaves 1080p and 30 fps pressed, and Save video exports the frame at its own size, never an upscale (CONTROL: before the change 4K and 25 fps are pressed)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    const ex = FM.exporter, run0 = ex.run, put = r12Mem(), fails = [];
+    let got = null;
+    ex.run = async o => { got = o; };
+    try {
+      await smP2((W, H) => smClips3(W, H), async function (v) {
+        try { localStorage.removeItem('fm.sm.export'); } catch (e) {}
+        got = null;
+        document.getElementById('btn-export').click(); await r4Settle(300);
+        if (!r12Box()) throw new Error('setup: Export opened no panel');
+        if (r12On('q') !== '4K' || r12On('fps') !== '25 fps') throw new Error('CONTROL: on the 3840×2160 25 fps frame the panel has “' + r12On('q') + '” and “' + r12On('fps') + '” pressed, want 4K and 25 fps');
+        const P = FM.scene.project;
+        P.width = 1920; P.height = 1080; P.fps = 30;
+        FM.refreshAll(); await r4Settle(200);
+        if (!r12Box()) throw new Error('setup: the panel went when the frame changed');
+        if (r12On('q') !== '1080p' || r12On('fps') !== '30 fps') fails.push('after the frame changed to 1920×1080 at 30 fps, Quality has “' + r12On('q') + '” pressed (of ' + r12Words('q') + ') and Smoothness “' + r12On('fps') + '” (of ' + r12Words('fps') + '), want 1080p and 30 fps');
+        const go = document.querySelector('#inspector .sm-exp .sm-exp-go');
+        if (go) go.click();
+        for (let i = 0; i < 60 && !got; i++) await v.sleep(20);
+        if (!got) fails.push('Save video did not start an export');
+        else if (got.scale > 1 + 1e-9 || got.fps !== 30) fails.push('Save video exported scale ' + got.scale + ' at ' + got.fps + ' fps, want at most the frame’s own size (scale 1) at 30 fps');
+        FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(100);
+      }, { W: 3840, H: 2160, fps: 25 });
+    } finally { ex.run = run0; put(); }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* Review R12-2 and R12-3: the picture is the frame at the playhead AS THE FILE HOLDS IT, so a playhead in the black a song runs on into
+     (which the file leaves out) shows the file's last frame; and a frame wider than the card's 45% cap allows at its 72 px height (2.39:1
+     at 380) keeps its shape inside the box instead of being squashed to it. The render is watched through FM.renderScene (put back by its
+     own descriptor); the shape is what the box shows: the canvas's own shape when it is fitted inside the box, else the box's. */
+  test('1243 R12 · S6 Export’s picture is a frame the file holds and keeps its shape: with the playhead at 8 s, past the clips’ 6 s end (a song runs on to 9 s), it is drawn from inside the clips, and at 380 a 2560×1072 frame shows 2.39:1, not squashed to its box (CONTROL: at 2 s it is drawn at 2 s, and a 1920×1080 frame shows 16:9)', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    const d0 = Object.getOwnPropertyDescriptor(FM, 'renderScene'), real = FM.renderScene, put = r12Mem(), fails = [];
+    let drawnAt = [];
+    Object.defineProperty(FM, 'renderScene', { configurable: true, writable: true, enumerable: d0 ? d0.enumerable : true, value: function (g, scene, t) {
+      if (g && g.canvas && g.canvas.classList && g.canvas.classList.contains('sm-exp-pic')) drawnAt.push(t);
+      return real.apply(this, arguments);
+    } });
+    try {
+      await smP2((W, H) => smClips3(W, H).concat([smSong('song', 0, 9, W, H)]), async function (v) {
+        const open = async t => { FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60); FM.setTime(t); await r4Settle(60); drawnAt = []; document.getElementById('btn-export').click(); await r4Settle(300); return r12Box(); };
+        if (!(await open(2))) throw new Error('setup: Export opened no panel');
+        if (!drawnAt.length || Math.abs(drawnAt[drawnAt.length - 1] - 2) > 1e-6) fails.push('CONTROL: with the playhead at 2 s the picture was drawn at ' + JSON.stringify(drawnAt) + ', want 2 s');
+        if (!(await open(8))) throw new Error('setup: Export opened no panel the second time');
+        if (Math.abs(FM.time - 8) > 1e-6) fails.push('setup: the playhead is at ' + FM.time + ', not 8 s');
+        if (!drawnAt.length || drawnAt.some(t => !(t < 6))) fails.push('with the playhead at 8 s, past the clips’ 6 s end, the picture was drawn at ' + JSON.stringify(drawnAt) + ' s, a frame the file (0 to 6 s) does not hold');
+        FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
+      }, { W: 1920, H: 1080 });
+      await r4At(380, 0, async function () {
+        for (const c of [{ W: 1920, H: 1080, control: true }, { W: 2560, H: 1072 }]) {
+          await smP2((W, H) => smClips3(W, H), async function () {
+            const at = (c.control ? 'CONTROL: ' : '') + 'at 380 a ' + c.W + '×' + c.H + ' frame ';
+            document.getElementById('btn-export').click(); await r4Settle(300);
+            const pic = document.querySelector('#inspector .sm-exp .sm-exp-pic');
+            if (!pic || !(pic.width > 0 && pic.height > 0)) { fails.push(at + 'has no picture in the Export panel'); return; }
+            const r = pic.getBoundingClientRect(), fit = getComputedStyle(pic).objectFit;
+            const shown = (fit === 'contain' || fit === 'scale-down') ? pic.width / pic.height : r.width / r.height, want = c.W / c.H;
+            if (!(r.width > 0 && r.height > 0) || Math.abs(shown - want) / want > 0.03) fails.push(at + 'is shown ' + (Math.round(shown * 100) / 100) + ':1 in a ' + Math.round(r.width) + '×' + Math.round(r.height) + ' box (object-fit ' + fit + '), want ' + (Math.round(want * 100) / 100) + ':1');
+            FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
+          }, { W: c.W, H: c.H });
+        }
+      });
+    } finally {
+      if (d0) Object.defineProperty(FM, 'renderScene', d0); else FM.renderScene = real;
+      put();
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* Review R12-4: an empty project opened the whole card (0:00, About 0 KB) whose Save video only said Add a clip first. Now Export says it
+     on Simple's line and opens nothing. CONTROL: the same press on a project with clips opens the panel. */
+  test('1243 R12 · S6 Export on an empty project opens no panel and says Add a clip first, then export it on Simple’s line (CONTROL: a project with clips opens the panel)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const fails = [], put = r12Mem();
+    try {
+      await smP2(() => [], async function (v) {
+        FM.selectLayer(null); await r4Settle(100);
+        document.getElementById('btn-export').click(); await r4Settle(300);
+        const heard = v.say() + ' | ' + ((document.getElementById('sm-live') || {}).textContent || '');
+        if (r12Box() || FM.simpleTools.exportOpen()) fails.push('Export on an empty project opened the panel (its length “' + ((document.querySelector('#inspector .sm-exp-len') || {}).textContent || '') + '”, its size “' + ((document.querySelector('#inspector .sm-exp-size') || {}).textContent || '') + '”)');
+        if (!/Add a clip first/.test(heard)) fails.push('Export on an empty project said “' + heard + '”, want Add a clip first, then export it');
+        FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
+      });
+      await smP2((W, H) => smClips3(W, H), async function () {
+        document.getElementById('btn-export').click(); await r4Settle(300);
+        if (!r12Box()) fails.push('CONTROL: Export on a project with clips opened no panel');
+        FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
+      });
+    } finally { put(); }
+    if (fails.length) throw new Error(fails.join(' · '));
   });
 
   /* ═══ #1253 · THE DRAWN EFFECT PICTURES IN THE APP'S EFFECT MENUS ═══
