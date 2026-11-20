@@ -28,7 +28,10 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
 6. **M3:** for PC only (with M1 on phone), or both?
 7. **Simple editor E1:** he liked it, but it has no computer version yet. Confirm E1, then draw its computer version.
 8. **ADD sheet on PC:** A2r (A2 with his fixes) [assumed], or the original A2 he said looked good?
-9. **The top "fade over the buttons" bug** (#1255 clause 4): is it the dim over the editor's top buttons while a sheet is open, or something on Home?
+9. ~~**The top "fade over the buttons" bug** (#1255 clause 4): which one?~~ ANSWERED BY EVIDENCE on 21 Nov 02:45, no question for him needed.
+   - The builder found it from his screenshots: the ADD sheet's dim leaves the editor's top-edge tab undimmed, so iOS fades the bar colour over the top buttons.
+   - It's fixed on land/b1255, along with the same fade under every other dim. It ships as v18.48.
+   - He should still confirm on his iPhone after v18.48.
 10. **Light mode on his iPhone** (light review M13): check that the clock and battery stay readable in light mode before it ships. He has to look on his phone.
 11. Earlier release questions still open:
     - v18.43: on PC, the two-row grid became one scrolling row. Does he want the grid back?
