@@ -39852,3 +39852,251 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **v18.40 (17 Nov):** clause 1 shipped (the site is the app only; `python3 tools/_public.py live` is the check). Clause 2: no Pro, the repo stays public (his answer); the old copy in Claude-game-2 is his to take down. Clause 3 (plates in the raw photos) is next.
       📍 **v18.41 (17 Nov):** clause 3 shipped. All 18 photos the app serves were looked at and checked: no location or device data, no hidden thumbnail, and no face, house number, sign or other plate that can be read. Two things only he can judge: tesla.jpg shows a residential street (two houses, no number), and bay.jpg and dusk.jpg are views from a high window. What is left is clause 2, and it is his: the old v2.83 copy in his other repo. While the repo is public (his answer of 17 Nov: no Pro), github.com still holds every old file in the project's history, these photos included, and some design sheets in tools/design (in the repo, not on the site) were made from the old photos.
       BUILT OUT UNTIL HE takes down the old copy (Claude-game-2 → the FreeMotion folder → ••• → Delete directory → Commit changes); the logger reminds him until it is gone. ✔ reply checked 17 Nov (his reply above was about Pro and keeping the repo public, an older ask; this line waits on the old copy).
+- [ ] **1255 — Polish every section with a strong visual identity, dark AND light, phone AND computer — OPTIONS ONLY, "Don't change anything until I approve"; animated pictures for the audio effects; designed section buttons; the home screen most of all; and a BUG: the fade at the top of the screen over the buttons is still there** (20 Nov 2026, 19:35-19:55 AWST, three messages, via INBOX — his words, with 9 phone screenshots of v18.46)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      polish every section with a strong visual identity; animated audio-effect pictures; designed category buttons; home screen most; dark AND light; the top fade is still there (9 phone screenshots, v18.46)
+      **His words (verbatim):** I want you to do some brainstorming on how we could polish up all of these different sections and how they look. Don't change anything until I approve on it and give like a shitload of different options for each one. This is a big job and I want you to take it seriously like a big job and you can get what agents to do it and just make sure everything you show me as polished and looks great. Also just a quick note the fading issue like whether the colour like at the top of the screen there is like some fade overlapping the buttons is still there right now. What I want you to do also is come up with designs for like the menus for the effects and the audio effects. Each audio effect needs its own icon like animated thing like whatever just like the visual effects do but you need to you know also cause it's like you know each section like the colouring section or whatever you click on that section and then it opens up the button to click and get into that section needs to have a nice design as well. Put a lot a lot of effort into those and then I need you to yeah basically just get a whole bunch of agents so it can be done by tonight I mean no rush of course but if you can do a quicker do it quicker I'm just for it to all. Be there ready like you know all these things like all these different menus like could be polished up things to be different like slightly designed Twix just so it looks like you know real time and effort and care was put into it. It's perfect it with it while still keeping a theme to the app so it's like a visual identity that is actually a strong and good one. I think the home screen that you first see when you open up it definitely is one of the most work needed. You need to think about it for dark mode and light mode.
+
+      **His screenshots (9, iPhone, v18.46, 19:32-19:33):**
+      1. The home project list.
+      2. The Simple editor on Project 8.
+      3. The Full editor timeline.
+      4-8. The ADD sheet's five tabs: Elements, Shape, Media, Audio, Template.
+      9. The effects browser: the Visual tab with its category cards.
+      Copies are in the logger's scratchpad at polish/ctx/.
+
+      **His clauses:**
+      1. [ ] Brainstorm how to polish all these sections and how they look.
+      2. [ ] Change NOTHING until he approves, and give "a shitload" of options for each.
+      3. [ ] It's a big job, so treat it seriously and use agents. Everything shown must be polished.
+      4. [ ] BUG: the fade at the top of the screen that overlaps the buttons is still there (v18.46).
+      5. [ ] Design the effects menus and the audio-effects menus.
+      6. [ ] Each audio effect gets its own animated picture, like the visual effects have.
+      7. [ ] Each section button that opens a section (Colouring and the rest) needs a nice design.
+      8. [ ] Put a lot of effort into those.
+      9. [ ] Use a whole bunch of agents, so it's done tonight if possible ("no rush").
+      10. [ ] Polish every menu with small designed touches that show real time and care.
+      11. [ ] Keep one theme across the app: a visual identity that's actually strong and good.
+      12. [ ] The home screen needs the most work.
+      13. [ ] Think about both dark mode and light mode.
+
+      **His follow-up, ~19:50 (verbatim):** We also need to basically have a second design for everything for light mode inside the editor correct me if I'm wrong but some people focus better like you know look at their screen better when there's a light mode so it's actually very important to them so just having there as an option the first option like everything will be default as dark mode but light mode should also supply inside the editor now as well but it should be. It should be gun tastefully and you know you gotta look into every single menu because there's a lot you know editor now or editor has gone very big so you're gonna have to do a lot of attention to detail.
+
+      **Follow-up clauses:**
+      14. [ ] Every design gets a second, light-mode version, including everything INSIDE the editor.
+      15. [ ] Dark stays the default. Light mode is an option that people can choose.
+      16. [ ] Light mode must be done tastefully.
+      17. [ ] Look into EVERY menu (the editor has grown very big), with a lot of attention to detail.
+
+      **His second follow-up, ~19:55 (verbatim):** Also, I'm not sure if you're doing it, but I just realized you have to do it all for phone and all for computer. So it's a lot of work, doubled up.
+
+      **Second follow-up clause:**
+      18. [ ] All of it for phone AND for computer.
+
+      **Logger's plan (not his words):**
+      - **Phone and computer (clause 18).**
+        - Every section's options are drawn at phone size (390x844).
+        - Each section's strongest options are redrawn at computer size: the desktop Studio layout at 1440x900, in dark and light.
+        - The real-app light-mode check screenshots every menu at both 390 wide and 1440 wide.
+      - **Light mode (clauses 14-17)** is covered two ways.
+        - (1) Every design option on the canvas comes in dark AND light.
+        - (2) A real light theme is prototyped as a scoped CSS file on a COPY of the app, outside ~/FreeMotion.
+          - Every editor menu, sheet, panel and popover is opened in that copy and screenshotted in dark and light side by side, so "every single menu" is checked against the real UI rather than drawn from memory.
+          - The approved CSS becomes the builder's release. Dark stays the default; light is a Settings choice.
+        - Facts: today only Home has a dark/light switch (`html[data-home]`). The editor is dark-only. styles.css is 13,000 lines with about 1,056 hex and 761 rgba colours outside its 46 variables, so the light theme is a real job.
+      - **Clauses 1-3 and 5-13 are DESIGN OPTIONS ONLY.** The logger's workflow makes them tonight and shows them on a Claude Design canvas: https://claude.ai/artifact/VdLq7tSBTCtn7uDBx9GRQz
+        - It covers: 6 identity directions; the home screen in dark and light; the Simple and Full editors; the ADD sheet tabs; the effects browser; designed category buttons for all 12 visual and 5 audio sections; the effect menus inside a section; the audio-effects menus; and 48 animated audio-effect pictures.
+        - Each section marks one option Recommended.
+        - **NOTHING lands in the app until he picks.** The builder must not implement any of it before his picks are recorded here. Each pick then becomes a builder release.
+      - **The audio pictures (clause 6)** use the same kit contract as the 238 visual pictures (fx-pics/, #1243 FX1), so an approved set lands the same way.
+      - **Clause 4 is a BUG for the builder** (oldest-first as usual). Candidates, from his screenshots:
+        - (a) The dim scrim over the editor's top-bar buttons while the ADD sheet is open (shots 4-8).
+        - (b) A gradient at the top of Home that sits over the gear/search/avatar when the list scrolls.
+        - (c) A regression of #920 / G1+G12 (v18.37, the top-edge tab).
+        - The logger asked him which one; if he hasn't answered, check (b) and (c) on a phone-width run first.
+      - **Ties to:** the unnumbered "visual identity pass before any public release" item and BEFORE-PUBLISHING.md (the look must become our own, not Alight Motion's).
+      📌 **Builder, 20 Nov:** logged from INBOX as #1255, word for word. Clause 4 (the fade at the top over the buttons) is a bug and is the builder's: it is looked at on a phone-width run, candidates (b) and (c) first. Clauses 1-3 and 5-18 are design options, which the logger's workflow is drawing; nothing of them is built before his picks are written under this entry (his clause 2). UNBLOCKED for clause 4: the logger's question to him about which fade it is does not hold the bug; looking at the phone-width run settles it, as the plan's own line says.
+      📥 **Follow-up, via INBOX — 20 Nov 2026, ~23:20 AWST: first reactions to the #1255 design options (not a pick yet)**
+      **His words (verbatim):** H2 pc one is great, I think orange looks really good but I'll need to see it in the editor before I make a decision
+
+      **Logger's note (not his words):**
+      - "H2 pc" is the computer version of Home option H2.
+      - "Orange" is the recommended identity, Cutline: warm charcoal and paper with one vermilion accent (#ff5a36 dark / #c63c1b light). Every section design was drawn in it.
+      - He hasn't decided. He wants to see it in the editor first. The Simple and Full editor options (E1-E6, T1-T6) went up on the canvas at 23:20 for that reason.
+      - Still NOTHING to build for #1255 until he picks.
+      📥 **Follow-up, via INBOX — 20 Nov 2026, ~23:30 AWST: #1255 direction: minimal ("less is more"), no big panel for the open project**
+      **His words (verbatim):** Also for the designs I think they're really good. I think we should focus on minimalism like lessons more so like just let's keep it minimal in the home menu instead of putting information and heaps of design on everything. I also think there shouldn't be like a massive thing for the one that you have opened just like a simplistic like some of the designs are good but like I prefer the ones that are more minimal
+
+      **His clauses:**
+      1. [ ] The designs are really good.
+      2. [ ] Focus on minimalism ("lessons more" is speech-to-text for "less is more").
+      3. [ ] Keep the HOME menu minimal: not lots of information and heavy design on everything.
+      4. [ ] No massive element for the project that's currently open. Keep it simple.
+      5. [ ] He prefers the more minimal options in general.
+
+      **Logger's plan (not his words):**
+      - A "minimal round" tonight:
+        - New minimal Home options N1-N6 in the Cutline look: phone in dark and light, and the best two on computer.
+        - The open project gets at most a quiet marker, never a hero.
+        - An audit ranks every other section's options by how minimal they are.
+        - Where no option is truly minimal, two minimal options are drawn for that section.
+      - The direction rule for every #1255 pick and build: minimal.
+      - Still NOTHING to build for #1255 until he picks.
+      📥 **Follow-up, via INBOX — 20 Nov 2026, ~23:40 AWST: #1255 reaction: the Simple editor's first option (E1) is good**
+      **His words (verbatim):** All the first options for the simple editor are good
+
+      **Logger's note (not his words):**
+      - "The first options" are E1, the first column on the canvas's Simple editor page: phone dark and light. (E1 has no computer version; the computer versions are E2 and E5.)
+      - Read it as a strong lean towards E1, not yet a final pick, because he also asked for minimal designs at 23:30.
+      - If E1 is picked, its computer version still has to be drawn.
+      📥 **Follow-up, via INBOX — 20 Nov 2026, ~23:50 AWST: #1255 reaction: Full editor computer version liked; two things to change; the switch must keep its colour**
+      **His words (verbatim):** Hello for the full editor I like all of the like the first options like the PC version. The only thing I don't like is the little lines that I like at the start of each layer. I feel like it's just over designed with shit and also I don't like that all the soul has been taken out of the switch because the switch needs to have colour still because I think it changes colour based on what layer you have selected in where the ad layer is. So we need to make sure when integrating this has the same function also for the fine versions I'll get back to you on those.
+
+      **His clauses:**
+      1. [ ] He likes the Full editor's first options and the PC (computer) version.
+         - Logger's reading: the first computer version on the canvas is T2 (dark and light).
+      2. [ ] He doesn't like the little lines at the start of each layer: "over designed".
+      3. [ ] The switch must keep its colour. Today it changes colour to match the selected layer, near the add-layer row.
+      4. [ ] When this is integrated, it must keep that same function.
+      5. [ ] He'll come back about the phone versions ("fine versions" is speech-to-text for "phone versions").
+
+      **Logger's plan (not his words):**
+      - Tonight T2's computer artboards are revised (lines gone, the switch coloured by the selected layer) and put on the canvas beside the originals.
+      - Build rule for #1255: the switch keeps today's behaviour, taking the selected layer's colour.
+      📥 **Follow-up, via INBOX — 20 Nov 2026, 23:00 AWST: #1255 Full editor PHONE notes; design EVERY editor section; one clean decisions chat before any switch-over**
+      (Correction: the four #1255 reaction blocks above are stamped ~23:20-23:50. The real times were about 22:45-22:58.)
+
+      **His words (verbatim):** Okay, so for the phone version, my issues with it are basically that the lines that you've got like a line on the right of each layer and then you put the lines on the left of that shit like I'm talking about the very first option by the way I didn't like it. The first one is just the closest one. I like the colour scheme. I don't like how you put the view button like the view options button like on top of where the canvas goes. You should put that back down and the switch button as Welsh should still stay on the same spot where it is now because it doesn't make sense to put the switch on the ad layer because it is there to interact with the outliers so if you can put it on the Adelaide layer then that's just annoying. Also you made like the. Layout with the notches way too big and have numbers on it. I don't want it like that because then it just makes it too cluttered
+
+      Also that is just one page so far what you've done is just one page of the editors still heaps of other sections on the editors that need designing. You have access to free motion so you can actually see those things. Take pictures of them yourself and also know how stuff works yourself I'm you have access all of it so I don't need to explain it to you. You should know what to do and just like yeah give me everything I need and basically before we you know make a switch over to any of the new stuff I just want you to have one real simple chat with me where you're like okay? Here's all the decisions you need to make you know these are the ones you like do you still like them? You change your mind you know here's the stuff changed to how you said you wanted it changed and you know before and after and like you know, are you ready to do the full switch over and it'll just be like the best clean process and we will then you will then start when I'm ready to go. I like it all then basically just you're just starting integrating it into the app.
+
+      **His clauses (speech-to-text fixed: "as Welsh" = as well, "ad layer"/"Adelaide layer" = add layer, "outliers" = other layers, "fine" = phone):**
+      1. [ ] Full editor PHONE, option T1 ("the very first option", the closest one, but he didn't like it):
+         a. He likes the colour scheme.
+         b. Remove the lines on the right AND on the left of each layer.
+         c. Put the view-options button back down where it was, not over the canvas.
+         d. The switch stays exactly where it is today. It is NOT moved onto the add-layer row, because it's there to interact with the other layers.
+         e. The ruler (the "layout with the notches") is too big and carries numbers. Make it small and without numbers; it's too cluttered.
+      2. [ ] That was only one page of the editor. Every other editor section needs designing too.
+      3. [ ] The logger has access to FreeMotion: take the pictures and learn how each part works itself, without asking him.
+      4. [ ] Give him everything he needs.
+      5. [ ] PROCESS, before ANY switch-over to the new designs, ONE simple decisions chat:
+         - every decision he must make, and the ones he liked ("do you still like them?")
+         - every change made the way he asked, shown before and after
+         - "are you ready to do the full switch over?"
+         Integration into the app starts only after he says he's ready.
+
+      **Logger's plan (not his words):**
+      - T1 is redrawn as T1r (phone, dark and light) with 1b-1e applied. The same rules are applied to the computer revision T2r. Both go on the canvas beside the originals.
+      - EVERY editor section (clauses 2-4):
+        - The new look (Cutline, minimal) is applied to a COPY of the real app as a theme, in dark and light.
+        - All 217 editor surfaces the crawler found are shot at phone and computer size and shown as current | new dark | new light.
+        - This is the real app in the new look rather than hand-drawn guesses, so every function stays exactly as it works today.
+      - Clause 5 is the GATE for #1255: no builder release from these designs until the decisions chat has happened and he has said he's ready.
+      📥 **Follow-up, via INBOX — 20 Nov 2026, ~23:25 AWST: #1255 Home H9 notes (wordmark centred, no giant "Projects"); computer Home to fill the screen better**
+      **His words (verbatim):** What I want the texts on H9 saying free motion in the middle, okay. Good with the settings on the left. And I don't want it to have a giant text saying projects. Oh, this is like that TikTok video that I've done. Because it says projects the at the bottom left. \ Also, with the design on computer, it can have the giant thing on the left with your currently open project, and that it can have like more details like on the project that you have opened or whatever. Like I feel like computer can show more details and be less minimal. Since you've got more space, I think it should still try and be minimal, but I just think it has a lot of wasted space on like the left and right of the screen, and it looks kind of weird. I mean, maybe that's fine actually. I don't know. Let's experiment with like stuff filling up the screen a bit better on computer. What do you mean? I don't like the idea where each project is like a massive picture on PC. What? Did Jackson die? Wow, that was cool. Oh, he's deafened. So yeah, just play around with that one a bit more.
+      (He was speaking while gaming. "this is like that TikTok video", "What do you mean?", "Did Jackson die? ... he's deafened" are side remarks, not requests.)
+
+      **His clauses:**
+      1. [ ] H9 phone: the FreeMotion wordmark goes in the MIDDLE of the top bar.
+      2. [ ] Settings on the left is good, so keep it.
+      3. [ ] No giant "Projects" heading. The bottom nav already says Projects.
+      4. [ ] Computer Home may have a big panel on the LEFT for the currently open project, with MORE detail about it. Computer can show more and be less minimal, but should still try to be minimal.
+      5. [ ] The computer H9 wastes too much space left and right and looks weird. Experiment with filling the screen better.
+      6. [ ] He does NOT want each project shown as a massive picture on PC.
+      7. [ ] "Play around with that one a bit more."
+
+      **Logger's plan (not his words):**
+      - H9r phone in dark and light: wordmark centred, settings left, no "Projects" heading.
+      - Three computer experiments, each in dark and light, all with no massive per-project pictures:
+        - (a) an open-project panel on the left with the full details, and a compact list on the right
+        - (b) the same panel with a compact grid of small thumbnails
+        - (c) a full-width list with detail columns
+      - All go on the canvas next to H9.
+      📌 **Builder, 20 Nov 23:37:** the 6 follow-ups above are logged word for word (his reactions to the design options, with the logger's notes). They change nothing for the builder yet: every design clause waits for the ONE decisions chat he asked for (his process clause 5 above) and for him to say he is ready. Clause 4 of the first message, the fade at the top, is still the builder's.
+      📥 **Follow-up, via INBOX — 21 Nov 2026, ~00:05 AWST: #1255 ADD sheet notes (A2 picked as good; header row out; templates smaller with an explanation; computer is missing the playback button)**
+      **His words (verbatim):** a2 is good. it doesnt need to say add to project 8 tho as u can see the project name at the top. you could probably just remove that whole row with the x and the ADD and just have the line there to swipe down. a2 is good. a2m is good but could be better. the icon for template isnt verygood. a2s is good. a2t isnt good coz the templates are massive, also should have an explanation. on the computer one u are missing the button that changes playback stuff.
+
+      **His clauses:**
+      1. [ ] A2 (the Elements tab) is good.
+      2. [ ] Drop "Add to Project 8", since the project name is already at the top. Remove the whole header row (the X and "ADD") and keep only the grab line for swiping down.
+      3. [ ] A2m (Media) is good but could be better.
+      4. [ ] The Template tab's icon isn't very good.
+      5. [ ] A2s (Shape) is good.
+      6. [ ] A2t (Template) isn't good: the templates are massive, and it needs an explanation.
+      7. [ ] The computer version is missing the button that changes playback settings.
+
+      **Logger's plan (not his words):**
+      - A2r is drawn tonight: all five tabs, phone dark and light, plus computer dark and light:
+        - no header row, only the grab line
+        - a better Template icon
+        - Media improved
+        - smaller template cards with a one-line explanation
+        - the computer version gets back the playback button today's editor has
+      - It goes on the canvas beside A2.
+      📌 **Builder, 21 Nov 00:37:** the 1 follow-ups above are logged word for word (his reactions to the design options, with the logger's notes). They change nothing for the builder yet: every design clause waits for the ONE decisions chat he asked for (his process clause 5 above) and for him to say he is ready. Clause 4 of the first message, the fade at the top, is still the builder's.
+      📥 **Follow-up, via INBOX — 21 Nov 2026, ~00:45 AWST: #1255 the FreeMotion logo in the designs is wrong; polish it before anything goes live**
+      **His words (verbatim):** Also, while I'm going through this, I should point out that what you've done with the free motion logo, like the little F with the lines, like a you haven't really created the logo to you know, look like the original one that we've got, and you've kind of made it look shit. So just make sure that that is polished up before. Like, you don't have to go and rechange all of these things right now. Just like remember that before this goes live, it needs to be polished.
+
+      **His clauses:**
+      1. [ ] The designs' FreeMotion logo (the little F with the lines) doesn't look like the original logo. It looks bad.
+      2. [ ] It doesn't need fixing in every mockup now.
+      3. [ ] Before this goes live, the logo MUST be polished and match the original.
+
+      **Logger's note (not his words):**
+      - Build rule for #1255: never redraw the mark.
+      - Use the app's REAL logo and wordmark assets. CONTEXT.md notes the current wordmark is a PNG.
+      - Only recolour or retint it for Cutline, and only if he approves that.
+      - This goes on the decisions-chat checklist as a must-do before the switch-over.
+      📥 **Follow-up, via INBOX — 21 Nov 2026, ~00:50 AWST: #1255 clean animations must ship with the redesign; the "Tap to add a layer" width stays as it is**
+      **His words (verbatim):** Also, I don't know if you've done this, but clean, before it gets like added, clean animations should be implemented. And also the tap to add a layer section shouldn't be wider than the normal layers. It should be like the same width, I reckon. Actually, you know what? It's not a big deal. Just leave it bigger how it is now. Don't even worry about what I just said.
+
+      **His clauses:**
+      1. [ ] Clean animations must be in place BEFORE the redesign is added to the app.
+      2. [x] ~~Make "Tap to add a layer" the same width as the layers.~~ He withdrew this in the same message: "Just leave it bigger how it is now. Don't even worry about what I just said." Nothing to do.
+
+      **Logger's note (not his words):**
+      - Build rule for #1255: the switch-over includes a motion pass, with the same quality bar as the look.
+      - That covers sheets, menus, tabs, selection, press feedback and the light/dark switch.
+      - The logger prepares a short motion spec (durations, easing, what moves) for the decisions chat.
+      📥 **Follow-up, via INBOX — 21 Nov 2026, ~00:55 AWST: #1255 he likes T4 on computer; the add-layer row becomes a thin hover bar on PC; hover on everything on PC; the switch fully detailed**
+      **His words (verbatim):** i like t4 computer dark and light it just should realise that the layer saying tap to add a layer shouldnt be there coz on pc tapping it doesnt add a layer and it should be thin with no text and expand when u hover over and on pc everything should have some sort of subtle but nice change when hovering over buttons. and the switch should be fully detailed
+
+      **His clauses:**
+      1. [ ] He likes T4 computer, dark and light.
+      2. [ ] On PC, drop the "Tap to add a layer" row, because tapping it doesn't add a layer on PC.
+      3. [ ] Instead, on PC it's a THIN bar with no text that expands when hovered.
+      4. [ ] On PC, EVERY button gets a subtle but nice hover change.
+      5. [ ] The switch must be shown fully detailed: today's real switch, not a simplified one.
+
+      **Logger's plan (not his words):**
+      - T4r computer, dark and light, tonight:
+        - the thin bar that expands on hover (real CSS :hover, plus a still of the hover state)
+        - hover states on the buttons
+        - the real switch drawn in full detail
+      - Build rule for #1255: on PC, every button has a subtle hover state, and the PC add-layer affordance is the thin hover bar.
+      📥 **Follow-up, via INBOX — 21 Nov 2026, ~01:00 AWST: #1255 Home picks: H9r (phone) great, H9a (computer) good**
+      **His words (verbatim):** h9r dark home minimal is great. h9a computer is good
+
+      **Logger's note (not his words):**
+      - HOME is effectively picked: H9r on phone (dark shown; its light twin is H9r-light) and H9a on computer (the open-project panel plus a list).
+      - To be confirmed once in the decisions chat, per his process rule.
+      📥 **Follow-up, via INBOX — 21 Nov 2026, ~01:05 AWST: #1255 the Template icon on A2r is still bad**
+      **His words (verbatim):** template icon on a2r is bad still
+
+      **Logger's note (not his words):** A sheet of real Template-icon options is going on the canvas (ADD sheet page), shown at tab size and large, in dark and light, with one recommended. He picks one, and it replaces the icon in A2r.
+      📥 **Follow-up, via INBOX — 21 Nov 2026, ~01:07 AWST: #1255 ADD sheet pick: the whole A2r row is good**
+      **His words (verbatim):** the whole a2r row is good
+
+      **Logger's note (not his words):**
+      - The ADD sheet is effectively picked as A2r: all five tabs, plus the computer A2r.
+      - The Template tab icon is still to be chosen from the options sheet being drawn now.
+      - To be confirmed once in the decisions chat.
+      📥 **Follow-up, via INBOX — 21 Nov 2026, ~01:10 AWST: #1255 ADD sheet on PC: A2 dark and light look good**
+      **His words (verbatim):** pc a2 dark and light look good.
+
+      **Logger's note (not his words):**
+      - He was looking at the ORIGINAL A2 computer boards.
+      - A2r's computer version is A2 with his fixes applied: no header row, and the Timeline options button back beside View options.
+      - So the PC pick is A2r computer unless he says otherwise. Check this once in the decisions chat.
+      📌 **Builder, 21 Nov 01:36:** the 7 follow-ups above are logged word for word (his reactions to the design options, with the logger's notes). They change nothing for the builder yet: every design clause waits for the ONE decisions chat he asked for (his process clause 5 above) and for him to say he is ready. Clause 4 of the first message, the fade at the top, is still the builder's.
