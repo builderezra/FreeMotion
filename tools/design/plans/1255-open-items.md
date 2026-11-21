@@ -33,6 +33,16 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
    - SHIPPED in v18.48, live 21 Nov 10:15: the grown Add menu plus 27 more screens (16 editor, 5 dark Home, 6 light Home), and the New project card.
    - HIS CHECK on his iPhone: open a project, tap "Tap to add a layer" and look at the top. If any screen still fades, name it.
    - The light Home is closer but not exact; that remainder is tracked as #1256.
+   - **REOPENED 21 Nov 11:06.** He said "Fade still there" (10:58) and "the top bar glitches in and out when loading in ... in and out of project" (11:02).
+     - The builder found the real fade: iOS 26's top-edge effect lays a tint AND a BLUR over the top of a Home Screen app, so the title and buttons blur at their top while the clock stays sharp.
+     - v18.37 and v18.48 only matched the tint's colour, so v18.48 fixed a neighbouring fault, not his.
+     - ASKED HIM at 11:10, with the 3x crop: "is this the fade?"
+     - The builder is reading WebKit's source for what stops that blur. The fix will come with an on-phone A/B. The glitch while opening or closing a project is logged as a second fault in the same work.
+     - v18.49 (live about 19:00 on 21 Nov) adds Settings > Appearance > "Sharp top buttons".
+       - It is OFF by default, per his #920 words "I don't want the buttons lower".
+       - Turned on, the top buttons sit about 36 pt below the clock area, out of the blur, which ends 33-34 pt below it on all ten of his screenshots.
+       - Also fixed: the open-project glitch (the top changed twice; now once). Added: a test card under Settings > Reports > "Top of the screen test".
+       - ASK HIM: turn Sharp top on, or keep the buttons where they are? The comparison picture was sent 21 Nov ~13:40.
 10. **Light mode on his iPhone** (light review M13): check that the clock and battery stay readable in light mode before it ships. He has to look on his phone.
 11. Earlier release questions still open:
     - v18.43: on PC, the two-row grid became one scrolling row. Does he want the grid back?
