@@ -65365,7 +65365,7 @@
    * FAILS ON v18.36: there are no edge tabs, so the first state reports 0 tabs shown.
    * CONTROL: with the tabs hidden, the same probe on the light Home finds a box that may NOT set the colour (the bug's
    * own shape), so the probe can tell the fix from the bug. */
-  test('920 #1243 G12 one invisible top-edge tab per screen, in that screen colour, so iOS never keeps the intro cream or drops to its blur (CONTROL: without the tabs the light Home cannot set the colour)', { item: '920', budgetMs: 120000 }, async function () {
+  test('920 #1243 G12 one invisible top-edge tab per screen, in that screen colour (on a phone Settings over the light Home has its own), so iOS never keeps the intro cream or drops to its blur (CONTROL: without the tabs the light Home cannot set the colour)', { item: '920', budgetMs: 120000 }, async function () {
     const rgb = function (s) { const m = /rgba?\(([^)]+)\)/.exec(s || ''); if (!m) return null; const p = m[1].split(/[ ,\/]+/).filter(Boolean).map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
     const fromHex = function (h) { return { r: parseInt(h.slice(1, 3), 16), g: parseInt(h.slice(3, 5), 16), b: parseInt(h.slice(5, 7), 16), a: 1 }; };
     const hx = function (c) { return '#' + [c.r, c.g, c.b].map(function (v) { return Math.round(v).toString(16).padStart(2, '0'); }).join(''); };
@@ -65460,11 +65460,17 @@
         step(check(window, where + ', a dialog over the ' + look + ' Home', dimmed(hTop), 'home-' + look + '-dim'), 'a dialog over the ' + look + ' Home');
         askClose(); await p; await sleep(60);
         step(check(window, where + ', the ' + look + ' Home again', hTop, 'home-' + look), 'the dialog closed');
-        /* Settings over this Home: a panel with a scrim, which WebKit never lets replace the colour, so the strip stays */
+        /* Settings over this Home: a panel with a scrim, which WebKit never lets replace the colour. On a PC, and over the dark
+           Home on a phone (its panel's top is #0b1922, within two levels), the Home's tab stays. #1255 clause 4: on a phone the
+           panel tops the screen, and over the light Home its #f4f6f9 is not the Home's #fafdff, so it has its own tab, in the
+           colour the page paints at the top centre (paint1255). */
         if (FM.settings && FM.settings.open) {
+          const own = look === 'light' && matchMedia('(max-width: 700px)').matches;
           FM.settings.open(); await sleep(320);
-          check(window, where + ', Settings over the ' + look + ' Home (same screen)', hTop, 'home-' + look);
+          if (own) step(check(window, where + ', Settings over the light Home (the panel’s own tab)', paint1255(innerWidth / 2, 2, false).c, 'home-light-settings'), 'Settings over the light Home');
+          else check(window, where + ', Settings over the ' + look + ' Home (same screen)', hTop, 'home-' + look);
           if (FM.settings.close) FM.settings.close(); await sleep(320);
+          if (own) step(check(window, where + ', the light Home after Settings', hTop, 'home-light'), 'Settings closed');
         }
       }
       /* the light Home, then a project the way he opens one: the editor parked during the load, then the swoop */
@@ -168339,6 +168345,343 @@
         await shutRow1084(c);
       }
     }));
+  });
+
+  /* #1255 CLAUSE 4, HIS WORDS (20 Nov, nine iPhone screenshots of v18.46): "the fading issue like whether the colour like at
+   * the top of the screen there is like some fade overlapping the buttons is still there right now". His five ADD-sheet
+   * screenshots, measured: the strip under the clock is #11151c and fades down to #0b0f14 over the back button, the title
+   * and the top buttons, while the page under it is dimmed to #0b0f14 (his home and editor shots, with nothing dimmed, show
+   * no fade). The Add menu that grows out of the Tap to add a layer row dims the editor with .add-stretch-dim
+   * (rgba(2,6,10,.55)), a box the size of the screen, which WebKit never takes the strip's colour from, so the editor's
+   * top-edge tab (#161a21) stayed and iOS laid that undimmed colour over the dim: the fade. v18.37 (queue 920) gave a
+   * dialog (#fm-ask) its dimmed tab but not this dim.
+   * Proves, with the setting on, a project with layers, at a phone width: with the menu up exactly one top-edge tab shows,
+   * WebKit's own rule (edge1243) takes it as a Candidate, its colour is the bar seen through the dim, and it is a
+   * DIFFERENT tab from the one before the tap (the one event that makes WebKit look again); closed, the bar's own tab is back.
+   * CONTROL: before the tap the same probe finds the editor's tab in the bar's own colour, so it can see a tab and read it.
+   * FAILS ON ecd650cb by its own sentence: with the menu up the editor tab still shows in the undimmed #161a21. */
+  test('1255 · with the Add menu grown from the Tap to add a layer row, the strip under the clock takes the dimmed bar colour instead of fading the undimmed one down over the top buttons (CONTROL: before the tap the probe reads the editor tab)', { item: '1255', budgetMs: 20000 }, async function () {
+    const rgb = function (s) { const m = /rgba?\(([^)]+)\)/.exec(s || ''); if (!m) return null; const p = m[1].split(/[ ,\/]+/).filter(Boolean).map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; };
+    const hx = function (c) { return '#' + [c.r, c.g, c.b].map(function (v) { return Math.round(v).toString(16).padStart(2, '0'); }).join(''); };
+    const over = function (top, under) { const a = top.a; return { r: top.r * a + under.r * (1 - a), g: top.g * a + under.g * (1 - a), b: top.b * a + under.b * (1 - a), a: 1 }; };
+    const far = function (a, b) { return Math.max(Math.abs(a.r - b.r), Math.abs(a.g - b.g), Math.abs(a.b - b.b)); };
+    const shown = function () { return [].slice.call(document.querySelectorAll('.fm-edge')).filter(function (e) { return getComputedStyle(e).display !== 'none'; }); };
+    const root = document.documentElement;
+    return grow1084(true, () => onRows1084(async function (c) {
+      const sheet = c.sheet;
+      try {
+        if (!matchMedia('(max-width: 700px)').matches) throw new Error('setup: not at a phone width, so the bar colour below is not the phone bar');
+        const bar = rgb(getComputedStyle(root).backgroundColor);   /* #920: at a phone width <html> carries #topbar-m's top colour */
+        /* CONTROL: no menu up, the probe finds the editor's own tab, WebKit takes it, in the bar's own colour */
+        const on0 = shown();
+        if (on0.length !== 1 || on0[0].dataset.edge !== 'editor') throw new Error('CONTROL: with a project up and no menu, the top-edge tabs shown are [' + on0.map(function (e) { return e.dataset.edge; }).join(', ') + '], not the editor tab alone, so this probe cannot read the strip');
+        const e0 = edge1243(window);
+        if (e0.el !== on0[0] || e0.type !== 'Candidate') throw new Error('CONTROL: WebKit’s rule takes ' + e0.container + ' (' + e0.type + '), not the editor tab');
+        if (far(rgb(getComputedStyle(on0[0]).backgroundColor), bar) > 2) throw new Error('CONTROL: the editor tab is ' + getComputedStyle(on0[0]).backgroundColor + ', not the bar’s own ' + hx(bar));
+        /* THE MENU UP, grown out of the row, its dim fully in */
+        c.tap();
+        if (!clipAnim1084(sheet)) throw new Error('setup: the row tap did not grow the add menu (no stretch), so there is no dim to test');
+        stretchAnims1084(sheet).forEach(function (x) { x.finish(); });
+        const dim = document.querySelector('.add-stretch-dim');
+        if (!dim || !(+getComputedStyle(dim).opacity > 0.99)) throw new Error('setup: the dim behind the grown menu is ' + (dim ? 'at opacity ' + getComputedStyle(dim).opacity : 'missing'));
+        const want = over(rgb(getComputedStyle(dim).backgroundColor), bar);
+        const on1 = shown();
+        if (on1.length !== 1) throw new Error('with the Add menu up ' + on1.length + ' top-edge tabs show (' + on1.map(function (e) { return e.dataset.edge; }).join(', ') + '), not exactly one');
+        const got = rgb(getComputedStyle(on1[0]).backgroundColor);
+        if (far(got, want) > 2) throw new Error('with the Add menu up the strip under the clock is ' + hx(got) + ' (the ' + on1[0].dataset.edge + ' tab) while the screen under it is dimmed to ' + hx(want) + ': iOS fades that brighter colour down over the back button, the title and the top buttons (his #1255 clause 4)');
+        if (on1[0] === on0[0]) throw new Error('with the Add menu up the same top-edge tab stays shown, so WebKit never looks again and keeps the undimmed colour');
+        const e1 = edge1243(window);
+        if (e1.el !== on1[0] || e1.type !== 'Candidate') throw new Error('with the Add menu up WebKit’s rule takes ' + e1.container + ' (' + e1.type + ', walk ' + e1.walk + '), not the ' + on1[0].dataset.edge + ' tab');
+        /* CLOSED: the bar's own tab is back */
+        FM.mobile.closeAdd();
+        await sleep(STRETCH1084 + 300);
+        const on2 = shown();
+        if (on2.length !== 1 || on2[0] !== on0[0]) throw new Error('after the Add menu closed the top-edge tabs shown are [' + on2.map(function (e) { return e.dataset.edge; }).join(', ') + '], not the editor tab again: the strip stays dimmed over an undimmed screen');
+        if (root.classList.contains('fm-add-dim')) throw new Error('after the Add menu closed <html> still says the screen is dimmed (fm-add-dim)');
+      } finally {
+        await shutRow1084(c);
+        root.classList.remove('fm-add-dim');
+      }
+    }));
+  });
+
+  /* #1255 CLAUSE 4: every box the size of the screen with a see-through background, read from the SOURCE (the app's stylesheets,
+     index.html's own style blocks, and every app script's style strings), never from what an earlier test left in the page.
+     A rule counts when it (or a rule for the same element: its own selector plus more, like .set-scrim and .set-scrim.open)
+     is position: fixed with all four edges at 0 AND gives a background colour that is neither clear nor solid. A script line
+     counts when one string sets position:fixed, all four edges at 0 and a background. Returns { css: [{sel, base, colour,
+     media, file}], js: [{file, line, text}] }. */
+  async function dims1255() {
+    const base = document.baseURI;
+    const get = async function (u) { const r = await fetch(new URL(u, base).href, { cache: 'no-store' }); if (!r.ok) throw new Error('setup: could not read ' + u + ' (' + r.status + ')'); return r.text(); };
+    const split = function (s) { const out = []; let d = 0, cur = ''; for (const ch of s) { if (ch === '(' || ch === '[') d++; if (ch === ')' || ch === ']') d--; if (ch === ',' && d === 0) { out.push(cur.trim()); cur = ''; } else cur += ch; } if (cur.trim()) out.push(cur.trim()); return out; };
+    const subject = function (sel) { let d = 0, last = 0; for (let i = 0; i < sel.length; i++) { const ch = sel[i]; if (ch === '(' || ch === '[') d++; else if (ch === ')' || ch === ']') d--; else if (d === 0 && /[\s>+~]/.test(ch)) last = i + 1; } return sel.slice(last).trim(); };
+    const tokens = function (comp) { const noNot = comp.replace(/:(not|is|where|has)\((?:[^()]|\([^()]*\))*\)/g, ''); return (noNot.match(/[#.][\w-]+|::[\w-]+|^[a-zA-Z][\w-]*/g) || []); };
+    const probe = document.createElement('i'); probe.style.display = 'none'; document.documentElement.appendChild(probe);
+    const alphaOf = function (v) { if (!v) return null; probe.style.backgroundColor = ''; probe.style.backgroundColor = v; if (!probe.style.backgroundColor) return null; const m = /rgba?\(([^)]+)\)/.exec(getComputedStyle(probe).backgroundColor); if (!m) return null; const p = m[1].split(/[ ,\/]+/).filter(Boolean).map(Number); return { css: getComputedStyle(probe).backgroundColor, a: p.length > 3 ? p[3] : 1 }; };
+    const rules = [];
+    const walk = function (list, media, file) { [].slice.call(list || []).forEach(function (r) {
+      if (r.type === 4 || r.media) { walk(r.cssRules, (media ? media + ' and ' : '') + r.media.mediaText, file); return; }
+      if (r.selectorText && r.style) rules.push({ r: r, media: media || '', file: file });
+      if (r.cssRules && r.cssRules.length) walk(r.cssRules, media, file);
+    }); };
+    try {
+      const html = await get('index.html');
+      const sheets = [{ file: 'styles.css', text: await get('styles.css') }, { file: 'theme-glass.css', text: await get('theme-glass.css') }];
+      (html.match(/<style[^>]*>[\s\S]*?<\/style>/g) || []).forEach(function (s, i) { sheets.push({ file: 'index.html <style> ' + (i + 1), text: s.replace(/^<style[^>]*>|<\/style>$/g, '') }); });
+      sheets.forEach(function (s) { const sh = new CSSStyleSheet(); sh.replaceSync(s.text.replace(/@import[^;]+;/g, '')); walk(sh.cssRules, '', s.file); });
+      const full = function (st) { return st.position === 'fixed' && st.top === '0px' && st.left === '0px' && st.right === '0px' && st.bottom === '0px'; };
+      const bases = [];
+      rules.forEach(function (x) { if (full(x.r.style)) split(x.r.selectorText).forEach(function (sel) { bases.push({ sel: sel, toks: tokens(subject(sel)) }); }); });
+      const css = [];
+      rules.forEach(function (x) {
+        const a = alphaOf(x.r.style.backgroundColor);
+        if (!a || !(a.a > 0.02 && a.a < 0.99)) return;
+        split(x.r.selectorText).forEach(function (sel) {
+          const t = tokens(subject(sel));
+          const b = bases.find(function (b) { return b.toks.length && b.toks.every(function (k) { return t.indexOf(k) >= 0; }); });
+          if (b) css.push({ sel: sel, base: b.sel, colour: a.css, media: x.media, file: x.file });
+        });
+      });
+      const js = [];
+      const srcs = [].slice.call(document.querySelectorAll('script[src]')).map(function (s) { return s.getAttribute('src'); }).filter(function (s) { return /^js\//.test(s); });
+      for (const s of srcs) {
+        const lines = (await get(s)).split('\n'), file = s.replace(/\?.*$/, '');
+        lines.forEach(function (ln, i) {
+          if (!/position:\s*fixed/.test(ln) || !/background/.test(ln)) return;
+          const all4 = /inset:\s*0(?![.\d])/.test(ln) || (/(^|[;'"\s{])top:\s*0(?![.\d])/.test(ln) && /(^|[;'"\s{])left:\s*0(?![.\d])/.test(ln) && /(^|[;'"\s{])right:\s*0(?![.\d])/.test(ln) && /(^|[;'"\s{])bottom:\s*0(?![.\d])/.test(ln));
+          if (all4) js.push({ file: file, line: i + 1, text: ln.trim().slice(0, 160) });
+        });
+      }
+      return { css: css, js: js };
+    } finally { probe.remove(); }
+  }
+
+  /* #1255 clause 4: what the page really paints at one point, computed from what is there: every box under the point (hit-tested
+     with pointer-events forced on, so a dim that lets touches through is still seen), its background COLOUR only, at its own
+     alpha times the opacity of it and every ancestor, blended back to front over the canvas.
+     `wide` keeps only boxes at least 90 % of the screen wide, the boxes the strip under the clock continues (a button or a title
+     in the top row is not the strip). The invisible top-edge tabs are left out: they paint nothing.
+     WHAT IT CANNOT SEE: gradients and images (the light Home's #hm-bleed and its #home-screen::before tint), backdrop blur,
+     filters. So on the light Home it reads the paper #fafdff where the real top is tinted: the #1255 review measured the light
+     Home under a dim at about #94a8b6 against the #acb4bb this reads, 10-24 levels apart. That gap is NOT proven away here;
+     it is named in the #1255 report as left out. And it reads one point (the top centre), so a dim showing beside a panel
+     (Settings, 88 % of the width) is not compared. */
+  function rgb1255(s) { const m = /rgba?\(([^)]+)\)/.exec(s || ''); if (!m) return null; const p = m[1].split(/[ ,\/]+/).filter(Boolean).map(Number); return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 }; }
+  function hx1255(c) { return c ? '#' + [c.r, c.g, c.b].map(function (v) { return Math.round(v).toString(16).padStart(2, '0'); }).join('') : 'none'; }
+  function far1255(a, b) { return Math.max(Math.abs(a.r - b.r), Math.abs(a.g - b.g), Math.abs(a.b - b.b)); }
+  function desc1255(el) { return el ? (el.id ? '#' + el.id : el.tagName.toLowerCase() + (el.classList.length ? '.' + [].slice.call(el.classList, 0, 2).join('.') : '')) : 'nothing'; }
+  function paint1255(x, y, wide) {
+    const W = innerWidth;
+    /* an open modal makes everything else inert (FM.modalFocus), and an inert box drops out of hit testing although it is
+       still painted: the attribute is lifted for this one synchronous hit test and put back exactly */
+    const inert = [].slice.call(document.querySelectorAll('[inert]')).map(function (n) { return [n, n.getAttribute('inert')]; });
+    const st = document.createElement('style'); st.textContent = '*,*::before,*::after{pointer-events:auto!important}'; document.head.appendChild(st);
+    let els;
+    try { inert.forEach(function (p) { p[0].removeAttribute('inert'); }); els = document.elementsFromPoint(x, y); }
+    finally { st.remove(); inert.forEach(function (p) { p[0].setAttribute('inert', p[1]); }); }
+    const layers = [];
+    let top = null;
+    for (const el of els) {
+      if (el.classList && el.classList.contains('fm-edge')) continue;
+      const cs = getComputedStyle(el);
+      if (cs.visibility !== 'visible') continue;
+      let op = 1;
+      for (let p = el; p && p.nodeType === 1; p = p.parentElement) op *= +getComputedStyle(p).opacity;
+      if (!(op > 0.001)) continue;
+      const r = el.getBoundingClientRect();
+      if (wide && r.width < 0.9 * W && el !== document.documentElement && el !== document.body) continue;
+      /* the background COLOUR, as the screens' own tops are read since queue 920 (a gradient tint over it, like the light Home's
+         #hm-bleed, is the look, not the screen's colour) */
+      const b = rgb1255(cs.backgroundColor);
+      if (b && b.a > 0) { layers.push({ r: b.r, g: b.g, b: b.b, a: b.a * op, el: el }); if (!top) top = el; }
+      if (b && b.a >= 0.999 && op >= 0.999) break;
+    }
+    let out = { r: 255, g: 255, b: 255, a: 1 };
+    for (let i = layers.length - 1; i >= 0; i--) { const c = layers[i]; out = { r: c.r * c.a + out.r * (1 - c.a), g: c.g * c.a + out.g * (1 - c.a), b: c.b * c.a + out.b * (1 - c.a), a: 1 }; }
+    return { c: out, top: top, stack: layers.map(function (l) { return desc1255(l.el) + '@' + (+l.a).toFixed(2); }).join(' > ') };
+  }
+  /* One reading of the top of the screen: which tabs show, the one WebKit's rule takes, and the paint under the clock. */
+  function read1255() {
+    const W = innerWidth;
+    const on = [].slice.call(document.querySelectorAll('.fm-edge')).filter(function (e) { return getComputedStyle(e).display !== 'none'; });
+    const tab = on.length === 1 ? on[0] : null;
+    const wk = edge1243(window);
+    const centre = paint1255(W / 2, 2, false);
+    return { on: on.map(function (e) { return e.dataset.edge; }), tab: tab, tabC: tab ? rgb1255(getComputedStyle(tab).backgroundColor) : null, wk: wk, paint: centre };
+  }
+
+  /* #1255 CLAUSE 4, HIS WORDS (20 Nov): "the fading issue like whether the colour like at the top of the screen there is like some
+   * fade overlapping the buttons is still there right now" — the third time he has reported it. iOS takes the strip under the
+   * clock from the ONE top-edge tab the page shows (index.html edge-css), never from a box the size of the screen. So while any
+   * dim the size of the screen lies over a top that is still visible, iOS lays the UNDIMMED tab over the dimmed bar and fades it
+   * down over the top buttons; and a panel the whole screen in another colour leaves a band of the old colour over it.
+   * Proves, at a phone width, for EVERY such screen in the editor and on the dark and the light Home (opened the way the app
+   * opens it, closed again): exactly one tab shows, WebKit's own rule (edge1243) takes it as a Candidate, and its colour is
+   * within 2 levels of what the page really paints at the top centre (paint1255: the boxes under the point, blended back to
+   * front, read from the page, never a constant here; background colours only, so the light Home's gradient tint is not seen,
+   * see paint1255); closed, the screen's plain tab is back. A question over a dimmed card
+   * (two at once) shows ONE tab, the question's own (it is on top and the last change): what it leaves is a few levels, held
+   * under 6 here and named in the report, not the 15-22 of the fade.
+   * THE LIST IS WHOLE: dims1255() reads the stylesheets and every app script from the source and names each box the size of
+   * the screen with a see-through background; each must be opened by a state below (its `dims` / `js`), or the test fails by
+   * its selector. It cannot see a dim drawn another way (an opaque box at an opacity, a gradient, edges other than all four 0,
+   * a style set one property per line in a script): those are named in the #1255 report.
+   * CONTROL: with nothing open the same reading gives the screen's plain tab in the plain bar's colour, in each of the three
+   * places; and the reader finds #fm-ask's rule and the Add menu's dim line, so it can see a dim at all.
+   * FAILS ON 279eafe8 by its own sentence: Settings, Notes, Sound effects, Paste look, Export, the friends card, Keyboard
+   * shortcuts, the recorder, Elements, the template fill and the Home's + card each read the undimmed tab over a dimmed top. */
+  test('1255 · with every dim the app can lay over the top of a phone screen open, the strip under the clock is the colour the page paints there', { item: '1255', budgetMs: 180000 }, async function () {
+    const root = document.documentElement, look0 = root.getAttribute('data-home'), wasHome = FM.home.isOpen();
+    const keep = FM.scene.layers.slice(), clip0 = FM.clipboard, notes0 = FM.scene.project.notes, grow0 = FM.settings.get(KEY1084);
+    let big0 = null, set0 = null;
+    try { big0 = localStorage.getItem('fm.panelBigByProject'); set0 = localStorage.getItem('fm.settings'); } catch (e) {}
+    const bigOn = function (key) { try { const o = JSON.parse(big0 || '{}'), id = FM.storage.openProjectId() || '_none'; o[id] = Object.assign({}, o[id] || {}); o[id][key] = true; localStorage.setItem('fm.panelBigByProject', JSON.stringify(o)); } catch (e) {} };
+    const bigBack = function () { try { if (big0 == null) localStorage.removeItem('fm.panelBigByProject'); else localStorage.setItem('fm.panelBigByProject', big0); } catch (e) {} };
+    const shown = function (id) { const n = document.getElementById(id); return !!n && !n.classList.contains('hidden'); };
+    const has = function (sel) { return !!document.querySelector(sel); };
+    const askUp = function () { return FM.ask({ title: 'Edge 1255', message: 'test' }); };
+    const askDown = async function (p) { const c = document.querySelector('#fm-ask .fm-ask-cancel'); if (c) c.click(); if (p) await p; };
+    const tapRow = function () {
+      const row = document.querySelector('.tl-addrow'); if (!row) throw new Error('setup: no Tap to add a layer row');
+      const b = row.getBoundingClientRect(), o = { bubbles: true, cancelable: true, clientX: b.left + Math.min(b.width * 0.6, 220), clientY: b.top + b.height / 2, pointerId: 9, pointerType: 'touch', isPrimary: true, button: 0 };
+      row.dispatchEvent(new PointerEvent('pointerdown', Object.assign({}, o, { buttons: 1 })));
+      row.dispatchEvent(new PointerEvent('pointerup', Object.assign({}, o, { buttons: 0 })));
+      const now = document.querySelector('.tl-addrow') || row;
+      now.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window, clientX: o.clientX, clientY: o.clientY, detail: 1 }));
+    };
+    /* the screens: name, the dims it accounts for (dims1255's base selectors, a script's file and a word of its line), how it
+       opens, that it is up, how it closes */
+    const ED = [
+      { name: 'a question', dims: ['#fm-ask'], up: () => shown('fm-ask'), open: async function () { this.p = askUp(); }, close: async function () { await askDown(this.p); } },
+      { name: 'Settings', dims: ['.set-scrim'], up: () => has('body > .set-scrim.open'), open: async () => FM.settings.open(), close: async () => FM.settings.close() },
+      { name: 'Notes (Comments wear the same card)', dims: ['.np-scrim'], up: () => has('body > .np-scrim:not(.pb-host-big)'), open: async () => FM.notepad.open(), close: async () => FM.notepad.close() },
+      { name: 'Notes made big', dims: ['.np-scrim'], up: () => has('body > .np-scrim.pb-host-big'), open: async () => { bigOn('notes'); FM.notepad.open(); }, close: async () => { FM.notepad.close({ now: true }); bigBack(); } },
+      { name: 'the Before you export card', dims: ['.np-scrim'], up: () => has('body > .np-scrim.np-remind'), open: async function () { FM.scene.project.notes = [{ id: 'n1255', text: 'Check the logo', remind: true }]; this.p = FM.notepad.confirmExport(); }, close: async function () { const b = document.querySelector('.np-remind .np-actions button'); if (b) b.click(); await this.p; FM.scene.project.notes = notes0; } },
+      { name: 'Sound effects', dims: ['.sfx-scrim'], up: () => has('body > .sfx-scrim'), open: async () => FM.sfx.open(), close: async () => FM.sfx.close() },
+      { name: 'the voice recorder', dims: ['#vr-overlay'], wrap: withFakeMic, up: () => shown('vr-overlay'), open: async () => { FM.voiceRec.open(); await sleep(400); }, close: async () => FM.voiceRec.close() },
+      { name: 'Paste look', dims: ['.ps-overlay'], up: () => has('body > .ps-overlay'), open: async () => { FM.clipboard = [{ snapshot: JSON.parse(JSON.stringify(FM.scene.layers[0])) }]; FM.openPasteStyle(FM.scene.layers[1]); }, close: async () => { document.querySelectorAll('.ps-overlay').forEach(function (o) { o.remove(); }); FM.clipboard = clip0; } },
+      { name: 'the Export dialog', dims: ['#export-dialog'], up: () => shown('export-dialog'), open: async () => { const b = ['m-export', 'btn-export'].map(function (id) { return document.getElementById(id); }).find(function (x) { return x && x.getClientRects().length; }) || document.getElementById('btn-export'); b.click(); }, close: async () => document.getElementById('exp-cancel').click() },
+      { name: 'Canvas settings', dims: ['#canvas-dialog'], up: () => shown('canvas-dialog'), open: async () => document.getElementById('btn-canvas').click(), close: async () => document.getElementById('cv-cancel').click() },
+      /* the progress card is shown the way the exporter shows it (its hidden class): a real render is not this test's subject */
+      { name: 'the export progress', dims: ['#export-overlay'], up: () => shown('export-overlay'), open: async () => document.getElementById('export-overlay').classList.remove('hidden'), close: async () => document.getElementById('export-overlay').classList.add('hidden') },
+      { name: 'the Export ready card', dims: ['#export-ready'], up: () => shown('export-ready'), open: async function () { this.p = FM._showExportReady({ blob: { size: 5e6 }, name: 'probe-1255.mp4', poster: null, width: 1080, height: 1920, fps: 30, seconds: 5, save: function () { return Promise.resolve('shared'); } }); }, close: async function () { document.getElementById('xr-discard').click(); await this.p; } },
+      { name: 'Work with friends', dims: ['.collab-scrim'], up: () => has('body > .collab-scrim'), open: async function () { this.p = FM.collab.ui.profile({ force: true }); }, close: async function () { FM.collab.ui.close(); await this.p; } },
+      { name: 'Keyboard shortcuts', dims: ['#shortcuts-overlay'], up: () => FM.shortcuts.isOpen() && !has('#shortcuts-overlay.pb-host-big'), open: async () => FM.shortcuts.show(), close: async () => FM.shortcuts.hide({ now: true }) },
+      { name: 'Keyboard shortcuts made big', dims: ['#shortcuts-overlay'], up: () => FM.shortcuts.isOpen() && has('#shortcuts-overlay.pb-host-big'), open: async () => { bigOn('shortcuts'); FM.shortcuts.show(); }, close: async () => { FM.shortcuts.hide({ now: true }); bigBack(); } },
+      { name: 'the Elements browser (the whole screen)', dims: [], up: () => shown('el-browser'), open: async () => FM.elementsBrowser.open(), close: async () => FM.elementsBrowser.close() },
+      { name: 'the template fill screen (the whole screen)', dims: [], up: () => shown('tpl-fill'), open: async () => FM.templateFill.open(), close: async () => FM.templateFill.close() },
+      { name: 'the Add menu grown from the Tap to add a layer row', js: ['js/mobile.js STRETCH_DIM'], up: () => root.classList.contains('fm-add-dim'), open: async () => { FM.settings.set(KEY1084, true); await sleep(150); tapRow(); await sleep(40); stretchAnims1084(document.getElementById('add-sheet')).forEach(function (x) { x.finish(); }); }, close: async () => { FM.mobile.closeAdd(); await sleep(STRETCH1084 + 300); FM.settings.set(KEY1084, grow0); } },
+      /* screens that dim nothing at the top, held to the same reading so a change to them is seen */
+      { name: 'the Effects browser (a sheet under the bar)', dims: [], up: () => shown('fx-browser'), open: async () => FM.fxBrowser.open('color'), close: async () => FM.fxBrowser.close() },
+      { name: 'the Add menu', dims: [], up: () => document.getElementById('add-sheet').classList.contains('open'), open: async () => FM.mobile.openAdd(), close: async () => { FM.mobile.closeAdd(); await sleep(300); } },
+      { name: 'the Director panel', dims: [], up: () => FM.aiPanel.isOpen(), open: async () => FM.aiPanel.show(), close: async () => FM.aiPanel.hide() },
+      { name: 'the Assistant chat', dims: [], up: () => FM.aiChat.isOpen(), open: async () => FM.aiChat.show(), close: async () => FM.aiChat.hide() },
+      /* two at once: the question wins */
+      { name: 'a question over Settings', pair: true, up: () => shown('fm-ask') && has('body > .set-scrim.open'), open: async function () { FM.settings.open(); await sleep(400); this.p = askUp(); }, close: async function () { await askDown(this.p); FM.settings.close(); } },
+      { name: 'a question over Notes', pair: true, up: () => shown('fm-ask') && has('body > .np-scrim'), open: async function () { FM.notepad.open(); await sleep(400); this.p = askUp(); }, close: async function () { await askDown(this.p); FM.notepad.close({ now: true }); } },
+    ];
+    const HM = [
+      { name: 'a question', dims: ['#fm-ask'], up: () => shown('fm-ask'), open: async function () { this.p = askUp(); }, close: async function () { await askDown(this.p); } },
+      { name: 'New project', dims: ['#hm-dialog'], up: () => shown('hm-dialog'), open: async () => { FM.home._render('projects'); await sleep(200); document.getElementById('hm-new').click(); }, close: async () => document.getElementById('hm-dialog').classList.add('hidden') },
+      { name: 'the + card on Templates', dims: ['#hm-libnew'], up: () => shown('hm-libnew'), open: async () => { FM.home._render('templates'); await sleep(200); document.getElementById('hm-new').click(); }, close: async () => { const d = document.getElementById('hm-libnew'); if (d) d.classList.add('hidden'); FM.home._render('projects'); } },
+      { name: 'Settings', dims: ['.set-scrim'], up: () => has('body > .set-scrim.open'), open: async () => FM.settings.open(), close: async () => FM.settings.close() },
+      { name: 'Work with friends', dims: ['.collab-scrim'], up: () => has('body > .collab-scrim'), open: async function () { this.p = FM.collab.ui.profile({ force: true }); }, close: async function () { FM.collab.ui.close(); await this.p; } },
+      { name: 'Keyboard shortcuts', dims: ['#shortcuts-overlay'], up: () => FM.shortcuts.isOpen() && !has('#shortcuts-overlay.pb-host-big'), open: async () => FM.shortcuts.show(), close: async () => FM.shortcuts.hide({ now: true }) },
+      { name: 'Keyboard shortcuts made big', dims: ['#shortcuts-overlay'], up: () => FM.shortcuts.isOpen() && has('#shortcuts-overlay.pb-host-big'), open: async () => { bigOn('shortcuts'); FM.shortcuts.show(); }, close: async () => { FM.shortcuts.hide({ now: true }); bigBack(); } },
+    ];
+    /* THE LIST IS WHOLE (deterministic: the source, not the page) */
+    const found = await dims1255();
+    if (!found.css.some(function (c) { return c.base === '#fm-ask'; }) || !found.js.some(function (j) { return j.file === 'js/mobile.js' && /STRETCH_DIM/.test(j.text); })) throw new Error('CONTROL: the reader of the source did not find #fm-ask’s dim rule or the grown Add menu’s dim line, so it cannot tell a listed dim from a missing one');
+    const listed = [].concat(ED, HM).reduce(function (a, s) { return a.concat(s.dims || []); }, []);
+    const missed = found.css.filter(function (c) { return !(/min-width:\s*701px/.test(c.media) && !/max-width/.test(c.media)) && listed.indexOf(c.base) < 0; }).map(function (c) { return c.sel + ' (' + c.file + ', ' + c.colour + ')'; })
+      .concat(found.js.filter(function (j) { return ![].concat(ED, HM).some(function (s) { return (s.js || []).some(function (k) { const p = k.split(' '); return p[0] === j.file && j.text.indexOf(p[1]) >= 0; }); }); }).map(function (j) { return j.file + ':' + j.line + ' ' + j.text; }));
+    if (missed.length) throw new Error('a box the size of the screen with a see-through background that no screen in this test opens, so its strip under the clock is never checked: ' + missed.join('; ') + ' (add it to the list here, and its tab and row to index.html edge-css)');
+    /* settle: a dim that fades or opens in is read once it has landed and stopped changing (New project's dim opens as a
+       circle from the + for 640 ms and lands on a timer, js/home.js npFxC; a still reading inside that is not the end) */
+    const settle = async function () {
+      await sleep(900);
+      let last = '';
+      for (let i = 0; i < 25; i++) { const now = hx1255(paint1255(innerWidth / 2, 2, false).c); if (now === last) return; last = now; await sleep(120); }
+    };
+    const bad = [], pairs = [];
+    const where = { editor: 'the editor', dark: 'the dark Home', light: 'the light Home' };
+    const control = function (ctx, plain, barC) {
+      const r = read1255();
+      if (r.on.length !== 1 || r.on[0] !== plain) throw new Error('CONTROL: ' + where[ctx] + ' with nothing open shows the tabs [' + r.on.join(', ') + '], not the ' + plain + ' tab alone');
+      if (r.wk.el !== r.tab || r.wk.type !== 'Candidate') throw new Error('CONTROL: ' + where[ctx] + ' with nothing open: WebKit’s rule takes ' + r.wk.container + ' (' + r.wk.type + '), not the ' + plain + ' tab');
+      if (far1255(r.paint.c, barC) > 2 || far1255(r.tabC, barC) > 2) throw new Error('CONTROL: ' + where[ctx] + ' with nothing open paints ' + hx1255(r.paint.c) + ' at the top and its tab is ' + hx1255(r.tabC) + ', not the plain bar’s ' + hx1255(barC) + ', so this reading cannot be trusted');
+      return r;
+    };
+    const run = async function (list, ctx, plain) {
+      let askTab = null;
+      for (const s of list) {
+        const one = async function () {
+          await s.open(); await settle();
+          try {
+            if (!s.up()) throw new Error('setup: ' + where[ctx] + ': ' + s.name + ' did not open, so its strip cannot be read');
+            const r = read1255(), label = where[ctx] + ', ' + s.name;
+            if (r.on.length !== 1) { bad.push(label + ': ' + r.on.length + ' top-edge tabs show (' + r.on.join(', ') + '), not exactly one'); return; }
+            if (r.wk.el !== r.tab || r.wk.type !== 'Candidate') bad.push(label + ': WebKit’s rule takes ' + r.wk.container + ' (' + r.wk.type + ', walk ' + r.wk.walk + '), not the ' + r.on[0] + ' tab, so the strip keeps the colour it had');
+            const d = far1255(r.tabC, r.paint.c);
+            if (s.name === 'a question') askTab = r.on[0];
+            if (s.pair) {
+              if (r.on[0] !== askTab) bad.push(label + ': the ' + r.on[0] + ' tab shows, not the question’s own ' + askTab);
+              if (d > 6) bad.push(label + ': the strip is ' + hx1255(r.tabC) + ' over a top painted ' + hx1255(r.paint.c) + ', ' + d.toFixed(1) + ' levels apart');
+              pairs.push(label + ' ' + d.toFixed(1));
+            } else if (d > 2) {
+              bad.push(label + ': the strip under the clock is ' + hx1255(r.tabC) + ' (the ' + r.on[0] + ' tab) but the page paints ' + hx1255(r.paint.c) + ' there (' + r.paint.stack + '): iOS lays that colour over the top and fades it down over the top buttons');
+            }
+          } finally { await s.close(); await sleep(450); }
+          const back = read1255();
+          if (back.on.length !== 1 || back.on[0] !== plain) bad.push(where[ctx] + ', after ' + s.name + ' closed: the tabs shown are [' + back.on.join(', ') + '], not the ' + plain + ' tab again');
+        };
+        if (s.wrap) await s.wrap(one); else await one();
+      }
+    };
+    try {
+      await atPhoneWidth(async function () {
+        if (FM.home.isOpen()) FM.home.close();
+        await sleep(300);
+        FM.scene.layers.length = 0; FM.addShapeLayer('rect'); FM.addShapeLayer('rect');
+        FM.scene.layers.forEach(function (l) { l.start = 0; l.duration = 6; });
+        FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+        await sleep(380);
+        control('editor', 'editor', rgb1255(getComputedStyle(root).backgroundColor));   /* #920: at a phone width <html> wears #topbar-m's colour */
+        await run(ED, 'editor', 'editor');
+        for (const look of ['dark', 'light']) {
+          root.setAttribute('data-home', look);
+          if (!FM.home.isOpen()) FM.home.open();
+          await sleep(700);
+          control(look, 'home-' + look, rgb1255(getComputedStyle(document.getElementById('home-screen')).backgroundColor));
+          await run(HM, look, 'home-' + look);
+        }
+      }, 380);
+    } finally {
+      try { await askDown(null); } catch (e) {}
+      try { FM.settings.close(); } catch (e) {}
+      try { FM.notepad.close({ now: true }); } catch (e) {}
+      try { FM.sfx.close(); } catch (e) {}
+      try { FM.shortcuts.hide({ now: true }); } catch (e) {}
+      try { FM.collab.ui.close(); } catch (e) {}
+      try { FM.elementsBrowser.close(); FM.templateFill.close(); FM.fxBrowser.close(); FM.aiPanel.hide(); FM.aiChat.hide(); } catch (e) {}
+      try { FM.mobile.closeAdd(); } catch (e) {}
+      document.querySelectorAll('.ps-overlay, .add-stretch-edge, .add-stretch-skin, .add-stretch-dim').forEach(function (o) { o.remove(); });
+      ['export-overlay', 'hm-dialog', 'hm-libnew'].forEach(function (id) { const n = document.getElementById(id); if (n) n.classList.add('hidden'); });
+      ['exp-cancel', 'cv-cancel'].forEach(function (id) { const n = document.getElementById(id); if (n && n.closest('.hidden') === null) n.click(); });
+      root.classList.remove('fm-add-dim');
+      FM.settings.set(KEY1084, grow0);
+      try { if (set0 == null) localStorage.removeItem('fm.settings'); else localStorage.setItem('fm.settings', set0); } catch (e) {}
+      bigBack(); FM.clipboard = clip0; FM.scene.project.notes = notes0;
+      if (look0 == null) root.removeAttribute('data-home'); else root.setAttribute('data-home', look0);
+      if (FM.home.isOpen()) FM.home.close();
+      await sleep(300);
+      FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (wasHome && !FM.home.isOpen()) FM.home.open();
+      await sleep(300);
+    }
+    if (bad.length) throw new Error(bad.length + ' screen(s) wrong at the top of a phone (#1255 clause 4): ' + bad.join(' | '));
   });
 
   /* ═══ queue 985 — THE CARD'S PICTURE DOES NOT LEAN ON THE PREVIEW (17 Oct, the PM's question after v17.58's two refusals) ═══

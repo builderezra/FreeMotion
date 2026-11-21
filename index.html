@@ -30,7 +30,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.47">
+<meta name="fm-build" content="v18.48">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -134,6 +134,28 @@
     .fm-edge[data-edge="home-dark-dim"] { background-color: #060b12; }   /* rgba(4,6,10,.7) over #091823 */
     .fm-edge[data-edge="editor-dim"] { background-color: #090c11; }      /* rgba(4,6,10,.7) over #161a21 */
     @media (min-width: 701px) { .fm-edge[data-edge="editor-dim"] { background-color: #060a0f; } }   /* the same, over the glass #topbar */
+    /* #1255 clause 4, his words (20 Nov): "the fading issue like whether the colour like at the top of the screen there is like
+       some fade overlapping the buttons is still there right now". Measured on his ADD-sheet screenshots: the strip under the
+       clock was the UNDIMMED bar colour fading down over the back button, the title and the top buttons, while the page under
+       it was dimmed. The Add menu that grows out of the Tap to add a layer row dims the editor (js/mobile.js .add-stretch-dim,
+       rgba(2,6,10,.55)), a box the size of the screen that iOS never takes a colour from, so the editor tab stayed and iOS
+       blended its #161a21 over the dim. So that dim has a tab of its own, in the dimmed bar's colour (html.fm-add-dim).
+       Keyboard shortcuts' dim on a phone, rgba(4,7,14,.62) over #161a21 = #0b0e15, is within one level of it, so it shares it. */
+    .fm-edge[data-edge="editor-thin-dim"] { background-color: #0b0f14; }  /* rgba(2,6,10,.55) over #161a21 */
+    @media (min-width: 701px) { .fm-edge[data-edge="editor-thin-dim"] { background-color: #060c11; } }   /* the same, over the glass #topbar */
+    /* #1255 clause 4, THE OTHER DIMS (his third report of the fade, 20 Nov: "the fading issue ... is still there right now").
+       Every other box the size of the screen that dims a phone's editor or Home did the same: the undimmed tab stayed, and iOS
+       faded it down over the dimmed top buttons. And a panel the whole screen in another colour (Elements, the template fill,
+       the Settings panel's top) left a band of the bar's colour over it. Each colour below is what the page paints at the top
+       centre with that screen open, measured in the app (tests/tests.js '1255 · with every dim ...'); a colour within one level
+       of a tab already here uses that tab. Phone widths only: the rows are in the (max-width: 700px) block below. */
+    .fm-edge[data-edge="editor-card-dim"] { background-color: #0a0e12; }    /* rgba(2,6,9,.62) over #161a21: Notes, Before you export, Comments, Sound effects; the recorder's rgba(4,8,12,.66) is #0a0e13, Paste look's rgba(0,0,0,.5) #0b0d11 */
+    .fm-edge[data-edge="editor-export-dim"] { background-color: #08090c; }  /* rgba(0,0,0,.65) over #161a21: Export, Canvas settings, the export's progress and its ready card */
+    .fm-edge[data-edge="deep-dim"] { background-color: #04080b; }           /* rgba(2,6,9,.9) over #161a21: Notes or Keyboard shortcuts made big on a phone (over the dark Home #03080c) */
+    .fm-edge[data-edge="editor-settings"] { background-color: #0c1922; }    /* the Settings panel's top (its glass over the .62 dim) over the editor */
+    .fm-edge[data-edge="editor-panel"] { background-color: #0a141a; }       /* the Elements browser's and the template fill's own ground, each the whole screen */
+    .fm-edge[data-edge="home-dark-shortcuts-dim"] { background-color: #060d16; }   /* rgba(4,7,14,.62) over #091823 */
+    .fm-edge[data-edge="home-light-settings"] { background-color: #f4f6f9; }       /* the Settings panel's top over the light Home */
     /* THE ONE TABLE: which tab shows. Exactly one matches in every state.
        The take: bone until the matte lands at 2.14 s, then coal (the still is the end frame, so coal), until the cut. */
     html.splash-kf-on:not(.splash-dark-on):not(.splash-kf-out) .fm-edge[data-edge="bone"] { display: block; }
@@ -142,16 +164,59 @@
        swoop in; the editor once Home is hidden, or from the swoop's first frame (#app.fm-push-in, home.js), not while #app
        waits parked off the right edge with Home still on screen. A dialog over either (#fm-ask, Home's #hm-dialog) swaps in
        the dimmed row. Each :has() rule stands alone (a browser with no :has() drops a whole selector list that names it). */
+    @media (min-width: 701px) {
     html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body:not(:has(> #fm-ask:not(.hidden))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden))) ~ .fm-edge[data-edge="home-light"] { display: block; }
     html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:not(:has(> #fm-ask:not(.hidden))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden))) ~ .fm-edge[data-edge="home-dark"] { display: block; }
+    }
     html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body:has(> #fm-ask:not(.hidden)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden) ~ .fm-edge[data-edge="home-light-dim"] { display: block; }
     html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):has(#hm-dialog:not(.hidden)) ~ .fm-edge[data-edge="home-light-dim"] { display: block; }
     html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:has(> #fm-ask:not(.hidden)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden) ~ .fm-edge[data-edge="home-dark-dim"] { display: block; }
     html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):has(#hm-dialog:not(.hidden)) ~ .fm-edge[data-edge="home-dark-dim"] { display: block; }
-    html:is(:not(.splash-kf-on), .splash-kf-out) > body:not(:has(> #fm-ask:not(.hidden))) > #app ~ #home-screen.hidden ~ .fm-edge[data-edge="editor"] { display: block; }
-    html:is(:not(.splash-kf-on), .splash-kf-out) > body:not(:has(> #fm-ask:not(.hidden))) > #app.fm-push-in ~ .fm-edge[data-edge="editor"] { display: block; }
+    @media (min-width: 701px) {
+    html:is(:not(.splash-kf-on), .splash-kf-out):not(.fm-add-dim) > body:not(:has(> #fm-ask:not(.hidden))) > #app ~ #home-screen.hidden ~ .fm-edge[data-edge="editor"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out):not(.fm-add-dim) > body:not(:has(> #fm-ask:not(.hidden))) > #app.fm-push-in ~ .fm-edge[data-edge="editor"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out).fm-add-dim > body:not(:has(> #fm-ask:not(.hidden))) > #app ~ #home-screen.hidden ~ .fm-edge[data-edge="editor-thin-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out).fm-add-dim > body:not(:has(> #fm-ask:not(.hidden))) > #app.fm-push-in ~ .fm-edge[data-edge="editor-thin-dim"] { display: block; }
+    }
     html:is(:not(.splash-kf-on), .splash-kf-out) > body:has(> #fm-ask:not(.hidden)) > #app ~ #home-screen.hidden ~ .fm-edge[data-edge="editor-dim"] { display: block; }
     html:is(:not(.splash-kf-on), .splash-kf-out) > body:has(> #fm-ask:not(.hidden)) > #app.fm-push-in ~ .fm-edge[data-edge="editor-dim"] { display: block; }
+    /* #1255 clause 4, A PHONE: every dim and full-screen panel has its row. Each reads only what the screen already puts in the
+       page: a box among body's own children (body:has(> …), like #fm-ask's rows) or #home-screen's own dialogs. ONE wins when two
+       are up, in this order (a later one's rows name every earlier one they must give way to):
+         a question (#fm-ask, rows above, every width) > a made-big Notes or Keyboard shortcuts (.pb-host-big) > Notes, its
+         Before you export card, Comments, Sound effects > Keyboard shortcuts > Work with friends > Settings > the voice
+         recorder > Elements, the template fill > Export, Canvas settings, the progress, the ready card > Paste look > the grown
+         Add menu > nothing.
+       Mostly the stacking order (#fm-ask 3200, the notes and sound cards 3000, shortcuts 230, friends 222, Settings 220, the
+       recorder 190, the panels 160-165, the export dialogs 100, Paste look 80, the Add dim 62): the one on top paints most of
+       the strip. A question over a dimmed card wins because it is on top and is the last screen change; what it leaves is a
+       few levels (#06080c under its #090c11), measured in the test, not the fade's 15-22. A closing card (.np-closing,
+       .pb-closing) or Settings losing .open hands the strip back at once: the tab swaps once, as the Add dim's does. */
+    @media (max-width: 700px) {
+    /* the editor: Home hidden, or the editor's swoop in */
+    html:is(:not(.splash-kf-on), .splash-kf-out):not(.fm-add-dim) > body:not(:has(> #fm-ask:not(.hidden), > .collab-scrim, > .np-scrim:not(.np-closing), > .sfx-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing), > .set-scrim.open, > #vr-overlay:not(.hidden), > #el-browser:not(.hidden), > #tpl-fill:not(.hidden), > #export-dialog:not(.hidden), > #canvas-dialog:not(.hidden), > #export-overlay:not(.hidden), > #export-ready:not(.hidden), > .ps-overlay)) > :is(#app ~ #home-screen.hidden, #app.fm-push-in) ~ .fm-edge[data-edge="editor"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out) > body:has(> .collab-scrim):not(:has(> .np-scrim:not(.np-closing), > .sfx-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing))) > :is(#app ~ #home-screen.hidden, #app.fm-push-in) ~ .fm-edge[data-edge="editor-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out) > body:has(> .np-scrim.pb-host-big:not(.np-closing), > #shortcuts-overlay.pb-host-big:not(.hidden):not(.pb-closing)):not(:has(> #fm-ask:not(.hidden))) > :is(#app ~ #home-screen.hidden, #app.fm-push-in) ~ .fm-edge[data-edge="deep-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out) > body:has(> .np-scrim:not(.np-closing), > .sfx-scrim):not(:has(> #fm-ask:not(.hidden), > .np-scrim.pb-host-big:not(.np-closing), > #shortcuts-overlay.pb-host-big:not(.hidden):not(.pb-closing))) > :is(#app ~ #home-screen.hidden, #app.fm-push-in) ~ .fm-edge[data-edge="editor-card-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out) > body:has(> #shortcuts-overlay:not(.hidden):not(.pb-closing)):not(:has(> #fm-ask:not(.hidden), > .np-scrim:not(.np-closing), > .sfx-scrim, > #shortcuts-overlay.pb-host-big)) > :is(#app ~ #home-screen.hidden, #app.fm-push-in) ~ .fm-edge[data-edge="editor-thin-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out) > body:has(> .set-scrim.open):not(:has(> #fm-ask:not(.hidden), > .np-scrim:not(.np-closing), > .sfx-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing), > .collab-scrim)) > :is(#app ~ #home-screen.hidden, #app.fm-push-in) ~ .fm-edge[data-edge="editor-settings"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out) > body:has(> #vr-overlay:not(.hidden)):not(:has(> #fm-ask:not(.hidden), > .np-scrim.pb-host-big:not(.np-closing), > #shortcuts-overlay:not(.hidden):not(.pb-closing), > .collab-scrim, > .set-scrim.open)) > :is(#app ~ #home-screen.hidden, #app.fm-push-in) ~ .fm-edge[data-edge="editor-card-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out) > body:has(> #el-browser:not(.hidden), > #tpl-fill:not(.hidden)):not(:has(> #fm-ask:not(.hidden), > .np-scrim:not(.np-closing), > .sfx-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing), > .collab-scrim, > .set-scrim.open, > #vr-overlay:not(.hidden))) > :is(#app ~ #home-screen.hidden, #app.fm-push-in) ~ .fm-edge[data-edge="editor-panel"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out) > body:has(> #export-dialog:not(.hidden), > #canvas-dialog:not(.hidden), > #export-overlay:not(.hidden), > #export-ready:not(.hidden)):not(:has(> #fm-ask:not(.hidden), > .np-scrim:not(.np-closing), > .sfx-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing), > .collab-scrim, > .set-scrim.open, > #vr-overlay:not(.hidden), > #el-browser:not(.hidden), > #tpl-fill:not(.hidden))) > :is(#app ~ #home-screen.hidden, #app.fm-push-in) ~ .fm-edge[data-edge="editor-export-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out) > body:has(> .ps-overlay):not(:has(> #fm-ask:not(.hidden), > .np-scrim.pb-host-big:not(.np-closing), > #shortcuts-overlay:not(.hidden):not(.pb-closing), > .collab-scrim, > .set-scrim.open, > #el-browser:not(.hidden), > #tpl-fill:not(.hidden), > #export-dialog:not(.hidden), > #canvas-dialog:not(.hidden), > #export-overlay:not(.hidden), > #export-ready:not(.hidden))) > :is(#app ~ #home-screen.hidden, #app.fm-push-in) ~ .fm-edge[data-edge="editor-card-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out).fm-add-dim > body:not(:has(> #fm-ask:not(.hidden), > .collab-scrim, > .np-scrim:not(.np-closing), > .sfx-scrim, > #shortcuts-overlay.pb-host-big:not(.hidden):not(.pb-closing), > .set-scrim.open, > #vr-overlay:not(.hidden), > #el-browser:not(.hidden), > #tpl-fill:not(.hidden), > #export-dialog:not(.hidden), > #canvas-dialog:not(.hidden), > #export-overlay:not(.hidden), > #export-ready:not(.hidden), > .ps-overlay)) > :is(#app ~ #home-screen.hidden, #app.fm-push-in) ~ .fm-edge[data-edge="editor-thin-dim"] { display: block; }
+    /* the dark Home (Settings over it paints #0b1922, within two levels of its own tab, so it keeps it) */
+    html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:not(:has(> #fm-ask:not(.hidden), > .collab-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden), #hm-libnew:not(.hidden))) ~ .fm-edge[data-edge="home-dark"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:has(> .collab-scrim):not(:has(> #shortcuts-overlay:not(.hidden):not(.pb-closing))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden) ~ .fm-edge[data-edge="home-dark-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:not(:has(> #shortcuts-overlay:not(.hidden):not(.pb-closing))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):has(#hm-libnew:not(.hidden)) ~ .fm-edge[data-edge="home-dark-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:has(> #shortcuts-overlay.pb-host-big:not(.hidden):not(.pb-closing)):not(:has(> #fm-ask:not(.hidden))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden))) ~ .fm-edge[data-edge="deep-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:has(> #shortcuts-overlay:not(.hidden):not(.pb-closing)):not(:has(> #fm-ask:not(.hidden), > #shortcuts-overlay.pb-host-big)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden))) ~ .fm-edge[data-edge="home-dark-shortcuts-dim"] { display: block; }
+    /* the light Home (its friends card and shortcuts wear the light dialogs' dim) */
+    html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body:not(:has(> #fm-ask:not(.hidden), > .collab-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing), > .set-scrim.open)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden), #hm-libnew:not(.hidden))) ~ .fm-edge[data-edge="home-light"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body:has(> .collab-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden) ~ .fm-edge[data-edge="home-light-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):has(#hm-libnew:not(.hidden)) ~ .fm-edge[data-edge="home-light-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body:has(> .set-scrim.open):not(:has(> #fm-ask:not(.hidden), > .collab-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden), #hm-libnew:not(.hidden))) ~ .fm-edge[data-edge="home-light-settings"] { display: block; }
+    }
   </style>
   <!-- Splash: TAKE 13, "EXPLODED STACK" (#1231, his pick of the 25 takes, 6 Nov: "I want it now so yes"; it replaced #1223's
        H2 "Scrub", of which he said "the new intro is dogshit, make a but tone of diff options for me to pick and actually try").
@@ -1095,7 +1160,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.47</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.48</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1988,6 +2053,14 @@
   <i class="fm-edge" data-edge="home-light-dim" aria-hidden="true"></i>
   <i class="fm-edge" data-edge="home-dark-dim" aria-hidden="true"></i>
   <i class="fm-edge" data-edge="editor-dim" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="editor-thin-dim" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="editor-card-dim" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="editor-export-dim" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="deep-dim" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="editor-settings" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="editor-panel" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="home-dark-shortcuts-dim" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="home-light-settings" aria-hidden="true"></i>
 
   <script src="vendor/mp4-muxer.js?v=9"></script>
   <script src="js/perf-probe.js?v=15"></script>
@@ -2065,7 +2138,7 @@
   <script src="js/audio-health.js?v=7"></script>
   <script src="js/editor-mode.js?v=11"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
   <script src="js/editor-morph.js?v=2"></script>   <!-- Simple mode P3: FM.editorMorph — the switch morph (D11 B), played as the cog closes -->
-  <script src="js/app.js?v=527"></script>
+  <script src="js/app.js?v=528"></script>
   <script src="js/audio-tools.js?v=12"></script>
   <script src="js/noise-reduction.js?v=3"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/auto-duck.js?v=1"></script>   <!-- #966 B25 Auto-duck: the music's volume keyframes under speech; the Volume card (inspector.js) reads FM.autoDuck when it draws -->
@@ -2073,7 +2146,7 @@
   <script src="js/sfx.js?v=26"></script>
   <script src="js/voice-rec.js?v=12"></script>
   <script src="js/audio-react.js?v=13"></script>
-  <script src="js/mobile.js?v=57"></script>
+  <script src="js/mobile.js?v=58"></script>
   <script src="js/ai-manifest.js?v=13"></script>
   <script src="js/ai-ops.js?v=23"></script>
   <script src="js/ai-key.js?v=1"></script>

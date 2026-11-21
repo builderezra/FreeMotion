@@ -689,6 +689,7 @@ window.FM = window.FM || {};
     function endStretch(fadeDim) {
       var st = addSheet._stretch;
       addSheet._stretch = null;
+      document.documentElement.classList.remove('fm-add-dim');   /* #1255 clause 4: the dim is going, so the strip is the bar's again */
       if (st) {
         var dim = fadeDim && st.dim && st.dim.parentNode ? st.dim : null;
         var dimAt = dim ? +getComputedStyle(dim).opacity : 0;
@@ -726,6 +727,10 @@ window.FM = window.FM || {};
         st.dim.style.cssText = 'position:fixed;left:0;top:0;right:0;bottom:0;margin:0;z-index:62;pointer-events:none;opacity:0;background:' + STRETCH_DIM + ';';
         parent.insertBefore(st.dim, addSheet);
         st.bits.push(st.dim);
+        /* #1255 clause 4, his words: "some fade overlapping the buttons is still there". This dim is the size of the screen,
+           which iOS never takes the top strip's colour from, so the strip kept the bar's undimmed colour and iOS faded it down
+           over the dimmed top buttons. The class swaps in the dimmed top-edge tab (index.html edge-css); endStretch drops it. */
+        document.documentElement.classList.add('fm-add-dim');
       }
       st.skin = stretchSnap(row);
       st.skinCss = st.skin.style.cssText;

@@ -1634,6 +1634,11 @@ window.FM = window.FM || {};
         Array.from(branch.parentElement.children).forEach(n => {
           // These body-level surfaces belong to controls inside the dialog too.
           if (live.has(n) || ['toast', 'fm-ask', 'ctx-menu'].indexOf(n.id) >= 0 || n.matches('[role=status],[role=alert],[aria-live]:not([aria-live=off])') || saved.some(s => s[0] === n)) return;
+          /* #1255 clause 4, his words: "some fade overlapping the buttons is still there". The top-edge tabs (index.html edge-css)
+             are what iOS reads the strip under the clock from, and an inert box drops out of the hit test that reads it, so under
+             this dialog the dimmed tab was never found and the undimmed colour faded down over it. They take no touch and no
+             focus (pointer-events none, aria-hidden), so leaving them out of the isolation changes nothing else. */
+          if (n.classList.contains('fm-edge')) return;
           saved.push([n, n.getAttribute('inert')]);
           n.inert = true;
         });
