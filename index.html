@@ -30,7 +30,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.48">
+<meta name="fm-build" content="v18.49">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -47,8 +47,73 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=798">
+<link rel="stylesheet" href="styles.css?v=799">
 <link rel="stylesheet" href="theme-glass.css?v=70">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
+<!-- SHARP TOP (#1255 clause 4, REOPENED 21 Nov). His words: "some fade overlapping the buttons is still there", and on v18.48
+     with nothing open, "Fade still there". It is iOS 26's own blur at the top of the screen (UIKit's scroll pocket), which a page
+     cannot switch off; the cure in the page's power is to keep every top bar's letters and buttons below its reach. styles.css
+     (SHARP TOP, at its top) holds the one property, --fm-sharp-top, 0px everywhere and 36px under html.fm-sharp in portrait.
+     This script sets html.fm-sharp BEFORE THE FIRST PAINT (it runs in the head, after the stylesheets, before the body element exists), so
+     nothing jumps at launch. ON only where the blur exists, decided by what the device can do, never by a version read from the
+     user agent (iOS 26's Safari still says "iPhone OS 18_6" there):
+       - a Home Screen app: navigator.standalone, which only iOS WebKit has, true only when launched from the Home Screen;
+       - an iPhone: navigator.platform "iPhone" (an iPad's pocket is the hard style, and an iPad says MacIntel or iPad);
+       - iOS 26 or later: CSS anchor positioning or scroll-driven animations, both new in WebKit 26 (Safari 18 has neither);
+       - a notch-tall inset: the safe area above 20 pt on the top (or, held sideways, on a side): a home-button iPhone has 20.
+     And only when he turned it on: Settings, "Sharp top buttons" (fm.settings sharpTop, true = on; default OFF, because on 11 Oct
+     he said "I don't want the buttons lower" (queue 920): he compares it on his phone first, with Settings, Reports, Top of the
+     screen test). Every other
+     device and browser: no class, the property stays 0px, every computed value is what it was. -->
+<script id="sharp-top">
+  (function () {
+    'use strict';
+    var FM = window.FM = window.FM || {};
+    var de = document.documentElement;
+    function inset() {
+      /* the safe area as the page sees it: a box padded by env() on the root (body does not exist yet), read once and removed */
+      var p = document.createElement('div');
+      p.style.cssText = 'position:absolute;visibility:hidden;pointer-events:none;top:0;left:0;width:0;height:0;' +
+        'padding:env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px)';
+      de.appendChild(p);
+      var cs = getComputedStyle(p), r = { top: parseFloat(cs.paddingTop) || 0, side: Math.max(parseFloat(cs.paddingLeft) || 0, parseFloat(cs.paddingRight) || 0) };
+      p.remove();
+      return r;
+    }
+    function facts() {
+      var nav = window.navigator, s = window.CSS && CSS.supports ? CSS.supports.bind(CSS) : function () { return false; };
+      var i = inset();
+      return {
+        standalone: nav.standalone === true,
+        iphone: /^iPhone/.test(nav.platform || ''),
+        webkit26: !!(s('anchor-name: --fm-a') || s('animation-timeline: scroll()')),
+        inset: Math.max(i.top, i.side)
+      };
+    }
+    function device() {
+      /* a test frame can answer for the device before this runs (tests '1255 ·'): a Chrome on a laptop has no blur to test */
+      if (typeof window.__fmSharpStub === 'boolean') return window.__fmSharpStub;
+      var f = facts();
+      return f.standalone && f.iphone && f.webkit26 && f.inset > 20;
+    }
+    function wanted() {
+      if (FM.settings && FM.settings.get) return FM.settings.get('sharpTop') === true;
+      var s = null;
+      try { s = JSON.parse(localStorage.getItem('fm.settings')); } catch (e) {}
+      return !!(s && s.sharpTop === true);
+    }
+    FM.sharpTop = {
+      EXTRA: 36,
+      facts: facts,
+      device: device,
+      wanted: wanted,
+      /* the one place the class is set: here at launch, and from js/settings.js apply() on every change of the setting */
+      apply: function () { var on = !!(FM.sharpTop.device() && FM.sharpTop.wanted()); de.classList.toggle('fm-sharp', on); return on; }
+    };
+    var on = false;
+    try { on = FM.sharpTop.apply(); } catch (e) {}
+    FM.sharpTop.first = { on: on, beforeBody: !document.body };
+  })();
+</script>
 <link rel="manifest" href="manifest.json?v=4">
 <!-- Back to #12151b, the value that shipped for months with no bottom bar (queue 135/143).
      v6.79 changed this to #000 and v6.80 to the app ground, both chasing a bar that turned out to be
@@ -1160,7 +1225,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.48</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.49</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -2066,7 +2131,7 @@
   <script src="js/perf-probe.js?v=15"></script>
   <script src="js/drawn-x.js?v=1"></script>
   <script src="js/variant.js?v=3"></script>   <!-- queue 974: every animation with options plays one AT RANDOM (FM.variant); before timeline/home/app -->
-  <script src="js/settings.js?v=61"></script>
+  <script src="js/settings.js?v=62"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
   <script src="js/collab-core.js?v=70"></script>

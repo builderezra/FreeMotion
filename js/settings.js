@@ -78,6 +78,15 @@ window.FM = window.FM || {};
        js/mobile.js when the menu opens; a local look, nothing about it travels or is saved in a project. In load()'s
        whitelist below, or it would be the #688 bug again. */
     addMenuGrow: true,
+    /* #1255 clause 4 (REOPENED 21 Nov), SHARP TOP. His words: "some fade overlapping the buttons is still there", then on v18.48
+       "Fade still there". iOS 26 blurs the top of the screen down to about 34 pt below the clock's area, over the letters of every
+       top bar, and a page cannot switch that off; on, every top bar's letters and buttons start below it (styles.css, SHARP TOP).
+       It moves the buttons he asked to keep "where they are" (queue 920: "I like B but I don't want the buttons lower"), so it is a
+       switch, OFF by default: the builder's own note on the reopen says nothing becomes the default before he has compared it on his
+       own phone (the Top of the screen test, Settings, Reports). The row shows only where the blur exists (an iPhone Home Screen app
+       on iOS 26, index.html's sharp-top script decides). Read before the first paint by that script straight from this key (only a
+       saved true turns it on), and in load()'s whitelist below (the #688 bug). */
+    sharpTop: false,
     /* THE SETTINGS' OWN REVISION (#1084, the pre-ship review's refuter, 22 Oct). save() writes the whole state, so every phone that
        saved ANY setting between v17.59 and v17.91 stores addMenuGrow false — the old default, not a choice he made. load() takes a
        saved addMenuGrow only from a blob that carries this revision, so the ON default reaches those phones, and every choice made
@@ -129,6 +138,7 @@ window.FM = window.FM || {};
          OFF on every launch would be the #688 bug with a worse consequence than a colour. */
       ['demoMode', 'showTouches', 'systemFonts', 'homeLight', 'collabLabs', 'collabCursors', 'collabSelections', 'collabCodesOnly', 'addMenuGrow'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });   // addMenuGrow: queue 1084
       if (typeof saved.simpleTransitionExtras === 'boolean') state.simpleTransitionExtras = saved.simpleTransitionExtras;   /* Simple 2.7 (#1122): its own line, so the whitelist above stays Full's */
+      if (typeof saved.sharpTop === 'boolean') state.sharpTop = saved.sharpTop;   // #1255 clause 4: Sharp top buttons
       const d = +saved.layerDuration;
       if (isFinite(d) && d > 0 && d <= 60) state.layerDuration = d;
       if (!(saved.settingsRev >= 2)) state.addMenuGrow = DEFAULTS.addMenuGrow;   // #1084: an older blob's addMenuGrow is the old default, not his choice (settingsRev)
@@ -158,6 +168,8 @@ window.FM = window.FM || {};
        about the app that was no longer true. Verified before removing it: with the Classic rules gone,
        #app and all four regions measure identically with and without the class. */
     touchRipples(state.showTouches);
+    /* #1255 clause 4: html.fm-sharp follows the switch (index.html's sharp-top script set it at launch, before the first paint) */
+    if (FM.sharpTop && FM.sharpTop.apply) { try { FM.sharpTop.apply(); } catch (e) {} }
     /* queue 921 S3: the Labs switch owns every piece of collaboration DOM there is, so it is applied
        here — the one place that runs at boot AND on every change — rather than from the row that flips
        it. `syncLabs` builds nothing but the two doors when the switch is off, and ENDS a live session if it goes off
@@ -638,6 +650,11 @@ window.FM = window.FM || {};
          (`homeLight`, true = light): every phone that already chose a look keeps it, and index.html's boot script (which
          reads homeLight before any of this loads, to pick the intro) is untouched. Only the switch shows the inverse. */
       switchRow('Toggle dark mode', '', () => !state.homeLight, () => { state.homeLight = !state.homeLight; save(); apply(); }),
+      /* #1255 clause 4: only where the iPhone's blur exists (FM.sharpTop.device); elsewhere the switch would change nothing, and a
+         switch that changes nothing is worse than no row (the rule the Add menu's row keeps). */
+      (FM.sharpTop && FM.sharpTop.device && FM.sharpTop.device())
+        ? toggleRow('Sharp top buttons', 'On: the top buttons sit a little lower, clear of the iPhone’s blur at the top of the screen. Off: tight to the clock, as before.', 'sharpTop')
+        : null,
     ));
     body.appendChild(group(
       toggleRow('Demo mode', 'Hides your photo and video previews (and their filenames) in the Add menu — so a screen recording never shows your camera roll.', 'demoMode'),
@@ -881,6 +898,8 @@ window.FM = window.FM || {};
     repTog.addEventListener('click', () => repOpen(rep.classList.contains('hidden')));
     repFold._open = repOpen;
     repOpen(false);
+    /* #1255 clause 4: "Top of the screen test" (topTest below). A plain row here, where the rows he pastes from already live. */
+    rep.appendChild(actionRow('Top of the screen test', 'A ruler from the very top of the screen, and three ten-second tests. One screenshot of it shows where the iPhone’s blur ends and what colours it. Changes nothing by itself.', 'Open', () => topTest()));
     /* ---- THE DEVICE REPORTS ARE HERE WHETHER OR NOT A PROJECT IS OPEN (queue 785, 5 Sep). Every readout below is a
        record the app wrote about HIS DEVICE — the last playback, export, project open, scrub, blank clip — and twelve
        open items wait on him pasting one of them. They sat inside `if (inProject)` with the Measure button, so from the
@@ -1114,8 +1133,119 @@ window.FM = window.FM || {};
     document.body.appendChild(scrim);
   }
 
+  /* ═══ TOP OF THE SCREEN TEST (#1255 clause 4, REOPENED 21 Nov) ═══════════════════════════════════════════════════════════
+   * His words: "Fade still there" (21 Nov, on v18.48). What iOS 26 lays over the top of his screen cannot be seen on a laptop
+   * (Chrome has no such blur), and two releases rested on a reading of a screenshot. This card makes one screenshot of HIS
+   * phone answer it: a ruler measured from the very top of the SCREEN (a sharp 1 px line every 4 pt, its number beside it, down
+   * to 160 pt), sharp text at known heights, the safe-area top the page reads in big figures, and three buttons that each change
+   * ONE thing for ten seconds and say so in big letters: the top-edge tab's colour to pure red (does the tab set the tint?), the
+   * page's own background to pure green (or does the page?), and sharp top on or off (where do the letters land?). Where the
+   * ruler's lines stop being sharp is where the blur ends. It changes nothing by itself, puts everything back, closes with one
+   * tap (Close, or Escape). Opened from Settings, Reports. */
+  let topCard = null;
+  function topTest() {
+    if (topCard) return topCard;
+    const de = document.documentElement;
+    const card = el('div', 'top-test'); card.id = 'top-test';
+    card.setAttribute('role', 'dialog'); card.setAttribute('aria-label', 'Top of the screen test');
+    const ruler = document.createElement('canvas'); ruler.className = 'top-test-ruler';
+    const safeLine = el('div', 'top-test-line top-test-safe', 'safe-area top');
+    const sharpLine = el('div', 'top-test-line top-test-sharp', 'top bars start here');
+    const big = el('div', 'top-test-big');
+    /* The card is PURPLE on purpose (styles.css #top-test): a full-screen fixed box is a candidate for the strip's colour itself,
+       so it must be a colour nothing else paints, or a screenshot could not say which of the three set the tint. */
+    const status = el('div', 'top-test-status', 'Purple on purpose. Take a screenshot, then one more for each button. Plain purple at the top: this card colours it. Red: the tab. Green: the page.');
+    const btns = el('div', 'top-test-btns');
+    card.append(ruler, safeLine, sharpLine, big, status, btns);
+    const R = 160, STEP = 4;
+    function readSafe() {
+      const p = el('div'); p.style.cssText = 'position:fixed;visibility:hidden;top:0;left:0;height:0;padding-top:env(safe-area-inset-top, 0px)';
+      card.appendChild(p); const v = parseFloat(getComputedStyle(p).paddingTop) || 0; p.remove(); return v;
+    }
+    function sharpNow() { return parseFloat(getComputedStyle(de).getPropertyValue('--fm-sharp-top')) || 0; }
+    function draw() {
+      const W = Math.max(1, window.innerWidth), dpr = window.devicePixelRatio || 1, H = R + 8;
+      ruler.width = Math.round(W * dpr); ruler.height = Math.round(H * dpr);
+      ruler.style.width = W + 'px'; ruler.style.height = H + 'px';
+      const g = ruler.getContext('2d');
+      g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, ruler.width, ruler.height);
+      g.fillStyle = '#ffffff'; g.textBaseline = 'middle';
+      g.font = Math.round(9 * dpr) + 'px system-ui, sans-serif';
+      for (let y = STEP; y <= R; y += STEP) {
+        const py = Math.round(y * dpr);                     // one device pixel, on a device-pixel row: as sharp as a line gets
+        const long = y % 20 === 0, len = (long ? 0.25 : 0.15) * W;
+        g.fillRect(0, py, Math.round(len * dpr), Math.max(1, Math.round(dpr)));
+        const col = (y / STEP) % 4;                          // four columns, so each number has 16 pt of room
+        g.fillText(String(y), Math.round((0.27 * W + col * 0.055 * W) * dpr), py);
+      }
+      /* sharp words with their tops at known heights, between the numbers and the two CSS-placed lines on the right */
+      g.textBaseline = 'top'; g.font = '600 ' + Math.round(12 * dpr) + 'px system-ui, sans-serif';
+      for (let y = 40; y <= 136; y += 16) g.fillText(y + ' pt  AaBbGg', Math.round(0.5 * W * dpr), Math.round(y * dpr));
+      const s = readSafe(), x = sharpNow(), f = (FM.sharpTop && FM.sharpTop.facts) ? FM.sharpTop.facts() : null;
+      big.textContent = '';
+      big.append(el('div', 'top-test-fig', 'Safe-area top: ' + Math.round(s) + ' pt'),
+        el('div', 'top-test-sub', 'Sharp top: ' + (x > 0 ? 'on, top bars start at ' + Math.round(s + x) + ' pt' : 'off') + ' · screen ' + W + ' pt wide'),
+        el('div', 'top-test-sub', f ? ('iPhone ' + (f.iphone ? 'yes' : 'no') + ' · Home Screen app ' + (f.standalone ? 'yes' : 'no') + ' · iOS 26 ' + (f.webkit26 ? 'yes' : 'no') + ' · inset ' + Math.round(f.inset) + ' pt') : ''));
+    }
+    /* the three tests: ONE change each, for ten seconds, said in big letters, then put back */
+    let run = null;
+    function stop() {
+      if (!run) return;
+      clearInterval(run.tick); clearTimeout(run.end);
+      try { run.undo(); } catch (e) {}
+      run = null; status.textContent = 'Put back. Try another, or Close.'; card.classList.remove('top-test-running');
+      draw();
+    }
+    function ten(words, doIt) {
+      stop();
+      const undo = doIt(), t0 = Date.now();
+      run = { undo: undo };
+      card.classList.add('top-test-running');
+      const say = () => { status.textContent = words + ' — ' + Math.max(0, Math.ceil(10 - (Date.now() - t0) / 1000)) + ' s'; };
+      say(); draw();
+      run.tick = setInterval(say, 250);
+      run.end = setTimeout(stop, 10000);
+    }
+    const btn = (label, fn) => { const b = el('button', 'top-test-btn', label); b.type = 'button'; b.addEventListener('click', fn); btns.appendChild(b); return b; };
+    btn('Tab red', () => ten('TOP-EDGE TAB IS PURE RED', () => {
+      /* a NEW tab appearing is the one event that makes WebKit read the strip's colour again (index.html, edge-css) */
+      const t = document.createElement('i'); t.className = 'fm-edge top-test-red'; t.setAttribute('aria-hidden', 'true');
+      document.body.appendChild(t);
+      return () => t.remove();
+    }));
+    btn('Page green', () => ten('PAGE BACKGROUND IS PURE GREEN', () => {
+      const v = de.style.getPropertyValue('background-color'), p = de.style.getPropertyPriority('background-color');
+      de.style.setProperty('background-color', '#00ff00', 'important');
+      return () => { if (v) de.style.setProperty('background-color', v, p); else de.style.removeProperty('background-color'); };
+    }));
+    btn('Sharp top on/off', () => ten('SHARP TOP IS ' + (de.classList.contains('fm-sharp') ? 'OFF' : 'ON'), () => {
+      de.classList.toggle('fm-sharp');
+      return () => { if (FM.sharpTop && FM.sharpTop.apply) FM.sharpTop.apply(); else de.classList.toggle('fm-sharp'); };
+    }));
+    const close = el('button', 'top-test-btn top-test-close', 'Close'); close.type = 'button';
+    btns.appendChild(close);
+    /* stopPropagation: Escape closes the CARD only, and he lands back in Settings (Settings' own Escape listener is on document too) */
+    const onKey = e => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); shut(); } };
+    const onSize = () => draw();
+    function shut() {
+      stop();
+      document.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('resize', onSize);
+      card.remove(); topCard = null;
+    }
+    close.addEventListener('click', shut);
+    document.addEventListener('keydown', onKey, true);
+    window.addEventListener('resize', onSize);
+    card._close = shut; card._stop = stop;
+    document.body.appendChild(card);
+    draw();
+    topCard = card;
+    return card;
+  }
+
   FM.settings = {
     init() { load(); apply(); },
+    topTest: () => topTest(),   /* #1255 clause 4: the Top of the screen test card (Settings, Reports) */
     get(k) { return k ? state[k] : Object.assign({}, state); },
     set(k, v) { state[k] = v; save(); apply(); },
     // subscribe to changes (home re-sorts, the add menu redraws, …)

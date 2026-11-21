@@ -168684,6 +168684,405 @@
     if (bad.length) throw new Error(bad.length + ' screen(s) wrong at the top of a phone (#1255 clause 4): ' + bad.join(' | '));
   });
 
+  /* ═══ #1255 clause 4, REOPENED 21 Nov — SHARP TOP, and the top changing once while a project opens or closes ═══════════════
+   * His words: "some fade overlapping the buttons is still there right now" (20 Nov); on v18.48, nothing open, "Fade still there";
+   * and 11:02, "the top bar glitches in and out when loading in", "Like loading in and out of project etc".
+   * iOS 26 blurs the top of an iPhone screen from its very top to the safe-area top + 34 pt (measured on his ten screenshots,
+   * ~/fm-builder/ab/reach1255.py), and a page cannot switch that off. Sharp top keeps every top bar's letters and buttons at least
+   * SHARP1255 below the safe-area top; it is on only where that blur exists (index.html's sharp-top script, the device answer
+   * stubbed here through window.__fmSharpStub, which that script reads on every call), and a switch in Settings turns it off.
+   * The suite's frame has no safe area (env() is 0 here), so "below the safe-area top + 36" is "at 36 px or lower". */
+  const SHARP1255 = 36;
+  /* the first thing a person reads or taps inside `rootEl`: the top of the highest visible text, button, field, icon or picture */
+  function ink1255(rootEl) {
+    let best = null;
+    const vis = function (e) { const cs = getComputedStyle(e); return cs.visibility === 'visible' && cs.display !== 'none' && +cs.opacity > 0.05; };
+    const walk = function (e) {
+      if (!e || e.nodeType !== 1 || !vis(e) || (e.classList && e.classList.contains('fm-edge'))) return;
+      const tag = e.tagName, r = e.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0 && /^(BUTTON|INPUT|SELECT|TEXTAREA|svg|IMG|CANVAS)$/.test(tag) && (!best || r.top < best.top)) best = { top: r.top, what: tag.toLowerCase() + (e.id ? '#' + e.id : (typeof e.className === 'string' && e.className ? '.' + e.className.split(' ')[0] : '')) };
+      for (const n of e.childNodes) {
+        if (n.nodeType === 3 && n.textContent.trim()) {
+          const rg = document.createRange(); rg.selectNodeContents(n);
+          for (const q of rg.getClientRects()) if (q.width > 0 && q.height > 0 && (!best || q.top < best.top)) best = { top: q.top, what: 'the words “' + n.textContent.trim().slice(0, 18) + '”' };
+        } else if (n.nodeType === 1 && tag !== 'svg') walk(n);
+      }
+    };
+    walk(rootEl);
+    return best;
+  }
+  /* the device answer and the switch, put back exactly as found (the global's own descriptor, the stored settings) */
+  async function withSharp1255(device, on, fn) {
+    const had = Object.getOwnPropertyDescriptor(window, '__fmSharpStub'), was = FM.settings.get('sharpTop');
+    let set0 = null; try { set0 = localStorage.getItem('fm.settings'); } catch (e) {}
+    try {
+      window.__fmSharpStub = device;
+      FM.settings.set('sharpTop', on);
+      await sleep(60);
+      return await fn();
+    } finally {
+      if (had) Object.defineProperty(window, '__fmSharpStub', had); else delete window.__fmSharpStub;
+      FM.settings.set('sharpTop', was);
+      try { if (set0 == null) localStorage.removeItem('fm.settings'); else localStorage.setItem('fm.settings', set0); } catch (e) {}
+      await sleep(60);
+    }
+  }
+
+  test('1255 · with Sharp top on, on an iPhone Home Screen app, every top bar on a phone starts its first letter or button below the iPhone’s top blur — the editor in Full and in Simple with Simple’s bottom row still on the screen, both Homes, Settings over Home and over the editor, the Elements and Effects browsers, Notes and Keyboard shortcuts made big (CONTROL: with it off the editor’s back button and Settings’ close start inside the blur)', { item: '1255', budgetMs: 120000 }, async function () {
+    const root = document.documentElement, look0 = root.getAttribute('data-home'), wasHome = FM.home.isOpen(), keep = FM.scene.layers.slice();
+    const wasSimple = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
+    let big0 = null; try { big0 = localStorage.getItem('fm.panelBigByProject'); } catch (e) {}
+    const bigOn = function (key) { try { const o = JSON.parse(big0 || '{}'), id = FM.storage.openProjectId() || '_none'; o[id] = Object.assign({}, o[id] || {}); o[id][key] = true; localStorage.setItem('fm.panelBigByProject', JSON.stringify(o)); } catch (e) {} };
+    const bigBack = function () { try { if (big0 == null) localStorage.removeItem('fm.panelBigByProject'); else localStorage.setItem('fm.panelBigByProject', big0); } catch (e) {} };
+    const bad = [];
+    const at = function (label, rootEl) {
+      if (!rootEl) { bad.push(label + ': not on the screen'); return null; }
+      const i = ink1255(rootEl);
+      if (!i) { bad.push(label + ': nothing to read or tap was found'); return null; }
+      return i;
+    };
+    const below = function (label, rootEl) { const i = at(label, rootEl); if (i && i.top < SHARP1255 - 0.5) bad.push(label + ': ' + i.what + ' starts ' + i.top.toFixed(1) + ' px below the safe-area top, inside the iPhone’s blur (it must start at ' + SHARP1255 + ' or lower)'); return i; };
+    const editorBar = function () { return document.getElementById('topbar-m'); };
+    try {
+      await atPhoneWidth(async function () {
+        if (FM.home.isOpen()) FM.home.close();
+        await sleep(300);
+        FM.scene.layers.length = 0; FM.addShapeLayer('rect');
+        FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+        FM.editor.apply('full', { force: true, quiet: true }); await sleep(300);
+        /* CONTROL: the switch off (the device still an iPhone): the top buttons are tight to the clock, inside the blur */
+        await withSharp1255(true, false, async function () {
+          await sleep(200);
+          const b = at('CONTROL, the editor with Sharp top off', editorBar());
+          FM.settings.open(); await sleep(450);
+          const s = at('CONTROL, Settings with Sharp top off', document.querySelector('.set-scrim .set-head'));
+          FM.settings.close(); await sleep(350);
+          if (!b || !(b.top < SHARP1255) || !s || !(s.top < SHARP1255)) throw new Error('CONTROL: with Sharp top off the editor’s ' + (b && b.what) + ' starts at ' + (b && b.top) + ' and Settings’ ' + (s && s.what) + ' at ' + (s && s.top) + ', not inside the top ' + SHARP1255 + ' px, so this probe cannot tell the setting from no setting');
+        });
+        await withSharp1255(true, true, async function () {
+          await sleep(200);
+          /* the editor, Full: the bar and the page's top band under it end together, so no band of another colour shows */
+          below('the editor (Full)', editorBar());
+          const barH = editorBar().getBoundingClientRect().height;
+          const stops = (getComputedStyle(root).backgroundImage.match(/(\d+(?:\.\d+)?)px/g) || []).map(parseFloat);
+          if (!stops.some(function (v) { return Math.abs(v - barH) < 0.6; })) bad.push('the editor (Full): the page’s top band ends at ' + stops.join('/') + ' px but the bar is ' + barH + ' px tall, so a band of another colour shows above or under it');
+          FM.settings.open(); await sleep(450);
+          below('Settings over the editor', document.querySelector('.set-scrim .set-head'));
+          FM.settings.close(); await sleep(350);
+          FM.elementsBrowser.open(); await sleep(450);
+          below('the Elements browser', document.getElementById('el-browser'));
+          FM.elementsBrowser.close(); await sleep(350);
+          FM.fxBrowser.open('color'); await sleep(450);
+          below('the Effects browser', document.getElementById('fx-browser'));
+          FM.fxBrowser.close(); await sleep(350);
+          bigOn('notes'); FM.notepad.open(); await sleep(600);
+          below('Notes made big', document.querySelector('.np-scrim.pb-host-big'));
+          FM.notepad.close({ now: true }); bigBack(); await sleep(350);
+          bigOn('shortcuts'); FM.shortcuts.show(); await sleep(600);
+          below('Keyboard shortcuts made big', document.getElementById('shortcuts-overlay'));
+          FM.shortcuts.hide({ now: true }); bigBack(); await sleep(350);
+          /* Simple: its rows are fixed, so the stage gives up what the bar took and its bottom row stays on the screen */
+          FM.editor.apply('simple', { force: true, quiet: true }); await sleep(450);
+          below('the editor (Simple)', editorBar());
+          const bar = document.querySelector('#sm-bar, .sm-bar');
+          if (!bar || !bar.getClientRects().length) bad.push('the editor (Simple): its bottom row (#sm-bar) is not on the screen to measure');
+          else if (bar.getBoundingClientRect().bottom > innerHeight + 0.5) bad.push('the editor (Simple): its bottom row ends at ' + bar.getBoundingClientRect().bottom.toFixed(1) + ' px, past the bottom of the ' + innerHeight + ' px screen: the taller top bar pushed it off');
+          FM.editor.apply('full', { force: true, quiet: true }); await sleep(300);
+          for (const look of ['dark', 'light']) {
+            root.setAttribute('data-home', look);
+            FM.home.open(); await sleep(700);
+            below('the ' + look + ' Home', document.querySelector('#home-screen .hm-top'));
+            if (look === 'dark') { FM.settings.open(); await sleep(450); below('Settings over the dark Home', document.querySelector('.set-scrim .set-head')); FM.settings.close(); await sleep(350); }
+          }
+        });
+      }, 380);
+    } finally {
+      try { FM.settings.close(); FM.elementsBrowser.close(); FM.fxBrowser.close(); FM.notepad.close({ now: true }); FM.shortcuts.hide({ now: true }); } catch (e) {}
+      bigBack();
+      if (look0 == null) root.removeAttribute('data-home'); else root.setAttribute('data-home', look0);
+      if (FM.home.isOpen()) FM.home.close();
+      await sleep(250);
+      try { FM.editor.apply(wasSimple ? 'simple' : 'full', { force: true, quiet: true }); } catch (e) {}
+      FM.scene.layers.length = 0; keep.forEach(function (l) { FM.scene.layers.push(l); });
+      FM.selectLayer(null); FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+      if (wasHome && !FM.home.isOpen()) FM.home.open();
+      await sleep(250);
+    }
+    if (bad.length) throw new Error(bad.length + ' top bar(s) still inside the iPhone’s blur with Sharp top on (#1255 clause 4): ' + bad.join(' | '));
+  });
+
+  test('1255 · with Sharp top off, or on any device without the iPhone’s top blur, nothing at the top moves: every bar, band and big card computes exactly what it did before the setting existed (CONTROL: with it on the same probe reads them moved)', { item: '1255', budgetMs: 40000 }, async function () {
+    const root = document.documentElement;
+    /* THE VALUES BEFORE #1255's SHARP TOP, at a 380 px phone with no safe area: each rule's own numbers (styles.css as on v18.48) */
+    const MAIN = [
+      ['.te-bar', 'paddingTop', '8px'], ['.fxb-top', 'paddingTop', '14px'], ['.fxb-catview-top', 'paddingTop', '14px'], ['.tfill-top', 'paddingTop', '14px'],
+      ['.tut-bar', 'paddingTop', '10px'], ['.set-head', 'paddingTop', '18px'], ['.collab-knock', 'top', '60px'], ['.np-scrim.pb-host-big', 'paddingTop', '18px'],
+      ['#topbar-m', 'height', '52px'], ['#topbar-m', 'paddingTop', '0px'], ['#home-screen .hm-top', 'paddingTop', '12px'], ['#shortcuts-overlay.pb-host-big', 'paddingTop', '0px'],
+      ['--pb-h', 'height', (innerHeight - 20) + 'px']
+    ];
+    const made = [];
+    const probe = function (sel, prop) {
+      if (sel === '--pb-h') { const d = document.createElement('div'); d.style.cssText = 'position:absolute;visibility:hidden;height:var(--pb-h)'; document.body.appendChild(d); made.push(d); return getComputedStyle(d).height; }
+      if (sel === '#topbar-m') return getComputedStyle(document.getElementById('topbar-m'))[prop];
+      if (sel === '#home-screen .hm-top') return getComputedStyle(document.querySelector('#home-screen .hm-top'))[prop];
+      if (sel === '#shortcuts-overlay.pb-host-big') {
+        /* the overlay is made on its first open: a stand-in with its id while none is in the page */
+        let o = document.getElementById('shortcuts-overlay'), mine = false;
+        if (!o) { o = document.createElement('div'); o.id = 'shortcuts-overlay'; o.className = 'hidden'; document.body.appendChild(o); mine = true; }
+        const had = o.classList.contains('pb-host-big'); o.classList.add('pb-host-big'); const v = getComputedStyle(o)[prop];
+        if (!had) o.classList.remove('pb-host-big');
+        if (mine) o.remove();
+        return v;
+      }
+      const d = document.createElement('div'); d.className = sel.replace(/\./g, ' ').trim(); d.style.visibility = 'hidden';
+      document.body.appendChild(d); made.push(d);
+      return getComputedStyle(d)[prop];
+    };
+    const read = function () { return MAIN.map(function (m) { return probe(m[0], m[1]); }); };
+    const bad = [];
+    let bandStop = null;
+    try {
+      await atPhoneWidth(async function () {
+        const wasHome = FM.home.isOpen();
+        if (wasHome) FM.home.close();
+        await sleep(250);
+        const band = function () { const m = (getComputedStyle(root).backgroundImage.match(/(\d+(?:\.\d+)?)px/g) || []).map(parseFloat); return m.length ? Math.max.apply(null, m) + 'px' : 'none'; };
+        for (const [label, device, on] of [['an iPhone with Sharp top switched off', true, false], ['a device without the blur (a laptop, a browser, an iPad) with the switch on', false, true]]) {
+          await withSharp1255(device, on, async function () {
+            if (root.classList.contains('fm-sharp')) bad.push(label + ': html.fm-sharp is set');
+            const v = getComputedStyle(root).getPropertyValue('--fm-sharp-top').trim();
+            if (v && v !== '0px') bad.push(label + ': --fm-sharp-top is ' + v + ', not 0px');
+            if (band() !== '52px') bad.push(label + ': the editor’s top band ends at ' + band() + ', not 52px as before');
+            read().forEach(function (got, i) { if (got !== MAIN[i][2]) bad.push(label + ': ' + MAIN[i][0] + ' ' + MAIN[i][1] + ' is ' + got + ', not ' + MAIN[i][2] + ' as before'); });
+          });
+        }
+        /* CONTROL: an iPhone with the switch on: the same probe sees the bars move */
+        await withSharp1255(true, true, async function () {
+          const moved = read().filter(function (got, i) { return got !== MAIN[i][2]; }).length;
+          bandStop = band();
+          if (moved < 10 || bandStop === '52px') throw new Error('CONTROL: with Sharp top on only ' + moved + ' of ' + MAIN.length + ' values moved and the top band ends at ' + bandStop + ', so this probe cannot see the setting');
+        });
+        if (wasHome) FM.home.open();
+        await sleep(200);
+      }, 380);
+    } finally { made.forEach(function (d) { d.remove(); }); }
+    if (bad.length) throw new Error('with Sharp top not in force the top still moved (#1255 clause 4): ' + bad.join(' | '));
+  });
+
+  test('1255 · Sharp top stays off until he turns it on, and then is in place before the first paint and remembered: a fresh iPhone page with no stored choice has no html.fm-sharp, a saved on has it before its body exists, the Sharp top buttons switch in Settings turns it on and off, and Settings reads it back after a reload (CONTROL: a saved on, on a device without the blur, gives no class and no switch)', { item: '1255', budgetMs: 40000 }, async function () {
+    const html = await src1180();
+    const m = html.match(/<script id="sharp-top">[\s\S]*?<\/script>/);
+    const css = html.match(/<link rel="stylesheet" href="(styles\.css[^"]*)"/);
+    let set0 = null; try { set0 = localStorage.getItem('fm.settings'); } catch (e) {}
+    const frames = [];
+    const boot = async function (device) {
+      const f = document.createElement('iframe');
+      f.style.cssText = 'position:fixed;left:0;top:0;width:380px;height:800px;border:0;opacity:0;pointer-events:none;z-index:-1';
+      const done = new Promise(function (r) { f.onload = r; });
+      f.srcdoc = '<!doctype html><html><head><meta charset="utf-8">' + (css ? '<link rel="stylesheet" href="' + css[1] + '">' : '') +
+        '<script>window.__fmSharpStub = ' + device + ';<\/script>' + (m ? m[0] : '') +
+        '<script>window.__atHead = { sharp: document.documentElement.classList.contains("fm-sharp"), body: !!document.body };<\/script>' +
+        '</head><body style="margin:0"><div class="set-head">Settings</div></body></html>';
+      document.body.appendChild(f); frames.push(f);
+      await Promise.race([done, sleep(4000)]);
+      const w = f.contentWindow;
+      return { head: w.__atHead || {}, pad: w.getComputedStyle(w.document.querySelector('.set-head')).paddingTop };
+    };
+    const bad = [];
+    const was = FM.settings.get('sharpTop');
+    try {
+      /* no stored choice: OFF. Queue 920, his words: I like B but I don't want the buttons lower; he compares it on his phone first */
+      try { const s = JSON.parse(set0 || '{}') || {}; delete s.sharpTop; localStorage.setItem('fm.settings', JSON.stringify(s)); } catch (e) {}
+      const fresh = await boot(true);
+      if (fresh.head.body) throw new Error('setup: the probe ran after <body> existed');
+      if (fresh.head.sharp || fresh.pad !== '18px') bad.push('a fresh page on an iPhone with no stored choice has html.fm-sharp ' + fresh.head.sharp + ' and pads Settings’ title by ' + fresh.pad + ': the top buttons move lower before he has chosen it (queue 920: he does not want them lower)');
+      /* …and Settings, loading over that page, agrees: no stored choice reads as off, so its apply() cannot move the bars a moment later */
+      FM.settings.init();
+      if (FM.settings.get('sharpTop') !== false) bad.push('with no stored choice Settings reads Sharp top as ' + FM.settings.get('sharpTop') + ': on an iPhone the top buttons would drop lower the moment Settings loads');
+      /* a saved on, honoured before the first paint */
+      try { const s = JSON.parse(set0 || '{}') || {}; s.sharpTop = true; localStorage.setItem('fm.settings', JSON.stringify(s)); } catch (e) {}
+      const on = await boot(true);
+      if (on.head.body) throw new Error('setup: the probe ran after <body> existed');
+      if (!on.head.sharp) bad.push('a fresh page on an iPhone with Sharp top saved on has no html.fm-sharp before its body exists: the top buttons would start under the blur and jump at launch');
+      if (on.pad !== SHARP1255 + 'px') bad.push('a fresh page on an iPhone with Sharp top saved on pads Settings’ title by ' + on.pad + ' at first paint, not ' + SHARP1255 + 'px');
+      /* CONTROL: the same saved on, on a device without the blur */
+      const off = await boot(false);
+      if (off.head.sharp || off.pad !== '18px') throw new Error('CONTROL: a fresh page on a device without the blur has html.fm-sharp ' + off.head.sharp + ' and pads Settings’ title by ' + off.pad + ', so the probe cannot tell the device answer apart');
+      /* the switch he turns it on and off with: Settings, Appearance, Sharp top buttons (only where the blur exists) */
+      const sharpRow = function () { return [].slice.call(document.querySelectorAll('.set-row')).find(function (r) { const l = r.querySelector('.set-label'); return l && l.textContent.trim() === 'Sharp top buttons'; }) || null; };
+      await withSharp1255(false, false, async function () {
+        FM.settings.open(); await sleep(400);
+        const r = sharpRow();
+        FM.settings.close(); await sleep(350);
+        if (r) bad.push('CONTROL: on a device without the blur Settings shows a Sharp top buttons switch that would change nothing');
+      });
+      await withSharp1255(true, false, async function () {
+        FM.settings.open(); await sleep(400);
+        try {
+          const r = sharpRow(), sw = r && r.querySelector('.set-switch');
+          if (!sw) { bad.push('on an iPhone Settings has no Sharp top buttons switch: he cannot turn it on or off'); return; }
+          if (document.documentElement.classList.contains('fm-sharp')) throw new Error('CONTROL: html.fm-sharp is already on with the switch off');
+          sw.click(); await sleep(60);
+          if (FM.settings.get('sharpTop') !== true || !document.documentElement.classList.contains('fm-sharp') || sw.getAttribute('aria-checked') !== 'true') bad.push('tapping Sharp top buttons on left the setting ' + FM.settings.get('sharpTop') + ', html.fm-sharp ' + document.documentElement.classList.contains('fm-sharp') + ', the switch ' + sw.getAttribute('aria-checked'));
+          attached((sharpRow() || {}).querySelector ? sharpRow().querySelector('.set-switch') : null, 'the Sharp top buttons switch').click(); await sleep(60);
+          if (FM.settings.get('sharpTop') !== false || document.documentElement.classList.contains('fm-sharp')) bad.push('tapping Sharp top buttons off left the setting ' + FM.settings.get('sharpTop') + ' and html.fm-sharp ' + document.documentElement.classList.contains('fm-sharp'));
+        } finally { FM.settings.close(); await sleep(350); }
+      });
+      /* and Settings reads the switch back (load()'s whitelist, the #688 bug) */
+      FM.settings.set('sharpTop', true);
+      FM.settings.init();
+      if (FM.settings.get('sharpTop') !== true) bad.push('after a reload Settings reads Sharp top as ' + FM.settings.get('sharpTop') + ': the switch he turned on is forgotten');
+    } finally {
+      frames.forEach(function (f) { f.remove(); });
+      try { if (set0 == null) localStorage.removeItem('fm.settings'); else localStorage.setItem('fm.settings', set0); } catch (e) {}
+      FM.settings.init();
+      if (FM.settings.get('sharpTop') !== was) FM.settings.set('sharpTop', was);
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('1255 · opening a project from Home and leaving it, the top of the screen changes once, in step with the slide: the strip’s tab and the page’s own colour turn together on the first frame the incoming screen moves, in Full and in Simple (CONTROL: before the tap both are Home’s, after the open both are the editor’s)', { item: '1255', budgetMs: 60000 }, async function () {
+    const root = document.documentElement, app = document.getElementById('app'), look0 = root.getAttribute('data-home');
+    const wasHome = FM.home.isOpen(), orig = FM.projects.currentId(), wasSimple = !!(FM.editor && FM.editor.isSimple && FM.editor.isSimple());
+    const made = [];
+    let last0 = null; try { last0 = localStorage.getItem('fm.editor.last'); } catch (e) {}
+    const pair = function () {
+      const tab = [].slice.call(document.querySelectorAll('.fm-edge')).filter(function (e) { return getComputedStyle(e).display !== 'none'; }).map(function (e) { return e.dataset.edge; }).join('+');
+      return { tab: tab, html: getComputedStyle(root).backgroundColor, inn: app.classList.contains('fm-push-in'), out: app.classList.contains('fm-pop-out') };
+    };
+    /* every frame of `ms` after `fire`: the (tab, colour) pairs, and the frames where one had turned without the other */
+    const record = async function (fire, ms) {
+      const seen = []; let go = true;
+      const loop = function () { if (!go) return; seen.push(pair()); requestAnimationFrame(loop); };
+      seen.push(pair()); requestAnimationFrame(loop);
+      fire();
+      await sleep(ms); go = false;
+      seen.push(pair());
+      return seen;
+    };
+    const bad = [];
+    try {
+      await atPhoneWidth(async function () {
+        root.setAttribute('data-home', 'dark');
+        /* the editor is kept per project (its card): B is switched to Simple, A to Full, and each open loads the other from Home */
+        if (FM.home.isOpen()) FM.home.close();
+        const B = await FM.projects.create({ name: '1255 top B', width: 320, height: 240 }); made[1] = B && B.id ? B.id : B;
+        await sleep(200); await FM.editor.request('simple'); await sleep(350);
+        const A = await FM.projects.create({ name: '1255 top A', width: 320, height: 240 }); made[0] = A && A.id ? A.id : A;
+        await sleep(200); await FM.editor.request('full'); await sleep(350);
+        for (const mode of ['simple', 'full']) {
+          FM.home.open(); await sleep(1200);
+          const HOME = pair();
+          if (HOME.tab !== 'home-dark') throw new Error('CONTROL: ' + mode + ': on the dark Home the ' + HOME.tab + ' tab shows, not home-dark');
+          const open = await record(function () { FM.home._openProject(made[mode === 'full' ? 0 : 1]); }, 1700);
+          const ED = open[open.length - 1];
+          if ((mode === 'simple') !== !!(FM.editor.isSimple && FM.editor.isSimple())) throw new Error('setup: the project opened in ' + (FM.editor.isSimple() ? 'Simple' : 'Full') + ', not ' + mode);
+          if (ED.tab !== 'editor' || ED.html === HOME.html) throw new Error('CONTROL: ' + mode + ': after the open the ' + ED.tab + ' tab shows over ' + ED.html + ', not the editor’s pair, so the open was not recorded');
+          const mixedIn = open.filter(function (s) { return (s.tab === ED.tab) !== (s.html === ED.html); });
+          if (mixedIn.length) bad.push(mode + ', opening: for ' + mixedIn.length + ' frame(s) the strip’s tab was ' + mixedIn[0].tab + ' while the page wore ' + mixedIn[0].html + ': the top changed twice, the second time after the slide');
+          const first = open.findIndex(function (s) { return s.tab === ED.tab; });
+          if (first > 0 && !open[first].inn) bad.push(mode + ', opening: the top turned to the editor’s on a frame the editor was not sliding in');
+          await sleep(300);
+          const back = await record(function () { const b = document.getElementById('m-back'); if (b && b.getClientRects().length) b.click(); else FM.home.open(); }, 1100);
+          const H2 = back[back.length - 1];
+          if (H2.tab !== 'home-dark' || H2.html !== HOME.html) throw new Error('CONTROL: ' + mode + ': after leaving, the ' + H2.tab + ' tab shows over ' + H2.html + ', not Home’s pair, so the way back was not recorded');
+          const mixedOut = back.filter(function (s) { return (s.tab === H2.tab) !== (s.html === H2.html); });
+          if (mixedOut.length) bad.push(mode + ', leaving: for ' + mixedOut.length + ' frame(s) the strip’s tab was ' + mixedOut[0].tab + ' while the page wore ' + mixedOut[0].html + ': the top changed twice');
+          const firstB = back.findIndex(function (s) { return s.tab === H2.tab; });
+          if (firstB > 0 && !back[firstB].out) bad.push(mode + ', leaving: the top turned to Home’s on a frame the editor was not sliding away');
+          await sleep(300);
+        }
+      }, 380);
+    } finally {
+      try { FM.editor.apply(wasSimple ? 'simple' : 'full', { force: true, quiet: true }); } catch (e) {}
+      try { if (orig && FM.projects.currentId() !== orig) await FM.projects.open(orig); } catch (e) {}
+      for (const id of made) { try { if (id) await FM.projects.remove(id); } catch (e) {} }
+      try { if (last0 == null) localStorage.removeItem('fm.editor.last'); else localStorage.setItem('fm.editor.last', last0); } catch (e) {}
+      if (look0 == null) root.removeAttribute('data-home'); else root.setAttribute('data-home', look0);
+      try { if (wasHome && !FM.home.isOpen()) FM.home.open(); else if (!wasHome && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep(400);
+    }
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
+  test('1255 · Settings, Reports has a Top of the screen test: a card in a colour no tab or page paints, a ruler from the very top of the screen to 160 pt, the safe-area top in big figures, and three ten-second tests that each change one thing, say so, and put it back; Close takes it away, and so does Escape, which reaches nothing under the card (CONTROL: before it opens nothing of it is in the page)', { item: '1255', budgetMs: 40000 }, async function () {
+    const root = document.documentElement, bad = [];
+    if (document.getElementById('top-test')) throw new Error('CONTROL: a Top of the screen test card is already in the page before it was opened');
+    const tabs0 = document.querySelectorAll('.fm-edge').length, bg0 = root.style.getPropertyValue('background-color'), sharp0 = root.classList.contains('fm-sharp');
+    try {
+      FM.settings.open(); await sleep(400);
+      const fold = document.getElementById('set-reports');
+      const row = fold && [].slice.call(fold.querySelectorAll('.set-row')).find(function (r) { return /Top of the screen test/.test(r.textContent); });
+      if (!row) throw new Error('Settings, Reports has no Top of the screen test row');
+      row.querySelector('button').click(); await sleep(300);
+      const card = document.getElementById('top-test');
+      if (!card) throw new Error('the Top of the screen test row opened nothing');
+      const cr = card.getBoundingClientRect();
+      if (cr.top !== 0 || cr.left !== 0 || Math.abs(cr.width - innerWidth) > 1 || Math.abs(cr.height - innerHeight) > 1) bad.push('the card is ' + cr.width + 'x' + cr.height + ' at ' + cr.left + ',' + cr.top + ', not the whole screen');
+      if (+getComputedStyle(card).zIndex <= 10001) bad.push('the card is under the top-edge tabs (z ' + getComputedStyle(card).zIndex + ')');
+      /* the card is itself a full-screen fixed box, a candidate for the strip's tint: in a colour the page or a tab also paints, a
+         screenshot could not say which of them set it */
+      const cbg = getComputedStyle(card).backgroundColor, pageBg = getComputedStyle(root).backgroundColor;
+      const tabsNow = function () { return [].slice.call(document.querySelectorAll('.fm-edge')).map(function (t) { return getComputedStyle(t).backgroundColor; }).filter(function (c) { return !/^rgba\(0, 0, 0, 0\)$|^transparent$/.test(c); }); };
+      /* the tabs' colours at this width AND at a phone's (the editor's tab is #161a21 only on a phone; the suite's frame may be wider) */
+      const tabBgs = tabsNow().concat(await atPhoneWidth(async function () { return tabsNow(); }));
+      if (!tabBgs.length || tabBgs.indexOf('rgb(22, 26, 33)') < 0) throw new Error('CONTROL: the probe does not see the phone editor tab’s #161a21 among the top-edge tabs (' + tabBgs.length + ' colours), so the card cannot be compared with them');
+      if (cbg === pageBg || tabBgs.indexOf(cbg) >= 0) bad.push('the card is painted ' + cbg + ', the colour the ' + (cbg === pageBg ? 'page' : 'top-edge tab') + ' paints too: a screenshot cannot tell which of them tints the top');
+      const ruler = card.querySelector('canvas'), rr = ruler && ruler.getBoundingClientRect();
+      if (!rr || rr.top !== 0 || rr.height < 160) bad.push('the ruler does not start at the very top of the screen and run to 160 pt (' + (rr ? rr.top + '..' + rr.bottom : 'none') + ')');
+      else {
+        /* a sharp 1 px line every 4 pt: rows 4, 8 … 160 painted at the left edge, the rows between them empty */
+        const g = ruler.getContext('2d'), k = ruler.width / rr.width;
+        const lit = function (y) { return g.getImageData(1, Math.round(y * k), 1, 1).data[3] > 200; };
+        const miss = []; for (let y = 4; y <= 160; y += 4) if (!lit(y)) miss.push(y);
+        if (miss.length) bad.push('the ruler has no line at ' + miss.slice(0, 5).join(', ') + ' pt');
+        if (lit(6) || lit(10)) bad.push('the ruler’s lines are not 1 px: rows between them are painted');
+      }
+      if (!/Safe-area top: \d+ pt/.test(card.textContent)) bad.push('the card does not print the safe-area top it reads');
+      const btn = function (t) { return [].slice.call(card.querySelectorAll('button')).find(function (b) { return b.textContent.trim() === t; }); };
+      const status = function () { return card.querySelector('.top-test-status').textContent; };
+      /* the red tab: one more edge tab, on top of the others, pure red, and gone again on Close */
+      btn('Tab red').click(); await sleep(50);
+      const red = document.querySelector('.fm-edge.top-test-red');
+      if (!red || getComputedStyle(red).backgroundColor !== 'rgb(255, 0, 0)' || getComputedStyle(red).display === 'none') bad.push('Tab red put no pure red top-edge tab in the page');
+      if (!/PURE RED/.test(status()) || !/\d+ s/.test(status())) bad.push('Tab red does not say so in big letters with its ten seconds (“' + status() + '”)');
+      btn('Page green').click(); await sleep(50);
+      if (document.querySelector('.fm-edge.top-test-red')) bad.push('starting Page green left the red tab in: two things changed at once');
+      if (getComputedStyle(root).backgroundColor !== 'rgb(0, 255, 0)') bad.push('Page green did not turn the page background pure green (' + getComputedStyle(root).backgroundColor + ')');
+      btn('Sharp top on/off').click(); await sleep(50);
+      if (root.style.getPropertyValue('background-color') !== bg0) bad.push('starting Sharp top on/off left the page green');
+      if (root.classList.contains('fm-sharp') === sharp0) bad.push('Sharp top on/off did not flip sharp top');
+      btn('Close').click(); await sleep(50);
+      if (document.getElementById('top-test')) bad.push('Close did not take the card away');
+      /* Escape takes the card away and reaches nothing under it: the editor's own shortcuts listen on window (js/app.js) and
+         Settings on document, so a key that closed the card must not also act on what is behind it */
+      let seen = 0;
+      const under = function (e) { if (e.key === 'Escape') seen++; };
+      window.addEventListener('keydown', under);
+      try {
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+        if (seen !== 1) throw new Error('CONTROL: with no card up the stand-in for the editor’s shortcuts saw ' + seen + ' Escape(s), not 1');
+        seen = 0;
+        FM.settings.topTest(); await sleep(200);
+        if (!document.getElementById('top-test')) bad.push('the Top of the screen test did not open a second time');
+        else {
+          document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+          await sleep(100);
+          if (document.getElementById('top-test')) bad.push('Escape did not take the card away');
+          if (seen) bad.push('Escape on the Top of the screen test also reached the editor’s shortcuts under it: one key, two things done');
+        }
+      } finally { window.removeEventListener('keydown', under); }
+    } finally {
+      const c = document.getElementById('top-test'); if (c && c._close) c._close();
+      try { FM.settings.close(); } catch (e) {}
+      await sleep(300);
+    }
+    if (document.querySelectorAll('.fm-edge').length !== tabs0) bad.push('the test left ' + (document.querySelectorAll('.fm-edge').length - tabs0) + ' extra top-edge tab(s) behind');
+    if (root.style.getPropertyValue('background-color') !== bg0) bad.push('the test left the page background changed');
+    if (root.classList.contains('fm-sharp') !== sharp0) bad.push('the test left sharp top flipped');
+    if (bad.length) throw new Error(bad.join(' | '));
+  });
+
   /* ═══ queue 985 — THE CARD'S PICTURE DOES NOT LEAN ON THE PREVIEW (17 Oct, the PM's question after v17.58's two refusals) ═══
    * Both refusals were the PICTURE test's control reading a preview canvas an earlier test had left 320×240. The card itself
    * draws its picture at the project's own shape with FM.renderScene (export-card.js drawThumb) and copies #preview only if
@@ -193977,6 +194376,9 @@
     const bm = html.match(/<meta name="fm-build" content="[^"]*">/);
     const a = html.indexOf('<body>'), b = html.indexOf('<div id="app">');
     if (a < 0 || b < a) throw new Error('setup: cannot find the splash block between <body> and #app in index.html');
+    /* #1255: a comment in <head> that spelt the body tag out made the first match fall in the head, so the frame booted the
+       head's own scripts (sharp-top makes window.FM, and the still then waits for an app that never lands). Say so here. */
+    if (html.lastIndexOf('</head>', a) < 0) throw new Error('setup: the first body tag in index.html is inside the head (a comment that spells it out?), so the splash block cut from it would carry the head');
     let links = '';
     if (opts.css) {
       for (const name of ['styles', 'theme-glass']) {

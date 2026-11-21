@@ -1,3 +1,42 @@
+/* ═══ SHARP TOP (#1255 clause 4, REOPENED 21 Nov) ═══════════════════════════════════════════════════════════════════════
+   His words: "the fading issue like whether the colour like at the top of the screen there is like some fade overlapping the
+   buttons is still there right now" (20 Nov), and on v18.48, nothing open: "Fade still there" (21 Nov 10:58).
+   What he sees is iOS 26's own edge effect at the top of a scroll view (UIKit's scroll pocket, the soft style on an iPhone):
+   a blur and a tint laid over the page from the top of the screen down past the clock. A page cannot switch it off (WebKit's
+   _shouldHideTopScrollPocket: only a host app's toolbars or full screen hide it). Measured on his ten screenshots (440x956 pt,
+   safe-area top 62 pt; ~/fm-builder/ab/reach1255.py): letters are blurred down to safe-area top + 26 pt, a faint softness
+   lasts to + 33, and from + 34 every edge is as sharp as the clock's. So the one cure in the page's power: every top bar's
+   letters and buttons start at least --fm-sharp-top below the safe-area top (36 px: 34 measured, 2 to spare), while each
+   surface's own colour still runs up to the top edge.
+   ONE property. 0px everywhere, so every rule that reads it computes exactly what it did before; 36px only on <html
+   class="fm-sharp">, which the sharp-top script in index.html sets before the first paint on an iPhone Home Screen app on
+   iOS 26 or later with a notch-tall top inset, unless he turned it off (Settings: "Sharp top buttons"). Portrait only: in
+   landscape the safe-area top is 0 and the clock is gone. The rules read it as max(their own padding, safe-area top + it), so
+   a bar whose letters already sit lower does not move, and nothing else does either. */
+:root { --fm-sharp-top: 0px; }
+@media (orientation: portrait) { html.fm-sharp { --fm-sharp-top: 36px; } }
+/* The Top of the screen test (Settings, Reports; js/settings.js topTest): a card over everything, a ruler from the very top of
+   the screen, two lines placed by CSS itself (the safe-area top, and where the top bars' letters start), the figures, and three
+   ten-second tests. Its red tab is an edge tab (index.html edge-css: masked, so it paints nothing; iOS reads its colour) above
+   every other one. The card is PURPLE, a colour nothing else in the app paints: a full-screen fixed box may be what iOS takes
+   the strip's tint from (queue 920's note below), so in the editor's #161a21 a screenshot could not tell the card, the tab and
+   the page apart. Plain purple at the top = the card; a red haze = the tab; a green one = the page. */
+#top-test { position: fixed; inset: 0; z-index: 10002; background: #4a2a6a; color: #fff; overflow: hidden;
+  font: 500 14px/1.3 system-ui, -apple-system, sans-serif; -webkit-user-select: none; user-select: none; }
+#top-test .top-test-ruler { position: absolute; left: 0; top: 0; display: block; pointer-events: none; }
+#top-test .top-test-line { position: absolute; right: 0; width: 23%; height: 0; border-top: 2px solid; font-size: 10px; text-align: right; padding-right: 4px; }
+#top-test .top-test-safe { top: env(safe-area-inset-top, 0px); border-color: #ffcc00; color: #ffcc00; }
+#top-test .top-test-sharp { top: calc(env(safe-area-inset-top, 0px) + var(--fm-sharp-top)); border-color: #29d9bb; color: #29d9bb; }
+#top-test .top-test-big { position: absolute; left: 16px; right: 16px; top: 178px; }
+#top-test .top-test-fig { font: 800 34px/1.1 system-ui, -apple-system, sans-serif; }
+#top-test .top-test-sub { margin-top: 6px; font-size: 14px; color: #c9d2de; }
+#top-test .top-test-status { position: absolute; left: 16px; right: 16px; top: 300px; font: 800 22px/1.2 system-ui, -apple-system, sans-serif; color: #fff; }
+#top-test.top-test-running .top-test-status { color: #ffcc00; }
+#top-test .top-test-btns { position: absolute; left: 16px; right: 16px; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+#top-test .top-test-btn { min-height: 52px; border: 0; border-radius: 12px; background: #2a3242; color: #fff; font: 700 16px/1.1 system-ui, -apple-system, sans-serif; cursor: pointer; }
+#top-test .top-test-close { background: #29d9bb; color: #06231d; }
+.fm-edge.top-test-red { display: block; background-color: #ff0000; z-index: 10003; }
+
 :root {
   /* Palette matched to real [the reference app] screenshots (see reference/AM-LAYOUT.md): dark navy + teal accent */
   --bg: #0e1320;
@@ -1272,7 +1311,7 @@ body.fm-moving .am-glint i, body.fm-playing .am-glint i, body.fm-moving .addmenu
 
 /* ===== AM-style focused text-edit mode (text-edit.js) ===== */
 .te-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 80; display: flex; align-items: center; gap: 8px;
-  padding: max(8px, env(safe-area-inset-top)) 10px 8px; background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: 0 4px 18px rgba(0,0,0,.4); }
+  padding: max(8px, calc(env(safe-area-inset-top) + var(--fm-sharp-top))) 10px 8px; background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: 0 4px 18px rgba(0,0,0,.4); }
 .te-btn { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 6px 12px;
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text); font-size: 13.5px; cursor: pointer; }
 .te-btn.on { border-color: var(--accent); background: rgba(41,217,187,.13); color: var(--accent); }
@@ -2059,7 +2098,7 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
    untappable. Same miss, same fix, same idiom as .hm-top and .set-head: max(base, inset) on the
    padding edge that touches the screen, so nothing changes where the inset is 0 (PC, and any phone
    without a notch). The shorthand stays for the other three edges; only the top is overridden. */
-.fxb-top { display: flex; align-items: center; gap: 10px; padding: 14px; padding-top: max(14px, env(safe-area-inset-top)); border-bottom: 1px solid var(--line-soft); }
+.fxb-top { display: flex; align-items: center; gap: 10px; padding: 14px; padding-top: max(14px, calc(env(safe-area-inset-top) + var(--fm-sharp-top))); border-bottom: 1px solid var(--line-soft); }
 .fxb-close, .fxb-search-btn { width: 38px; height: 38px; display: inline-flex; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 50%; color: var(--text); cursor: pointer; font-size: 15px; flex: none; }
 .fxb-search-btn svg { width: 19px; height: 19px; }
 /* Colour and true centring for these two (queue 209). Ezra: "The search and x buttons in this menu
@@ -2287,7 +2326,7 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .fxb-catview { position: absolute; inset: 0; z-index: 5; background: var(--panel, #10141d); display: flex; flex-direction: column; }
 /* The drilled-in category view is a SECOND full-cover header stacked over the first, with the same
    status-bar problem and therefore the same fix — measured: ‹ Back sat at y=14 under a 62px inset. */
-.fxb-catview-top { display: flex; align-items: center; gap: 10px; padding: 14px; padding-top: max(14px, env(safe-area-inset-top)); border-bottom: 1px solid var(--line-soft); }
+.fxb-catview-top { display: flex; align-items: center; gap: 10px; padding: 14px; padding-top: max(14px, calc(env(safe-area-inset-top) + var(--fm-sharp-top))); border-bottom: 1px solid var(--line-soft); }
 .fxb-back { background: none; border: none; color: var(--accent); font-size: 15px; cursor: pointer; }
 /* Done sits right; the title takes the slack so Back stays left (queue 297). */
 .fxb-subdone { font-weight: 600; margin-left: auto; padding: 6px 4px; }
@@ -2409,8 +2448,8 @@ html.splash-on, html.splash-on body { background: #000; }
   html:has(#home-screen.hidden) {
     background-image: linear-gradient(180deg,
       #161a21 0,
-      #161a21 calc(52px + env(safe-area-inset-top)),
-      rgba(0, 0, 0, 0) calc(52px + env(safe-area-inset-top)));
+      #161a21 calc(52px + env(safe-area-inset-top) + max(0px, var(--fm-sharp-top) - 4px)),
+      rgba(0, 0, 0, 0) calc(52px + env(safe-area-inset-top) + max(0px, var(--fm-sharp-top) - 4px)));
   }
 }
 /* ═══ QUEUE 920 (25 Sep) — THE STATUS BAR IS PAINTED WITH THE PAGE'S background-COLOR, SO THAT IS NOW THE TOP BAR'S.
@@ -2429,9 +2468,25 @@ html.splash-on, html.splash-on body { background: #000; }
     background-color: #161a21;
     background-image: linear-gradient(180deg,
       #161a21 0,
-      #161a21 calc(52px + env(safe-area-inset-top)),
-      rgba(0, 0, 0, 0) calc(52px + env(safe-area-inset-top))),
+      #161a21 calc(52px + env(safe-area-inset-top) + max(0px, var(--fm-sharp-top) - 4px)),
+      rgba(0, 0, 0, 0) calc(52px + env(safe-area-inset-top) + max(0px, var(--fm-sharp-top) - 4px))),
       linear-gradient(var(--bg), var(--bg));
+  }
+  /* #1255 (his words, 21 Nov 11:02: "the top bar glitches in and out when loading in", "Like loading in and out of project
+     etc"). MEASURED frame by frame at 380, opening a project from the dark Home: the strip's tab turned to the editor's when
+     the editor began to slide in (390 ms), but <html> kept Home's colour until the slide had ENDED and Home was hidden (929 ms),
+     the same moment #app stopped being a fixed box, which is when WebKit looks at the top again. So the top changed twice,
+     the second time half a second after the slide, by the colour iOS tints its top edge from. Now <html> wears the editor's
+     top from the first frame of the slide, with the tab: one change, in step with the slide. (Leaving was already one change:
+     the tab and <html> both turn at the first frame of the slide back.) !important: the Homes' own rules (theme-glass.css's
+     light one too) still match while Home is under the arriving editor. */
+  html:not(.splash-on):has(> body > #app.fm-push-in) {
+    background-color: #161a21 !important;
+    background-image: linear-gradient(180deg,
+      #161a21 0,
+      #161a21 calc(52px + env(safe-area-inset-top) + max(0px, var(--fm-sharp-top) - 4px)),
+      rgba(0, 0, 0, 0) calc(52px + env(safe-area-inset-top) + max(0px, var(--fm-sharp-top) - 4px))),
+      linear-gradient(var(--bg), var(--bg)) !important;
   }
 }
 /* the dark Home's top is the glass glow, #091823 at its middle (measured at 390, no inset): the ground stays --bg */
@@ -4295,6 +4350,12 @@ body.home-open #toast { z-index: 205; }
   :root { --stage-h: 40vh; }
   :root { --stage-h: 40svh; }
   #app { grid-template-rows: auto var(--stage-h) 1fr; grid-template-columns: minmax(0, 1fr); }
+  /* #1255 clause 4, SHARP TOP: the top bar grows by max(0px, --fm-sharp-top - 4px), and the editor whose rows are fixed (its
+     stage is 100svh less 380 px of fixed rows and the insets) would push its bottom bar off the screen by that much. So with
+     html.fm-sharp on, the stage is at most that budget less the bar's growth: the fixed rows keep their place and the stage
+     gives up exactly what the bar took. Full's 40svh is under the budget on his phone (382 against 448 pt) and does not move.
+     With html.fm-sharp off this rule is not there. */
+  html.fm-sharp #app { grid-template-rows: auto min(var(--stage-h), calc(100svh - 380px - env(safe-area-inset-top, 0px) - max(0px, var(--fm-sharp-top) - 4px) - env(safe-area-inset-bottom, 0px))) 1fr; }
   /* Re-place for the single-column phone grid: the desktop rules span to column line 3, which would
      conjure an implicit second column here. The inspector is a position:fixed sheet on phone, so it is
      out of flow entirely and needs no track of its own. */
@@ -4788,7 +4849,10 @@ body.home-open #toast { z-index: 205; }
        #view-bar (20) and #stage (auto) while staying far below the sheets and overlays (55+), which
        must still cover this bar. */
     position: relative; z-index: 30;
-    height: calc(52px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) 8px 0 2px;
+    /* #1255 clause 4, SHARP TOP: the 42 px buttons sit 4.5 px down the 52 px row (measured), so the bar grows by the sharp-top
+       clearance less 4 px and every button's box starts at the safe-area top + --fm-sharp-top (0px: exactly as before). The page's
+       top band (the queue-903 rule) and .collab-knock grow by the same sum. */
+    height: calc(52px + env(safe-area-inset-top) + max(0px, var(--fm-sharp-top) - 4px)); padding: calc(env(safe-area-inset-top) + max(0px, var(--fm-sharp-top) - 4px)) 8px 0 2px;
     /* ⚠️ FLAT, NOT FADED — queue 903, the same complaint on the other screen. This poured
        `#161a21 → #12151b` down a bar that is `52px + env(safe-area-inset-top)` tall — about 111px on
        his phone — so the fade was long enough to read as a band sitting over the controls rather than
@@ -5290,7 +5354,7 @@ body.home-open #toast { z-index: 205; }
    (Ezra). 12/12 keeps the same overall height and puts them on the centre line. */
 /* The one top-of-screen element that never consumed the status-bar inset — with viewport-fit=cover
    the wordmark would otherwise sit under the clock. max() so it is unchanged where the inset is 0. */
-.hm-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; padding-top: max(12px, env(safe-area-inset-top)); }
+.hm-top { display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; padding-top: max(12px, calc(env(safe-area-inset-top) + var(--fm-sharp-top))); }
 .hm-brand { flex: 1; min-width: 0; font-weight: 800; font-size: 19px; letter-spacing: .2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }   /* flex:1 eats the free space so the action buttons stay grouped on the right */
 /* .hm-more removed in v5.24 — the home ⋯ menu's two entries moved into the settings cog. */
 /* magnifier beside Select/⋯ — opens the name+date search bar */
@@ -5847,7 +5911,7 @@ body.hm-selecting .hm-pin { display: none; }
 .tut-reader { position: absolute; inset: 0; z-index: 30; display: flex; flex-direction: column; background: var(--bg, #0b0e14); color: var(--text); }
 .tut-reader.tut-arrive { animation: tut-in 220ms cubic-bezier(.22, .9, .32, 1) both; }
 @keyframes tut-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-.tut-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: max(10px, env(safe-area-inset-top)) 12px 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.tut-bar { flex: none; display: flex; align-items: center; gap: 10px; padding: max(10px, calc(env(safe-area-inset-top) + var(--fm-sharp-top))) 12px 10px; border-bottom: 1px solid var(--line); background: var(--panel); }
 .tut-back { flex: none; width: 40px; height: 40px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); display: flex; align-items: center; justify-content: center; padding: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 .tut-back svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
 .tut-where { min-width: 0; font-size: 13px; font-weight: 600; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -6752,7 +6816,7 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
   box-shadow: 18px 0 50px rgba(0, 0, 0, .5);
 }
 .set-scrim.open .set-panel { transform: translateX(0); }
-.set-head { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 18px 18px 10px; padding-top: max(18px, env(safe-area-inset-top)); }
+.set-head { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 18px 18px 10px; padding-top: max(18px, calc(env(safe-area-inset-top) + var(--fm-sharp-top))); }
 .set-title { font-size: 22px; font-weight: 800; letter-spacing: .2px; }
 .set-close { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); font-size: 13px; cursor: pointer; }
 /* overflow-x: hidden (#912) — a row that ever runs wider than its card must not turn the whole panel
@@ -7304,7 +7368,7 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 }
 /* Home header: balanced outer columns keep the wordmark centred on the SCREEN, even though the
    right side has two controls and the left only one. Join and idle Select are in menus now. */
-.hm-top { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); column-gap: 4px; padding-top: calc(12px + env(safe-area-inset-top)); }
+.hm-top { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); column-gap: 4px; padding-top: max(calc(12px + env(safe-area-inset-top)), calc(env(safe-area-inset-top) + var(--fm-sharp-top))); }
 .hm-top > #hm-settings-btn { grid-column: 1; justify-self: start; }
 .hm-top > .hm-brand { grid-column: 2; justify-self: center; width: min(135px, calc(100vw - 228px)); flex: none; margin: 0; }
 .hm-top-actions { grid-column: 3; justify-self: end; display: flex; align-items: center; gap: 4px; min-width: 0; }
@@ -10353,7 +10417,7 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
             padding-bottom: max(14px, env(safe-area-inset-bottom)); }
 #tpl-fill.hidden { display: none; }
 .tfill-top { display: flex; align-items: center; justify-content: space-between; gap: 10px;
-             padding: 14px; padding-top: max(14px, env(safe-area-inset-top)); border-bottom: 1px solid var(--line-soft); }
+             padding: 14px; padding-top: max(14px, calc(env(safe-area-inset-top) + var(--fm-sharp-top))); border-bottom: 1px solid var(--line-soft); }
 .tfill-title { font-size: 16px; font-weight: 700; color: var(--text); }
 .tfill-done { padding: 8px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text);
               font-size: 13.5px; font-weight: 650; cursor: pointer; }
@@ -11581,7 +11645,7 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
    that has to be answered — and it clears the phone's top bar and its safe area rather than the
    viewport, or it lands under the notch. */
 .collab-knock {
-  position: fixed; left: 8px; right: 8px; top: calc(52px + env(safe-area-inset-top) + 8px); z-index: 225;
+  position: fixed; left: 8px; right: 8px; top: calc(52px + env(safe-area-inset-top) + max(0px, var(--fm-sharp-top) - 4px) + 8px); z-index: 225;
   background: var(--panel); border: 1px solid var(--line); border-radius: 13px; padding: 13px;
   color: var(--text); box-shadow: 0 18px 40px rgba(0, 0, 0, .5);
 }
@@ -12288,8 +12352,12 @@ body.collab-card-open #toast:not(.toast-tap) { pointer-events: none; }
 @media (max-width: 700px) {
   :root {
     --pb-w: calc(100vw - 20px);
-    --pb-h: calc(100dvh - 20px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    --pb-h: calc(100dvh - 20px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - var(--fm-sharp-top));
   }
+  /* #1255 clause 4, SHARP TOP: big is centred by its scrim, so it gives up the clearance in height and its scrim pads the top
+     by it: the card's top edge moves down by the whole clearance (0px: exactly as before). */
+  .np-scrim.pb-host-big { padding-top: calc(18px + var(--fm-sharp-top)); }
+  #shortcuts-overlay.pb-host-big { padding-top: var(--fm-sharp-top); }
 }
 /* `flex: none`: the scrim is a flex row, and a flex item shrinks to its container by default — big must not. */
 .pb-card.pb-big { flex: none; width: var(--pb-w); height: var(--pb-h); max-width: none; max-height: none; min-width: 0; }
