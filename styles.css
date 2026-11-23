@@ -13001,8 +13001,12 @@ body.ed-simple .sm-exp-b:focus-visible, body.ed-simple .sm-exp-go:focus-visible 
    cut with an ellipsis so a long one never widens its tile (the whole name is its title and accessible name). The Strength row
    reuses Volume's slider rules (.sm-vol-r / .sm-vol-v). Every rule hangs on a class or attribute only js/simple-tools.js makes,
    so Full matches none of them. ═══ */
-#sm-tray[data-row="effects"] .sm-fx-tile { min-width: 56px; padding: 0 4px; }
-.sm-fx-th { display: block; flex: none; width: 40px; height: 24px; border-radius: 5px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); }
+/* #1259, his words (23 Nov): "the effects is just all the same image and they don't really actually show you what it is that is happening".
+   Each tile shows its effect's own drawn picture (js/simple-tools.js), and that picture is SQUARE (192 x 192): the 40 x 24 box it had
+   squashed it to 5:3. The largest square the fixed 56 px row holds with the name under it: 40 + 3 gap + 11 name = 54. The row's height is
+   unchanged, so nothing above it moves (the row itself is the panel, #1243 S9). Simple only: classes only js/simple-tools.js makes. */
+#sm-tray[data-row="effects"] .sm-fx-tile { min-width: 58px; padding: 0 4px; gap: 3px; }
+.sm-fx-th { display: block; flex: none; width: 40px; height: 40px; border-radius: 6px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); }
 .sm-fx-tile .sm-tool-l { max-width: 60px; overflow: hidden; text-overflow: ellipsis; }
 .sm-fx-tile[aria-pressed="true"] .sm-fx-th { box-shadow: 0 0 0 2px var(--accent, #4da3ff); }
 

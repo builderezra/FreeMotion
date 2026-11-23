@@ -208079,6 +208079,155 @@
     if (fails.length) throw new Error(fails.join(' · '));
   });
 
+  /* ═══ RELEASE 13 · #1259 · SIMPLE'S EFFECT PICTURES ═══
+     His words (23 Nov, REQUESTS.md #1259): "in the simple editor, the effects is just all the same image and they don't really actually show
+     you what it is that is happening. So that obviously will need a lot of work." Every tile of both pickers (an item's Add effect,
+     itemFxFill, and the project row's Effects, fxFill) mounts the drawn picture of the effect it puts on (js/fx-thumbs.js mount: the
+     canvas's _fxPic is that effect's type; a preset through mountPreset never gets a picture, its _fxType is 'p:<id>'), in a SQUARE box,
+     40 px: the largest the fixed 56 px row holds with the name under it, so the row and everything above it stay where they are. And the
+     shipped presets come one per base effect first, so the first screen is not one picture five times. The pictures are loaded and held
+     on their still frame for the measurement; both switches are put back. */
+  const fx1259Pics = async () => {
+    const T = FM.fxThumbs;
+    if (!T || !T._picsLoad || !T._pics) throw new Error('setup: js/fx-thumbs.js has no picture seams (_picsLoad / _pics)');
+    const en = T._picsEnabled ? T._picsEnabled(true) : true, still = T._picsStill ? T._picsStill(true) : false;
+    await T._picsLoad();
+    return () => { if (T._picsEnabled) T._picsEnabled(en); if (T._picsStill) T._picsStill(still); };
+  };
+  const fx1259Has = type => (FM.fxThumbs._pics().ids || []).some(i => i && i.type === type);
+  /* every tile of the open picker, its key (data-tool without 'fx:') and what its canvas was mounted as, read while the strip is walked
+     end to end (the tiles mount as they come into view, #1243 S11) */
+  async function fx1259Walk() {
+    const run = document.querySelector('#sm-tray .sm-run');
+    if (!run) throw new Error('the picker’s strip is not drawn');
+    const seen = new Map(), all = Array.from(run.querySelectorAll('.sm-fx-tile')).map(t => String(t.dataset.tool).slice(3));
+    const look = () => run.querySelectorAll('.sm-fx-tile').forEach(t => { const c = t.querySelector('canvas.sm-fx-th'); if (c && c._fxType) seen.set(String(t.dataset.tool).slice(3), { pic: c._fxPic || null, type: String(c._fxType) }); });
+    const step = Math.max(80, run.clientWidth - 40);
+    for (let x = 0; ; x += step) {
+      run.scrollLeft = x; await r4Settle(60); look();
+      if (run.scrollLeft + run.clientWidth >= run.scrollWidth - 1) break;
+    }
+    run.scrollLeft = 0; await r4Settle(40);
+    return { all: all, seen: seen };
+  }
+  test('1259 · at 380 with the drawn pictures on, every tile of a title’s Add effect and of the project row’s Effects shows its own effect’s drawn picture, a preset its base effect’s, and none is drawn as a preset on the sample photo (CONTROL: the pictures are ready and Beat Slam is a Shake preset)', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    const T = FM.fxThumbs, d0 = Object.getOwnPropertyDescriptor(T, 'mountPreset'), real = T.mountPreset, fails = [];
+    let presetMounts = 0, put = null;
+    Object.defineProperty(T, 'mountPreset', { configurable: true, writable: true, enumerable: d0 ? d0.enumerable : true, value: function () { presetMounts++; return real.apply(this, arguments); } });
+    try {
+      put = await fx1259Pics();
+      if (T._pics().state !== 'ready') throw new Error('CONTROL: the drawn pictures did not load (state ' + T._pics().state + ': ' + (T._pics().error || '') + ')');
+      if ((smIfxPreset('s-beatslam') || {}).fx !== 'shake') throw new Error('CONTROL: the shipped Beat Slam is no longer a Shake preset');
+      await r4At(380, 760, async function () {
+        await smP2(smIfxScene, async function (v) {
+          const check = (who, w, typeOf) => {
+            const miss = w.all.filter(k => !w.seen.has(k));
+            if (miss.length) fails.push(who + ': ' + miss.length + ' of ' + w.all.length + ' tiles were never mounted as the strip was walked (' + miss.slice(0, 4).join(', ') + ')');
+            const bad = [];
+            w.seen.forEach((m, k) => { const t = typeOf(k); if (fx1259Has(t) && m.pic !== t) bad.push(k + ' shows ' + (m.pic ? 'the picture of ' + m.pic : (m.type.indexOf('p:') === 0 ? 'a preset drawn on the sample photo' : 'a live render')) + ', want the picture of ' + t); });
+            if (bad.length) fails.push(who + ': ' + bad.length + ' of ' + w.all.length + ' tiles do not show their effect’s picture: ' + bad.slice(0, 6).join(' · '));
+            if (!w.all.length) fails.push(who + ': the picker has no tiles');
+          };
+          await smIfxOpen(v, v.L('Hi').id);
+          const wi = await fx1259Walk();
+          if (!wi.seen.size || !wi.seen.get(wi.all[0])) throw new Error('CONTROL: the title’s picker mounted no tile at all, so nothing below is measured');
+          check('the title’s Add effect', wi, k => smIfxType(k));
+          if (!wi.all.some(k => k.indexOf('p:') === 0)) fails.push('CONTROL: the title’s picker offers no preset, so the preset tiles are not measured');
+          smTool('fxBack').click(); await r4Settle(120);
+          FM.selectLayer(null); await r4Settle(150);
+          const fx = smTool('effects');
+          if (!fx) throw new Error('setup: the project row has no Effects');
+          fx.click(); await r4Settle(200);
+          check('the project row’s Effects', await fx1259Walk(), k => k);
+          if (presetMounts) fails.push('a picker drew ' + presetMounts + ' tile' + (presetMounts === 1 ? '' : 's') + ' through mountPreset, a live render on the one sample photo');
+        });
+      });
+    } finally {
+      if (d0) Object.defineProperty(T, 'mountPreset', d0); else T.mountPreset = real;
+      if (put) put();
+    }
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  test('1259 · at 380 and 1280 the picture in a title’s Add effect and in the project row’s Effects is a 40 px square with the name under it, the row stays 56 px, and the bar, the timeline and the stage do not move when a picker opens (CONTROL: before it opens the row is 56 px)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    for (const width of [380, 1280]) {
+      await r4At(width, width > 700 ? 800 : 760, async function () {
+        await smP2(smIfxScene, async function (v) {
+          const at = width + ' px: ', box = id => { const e = document.getElementById(id); return e ? r4Box(e) : null; };
+          const where = () => ({ bar: box('sm-bar'), timeline: box('sm-timeline'), stage: box('stage') });
+          const same = (a, b, what) => Object.keys(a).forEach(k => { if (!a[k] || !b[k] || r4Moved(a[k], b[k])) fails.push(at + 'opening ' + what + ' moved the ' + k + ' from ' + JSON.stringify(a[k]) + ' to ' + JSON.stringify(b[k])); });
+          const measure = what => {
+            const tile = document.querySelector('#sm-tray .sm-fx-tile'), th = tile && tile.querySelector('.sm-fx-th'), name = tile && tile.querySelector('.sm-tool-l');
+            if (!th) { fails.push(at + what + ' has no picture box'); return; }
+            const r = th.getBoundingClientRect();
+            if (Math.abs(r.width - r.height) > 0.5 || Math.abs(r.width - 40) > 0.5) fails.push(at + what + '’s picture is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' px, want a 40 px square');
+            if (!name || name.getBoundingClientRect().top < r.bottom - 0.5) fails.push(at + what + '’s name is not under its picture');
+            const tr = document.getElementById('sm-tray').getBoundingClientRect();
+            if (Math.abs(tr.height - 56) > 0.5) fails.push(at + 'with ' + what + ' open the row is ' + tr.height + ' px, want 56');
+            if (r.top < tr.top - 0.5 || r.bottom > tr.bottom + 0.5) fails.push(at + what + '’s picture runs out of the row (' + Math.round(r.top) + '–' + Math.round(r.bottom) + ' in ' + Math.round(tr.top) + '–' + Math.round(tr.bottom) + ')');
+            const bar = document.getElementById('sm-bar').getBoundingClientRect();
+            if (bar.bottom > innerHeight + 0.5) fails.push(at + 'with ' + what + ' open the bar ends at ' + Math.round(bar.bottom) + ', below the screen (' + innerHeight + ')');
+          };
+          FM.selectLayer(v.L('Hi').id); await r4Settle(150);
+          if (Math.abs(document.getElementById('sm-tray').getBoundingClientRect().height - 56) > 0.5) throw new Error('CONTROL ' + at + 'the title’s tray is ' + document.getElementById('sm-tray').getBoundingClientRect().height + ' px before its picker opens, want 56');
+          const w0 = where();
+          await smIfxOpen(v, v.L('Hi').id); await r4Settle(150);
+          measure('the title’s Add effect');
+          same(w0, where(), 'the title’s Add effect');
+          smTool('fxBack').click(); await r4Settle(120);
+          FM.selectLayer(null); await r4Settle(150);
+          const p0 = where();
+          smTool('effects').click(); await r4Settle(200);
+          if (!document.querySelector('#sm-tray .sm-fx-tile')) { fails.push(at + 'the project row’s Effects opened no picker'); return; }
+          measure('the project row’s Effects');
+          same(p0, where(), 'the project row’s Effects');
+        });
+      });
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1259 · a title’s Add effect at 380 shows five different pictures on its first screen: the shipped presets come one per base effect first, then the rest, his own presets still lead and every preset still comes before the stock effects (CONTROL: the shipped list opens with five Shake presets)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const P = FM.effectPresets, d0 = P ? Object.getOwnPropertyDescriptor(P, 'custom') : null, fails = [];
+    const ship = (FM.EFFECT_PRESETS || []).slice(0, 5).map(p => p.fx).join();
+    if (ship !== 'shake,shake,shake,shake,shake') throw new Error('CONTROL: the shipped presets open with ' + ship + ', not five Shake presets, so the order below measures nothing');
+    let put = null;
+    try {
+      put = await fx1259Pics();
+      await r4At(380, 760, async function () {
+        await smP2(smIfxScene, async function (v) {
+          const L = v.L('Hi'), list = () => FM.spine.itemEffects(L);
+          /* the order itself: one per base effect first, then the rest; presets before stock effects */
+          const keys = list().map(p => p.key), pre = list().filter(p => p.preset);
+          const lead = [], seenFx = {};
+          (FM.EFFECT_PRESETS || []).forEach(p => { if (!seenFx[p.fx] && pre.some(q => q.preset === p)) { seenFx[p.fx] = 1; lead.push('p:' + p.id); } });
+          if (keys.slice(0, lead.length).join() !== lead.join()) fails.push('the picker opens with ' + keys.slice(0, lead.length).join(', ') + ', want one shipped preset per base effect first: ' + lead.join(', '));
+          const lastPre = keys.map(k => k.indexOf('p:') === 0).lastIndexOf(true), firstStock = keys.findIndex(k => k.indexOf('p:') !== 0);
+          if (firstStock >= 0 && lastPre > firstStock) fails.push('a preset (' + keys[lastPre] + ') comes after the stock effect ' + keys[firstStock]);
+          ['p:s-quake', 'p:s-handheld', 'p:s-hypex', 'p:s-rumble'].forEach(k => { if (keys.indexOf(k) < 0) fails.push('the picker lost ' + k); });
+          /* his own presets lead, in his order */
+          if (P && d0) {
+            Object.defineProperty(P, 'custom', { configurable: true, writable: true, enumerable: d0.enumerable, value: () => [{ id: 'u1259a', fx: 'shake', name: 'My shake' }, { id: 'u1259b', fx: 'blur', name: 'My blur' }] });
+            try { const k2 = list().map(p => p.key); if (k2[0] !== 'p:u1259a' || k2[1] !== 'p:u1259b') fails.push('with two presets of his own the picker opens with ' + k2.slice(0, 3).join(', ') + ', want his two first, in his order'); }
+            finally { Object.defineProperty(P, 'custom', d0); }
+          }
+          /* what a person sees: the first five tiles on screen, five different pictures */
+          await smIfxOpen(v, L.id); await r4Settle(250);
+          const tr = document.getElementById('sm-tray').getBoundingClientRect();
+          const first = Array.from(document.querySelectorAll('#sm-tray .sm-fx-tile')).filter(t => { const r = t.getBoundingClientRect(); return r.left >= tr.left - 0.5 && r.right <= tr.right + 0.5; }).slice(0, 5);
+          const pics = first.map(t => { const c = t.querySelector('canvas.sm-fx-th'); return c ? (c._fxPic || '(' + c._fxType + ')') : '(not mounted)'; });
+          if (first.length < 5) fails.push('only ' + first.length + ' tiles lie whole on the first screen at 380');
+          else if (new Set(pics).size !== 5) fails.push('the first screen shows ' + first.map((t, i) => t.textContent + ' [' + pics[i] + ']').join(', ') + ': the same picture more than once');
+        });
+      });
+    } finally { if (put) put(); }
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
   /* ═══ #1253 · THE DRAWN EFFECT PICTURES IN THE APP'S EFFECT MENUS ═══
      His words (16 Nov, REQUESTS.md #1253): "why aren't the new icons in yet? … Just add all the effects in now. If there's any
      I don't like I'll tell you about them."
