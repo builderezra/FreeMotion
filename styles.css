@@ -12837,12 +12837,9 @@ body.ed-simple #sm-bar > #sm-say { position: absolute; left: 0; right: 0; bottom
 body.ed-simple #sm-bar > #sm-say.sm-saying { display: flex; }
 @media (max-width: 700px) { body.ed-simple #sm-bar[data-mode="panel"] > #sm-say { position: fixed; bottom: var(--sm-sheet-b, 0px); } }
 /* the playhead line stops at the floating strip's top (222 − 44) while a line or the hint is up */
-@media (max-width: 700px) { body.ed-simple:has(#sm-say.sm-saying) #tl-centerline, body.ed-simple:has(#sm-bar > .sm-hint) #tl-centerline { height: 178px; } }
-/* THE FIRST-RUN HINT floats the same way, under a line if one comes, and takes no pointer events: the first tap reaches what is under it */
-body.ed-simple #sm-bar > .sm-hint { position: absolute; left: 0; right: 0; bottom: 100%; z-index: 24; pointer-events: none; min-height: 44px; box-sizing: border-box;
-  display: flex; align-items: center; padding: 4px 12px; background: var(--panel-2); border-top: 1px solid var(--line);
-  font: 600 12.5px/1.3 system-ui, sans-serif; color: var(--text-dim); }
-body.ed-simple #sm-bar:has(> #sm-say.sm-saying) > .sm-hint { display: none; }
+@media (max-width: 700px) { body.ed-simple:has(#sm-say.sm-saying) #tl-centerline { height: 178px; } }
+/* (THE FIRST-RUN HINT, .sm-hint, floated here the same way. It went with #1255's 20:53 follow-up, his words: "There shouldn't be any
+   explanations like that. We have tutorials for a reason": js/simple-tools.js hintSync. Its rules went with it.) */
 /* #1243 S37: the end of the video is a line across every row (only when something runs past it), and the part of an item past it is hatched in
    that item's own row. It replaces the black band, whose label was cut to "Black C" and whose tap could do nothing. */
 #sm-timeline .sm-endline { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #aeb8c8; opacity: .75; z-index: 4; pointer-events: none; }
@@ -12850,6 +12847,9 @@ body.ed-simple #sm-bar:has(> #sm-say.sm-saying) > .sm-hint { display: none; }
 #sm-timeline .sm-more.sm-more-past::before { content: ''; position: absolute; inset: -10px -6px; }   /* the chip is 24 px tall: the finger's target is 44 */
 #sm-timeline .sm-item .sm-past { position: absolute; top: 0; bottom: 0; right: 0; pointer-events: none; background: repeating-linear-gradient(135deg, rgba(8,11,16,.62) 0 5px, rgba(8,11,16,.2) 5px 10px); }
 .sm-band-hint { padding: 16px; color: var(--text-dim); font: 600 13px/1.4 system-ui, sans-serif; }
+/* #1255 20:53: the band's how-to words went (js/simple-tools.js bandWords), so the line is empty unless it states a fact ("Moves with
+   ‘Hello’"): empty, it takes no room. Simple only: .sm-band-hint is drawn only while Simple is on screen. */
+.sm-band-hint:empty { display: none; }
 /* (§3.12 rule 5's 56 px kept free of buttons over 🗑, finding 23, went with #1243 S3: the line floats above the bar now, so it never
    lies where a tool was pressed, and a second click where 🗑 was meets the bar's own row, which tool()'s double-click guard holds.) */
 @media (min-width: 701px) {

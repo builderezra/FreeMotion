@@ -68387,16 +68387,10 @@
     } finally { fe.style.height = h0; window.dispatchEvent(new Event('resize')); await settle(120); }
   });
 
-  /* 2A, row 13 (the first ten seconds): SIMPLE'S FIRST-RUN HINT (DESIGN §7.3 step 4, §8.9) — while nothing is selected, only with a main
-     clip on the track, at most once per device (fm.sm.hint = '1' once the first tap anywhere takes it away), in the phone words at a phone
-     width (max-width 700 px, the test Full uses) and the PC words otherwise; while it shows, the play bar's ✂ wears the clip's selection
-     outline. Since #1243 S3 it floats just above the bar (#sm-bar > .sm-hint), the project row being just the tools, and the quiet line
-     it used to replace is retired. Every test saves and puts back this device's fm.sm.hint (smP2 restores only fm.editor.last /
-     fm.editor.hint). Red on c41-p27: no hint is ever drawn. */
-  /* #1243 S5: Split is the first of a clip's tools now (the play row's ✂ and its outline went), and Look left the clip (R decision 1) */
-  const SM_HINT_PHONE = 'Tap a clip to split it or change its speed';
-  const SM_HINT_PC = 'Click a clip to split it or change its speed · S splits at the line';
-  const smHintWords = () => window.matchMedia('(max-width: 700px)').matches ? SM_HINT_PHONE : SM_HINT_PC;
+  /* 2A, row 13 (the first ten seconds): SIMPLE'S FIRST-RUN HINT (DESIGN §7.3 step 4, §8.9) WENT with #1255's 20:53 follow-up. His words:
+     "I'm also noticing a pop-up that says tap a clip to split or change its speed. There shouldn't be any explanations like that. We
+     have tutorials for a reason". The '1255 hints' tests check that it never shows. The helpers stay: other tests still put this
+     device's fm.sm.hint aside and back (an older version's page may have written it). */
   async function smHintKeep(v0, fn) {
     let had = null; try { had = localStorage.getItem('fm.sm.hint'); } catch (e) {}
     try {
@@ -68404,91 +68398,13 @@
       return await fn();
     } finally { try { if (had === null) localStorage.removeItem('fm.sm.hint'); else localStorage.setItem('fm.sm.hint', had); } catch (e) {} }
   }
-  /* the probe: the hint floating above the bar (#sm-bar > .sm-hint, #1243 S3), its words and whether it is laid out */
+  /* the probe: anything floating above the bar where the hint was (#sm-bar > .sm-hint, #1243 S3), its words and whether it is laid out */
   const smHintRow = () => { const h = document.querySelector('#sm-bar > .sm-hint'); return { text: h ? h.textContent.trim() : '', shown: !!(h && h.getClientRects().length) }; };
   const smHintFresh = async v => { FM.selectLayer(null); FM.simpleTools._reset(); FM.simpleTools.sync(); await v.sleep(60); };
-
-  test('simple P2.7 · the first-run hint shows above the bar with a main clip and nothing selected, in the phone words at a phone width and the PC words otherwise', { item: '980', budgetMs: 60000 }, async function () {
-    smNeedP2();
-    await smHintKeep(null, () => smP2(smClips3, async function (v) {
-      await smHintFresh(v);
-      const check = (where) => {
-        const row = smHintRow(), want = smHintWords(), fails = [];
-        if (row.text !== want) fails.push(where + ' with three clips and nothing selected the hint above the bar reads “' + row.text + '”, want the first-run hint “' + want + '”');
-        else if (!row.shown) fails.push(where + ' the hint is not on screen');
-        else { const hr = document.querySelector('#sm-bar > .sm-hint').getBoundingClientRect(), top = document.getElementById('sm-bar').getBoundingClientRect().top; if (Math.abs(hr.bottom - top) > 1) fails.push(where + ' the hint’s bottom is ' + Math.round(hr.bottom - top) + ' px from the bar’s top, want 0 (it floats just above the bar)'); }
-        if (fails.length) throw new Error(fails.join(' · '));
-      };
-      check(innerWidth + ' px:');
-      let flag = localStorage.getItem('fm.sm.hint');
-      if (flag !== null) throw new Error('showing the hint wrote fm.sm.hint = ' + JSON.stringify(flag) + ' — only dismissing it may');
-      /* the desktop pass also proves the phone words: the width's own change redraws the row */
-      if (!window.matchMedia('(max-width: 700px)').matches) await atPhoneWidth(async function () { await v.sleep(60); check('at 380 px:'); }, 380);
-      flag = localStorage.getItem('fm.sm.hint');
-      if (flag !== null) throw new Error('a width change wrote fm.sm.hint = ' + JSON.stringify(flag) + ' — only a tap dismisses the hint');
-    }));
-  });
-
-  test('simple P2.7 · the first-run hint goes on the first tap anywhere: fm.sm.hint is then 1, nothing takes its place and a redraw does not bring it back', { item: '980', budgetMs: 60000 }, async function () {
-    smNeedP2();
-    await smHintKeep(null, () => smP2(smClips3, async function (v) {
-      await smHintFresh(v);
-      const row0 = smHintRow();
-      if (row0.text !== smHintWords() || !row0.shown) throw new Error('before any tap the hint above the bar reads “' + row0.text + '” (on screen: ' + row0.shown + '), want the first-run hint “' + smHintWords() + '”');
-      /* a tap where the hint floats, on whatever lies under it (the hint takes no pointer events): "anywhere" includes a dead spot */
-      const r = document.querySelector('#sm-bar > .sm-hint').getBoundingClientRect(), x = r.left + 10, y = r.top + r.height / 2, at = document.elementFromPoint(x, y) || document.body;
-      const ev = { bubbles: true, cancelable: true, pointerId: 31, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y };
-      at.dispatchEvent(new PointerEvent('pointerdown', Object.assign({ buttons: 1 }, ev)));
-      at.dispatchEvent(new PointerEvent('pointerup', ev));
-      await v.sleep(60);
-      const fails = [], row = smHintRow(), flag = localStorage.getItem('fm.sm.hint');
-      if (row.shown || row.text) fails.push('after the first tap the hint is still above the bar (“' + row.text + '”)');
-      if (document.getElementById('sm-tray').getClientRects().length) fails.push('after the hint went a tray row came up in its place (nothing replaces it: the bar is the project row)');
-      if (flag !== '1') fails.push('fm.sm.hint is ' + JSON.stringify(flag) + ' after the tap took the hint away, want "1"');
-      FM.selectLayer(v.L('B').id); await v.sleep(60);
-      FM.selectLayer(null); await smHintFresh(v);
-      if (smHintRow().shown) fails.push('the hint came back after a select, a deselect and a redraw — it shows once per device');
-      if (fails.length) throw new Error(fails.join(' · '));
-    }));
-  });
-
-  test('simple P2.7 · the first-run hint never shows once fm.sm.hint is 1 and nothing takes its place (CONTROL: the probe sees the hint once the flag is cleared, and Clip 2’s Split on show once it is selected)', { item: '980', budgetMs: 60000 }, async function () {
-    smNeedP2();
-    await smHintKeep('1', () => smP2(smClips3, async function (v) {
-      await smHintFresh(v);
-      const row = smHintRow();
-      if (row.shown || row.text) throw new Error('with fm.sm.hint = "1" the first-run hint still shows (“' + row.text + '”)');
-      if (document.getElementById('sm-tray').getClientRects().length) throw new Error('with nothing selected and no hint a tray row is on screen (nothing takes the hint’s place: the bar is the project row)');
-      // CONTROL: with Clip 2 selected its Split is on show in the tray, so the empty probe above is not a broken page (#1243 S4: More went)
-      FM.selectLayer(v.L('B').id); await v.sleep(60);
-      const more = document.querySelector('#sm-tray .sm-tool[data-tool="split"]');
-      if (!more || !more.getClientRects().length) throw new Error('CONTROL: with Clip 2 selected no Split is on show in the tray');
-      // CONTROL: the same probe sees the hint as soon as this device has not dismissed it
-      localStorage.removeItem('fm.sm.hint');
-      await smHintFresh(v);
-      const back = smHintRow();
-      if (back.text !== smHintWords() || !back.shown) throw new Error('CONTROL: with fm.sm.hint cleared the hint reads “' + back.text + '” (on screen: ' + back.shown + '), want the first-run hint “' + smHintWords() + '” — the probe cannot see the hint');
-    }));
-  });
-
-  test('simple P2.7 · the first-run hint does not show with no main clip on the track (CONTROL: the same probe shows it once there are clips)', { item: '980', budgetMs: 60000 }, async function () {
-    smNeedP2();
-    await smHintKeep(null, async function () {
-      await smP2(() => [], async function (v) {
-        await smHintFresh(v);
-        const row = smHintRow();
-        if (row.shown || row.text === SM_HINT_PHONE || row.text === SM_HINT_PC) throw new Error('with no clip on the track the first-run hint shows above the bar');
-      });
-      const flag = localStorage.getItem('fm.sm.hint');
-      if (flag !== null) throw new Error('an empty project wrote fm.sm.hint = ' + JSON.stringify(flag) + ' — the hint was never shown, so it was never dismissed');
-      // CONTROL: the same probe, a project with clips: the hint shows
-      await smP2(smClips3, async function (v) {
-        await smHintFresh(v);
-        const t = smHintRow();
-        if (t.text !== smHintWords() || !t.shown) throw new Error('CONTROL: with three clips the hint above the bar reads “' + t.text + '” (on screen: ' + t.shown + '), want the first-run hint “' + smHintWords() + '”');
-      });
-    });
-  });
+  /* RETIRED (#1255 20:53, DROPS TEST): 'simple P2.7 · the first-run hint shows above the bar with a main clip and nothing selected, in the phone words at a phone width and the PC words otherwise' — the hint went; '1255 hints · at 380 and 1280 with clips and nothing selected…' checks that nothing shows there. */
+  /* RETIRED (#1255 20:53, DROPS TEST): 'simple P2.7 · the first-run hint goes on the first tap anywhere: fm.sm.hint is then 1, nothing takes its place and a redraw does not bring it back' — there is no hint to take away, and fm.sm.hint is no longer written. */
+  /* RETIRED (#1255 20:53, DROPS TEST): 'simple P2.7 · the first-run hint never shows once fm.sm.hint is 1 and nothing takes its place (CONTROL: the probe sees the hint once the flag is cleared, and Clip 2’s Split on show once it is selected)' — it never shows at all now, with or without the flag ('1255 hints'). */
+  /* RETIRED (#1255 20:53, DROPS TEST): 'simple P2.7 · the first-run hint does not show with no main clip on the track (CONTROL: the same probe shows it once there are clips)' — its CONTROL needed the hint. */
 
   /* ═══ E1: six new effects (Colour Cycle, Soften Skin, Oil Paint, Glitter, Censor, Pop Art) ═══ */
   const E1 = (function () {
@@ -141626,7 +141542,7 @@
 
   /* #1243 S3: the tray is the bar's one row now (with nothing selected the bar is the project row and the tray is hidden), so the two
      rows are the bar's own height: 104 px and its 1 px edge only while it holds two, the one row 56 */
-  test('1243 R8 · decision 6 at 1280×800 on PC a clip’s tray, a title’s and two selected each lie on ONE 56 px row in the band, every tool on it pressable once the strip is scrolled to it, Delete last after a section line, no › cue, and the band says Its tools are below (CONTROL: nothing selected, the bar is the 57 px project row)', { item: '980', budgetMs: 90000 }, async function () {
+  test('1243 R8 · decision 6 at 1280×800 on PC a clip’s tray, a title’s and two selected each lie on ONE 56 px row in the band, every tool on it pressable once the strip is scrolled to it, Delete last after a section line, no › cue, and the band above it shows no how-to words (CONTROL: nothing selected, the bar is the 57 px project row)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smTrayBAt(1280, 800, async function () {
       await smP2((W, H) => [smT('On A', 0.5, 1, W, H), smV('C', 5, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
@@ -141648,8 +141564,11 @@
           if (bad.length) fails.push(who + ': ' + bad.join(' · '));
         }
         FM.selectLayer(null); FM.selectLayer(v.L('B').id); await v.sleep(150);
+        /* #1255 20:53 (his words: "There shouldn't be any explanations like that"): the band said Its tools are below; it says nothing now,
+           and its empty line takes no room */
         const hint = document.querySelector('#inspector .sm-band-hint');
-        if (!hint || hint.textContent !== 'Its tools are below' || FM.spineWords.tools.bandHintSel !== 'Its tools are below') fails.push('the band’s words are “' + (hint && hint.textContent) + '”, want “Its tools are below” from the words file');
+        if (!hint) fails.push('CONTROL: the band’s line is not drawn for Clip 2, so the probe below reads nothing');
+        else if (hint.textContent || hint.getClientRects().length) fails.push('the band’s line says “' + hint.textContent + '”' + (hint.getClientRects().length ? ' and takes room' : '') + ', want no words and no room');
         FM.selectLayer(null); await v.sleep(150);
         if (Math.abs(barH() - 57) > 0.5 || tray.getClientRects().length) fails.push('nothing selected again: the bar stays at ' + barH() + ' px, want the 57 px project row');
         if (fails.length) throw new Error('1280×800: ' + fails.join(' · '));
@@ -141716,7 +141635,7 @@
     }, 1280);
   });
 
-  test('simple P2.2 · tray B at 1280×800, 1280×720 and 960×700 a picture clip’s one-row tray brings every tool into reach by scrolling and nothing in the band above it is cut off — the title and Its tools are below show whole — and a band dragged to 200 px keeps the bar whole (#1243 R decision 6: one strip on a PC)', { item: '980', budgetMs: 120000 }, async function () {
+  test('simple P2.2 · tray B at 1280×800, 1280×720 and 960×700 a picture clip’s one-row tray brings every tool into reach by scrolling and nothing in the band above it is cut off — the title shows whole and the band holds no how-to words — and a band dragged to 200 px keeps the bar whole (#1243 R decision 6: one strip on a PC)', { item: '980', budgetMs: 120000 }, async function () {
     smNeedP2();
     const out = [];
     for (const [w, h] of [[1280, 800], [1280, 720], [960, 700]]) {
@@ -141732,11 +141651,10 @@
           if (bad.length) throw new Error(at + bad.join(' · '));
           const insp = document.getElementById('inspector'), ib = insp.getBoundingClientRect(), hint = insp.querySelector('.sm-band-hint');
           const title = document.querySelector('#inspector-panel .panel-title'), tb = title.getBoundingClientRect();
-          if (!hint || hint.textContent !== 'Its tools are below') throw new Error(at + 'the band says “' + (hint && hint.textContent) + '”');
-          const hb = hint.getBoundingClientRect();
-          if (hb.top < ib.top - 0.5 || hb.bottom > ib.bottom + 0.5) throw new Error(at + 'Its tools are below is cut off: ' + Math.round(hb.top) + '–' + Math.round(hb.bottom) + ' in ' + Math.round(ib.top) + '–' + Math.round(ib.bottom));
+          /* #1255 20:53: the band's Its tools are below went; its line is drawn (CONTROL) but empty and takes no room */
+          if (!hint) throw new Error('CONTROL: ' + at + 'the band’s line is not drawn');
+          if (hint.textContent || hint.getClientRects().length) throw new Error(at + 'the band says “' + hint.textContent + '”, want no how-to words');
           if (insp.scrollHeight > insp.clientHeight + 1) throw new Error(at + 'the band above the tools has to scroll (' + insp.scrollHeight + ' in ' + insp.clientHeight + ')');
-          if (hint.scrollWidth > hint.clientWidth + 1) throw new Error(at + 'Its tools are below runs out sideways');
           if (tb.height < 20 || tb.bottom > ib.top + 0.5 || tb.top < document.getElementById('inspector-panel').getBoundingClientRect().top - 0.5) throw new Error(at + 'the title row is cut: ' + JSON.stringify([tb.top, tb.bottom, ib.top]));
           out.push(at + Math.round(ib.height) + ' px above the tools');
           /* THE DIVIDER DRAGS THE BAND DOWN (remembered as fm_tl_h): the bar stays whole in it, its one row the same */
@@ -141759,7 +141677,7 @@
      panel takes the whole band and the bar hides (#1243 S9), so there is no tray under it to go to one row; the real-input double click on
      More at 1280×720 is now part of 'simple P2.7 · 2A row 16 … a REAL double click on More …', and 1243 R4's rule 3 PC test measures the room. */
 
-  test('simple P2.2 · tray B at 380 the phone keeps its one row: a picture’s tools scroll in one strip that ends with Delete after a section line, Split pressable at the start and Delete once scrolled, and the words say Its tools are below (#1243 S4, S31: no More, no pinned end)', { item: '980', budgetMs: 60000 }, async function () {
+  test('simple P2.2 · tray B at 380 the phone keeps its one row: a picture’s tools scroll in one strip that ends with Delete after a section line, Split pressable at the start and Delete once scrolled, and the words file holds no Its tools are below (#1243 S4, S31: no More, no pinned end; #1255: no how-to words)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
       await smP2((W, H) => [smV('C', 6, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
@@ -141780,7 +141698,9 @@
         smMustHit(smTool('split'), '380: Split at the strip’s start');
         sc.scrollLeft = sc.scrollWidth; await v.sleep(30);
         smMustHit(smTool('delete'), '380: Delete at the strip’s end');
-        if (FM.spineWords.tools.bandHintSel !== 'Its tools are below') throw new Error('380: the words are “' + FM.spineWords.tools.bandHintSel + '”, want Its tools are below (no More to open the rest)');
+        /* #1255 20:53: the band's how-to words went from the words file (CONTROL: the file is read: it names Split) */
+        if (FM.spineWords.tools.split !== 'Split') throw new Error('CONTROL: the words file does not name Split, so it is not the one read here');
+        if (FM.spineWords.tools.bandHintSel || FM.spineWords.tools.bandHint) throw new Error('380: the words file still holds the band’s how-to words “' + (FM.spineWords.tools.bandHintSel || FM.spineWords.tools.bandHint) + '”');
       });
     }, 380);
   });
@@ -141839,7 +141759,7 @@
   });
 
 
-  test('simple P2.2 · tray B at 1280×720 after the window was once 500 px tall the band is left at 230 px, and a picture clip’s one-row tray and the words above it still show whole in it, every tool in reach by scrolling (checker finding 2, one row since #1243 R decision 6)', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P2.2 · tray B at 1280×720 after the window was once 500 px tall the band is left at 230 px, and a picture clip’s one-row tray still shows whole in it with nothing above it to scroll, every tool in reach by scrolling (checker finding 2, one row since #1243 R decision 6)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smTrayBAt(1280, 720, async function () {
       await smP2((W, H) => [smV('C', 5, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
@@ -141856,18 +141776,20 @@
         const bad = await smTrayReach();
         if (bad.length) throw new Error('a band left at ' + tl + ' px: ' + bad.join(' · '));
         const insp = document.getElementById('inspector'), ib = insp.getBoundingClientRect(), hint = insp.querySelector('.sm-band-hint'), tb = document.getElementById('sm-bar').getBoundingClientRect();
-        if (!hint) throw new Error('CONTROL: the band shows no words');
-        const hb = hint.getBoundingClientRect();
-        if (hb.top < ib.top - 0.5 || hb.bottom > ib.bottom + 0.5 || insp.scrollHeight > insp.clientHeight + 1) throw new Error('a band at ' + tl + ' px cuts its words: ' + Math.round(hb.top) + '–' + Math.round(hb.bottom) + ' in ' + Math.round(ib.top) + '–' + Math.round(ib.bottom) + ' (scroll ' + insp.scrollHeight + ' in ' + insp.clientHeight + ')');
+        /* (#1255 20:53: the band's words went, so its line is drawn empty: nothing in the band may need a scroll) */
+        if (!hint) throw new Error('CONTROL: the band’s line is not drawn');
+        if (insp.scrollHeight > insp.clientHeight + 1) throw new Error('a band at ' + tl + ' px has to scroll above the tools (' + insp.scrollHeight + ' in ' + insp.clientHeight + ', the band ' + Math.round(ib.top) + '–' + Math.round(ib.bottom) + ')');
         if (tb.top < band().top - 0.5 || tb.bottom > band().bottom + 0.5) throw new Error('a band at ' + tl + ' px pushes the bar out of it');
       });
     }, 1280);
   });
 
-  test('simple P2.2 · tray B on PC the band says Its tools are below for a selected clip or title at the band’s own height, with the band dragged to 192 px and on a landscape phone at 844×390, never · More opens the rest, and Tap a clip to see its tools with nothing selected (#1243 S4 step 4)', { item: '980', budgetMs: 120000 }, async function () {
+  /* #1255 20:53, his words: "There shouldn't be any explanations like that. We have tutorials for a reason". The band said Its tools are
+     below for a selection and Tap a clip to see its tools with nothing selected, every time; it says nothing now. WANT is the empty
+     line; words() is null when the band's line is not drawn at all, so a missing line can never pass for an empty one (CONTROL). */
+  test('simple P2.2 · tray B on PC the band shows no how-to words for a selected clip or title at the band’s own height, with the band dragged to 192 px and on a landscape phone at 844×390, nor with nothing selected (#1255: no Its tools are below, no Tap a clip to see its tools; CONTROL: the band’s line is drawn each time)', { item: '980', budgetMs: 120000 }, async function () {
     smNeedP2();
-    const WANT = 'Its tools are below';
-    if (FM.spineWords.tools.bandHintSel !== WANT) throw new Error('the words file says “' + FM.spineWords.tools.bandHintSel + '” for a selected item, want “' + WANT + '”');
+    const WANT = '';
     const words = () => { const h = document.querySelector('#inspector .sm-band-hint'); return h ? h.textContent : null; };
     await smTrayBAt(1280, 720, async function () {
       await smP2((W, H) => [smT('On A', 0.5, 1, W, H), smV('C', 5, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
@@ -141881,7 +141803,7 @@
         FM.selectLayer(v.L('On A').id); await v.sleep(150);
         if (words() !== WANT) throw new Error('a title: the band says “' + words() + '”');
         FM.selectLayer(null); await v.sleep(150);
-        if (words() !== (FM.spineWords.tools.bandHint || 'Tap a clip to see its tools')) throw new Error('nothing selected: the band says “' + words() + '”');
+        if (words() !== WANT) throw new Error('nothing selected: the band says “' + words() + '”' + (words() === null ? ' (CONTROL: its line is not drawn)' : ''));
       });
     }, 1280);
     await smTrayBAt(844, 390, async function () {
@@ -142155,7 +142077,7 @@
     if (fails.length) throw new Error(fails.join(' ¦ '));
   });
 
-  test('simple P2.2 · review entering Simple clears Full’s left panel from Simple’s band at once: no Add menu under the rows with nothing selected, no layer editor with a clip open in Colouring, only Simple’s own words (verify high-inspector, the way in)', { item: '980', budgetMs: 150000 }, async function () {
+  test('simple P2.2 · review entering Simple clears Full’s left panel from Simple’s band at once: no Add menu under the rows with nothing selected, no layer editor with a clip open in Colouring, only Simple’s own band line (verify high-inspector, the way in)', { item: '980', budgetMs: 150000 }, async function () {
     /* The reverse of the leaving case round one fixed: nothing on the switch redrew #inspector, so entering Simple kept Full's Add
        menu (nothing selected) or Full's layer editor (a clip selected) in the band under Simple's rows until the selection
        changed. Round two moves that redraw before the timeline rebuild and stops the band forgetting the clip; this holds the
@@ -142166,7 +142088,8 @@
     const settle = async ms => { await sleep(ms); document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} }); };
     const look = function () {
       const i = document.getElementById('inspector'), h = i.querySelector('.sm-band-hint'), t = document.querySelector('#inspector-panel .panel-title-label');
-      return { hint: h ? h.textContent : '', add: !!i.querySelector('.addmenu'), editor: !!i.querySelector('.quick-row, .cat-wrap, .cat-back, .cat-body'),
+      /* the band's line, drawn: its words in brackets (since #1255 20:53 it holds none, '[]'); '' when it is not drawn at all */
+      return { hint: h ? '[' + h.textContent + ']' : '', add: !!i.querySelector('.addmenu'), editor: !!i.querySelector('.quick-row, .cat-wrap, .cat-back, .cat-body'),
         title: t ? t.textContent : '', open: document.getElementById('inspector-panel').classList.contains('open') };
     };
     const differ = (a, b) => Object.keys(a).filter(k => a[k] !== b[k]);
@@ -205371,9 +205294,11 @@
     if (fails.length) throw new Error(fails.join(' · '));
   });
 
-  /* N10 · THE FIRST-RUN HINT FLOATS (S3: the project row is just the tools) AND LETS THE FIRST TAP THROUGH. Red on v18.36: the hint is a
-     row inside the tray, nothing floats above the bar. CONTROL: a tap on Clip 2 away from the hint selects it too, so the tap is a tap. */
-  test('1243 R4 · the first-run hint at 380 floats just above the bar, and a tap on the clip under it reaches the clip: Clip 2 is selected, the hint goes and fm.sm.hint is 1 (CONTROL: a tap on the clip away from the hint selects it too)', { item: '1243', budgetMs: 60000 }, async function () {
+  /* N10 · THE FIRST TAP REACHES THE CLIP. Until #1255's 20:53 follow-up a first-run hint floated in the 44 px just above the bar and let
+     the first tap through (S3); the hint went (his words: "There shouldn't be any explanations like that"), so nothing floats there and a
+     tap in that strip lands on Clip 2 itself. Red on the hint's tree (v18.50): the hint floats above the bar. CONTROL: a tap on Clip 2
+     away from that strip selects it too, so the tap is a tap. */
+  test('1243 R4 · at 380 with a main clip and nothing selected nothing floats above the bar where the first-run hint was, and a tap on Clip 2 in that strip selects it (CONTROL: a tap on the clip away from the strip selects it too)', { item: '1243', budgetMs: 60000 }, async function () {
     smNeedP2();
     await smHintKeep(null, async function () {
       await atPhoneWidth(async function () {
@@ -205381,9 +205306,8 @@
           FM.time = 3; FM.simpleTimeline.updatePlayhead();
           await smHintFresh(v); await r4Settle(100);
           const h = document.querySelector('#sm-bar > .sm-hint');
-          if (!r4Shown(h)) throw new Error('380: no first-run hint floats above the bar (#sm-bar > .sm-hint); it is ' + (document.querySelector('#sm-tray .sm-hint') ? 'a row inside the tray' : 'nowhere'));
-          const fails = [], hr = h.getBoundingClientRect(), top = r4Bar().getBoundingClientRect().top;
-          if (Math.abs(hr.bottom - top) > 1) fails.push('the hint’s bottom is ' + Math.round(hr.bottom - top) + ' px from the bar’s top, want 0');
+          if (r4Shown(h)) throw new Error('380: a first-run hint still floats above the bar: “' + h.textContent.trim() + '”');
+          const fails = [], top = r4Bar().getBoundingClientRect().top, hr = { top: top - 44, bottom: top };   /* the strip the hint took */
           const node = document.querySelector('#sm-main .sm-item[data-id="' + v.L('B').id + '"]');
           if (!node) throw new Error('setup: Clip 2 is not drawn');
           const nr = node.getBoundingClientRect(), x = Math.max(nr.left, 0) + Math.min(nr.right, innerWidth) > 0 ? (Math.max(nr.left, 0) * 3 + Math.min(nr.right, innerWidth)) / 4 : NaN;
@@ -205399,11 +205323,8 @@
             return t;
           };
           const hit = tapAt(x, y); await r4Settle(200);
-          if (FM.scene.selectedId !== v.L('B').id) fails.push('a tap on Clip 2 under the hint did not select it (it landed on ' + (hit ? String(hit.className || hit.tagName) : 'nothing') + ')');
-          let flag = null; try { flag = localStorage.getItem('fm.sm.hint'); } catch (e) {}
-          if (flag !== '1') fails.push('fm.sm.hint is ' + JSON.stringify(flag) + ' after the first tap, want 1');
-          if (r4Shown(document.querySelector('#sm-bar > .sm-hint'))) fails.push('the hint is still up after the first tap');
-          /* CONTROL: the same clip away from the hint, from nothing selected */
+          if (FM.scene.selectedId !== v.L('B').id) fails.push('a tap on Clip 2 in the strip just above the bar did not select it (it landed on ' + (hit ? String(hit.className || hit.tagName) : 'nothing') + ')');
+          /* CONTROL: the same clip away from that strip, from nothing selected */
           FM.selectLayer(null); await r4Settle(150);
           const nr2 = node.isConnected ? node.getBoundingClientRect() : document.querySelector('#sm-main .sm-item[data-id="' + v.L('B').id + '"]').getBoundingClientRect();
           tapAt(x, nr2.top + 8); await r4Settle(200);
@@ -206876,7 +206797,9 @@
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
   });
 
-  test('1243 R9 · S12 review at 380 with no look yet the Adjust tab says Let go to see it above the sliders inside the panel, and once a slider has made the look the note is gone (CONTROL: the Brightness slider is there)', { item: '980', budgetMs: 90000 }, async function () {
+  /* #1255 20:53 (his words: "There shouldn't be any explanations like that"): the R9 review's note "Let go to see it" stood over the
+     sliders every time Adjust opened with no look yet. It went: the sliders come straight under the tabs, and letting go still makes the look. */
+  test('1243 R9 · S12 review at 380 with no look yet the Adjust tab shows its sliders straight under the tabs with no note above them, and letting go of a slider makes the look (CONTROL: the Brightness slider is there)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     const fails = [];
     await r4At(380, 0, async function () {
@@ -206885,17 +206808,13 @@
         const tab = smLookTab((FM.spineWords.tools || {}).lookAdjust || 'Adjust');
         if (!tab) throw new Error('setup: the Look panel has no Adjust tab');
         tab.click(); await r4Settle(150);
-        if (!document.querySelector('#inspector .sm-look-r[data-key="bright"]')) throw new Error('CONTROL: the Adjust tab has no Brightness slider');
-        const note = document.querySelector('#inspector .sm-look-letgo'), want = (FM.spineWords.tools || {}).lookLetGo;
-        if (!note) fails.push('with no look yet the Adjust tab says nothing about the picture changing only on release');
-        else {
-          if (note.textContent !== want) fails.push('the note reads “' + note.textContent + '”, want “' + want + '”');
-          const r = note.getBoundingClientRect(), p = document.querySelector('#inspector .sm-look').getBoundingClientRect();
-          if (!r.width || r.left < p.left - 1 || r.right > p.right + 1 || r.right > innerWidth) fails.push('the note is not inside the panel at 380 (' + Math.round(r.left) + ' to ' + Math.round(r.right) + ', the panel ' + Math.round(p.left) + ' to ' + Math.round(p.right) + ')');
-        }
+        const sl = document.querySelector('#inspector .sm-look-r[data-key="bright"]');
+        if (!sl) throw new Error('CONTROL: the Adjust tab has no Brightness slider');
+        const box = document.querySelector('#inspector .sm-look'), kids = box ? Array.from(box.children) : [], first = kids[1] || null;
+        if (document.querySelector('#inspector .sm-look-letgo') || /let go/i.test(box ? box.textContent : '')) fails.push('with no look yet the Adjust tab still says “' + ((document.querySelector('#inspector .sm-look-letgo') || {}).textContent || 'Let go') + '” over the sliders');
+        if (!first || !first.contains(sl)) fails.push('with no look yet the first thing under the tabs is ' + (first ? '“' + first.textContent.trim().slice(0, 40) + '”' : 'nothing') + ', want the Brightness row');
         await smLookSlide(v, 'bright', 30); await r4Settle(150);
-        if (!smLookLayers().length) fails.push('CONTROL: letting go of Brightness made no look');
-        else if (document.querySelector('#inspector .sm-look-letgo')) fails.push('with a look the note still shows, though the sliders now show the picture as they move');
+        if (!smLookLayers().length) fails.push('letting go of Brightness made no look');
       });
     });
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
@@ -208226,6 +208145,84 @@
       });
     } finally { if (put) put(); }
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  /* ═══ RELEASE 13 · #1255 (follow-up 23 Nov, 20:53, clauses 6 and 7) · NO STANDING HINTS ═══
+     His words: "I'm also noticing a pop-up that says tap a clip to split or change its speed. There shouldn't be any explanations like
+     that. We have tutorials for a reason, and there could be a tutorial when the first time you load into the app is, but not, you know,
+     constantly there." Gone: the first-run hint over the bar (Tap a clip to split it or change its speed / Click a clip… · S splits at the
+     line), the PC band's Tap a clip to see its tools and Its tools are below, Look's Let go to see it, the first arrival's toast (Switch
+     back any time from the ⚙ cog), and Edit lines' tap to type. Kept: what is said after his action (a refusal, what a step did). */
+  test('1255 hints · at 380 and 1280 on a device that never saw a hint, with clips and nothing selected nothing floats above the bar, no line on screen tells him to tap or click a clip, the PC band holds no how-to words, and the bar does not move from there to a selected clip and back (CONTROL: Delete on a locked clip still floats its refusal above the bar)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [], HOW = /\b(tap|click) a clip\b|its tools are below|S splits at the line/i;
+    for (const width of [380, 1280]) {
+      await r4At(width, width > 700 ? 800 : 760, async function () {
+        await smHintKeep(null, async function () {
+          await smP2(smClips3, async function (v) {
+            const at = width + ' px: ';
+            await smHintFresh(v); await r4Settle(150);
+            const h = document.querySelector('#sm-bar > .sm-hint');
+            if (r4Shown(h)) fails.push(at + 'a hint floats above the bar: “' + h.textContent.trim() + '”');
+            const said = (document.body.innerText.match(HOW) || [])[0];
+            if (said) fails.push(at + 'with nothing selected the screen says “' + said + '…”');
+            if (width > 700) {
+              const bh = document.querySelector('#inspector .sm-band-hint');
+              if (!bh) fails.push('CONTROL ' + at + 'the band’s line is not drawn');
+              else if (bh.textContent) fails.push(at + 'the band says “' + bh.textContent + '” with nothing selected');
+            }
+            const bar0 = r4Box(r4Bar()), tl0 = r4Box(document.getElementById('sm-timeline'));
+            /* a tap anywhere used to take the hint away and write fm.sm.hint: nothing is written now */
+            document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 51, pointerType: 'touch', isPrimary: true, buttons: 1, clientX: 5, clientY: 5 }));
+            document.body.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 51, pointerType: 'touch', isPrimary: true, clientX: 5, clientY: 5 }));
+            FM.selectLayer(v.L('B').id); await r4Settle(150);
+            const said2 = (document.body.innerText.match(HOW) || [])[0];
+            if (said2) fails.push(at + 'with Clip 2 selected the screen says “' + said2 + '…”');
+            FM.selectLayer(null); await r4Settle(150);
+            if (r4Moved(bar0, r4Box(r4Bar())) || r4Moved(tl0, r4Box(document.getElementById('sm-timeline')))) fails.push(at + 'the bar or the timeline moved from nothing selected, to Clip 2 and back: bar ' + r4Txt(bar0) + ' → ' + r4Txt(r4Box(r4Bar())));
+            let flag = null; try { flag = localStorage.getItem('fm.sm.hint'); } catch (e) {}
+            if (flag !== null) fails.push(at + 'fm.sm.hint was written (' + JSON.stringify(flag) + ')');
+            /* CONTROL: a refusal after his own press still floats its line just above the bar */
+            v.L('B').locked = true;
+            try {
+              FM.selectLayer(v.L('B').id); await r4Settle(150);
+              const del = smTool('delete');
+              if (!del) throw new Error('CONTROL ' + at + 'Clip 2’s tray has no Delete');
+              del.click(); await v.idle(); await r4Settle(100);
+              const s = document.getElementById('sm-say'), sr = s.getBoundingClientRect(), top = r4Bar().getBoundingClientRect().top;
+              if (!/locked/.test(v.say()) || !s.classList.contains('sm-saying') || Math.abs(sr.bottom - top) > 1) fails.push('CONTROL ' + at + 'Delete on the locked clip said “' + v.say() + '”' + (s.classList.contains('sm-saying') ? ' at ' + Math.round(sr.bottom) + ' (the bar’s top ' + Math.round(top) + ')' : ' nowhere on screen') + ', want its refusal floating just above the bar');
+            } finally { v.L('B').locked = false; FM.simpleTimeline.clearSay(); }
+          });
+        });
+      });
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1255 hints · arriving in Simple from Full on a device that never switched raises no toast explaining the cog (CONTROL: the switch happened and the screen reader line says Simple editor)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const d0 = Object.getOwnPropertyDescriptor(FM, 'toast'), real = FM.toast, said = [];
+    await smP2(smClips3, async function (v) {
+      try { localStorage.removeItem('fm.editor.hint'); } catch (e) {}
+      if (FM.editor.mode() !== 'full') FM.editor.apply('full', { force: true, quiet: true });
+      Object.defineProperty(FM, 'toast', { configurable: true, writable: true, enumerable: d0 ? d0.enumerable : true, value: function (msg) { said.push(String(msg)); return real.apply(this, arguments); } });
+      try {
+        FM.editor.set('simple'); await r4Settle(300);
+      } finally { if (d0) Object.defineProperty(FM, 'toast', d0); else FM.toast = real; }
+      const live = (document.getElementById('ed-live') || {}).textContent || '';
+      if (FM.editor.mode() !== 'simple' || live !== 'Simple editor') throw new Error('CONTROL: the switch left the editor in ' + FM.editor.mode() + ' and the screen reader line says “' + live + '”, want Simple and Simple editor');
+      if (said.length) throw new Error('arriving in Simple raised ' + said.map(t => '“' + t + '”').join(', ') + ', want no toast');
+      let flag = null; try { flag = localStorage.getItem('fm.editor.hint'); } catch (e) {}
+      if (flag !== null) throw new Error('arriving in Simple wrote fm.editor.hint (' + JSON.stringify(flag) + '): nothing is shown, so nothing is remembered');
+    }, { full: true });
+  });
+
+  test('1255 hints · Simple’s words file no longer holds the first-run hint, the band’s how-to words, Let go to see it or the first arrival’s toast, and an empty caption line reads Empty (CONTROL: the file is read: it names Split and Add a line here)', { item: '980' }, function () {
+    const w = FM.spineWords || {}, t = w.tools || {}, e = w.editor || {};
+    if (t.split !== 'Split' || t.capAddLine !== 'Add a line here') throw new Error('CONTROL: the words file does not name Split and Add a line here, so it is not the one read here');
+    const left = ['firstHint', 'firstHintPc', 'bandHint', 'bandHintSel', 'lookLetGo'].filter(k => k in t).concat('firstSimple' in e ? ['editor.firstSimple'] : []);
+    if (left.length) throw new Error('the words file still holds ' + left.map(k => k + ' (“' + (t[k] || e[k.replace('editor.', '')]) + '”)').join(', '));
+    if (t.capEmpty !== 'Empty') throw new Error('an empty caption line reads “' + t.capEmpty + '”, want Empty');
   });
 
   /* ═══ #1253 · THE DRAWN EFFECT PICTURES IN THE APP'S EFFECT MENUS ═══

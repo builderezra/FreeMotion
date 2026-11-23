@@ -262,11 +262,9 @@ window.FM = window.FM || {};
     let live = document.getElementById('ed-live');
     if (!live) { live = document.createElement('div'); live.id = 'ed-live'; live.className = 'sm-vh'; live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite'); document.body.appendChild(live); }
     if (live) live.textContent = mode === 'simple' ? (w.liveSimple || 'Simple editor') : (w.liveFull || 'Full editor');
-    /* First arrival in SIMPLE only, once per device (§6.1). Arriving in Full shows nothing (§0.4 V4). */
-    if (mode === 'simple') {
-      let seen = null; try { seen = localStorage.getItem('fm.editor.hint'); } catch (e) {}
-      if (!seen && FM.toast) { FM.toast(w.firstSimple || 'Simple editor. Switch back any time from the ⚙ cog.', 2600); try { localStorage.setItem('fm.editor.hint', '1'); } catch (e) {} }
-    }
+    /* (The first arrival in Simple raised a toast, once per device: "Simple editor. Switch back any time from the ⚙ cog." It went
+       with #1255's 20:53 follow-up, his words: "There shouldn't be any explanations like that. We have tutorials for a reason". The
+       cog it named is where he switched from, so nothing becomes harder to find. Arriving in Full still shows nothing, §0.4 V4.) */
   }
 
   /* THE ONE DOOR (§6.1, §6.4). Resolves true when the editor changed (or already was `to`). */

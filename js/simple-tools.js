@@ -96,7 +96,6 @@ window.FM = window.FM || {};
   const ROW_KEYS = new Set(['speed', 'volume', 'opacity', 'transform', 'fade', 'transition', 'strength', 'soundstyles', 'slide']);   // the item rows rowFor() still names (#1243 S28: Audio's went; 8b: Sound styles; 10: Slide)
   let fills = 0, lastPress = null;   // how many times the tray was refilled; the tool a pointer's last single click pressed
   let rowN = 0;                      // how many times the bar has shown another row (_fill): tool()'s double-tap hold (HW5)
-  let hintUp = false;              // 2.7: the first-run hint floats above the bar now (hintSync)
   /* Phase 3 · Look: which panel panelFor's band / sheet shows ('more' = Full's own panel for the item — More opened it until #1243 S4; a
      text's Style and a caption track's Style open it now — 'look' = Look's own), Look's open tab, a
      slider's live preview to take back ({id, pre}), and where the panel was (its strip's scroll, its own scroll, the control with
@@ -214,8 +213,6 @@ window.FM = window.FM || {};
        and Loop and preview speed stays Full's. #1243 S34 A: LINK takes the play row's first place, one switch for the whole project. */
     const lk = document.getElementById('btn-sm-link');
     if (lk) lk.addEventListener('click', () => { if (isSimple() && FM.spine && FM.spine.cmd && FM.spine.linkMode) FM.spine.cmd.link(!FM.spine.linkMode()); });
-    /* 2.7 (SU1 #13): the first-run hint goes on the first tap anywhere, and only then is it remembered (hintSync) */
-    window.addEventListener('pointerdown', () => { if (hintUp && isSimple()) dismissHint(); }, true);
     /* 2.7 (SU1 #20, his "2A" 14 Oct): SIMPLE'S EXPORT IS ITS OWN, not Full's dialog (120 fps, Custom, "Export just this layer", the loop
        region). Capture phase on the button both editors share (the phone's ⬆ clicks it), only while Simple is on screen (as Simple's ⋯
        did until #1243 S5 took it off the play row). #1243 S6 (his words: "Just make an export menu, but make it simple and easy to
@@ -1036,22 +1033,16 @@ window.FM = window.FM || {};
     else if (!want && b) b.remove();
   }
 
-  /* 2.7 (SU1 #13, DESIGN §7.3 step 4, §8.9): THE FIRST-RUN HINT, while nothing is selected, only with a main clip on the track and at
-     most once per device: the first tap anywhere takes it away and writes fm.sm.hint = '1' (the listener in mount). Phone or PC words
-     by the phone test Full uses (max-width 700 px). (Its outline on the play bar's ✂ went with the ✂: #1243 S5 put Split on the clip's
-     own tools, which the hint's first words send him to.) #1243 S3: it FLOATS just above the bar like a spoken line (the project
-     row is just the tools), and takes no pointer events, so the first tap also reaches the clip under it. (The quiet line, "3 clips ·
-     0:06", is retired: the pill shows the length and the timeline the clips.) */
-  const HINT_KEY = 'fm.sm.hint';
-  function hintSeen() { try { return localStorage.getItem(HINT_KEY) === '1'; } catch (e) { return true; } }   // unreadable storage could never remember it: no hint
-  function hintSync(mode, R) {
-    hintUp = mode === 'project' && !!R && R.main.some(e => !e.slot) && !hintSeen();
-    let h = bar && bar.querySelector(':scope > .sm-hint');
-    if (hintUp) {
-      if (!h) { h = el('div', 'sm-hint'); bar.insertBefore(h, tray); }
-      const t = phone.matches ? (W().firstHint || '') : (W().firstHintPc || '');
-      if (h.textContent !== t) h.textContent = t;
-    } else if (h) h.remove();
+  /* THE FIRST-RUN HINT WENT (#1255's 20:53 follow-up). His words: "I'm also noticing a pop-up that says tap a clip to split or change
+     its speed. There shouldn't be any explanations like that. We have tutorials for a reason, and there could be a tutorial when the
+     first time you load into the app is, but not, you know, constantly there." It was SU1 #13's line ("Tap a clip to split it or change
+     its speed", on a PC "Click a clip… · S splits at the line"), floating just above the bar in the project row until the first tap. It
+     floated (absolute), so nothing moves where it sat. What it pointed at is found where it always was: a clip's tap opens its tools,
+     Split first, Speed among them. fm.sm.hint is no longer read or written. hintSync stays as the one place that takes a hint left in
+     the bar by an earlier version's page away. */
+  function hintSync() {
+    const h = bar && bar.querySelector(':scope > .sm-hint');
+    if (h) h.remove();
   }
   /* 2.7 (2A row 16): A PANEL THAT OPENS UNDER THE FINGER IGNORES THAT FINGER. More's panel rises over the place More was pressed (until
      #1243 it moved the tray and More up 134 px at 380x800; since #1243 rule 3 the sheet runs from the stage's bottom edge over the whole
@@ -1105,11 +1096,6 @@ window.FM = window.FM || {};
     if (b.getAttribute('aria-pressed') !== p) b.setAttribute('aria-pressed', p);
     if (b.title !== t) b.title = t;
     if (b.getAttribute('aria-label') !== name) b.setAttribute('aria-label', name);
-  }
-  function dismissHint() {
-    hintUp = false;
-    try { localStorage.setItem(HINT_KEY, '1'); } catch (e) {}
-    lastSig = ''; FM.simpleTools.sync();   // the hint goes (hintSync)
   }
 
   /* ═══ #1243 S6 A: SIMPLE'S EXPORT MENU (1243-B "S6", 1243-R (c) row 12). ═══
@@ -1346,16 +1332,16 @@ window.FM = window.FM || {};
     if (runSeen) runSeen.observe(run);
     return run;
   }
-  /* THE BAND'S WORDS for a selected item (js/inspector.js draws them, bandWords, and may do so before the tray is refilled for a new
-     selection, so every refill puts them right). #1243 S4 step 4: "Its tools are below" — no "· More opens the rest", More went. */
+  /* THE BAND'S WORDS (js/inspector.js draws them, bandWords, and may do so before the tray is refilled for a new selection, so every
+     refill puts them right). #1255's 20:53 follow-up, his words: "There shouldn't be any explanations like that. We have tutorials for a
+     reason". The PC band said "Tap a clip to see its tools" with nothing selected and "Its tools are below" with something selected,
+     every time: both went, and the band is empty (styles.css hides the empty line, so it takes no room). What stays is a fact about the
+     item, not a how-to: a layer of an element moving with the rest says so (Phase 3 · Clips › Extras, "Moves with ‘Hello’"). */
   function bandWords(layer) {
-    const w = W();
-    if (!layer) return w.bandHint || 'Tap a clip to see its tools';
-    const base = w.bandHintSel || 'Its tools are below';
-    /* Phase 3 · Clips › Extras: a layer of an element moving with the rest says so first */
+    if (!layer) return '';
     const id = (layer && layer.id) || ((FM.selectionIds ? FM.selectionIds() : [])[0] || null);
-    const R = FM.simpleTimeline && FM.simpleTimeline.read ? FM.simpleTimeline.read() : null, wl = id ? withWords(R, id) : '';
-    return wl ? wl + ' · ' + base : base;
+    const R = FM.simpleTimeline && FM.simpleTimeline.read ? FM.simpleTimeline.read() : null;
+    return id ? withWords(R, id) : '';
   }
   function hintFollows() {
     const h = document.querySelector('#inspector > .sm-band-hint[data-sel]');
@@ -1550,8 +1536,9 @@ window.FM = window.FM || {};
   }
   function lookAdjust(box, L) {
     const w = W(), S = FM.spine;
-    /* R9 review: with no look yet a slider has no layer to show the picture on, so it changes on release; the panel says so plainly */
-    if (!L) { const n = el('div', 'sm-look-note sm-look-letgo'); n.appendChild(el('span', 'sm-look-note-t', w.lookLetGo || 'Let go to see it')); box.appendChild(n); }
+    /* (With no look yet a slider has no layer to show the picture on, so it changes when let go. The R9 review's line saying so, "Let go
+       to see it", stood over the sliders every time; it went with #1255's 20:53 follow-up, his words: "There shouldn't be any explanations
+       like that". Letting go shows it, and from then on the sliders show the picture as they move.) */
     (S.LOOK_ADJ || []).forEach(d => box.appendChild(lookSlider(L, d.key, w[d.word] || d.key, d.lo)));
     const rs = el('button', 'sm-look-reset', w.lookReset || 'Reset'); rs.type = 'button'; rs.dataset.look = 'reset';
     if (!S.lookOf(L).adjust) rs.setAttribute('aria-disabled', 'true');
@@ -1621,7 +1608,7 @@ window.FM = window.FM || {};
       const at = capTime((+L.start || 0) + (+c.start || 0)), words = String(c.text == null ? '' : c.text).trim();
       const b = el('button', 'sm-cap-t'); b.type = 'button'; b.dataset.cap = 'line-' + i;
       b.appendChild(el('span', 'sm-cap-time', at));
-      b.appendChild(el('span', 'sm-cap-w' + (words ? '' : ' sm-cap-empty'), words || (w.capEmpty || 'Empty · tap to type')));
+      b.appendChild(el('span', 'sm-cap-w' + (words ? '' : ' sm-cap-empty'), words || (w.capEmpty || 'Empty')));
       b.setAttribute('aria-label', at + ', ' + (words || w.capEmpty || ''));
       b.addEventListener('click', e => { e.stopPropagation(); typeLine(L.id, c); });
       const x = el('button', 'sm-cap-x'); x.type = 'button'; x.dataset.cap = 'x-' + i;

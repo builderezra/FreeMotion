@@ -36,7 +36,7 @@ window.FM = window.FM || {};
       simpleText: 'Clips one after another, with text, captions and music. Gaps close up by themselves. Best for a quick video, or if you’ve never edited.',
       fullText: 'Everything FreeMotion does: layers anywhere, keyframes, masks, 3D and every effect. For animation, and anything Simple can’t do.',
       note: 'Same project in both. Nothing is converted, and you can switch back any time.',
-      firstSimple: 'Simple editor. Switch back any time from the ⚙ cog.',     // Simple only; arriving in Full shows nothing (§0.4 V4)
+      /* (firstSimple, the first arrival's toast, went with #1255's 20:53 follow-up: no explanations that show by themselves) */
       refuse: { export: 'Wait for the export to finish', recording: 'Close the recorder first', busy: 'One moment…', drag: '', unsettled: 'Finish or close the open tool first' },
       warn: {   // DESIGN §6.4: a switch that would lose un-undoable work asks first
         title: 'Switch to ',
@@ -259,13 +259,10 @@ window.FM = window.FM || {};
       exportSize: s => 'About ' + s, exportGo: 'Save video', exportEmpty: 'Add a clip first, then export it',
       exportLen: s => { s = Math.max(0, +s || 0); if (s > 0 && s < 1) return (Math.round(s * 10) / 10) + ' s'; s = Math.round(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); },
       music: 'Music from your files', sfx: 'Sound effects', voice: 'Record voice', closeAll: 'Close all gaps',   // (moreOpts went with Simple's ⋯, #1243 S5; review L3-10)
-      /* #1243 S4 step 4: "Its tools are below" everywhere (no More to open the rest; the PC's two rows went in release 8) */
-      selected: n => n + ' selected', bandHint: 'Tap a clip to see its tools', bandHintSel: 'Its tools are below',
-      /* 2.7 (SU1 #13): the first-run hint, floating just above the bar since #1243 S3 (§7.3 step 4, §8.9): one verb everywhere, split, never
-         "cut". #1243 S5: Split is the first tool on a clip now, not ✂ on the play row. The hint no longer says "or look": R decision 1 takes
-         Look off the clip (#1243 S12 did: Look is on the project row, for the whole video) */
-      firstHint: 'Tap a clip to split it or change its speed',
-      firstHintPc: 'Click a clip to split it or change its speed · S splits at the line',
+      /* #1255's 20:53 follow-up, his words: "I'm also noticing a pop-up that says tap a clip to split or change its speed. There shouldn't
+         be any explanations like that. We have tutorials for a reason". The PC band's "Tap a clip to see its tools" and "Its tools are
+         below", and the first-run hint ("Tap a clip to split it or change its speed", "Click a clip… · S splits at the line"), went. */
+      selected: n => n + ' selected',
       /* #1243 S5: Split, first on every item's tools (his "put the split button on the row that pops up when you have a layer selected") */
       split: 'Split', splitTitle: 'Split at the line (S)',
       /* #1243 S34 A: the play row's Link, and why Stay put rests while it is off */
@@ -303,7 +300,7 @@ window.FM = window.FM || {};
          and the panel's two lines: clips that still carry a look of their own (Remove them, one step), a look that ends early (Fix) */
       lookFaves: 'Favourites', lookYours: 'Yours', lookChips: 'Filter sections',
       lookClipsOwn: n => n === 1 ? '1 clip has its own look' : n + ' clips have their own look', lookClipsOff: n => n === 1 ? 'Remove it' : 'Remove them',
-      lookEndsEarly: 'The look doesn’t cover the whole video', lookLetGo: 'Let go to see it',
+      lookEndsEarly: 'The look doesn’t cover the whole video',   /* (lookLetGo, "Let go to see it", went: #1255's 20:53 follow-up) */
       /* Phase 3 · Captions (queue 980, DESIGN §8.5 the Captions tool and the caption-track tray, §8.9 the caption-track switch) */
       captions: 'Captions', captionsTitle: 'Type captions, find speech, pick a style', typeCaptions: 'Type captions',
       findSpeech: 'Find speech', findSpeechTitle: 'Finds when people talk · you type the words',
@@ -312,7 +309,7 @@ window.FM = window.FM || {};
       capStay: 'Stays with the sound', capStayTitle: 'The captions stay with the sound they were timed from',
       /* on a phone the pair's faces are one word each (sheet 1 question 3, pick B, 6 Nov): the whole tray is on show with no swipe */
       capFollowShort: 'Follows', capStayShort: 'Stays',
-      capAddLine: 'Add a line here', capEmpty: 'Empty · tap to type', capRemove: 'Remove this line', capNone: 'No lines yet',
+      capAddLine: 'Add a line here', capEmpty: 'Empty',   /* was 'Empty · tap to type' (#1255 20:53: no how-to words that stand on screen) */ capRemove: 'Remove this line', capNone: 'No lines yet',
       /* Phase 3 · Effect segments (queue 980, DESIGN §8.5: the project row's Effects, the Effect segment tray "Change effect · Strength ·
          Stay put · 🗑"; §8.5c): the picker in the tray row and the segment's own tools */
       effects: 'Effects', effectsTitle: 'An effect over the whole video', change: 'Change effect', strength: 'Strength', strengthLabel: 'Strength in percent',
