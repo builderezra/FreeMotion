@@ -208225,6 +208225,119 @@
     if (t.capEmpty !== 'Empty') throw new Error('an empty caption line reads “' + t.capEmpty + '”, want Empty');
   });
 
+  /* ═══ RELEASE 13 · #1258 CLAUSE 2 · THE EDITOR CHOICE ON NEW PROJECT ═══
+     His words (23 Nov): "there should be an option when you press create, like when you're in the create menu and creating a new project,
+     there should be an option to, you know, decide whether you're going to use simple editor or not." The plan's K3 (recommended): an
+     Editor switch, Simple | Full, beside Create, put into Home's New project dialog by js/editor-mode.js when it opens, starting at what a
+     new project would get (FM.editor.forNew); a tap writes fm.editor.last as the cog's switch would, and Create hands it to the new card.
+     Driven through the real doors (the + and Create); every project made is removed and fm.editor.last, fm.newproj, the editor and Home
+     are put back (sm2aKeep / sm2aPut). */
+  const np1258Sw = () => document.querySelector('#hm-dialog .hm-dlg-card > .sm-np-ed');
+  const np1258On = () => { const g = np1258Sw(), b = g && g.querySelector('button[aria-checked="true"]'); return b ? b.dataset.ed : ''; };
+  async function np1258Open(last, what) {
+    sm2aLsPut('fm.editor.last', last);
+    if (!FM.home.isOpen()) { FM.home.open(); await sleep(900); }
+    FM.home._render('projects'); await sleep(250);
+    const dlg = document.getElementById('hm-dialog');
+    document.getElementById('hm-new').click();
+    await hcUntil('the New project dialog (' + what + ')', function () { return !dlg.classList.contains('hidden'); }, 4000);
+    await sleep(700);
+    return dlg;
+  }
+  async function np1258Create(st, what) {
+    const before = FM.storage.openProjectId(), n0 = FM.projects.list().length;
+    document.getElementById('hm-create').click();
+    const pid = await sm2aLanded(before, 'the project Create made to open (' + what + ')');
+    st.made.push(pid);
+    const r = sm2aRead(pid);
+    r.made = FM.projects.list().length - n0;
+    return r;
+  }
+  test('1258 · New project at 380 and 1280 shows an Editor switch, Simple or Full, in a row of its own just above Cancel and Create, both sides pressable, starting on what a new project would get: Full on a device that never switched, Simple once fm.editor.last is simple (CONTROL: FM.editor.forNew says the same each time)', { item: '980', budgetMs: 120000 }, async function () {
+    const st = sm2aKeep(), fails = [];
+    try {
+      if (st.wasHome) FM.home.close();
+      await sleep(100);
+      for (const width of [380, 1280]) {
+        const run = async function () {
+          for (const last of [null, 'simple']) {
+            const at = width + ' px, fm.editor.last ' + (last || 'unset') + ': ';
+            const dlg = await np1258Open(last, at);
+            try {
+              const want = FM.editor.forNew();
+              if (want !== (last === 'simple' ? 'simple' : 'full')) throw new Error('CONTROL ' + at + 'FM.editor.forNew() says ' + want);
+              const g = np1258Sw();
+              if (!g) { fails.push(at + 'New project has no Editor switch by Create'); continue; }
+              const rg = g.querySelector('[role="radiogroup"]');
+              if (!rg || !/Editor/.test(rg.getAttribute('aria-label') || '') || !/Editor/.test(g.textContent)) fails.push(at + 'the switch is not a radiogroup named Editor with the name Editor beside it');
+              const ar = dlg.querySelector('.hm-dlg-actions').getBoundingClientRect(), gr0 = g.getBoundingClientRect();
+              if (gr0.bottom > ar.top + 0.5) fails.push(at + 'the switch does not sit above Cancel and Create');
+              if (new Set(Array.from(dlg.querySelectorAll('.hm-dlg-actions > button')).map(b => Math.round(b.getBoundingClientRect().top))).size !== 1) fails.push(at + 'Cancel and Create no longer share one line');
+              const sides = Array.from(g.querySelectorAll('button[data-ed]')).map(b => b.dataset.ed + ':' + b.textContent).join(',');
+              if (sides !== 'simple:Simple,full:Full') fails.push(at + 'the switch offers ' + sides + ', want Simple then Full');
+              if (np1258On() !== want) fails.push(at + 'the switch starts on ' + (np1258On() || 'nothing') + ', want ' + want + ' (what a new project gets)');
+              g.querySelectorAll('button[data-ed]').forEach(b => { if (!r4Hits(b)) fails.push(at + b.textContent + ' is not pressable where it is'); });
+              const cr = document.getElementById('hm-create');
+              if (!r4Hits(cr)) fails.push(at + 'Create is not pressable with the switch beside it');
+              const card = dlg.querySelector('.hm-dlg-card').getBoundingClientRect(), gr = g.getBoundingClientRect();
+              if (gr.left < card.left - 0.5 || gr.right > card.right + 0.5) fails.push(at + 'the switch runs out of the card (' + Math.round(gr.left) + '–' + Math.round(gr.right) + ' in ' + Math.round(card.left) + '–' + Math.round(card.right) + ')');
+              if (sm2aLs('fm.editor.last') !== last) fails.push(at + 'opening New project wrote fm.editor.last (' + sm2aLs('fm.editor.last') + ')');
+            } finally { document.getElementById('hm-cancel').click(); await sleep(250); }
+          }
+        };
+        if (width > 700) await atWideWidth(run, width); else await atPhoneWidth(run, width);
+      }
+    } finally { await sm2aPut(st); }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1258 · at 380 with fm.editor.last full a tap on Simple in New project and then Create opens the new project in Simple, its card says simple and fm.editor.last is simple (CONTROL: Create made exactly one project and opened it)', { item: '980', budgetMs: 90000 }, async function () {
+    const st = sm2aKeep(), fails = [];
+    try {
+      if (st.wasHome) FM.home.close();
+      await sleep(100);
+      if (FM.editor.mode() !== 'full') FM.editor.apply('full', { force: true, quiet: true });
+      await atPhoneWidth(async function () {
+        await np1258Open('full', 'last full');
+        const g = np1258Sw(), b = g && g.querySelector('button[data-ed="simple"]');
+        if (!b) throw new Error('New project has no Editor switch with a Simple side');
+        if (np1258On() !== 'full') fails.push('the switch starts on ' + np1258On() + ', want Full');
+        b.click(); await sleep(120);
+        if (np1258On() !== 'simple') fails.push('after the tap the switch shows ' + np1258On() + ', want Simple');
+        if (sm2aLs('fm.editor.last') !== 'simple') fails.push('the tap left fm.editor.last ' + sm2aLs('fm.editor.last') + ', want simple');
+        const r = await np1258Create(st, 'Simple picked');
+        if (r.made !== 1 || !r.card) throw new Error('CONTROL: Create made ' + r.made + ' project(s) (card ' + (r.card ? 'found' : 'missing') + ')');
+        if (r.mode !== 'simple' || !r.cls) fails.push('the new project opened in ' + r.mode + ', want Simple');
+        if (r.ed !== 'simple') fails.push('the new project’s card says editor ' + r.ed + ', want simple');
+        if (r.last !== 'simple') fails.push('after Create fm.editor.last is ' + r.last + ', want simple');
+      }, 380);
+    } finally { await sm2aPut(st); }
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  test('1258 · at 380 an untouched Editor switch leaves fm.editor.last as it was: unset on a device that never switched and full after Full, and the project opens in Full (CONTROL: the switch was on show each time and Create made one project)', { item: '980', budgetMs: 90000 }, async function () {
+    const st = sm2aKeep(), fails = [];
+    try {
+      if (st.wasHome) FM.home.close();
+      await sleep(100);
+      if (FM.editor.mode() !== 'full') FM.editor.apply('full', { force: true, quiet: true });
+      await atPhoneWidth(async function () {
+        for (const last of [null, 'full']) {
+          const at = 'fm.editor.last ' + (last || 'unset') + ': ';
+          await np1258Open(last, at);
+          const g = np1258Sw();
+          if (!g || !r4Shown(g)) throw new Error('CONTROL ' + at + 'New project shows no Editor switch, so an untouched one is not measured');
+          if (np1258On() !== 'full') fails.push(at + 'the switch starts on ' + np1258On() + ', want Full');
+          const r = await np1258Create(st, at);
+          if (r.made !== 1 || !r.card) throw new Error('CONTROL ' + at + 'Create made ' + r.made + ' project(s)');
+          if (r.last !== last) fails.push(at + 'an untouched switch and Create left fm.editor.last ' + JSON.stringify(r.last) + ', want ' + JSON.stringify(last));
+          if (r.mode !== 'full' || r.ed !== '(none)') fails.push(at + 'the new project opened in ' + r.mode + ' with card editor ' + r.ed + ', want Full and today’s card');
+        }
+      }, 380);
+    } finally { await sm2aPut(st); }
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
   /* ═══ #1253 · THE DRAWN EFFECT PICTURES IN THE APP'S EFFECT MENUS ═══
      His words (16 Nov, REQUESTS.md #1253): "why aren't the new icons in yet? … Just add all the effects in now. If there's any
      I don't like I'll tell you about them."

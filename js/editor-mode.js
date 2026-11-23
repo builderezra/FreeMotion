@@ -409,7 +409,78 @@ window.FM = window.FM || {};
     S.cmd.split(id);
   }
 
+  /* ═══ #1258 CLAUSE 2: THE EDITOR CHOICE ON NEW PROJECT (the plan's K3, recommended: a switch beside Create). ═══
+     His words (23 Nov): "there should be an option when you press create, like when you're in the create menu and creating a new
+     project, there should be an option to, you know, decide whether you're going to use simple editor or not."
+     Home's New project dialog (index.html #hm-dialog, js/home.js) gets a two-way switch, Editor: Simple | Full, in a row of its own
+     just above Cancel and Create, laid out as the dialog's other rows are (.hm-fld: the name on the left, the control on the right; in
+     the button row itself it pushed Create onto a line of its own at 380). It is put there by THIS file each time the dialog opens (an
+     observer on the dialog's class; home.js is not touched),
+     and it starts at what a new project would get today (forNew(): this device's fm.editor.last). Create already hands forNew() to
+     the new project's card (home.js newEditor), so a tap here only has to write what forNew() reads: a deliberate tap writes
+     fm.editor.last, as the cog's switch does; an untouched Create writes nothing. Its words are the cog's own (Editor, Simple, Full),
+     its buttons carry no data he typed, and it is built with createElement / textContent. Under D22 B with Simple switched off it is
+     not drawn (forNew() is always Full then). */
+  const NP_CLS = 'sm-np-ed';
+  function npEdPick(ed) {
+    try { localStorage.setItem('fm.editor.last', ed); } catch (e) {}
+    npEdSync();
+  }
+  function npEdSync() {
+    const g = document.querySelector('#hm-dialog .' + NP_CLS);
+    if (!g) return;
+    const now = forNew();
+    g.querySelectorAll('button[data-ed]').forEach(b => {
+      const on = b.dataset.ed === now;
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+      b.tabIndex = on ? 0 : -1;
+    });
+  }
+  function npEdMount() {
+    const dlg = document.getElementById('hm-dialog');
+    if (!dlg || dlg.classList.contains('hidden')) return;
+    const acts = dlg.querySelector('.hm-dlg-actions');
+    let g = dlg.querySelector('.' + NP_CLS);
+    if (!enabled()) { if (g) g.remove(); return; }
+    if (!acts || !acts.parentNode) return;
+    if (!g) {
+      const w = W();
+      g = document.createElement('div');
+      g.className = 'hm-fld ' + NP_CLS;   // the dialog's own row look (name left, control right)
+      const l = document.createElement('span'); l.className = 'sm-np-l'; l.textContent = w.title || 'Editor'; l.setAttribute('aria-hidden', 'true');
+      const seg = document.createElement('div');
+      seg.className = 'sm-np-seg';
+      seg.setAttribute('role', 'radiogroup');
+      seg.setAttribute('aria-label', w.title || 'Editor');
+      [['simple', w.simple || 'Simple'], ['full', w.full || 'Full']].forEach(p => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'sm-np-b'; b.dataset.ed = p[0]; b.textContent = p[1];
+        b.setAttribute('role', 'radio');
+        b.addEventListener('click', e => { e.preventDefault(); npEdPick(p[0]); });
+        seg.appendChild(b);
+      });
+      /* a radiogroup's arrows move the choice, as the cog's own switch does with a tap */
+      seg.addEventListener('keydown', e => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+        e.preventDefault(); e.stopPropagation();
+        const next = forNew() === 'simple' ? 'full' : 'simple';
+        npEdPick(next);
+        const b = seg.querySelector('button[data-ed="' + next + '"]'); if (b) b.focus();
+      });
+      g.append(l, seg);
+      acts.parentNode.insertBefore(g, acts);
+    }
+    npEdSync();
+  }
+  function npEdWatch() {
+    const dlg = document.getElementById('hm-dialog');
+    if (!dlg || typeof MutationObserver !== 'function') return;
+    new MutationObserver(npEdMount).observe(dlg, { attributes: true, attributeFilter: ['class'] });
+    npEdMount();
+  }
+
   function wire() {
+    npEdWatch();
     if (GATED) body().classList.toggle('sm-on', enabled());
     if (GATED && FM.settings && FM.settings.onChange) FM.settings.onChange(() => { if (!!enabled() !== body().classList.contains('sm-on')) FM.editor.onPreviewFlip(); });
   }

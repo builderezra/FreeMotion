@@ -12976,6 +12976,21 @@ body.ed-simple .sm-exp-b:focus-visible, body.ed-simple .sm-exp-go:focus-visible 
   body.ed-simple .sm-exp-foot > .sm-exp-go { flex: 1 1 auto; min-height: 40px; }
 }
 
+/* ═══ #1258 CLAUSE 2 (his words: "there should be an option when you press create… to, you know, decide whether you're going to use
+   simple editor or not"): the Editor switch, Simple | Full (K3, recommended: beside Create), in a row of its own just above Cancel and
+   Create, put there by js/editor-mode.js when the dialog opens. The row is the dialog's own .hm-fld (its name on the left in the
+   fields' grey, the control on the right); the control is a two-way segmented switch whose frame and pressed side are a grey that
+   reads on the dark Home and the light one. It fades in with the card's own fields (their entrance, js/home.js npFxStagger, is drawn
+   before it is there). Every rule hangs on .sm-np-ed, which only js/editor-mode.js makes. ═══ */
+#hm-dialog .hm-dlg-card > .sm-np-ed { flex: none; margin: 10px 0 0; animation: sm-np-in .64s cubic-bezier(.3, 0, .3, 1) both; }
+@keyframes sm-np-in { 0%, 55% { opacity: 0; transform: translateY(12px); } 90%, 100% { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #hm-dialog .hm-dlg-card > .sm-np-ed { animation: none; } }
+#hm-dialog .sm-np-ed > .sm-np-seg { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 11px; box-shadow: inset 0 0 0 1px rgba(127, 135, 150, .38); }
+#hm-dialog .sm-np-seg > button.sm-np-b { min-height: 32px; min-width: 60px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; background-image: none;
+  color: inherit; font: 600 13px/1 system-ui, sans-serif; opacity: .72; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+#hm-dialog .sm-np-seg > button.sm-np-b[aria-checked="true"] { background: rgba(127, 135, 150, .3); opacity: 1; }
+#hm-dialog .sm-np-seg > button.sm-np-b:focus-visible { outline: 2px solid var(--accent, #4da3ff); outline-offset: 1px; }
+
 /* ═══ Simple mode Phase 3 · CAPTIONS (queue 980; DESIGN §8.5 the caption-track tray's Edit lines, D20 A): the lines panel, drawn in
    #inspector where More's and Look's panels dock. One 44 px row per line — its time, its words (one line, cut with an ellipsis), and
    a 44 px ✕ — under an "Add a line here" button. Every rule hangs on a class only js/simple-tools.js makes (.sm-cap…), so Full matches
