@@ -64,7 +64,7 @@ window.FM = window.FM || {};
         dockSheet();
         return;
       }
-      if (!has) { insp.style.top = ''; insp.style.maxHeight = ''; close(); userClosed = false; return; }
+      if (!has) { fltDrop(); insp.style.top = ''; insp.style.maxHeight = ''; close(); userClosed = false; return; }   // fltDrop: #1243 F9, review R5
       /* SIMPLE MODE P2.2 (D10): in Simple a selection shows its tools in the tray row; the sheet rises only for a tray tool
          that has a panel ("More"). simpleTools.sheetHeld is false whenever Simple is not on screen, so Full is today's. */
       if (FM.simpleTools && FM.simpleTools.sheetHeld && FM.simpleTools.sheetHeld(id)) { insp.style.top = ''; insp.style.maxHeight = ''; close(); return; }
@@ -154,7 +154,9 @@ window.FM = window.FM || {};
         }
         if (e.cancelable) e.preventDefault();
         var now = e.timeStamp, ddt = now - lastT; if (ddt > 0) vy = (e.clientY - lastY) / ddt; lastY = e.clientY; lastT = now;
-        panel.style.transform = 'translateY(' + Math.max(0, dy) + 'px)';
+        /* #1243 F9 (review R4): from where the sheet RESTS. The small Filters sheet rests lowered by --insp-drop (styles.css), and an
+           inline translateY(dy) alone replaced that, so a pull down first jumped the sheet UP by the drop. No other sheet sets it (0). */
+        panel.style.transform = 'translateY(calc(var(--insp-drop, 0px) + ' + Math.max(0, dy) + 'px))';
       }
       function settle(e, aborted) {
         if (!active || (e && e.pointerId !== pid)) return;
@@ -353,7 +355,16 @@ window.FM = window.FM || {};
       clearTimeout(flt.idle);
       flt.pend = null;
       if (!insp.classList.contains('insp-flt')) return;
-      fltStill(function () { insp.classList.remove('insp-flt'); insp.style.removeProperty('--insp-drop'); });
+      fltStill(fltClear);
+    }
+    function fltClear() { insp.classList.remove('insp-flt'); insp.style.removeProperty('--insp-drop'); insp.style.removeProperty('--insp-drop-max'); }
+    /* review R5: the sheet is CLOSING (nothing selected), so the Filters state goes with it, in the close's own motion — not by
+       fltOff on the next selection, whose no-motion step would then swallow that sheet's slide up. */
+    function fltDrop() {
+      if (!flt || !insp) return;
+      clearTimeout(flt.idle);
+      flt.pend = null;
+      fltClear();
     }
     function fltApply(dockTop) {
       if (!flt || !insp) return false;
@@ -369,6 +380,7 @@ window.FM = window.FM || {};
         insp.classList.add('insp-flt');
         insp.style.top = line + 'px';
         insp.style.maxHeight = 'none';
+        insp.style.setProperty('--insp-drop-max', Math.max(0, Math.round(flt.drop)) + 'px');   // review R3: the list's room under the lowered edge (styles.css)
         fltSet(flt.grown ? 0 : flt.drop);
       };
       if (entering) fltStill(put); else put();
@@ -906,8 +918,12 @@ window.FM = window.FM || {};
       if (tabs) st.anims.push(tabs.animate([{ offset: 0, opacity: 0 }, { offset: STRETCH_SKIN_HOLD, opacity: 0 }, { offset: STRETCH_SKIN_GONE, opacity: 1 }, { offset: 1, opacity: 1 }], T));
       // #1243 G8: one bar — the real row is hidden while the shape moves, and back once it has stopped
       stretchHideRow(st, true);
-      st.clip.addEventListener('finish', function () { if (addSheet._stretch === st && addSheet.classList.contains('open')) stretchHideRow(st, false); });
-      setTimeout(function () { if (addSheet._stretch === st && addSheet.classList.contains('open')) stretchHideRow(st, false); }, STRETCH_MS + 40);   // a backgrounded tab advances no animation (as #571)
+      /* …and once it has stopped the menu's contents carry no mask either (review R7: a mask held for as long as the menu stays
+         open clips anything drawn outside each box and keeps a costlier composite on phones). unstretchAdd puts it back to run
+         the reveal backwards. */
+      var landed = function () { if (addSheet._stretch === st && addSheet.classList.contains('open')) { stretchHideRow(st, false); growKids().forEach(function (k) { stretchMask(k, false); }); } };
+      st.clip.addEventListener('finish', landed);
+      setTimeout(landed, STRETCH_MS + 40);   // a backgrounded tab advances no animation (as #571)
       if (st.dim) st.anims.push(st.dim.animate([{ opacity: 0 }, { opacity: 1 }], { duration: STRETCH_MS, easing: 'ease-out', fill: 'both' }));
       addSheet._stretch = st;
     }
@@ -923,6 +939,7 @@ window.FM = window.FM || {};
         stretchPlaceSkin(st);
       }
       stretchHideRow(st, true);   // one bar while it runs back; endStretch shows the row again
+      growKids().forEach(function (k) { stretchMask(k, true); });   // review R7: the reveal runs backwards, so its mask is back on
       addSheet.classList.add('closing');
       addSheet.style.transition = 'none';
       addSheet.style.transform = 'translateY(0)';   // held where it rests while the shape runs back onto the row

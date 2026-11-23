@@ -3762,7 +3762,7 @@
       if ((L2.shadow.dx || 0) !== 0 || (L2.shadow.dy || 0) !== 0) throw new Error('a brand-new shadow still starts offset (' + L2.shadow.dx + ',' + L2.shadow.dy + '), so the plain shadow is still the one you have to go and find');
       L2.shadow.enabled = true; FM.inspector.refresh(); FM.inspector.openCategory('border');
       /* #1243 F7: a tile opens its feature's page — the Shadow rows live on the Shadow page (the real tap, not a seam) */
-      attached(document.querySelector('#inspector .bs-tile[data-kind="shadow"]'), 'the Shadow tile').click();
+      attached([].filter.call(document.querySelectorAll('#inspector .bs-tile'), t => ((t.querySelector('.bs-name') || {}).textContent || '').trim() === 'Shadow')[0], 'the Shadow tile').click();
       const rows = [].slice.call(document.querySelectorAll('#inspector .prop-row, .insp-body .prop-row'));
       const styleRow = rows.filter(r => /^Style$/.test(((r.querySelector('label') || {}).textContent || '').trim()))[0];
       if (!styleRow) throw new Error('no Style row on an enabled shadow — nothing tells you the other kind exists (rows: ' + rows.map(r => ((r.querySelector('label') || {}).textContent || '').trim()).join(', ').slice(0, 160) + ')');
@@ -11906,10 +11906,19 @@
          a mutation check caught exactly that once). */
       const tiles = [].slice.call(document.querySelectorAll('#inspector .bs-tile, .insp-body .bs-tile'));
       const outline = tiles.filter(r => /^\s*Outline\s*$/.test((r.querySelector('.bs-name') || {}).textContent || ''))[0];
-      if (!outline || outline.getAttribute('aria-pressed') == null) {
-        throw new Error('the Outline & Shadows card on a VIDEO offers no Outline TOGGLE (tiles found: ' + tiles.map(r => ((r.querySelector('.bs-name') || {}).textContent || '').trim()).join(', ').slice(0, 140) + ')');
+      /* #1243 F7 (review R1): the tile no longer TOGGLES Outline, it OPENS Outline's page, and the page's own switch turns it on.
+         So "offers it" now means: the Outline tile is a real button, and tapping it opens a page headed Outline whose on/off
+         switch is a real switch. (The old read, aria-pressed on the tile, called a page-opener a toggle.) */
+      if (!outline || outline.tagName !== 'BUTTON') {
+        throw new Error('the Outline & Shadows card on a VIDEO offers no Outline tile to press (tiles found: ' + tiles.map(r => ((r.querySelector('.bs-name') || {}).textContent || '').trim()).join(', ').slice(0, 140) + ')');
+      }
+      outline.click();
+      const head = document.querySelector('#inspector .bs-head .bs-title'), sw = document.querySelector('#inspector .bs-head .bs-onoff[role="switch"]');
+      if (!head || head.textContent.trim() !== 'Outline' || !sw) {
+        throw new Error('on a VIDEO the Outline tile opens no Outline page with an on/off switch (header: ' + (head ? head.textContent.trim() : 'none') + ', switch: ' + (sw ? 'yes' : 'none') + ')');
       }
     } finally {
+      FM._bsPage = null;
       FM.scene.layers = layers0;
       if (FM.refreshAll) FM.refreshAll();
       if (FM.inspector) FM.inspector.refresh();
@@ -98111,9 +98120,10 @@
     const saved = FM.scene, savedSel = FM.scene.selectedId;
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
     const btnTexts = () => [].map.call(document.querySelectorAll('#inspector .bs-page-rows button'), b => (b.textContent || '').trim());
-    const open = async (kind) => {
-      const t = document.querySelector('#inspector .bs-tile[data-kind="' + kind + '"]');
-      if (!t) throw new Error('the Outline & Shadows card has no ' + kind + ' tile to open');
+    const named = (name) => [].filter.call(document.querySelectorAll('#inspector .bs-tile'), t => ((t.querySelector('.bs-name') || {}).textContent || '').trim() === name)[0];
+    const open = async (name) => {
+      const t = named(name);
+      if (!t) throw new Error('the Outline & Shadows card has no ' + name + ' tile to open');
       t.click(); await sleep(120);
       const h = document.querySelector('#inspector .bs-head .bs-title');
       return h ? h.textContent.trim() : '';
@@ -98127,14 +98137,14 @@
       FM.selectLayer(L.id); FM.refreshAll(); await sleep(120);
       FM.inspector.openCategory('border'); await sleep(250);
       // CONTROL: the front page shows both features lit, so both really are on
-      const lit = [].filter.call(document.querySelectorAll('#inspector .bs-tile.on'), t => /^(outline|shadow)$/.test(t.dataset.kind)).length;
+      const lit = ['Outline', 'Shadow'].filter(n => named(n) && named(n).classList.contains('on')).length;
       if (lit !== 2) throw new Error('CONTROL: with Outline and Shadow both on, ' + lit + ' of their tiles are lit — the fixture is not the one this checks');
-      if (await open('outline') !== 'Outline') throw new Error('the Outline tile did not open a page headed Outline');
+      if (await open('Outline') !== 'Outline') throw new Error('the Outline tile did not open a page headed Outline');
       const o = btnTexts();
       if (o.indexOf('Inside') < 0) throw new Error('the Outline page has no Position row (Inside / Center / Outside): ' + o.join(', '));
       if (o.indexOf('Soft') >= 0 || o.indexOf('Drop') >= 0) throw new Error('the Outline page also carries Shadow’s Style row (Soft / Drop) — two features’ rows run on as one column again (queue 564)');
       document.querySelector('#inspector .bs-back').click(); await sleep(120);
-      if (await open('shadow') !== 'Shadow') throw new Error('the Shadow tile did not open a page headed Shadow');
+      if (await open('Shadow') !== 'Shadow') throw new Error('the Shadow tile did not open a page headed Shadow');
       const s = btnTexts();
       if (s.indexOf('Soft') < 0) throw new Error('the Shadow page has no Style row (Soft / Drop): ' + s.join(', '));
       if (s.indexOf('Inside') >= 0) throw new Error('the Shadow page also carries Outline’s Position row — two features at once');
@@ -166599,8 +166609,16 @@
       if (!row) throw new Error('CONTROL: no ' + label + ' row for ' + cls);
       return row.querySelector(cls);
     };
-    const check = function (category, label, cls, prop) {
+    /* page: #1243 F7 (review R2) — Outline & Shadows shows one feature's rows at a time, so its Size / Color live on the Outline
+       page and Start on the Trim path page: open the card on its tiles, then tap that feature's tile, as he would. */
+    const check = function (category, label, cls, prop, page) {
+      if (page) FM._bsPage = null;
       FM.time = 3; FM.inspector.openCategory(category);
+      if (page) {
+        const t = [].filter.call(document.querySelectorAll('#inspector .bs-tile'), function (x) { return ((x.querySelector('.bs-name') || {}).textContent || '').trim() === page; })[0];
+        if (!t) throw new Error('CONTROL: the ' + category + ' card has no ' + page + ' tile to open');
+        t.click();
+      }
       let b = rowButton(label, cls);
       if (b.textContent !== '◆' || FM.isAnimated(prop())) throw new Error('CONTROL: ' + label + ' did not start as a static diamond');
       if (b.getAttribute('aria-label') !== 'Animate ' + label) throw new Error(label + ' does not announce Animate');
@@ -166617,9 +166635,9 @@
       L.trimPath = { enabled: true, start: 0, end: 1, offset: 0 };
       const fx = FM.fxRegistry.makeInstance('blur'); fx._expanded = true; L.effects = [fx];
       check('effects', 'Radius', '.fx-kf', function () { return fx.params.radius; });
-      check('border', 'Size', '.fx-kf', function () { return L.stroke.width; });
-      check('border', 'Start', '.fx-kf', function () { return L.trimPath.start; });
-      check('border', 'Color', '.fx-kf', function () { return L.stroke.color; });
+      check('border', 'Size', '.fx-kf', function () { return L.stroke.width; }, 'Outline');
+      check('border', 'Start', '.fx-kf', function () { return L.trimPath.start; }, 'Trim path');
+      check('border', 'Color', '.fx-kf', function () { return L.stroke.color; }, 'Outline');
       check('blend', 'Opacity', '.kf-btn', function () { return L.transform.opacity; });
       const mask = FM.masks.make('add'); mask.path = [[0, 0], [80, 0], [80, 80]]; mask._expanded = true;
       L.masks = [mask];
@@ -166655,6 +166673,7 @@
       diamonds('volume', '.mt-kf', 'Volume');
       diamonds('speed', '.mt-kf', 'Speed');
     } finally {
+      FM._bsPage = null;
       FM.playing = playing; FM._mtMode = mtMode;
       if (audioReport === null) localStorage.removeItem('fm.lastAudioReport'); else localStorage.setItem('fm.lastAudioReport', audioReport);
       if (FM.pointEdit && FM.pointEdit.isActive()) FM.pointEdit.stop();
@@ -168298,6 +168317,7 @@
         if (!(+getComputedStyle(edge).opacity < 0.05)) throw new Error('with the menu fully open the lit edge still shows (' + getComputedStyle(edge).opacity + ') — it hands over to the menu’s own top edge');
         // CLOSE: the SAME animation, backwards
         list.forEach(function (x) { x.finish(); });
+        await sleep(STRETCH1084 + 60);   // review R7: the menu LANDS (its reveal mask comes off) before it is closed, as his would
         FM.mobile.closeAdd();
         if (sheet.classList.contains('open') || document.body.classList.contains('add-open')) throw new Error('closing left the menu marked open');
         const s = clipAnim1084(sheet);
@@ -168309,6 +168329,8 @@
         // 40% INTO THE CLOSE the menu is being covered again from the bottom up, while the shape is still most of the menu
         seek1084(back, 0.6 * D);
         const kids = [].slice.call(sheet.children);
+        const bareK = kids.filter(function (k) { const cs = getComputedStyle(k); return !/gradient/.test(String(cs.maskImage || '') + ' ' + String(cs.webkitMaskImage || '')); });
+        if (bareK.length) throw new Error('40% into the close part of the menu (' + bareK.map(function (k) { return k.id || k.className; }).join(', ') + ') carries no mask, so the reveal running back covers nothing — it is put back on for the close');
         const open6 = kids.filter(function (k) { return !(maskY1084(k) > 1); });
         if (open6.length) throw new Error('40% into the close part of the menu (' + open6.map(function (k) { return (k.id || k.className) + ' ' + maskY1084(k); }).join(', ') + ') is still fully uncovered — #1243 G8: the reveal runs back, covering the menu behind the falling edge');
         const q6 = inset1084(sheet);
@@ -208826,7 +208848,7 @@
     const q = (s) => document.querySelector('#inspector ' + s);
     const title = () => { const t = q('.bs-head .bs-title'); return t ? t.textContent.trim() : ''; };
     const btns = () => [].map.call(document.querySelectorAll('#inspector .bs-page-rows button'), b => (b.textContent || '').trim());
-    const tile = (k) => attached(q('.bs-tile[data-kind="' + k + '"]'), 'the ' + k + ' tile');
+    const tile = (name) => attached([].filter.call(document.querySelectorAll('#inspector .bs-tile'), t => ((t.querySelector('.bs-name') || {}).textContent || '').trim() === name)[0], 'the ' + name + ' tile');   // by its words, as #610 and 780 find them
     const sw = (k) => attached(q('.bs-switch .bs-sw[aria-label^="' + k + '"]'), 'the ' + k + ' button in the switcher row');
     try {
       await atPhoneWidth(async function () {
@@ -208837,8 +208859,8 @@
           FM.inspector.openCategory('border'); await sleep(200);
           const tiles = document.querySelectorAll('#inspector .bs-tile');
           if (tiles.length !== 5) throw new Error('setup: the shape’s Outline & Shadows card shows ' + tiles.length + ' tiles, not five');
-          if (!tile('outline').classList.contains('on') || !tile('shadow').classList.contains('on')) throw new Error('CONTROL: with Outline and Shadow both on the tiles do not light both, so the fixture is not the one this checks');
-          tile('shadow').click(); await sleep(150);
+          if (!tile('Outline').classList.contains('on') || !tile('Shadow').classList.contains('on')) throw new Error('CONTROL: with Outline and Shadow both on the tiles do not light both, so the fixture is not the one this checks');
+          tile('Shadow').click(); await sleep(150);
           if (title() !== 'Shadow') throw new Error('tapping the Shadow tile did not open a page headed Shadow (header: ‘' + title() + '’; Shadow is now ' + (L.shadow.enabled ? 'on' : 'off') + ') — his words: "when you actually press on one it opens up that menu and then has a back button"');
           const s = btns();
           if (s.indexOf('Soft') < 0 || s.indexOf('Drop') < 0) throw new Error('the Shadow page does not carry Shadow’s Style row: ' + s.join(', '));
@@ -208870,7 +208892,7 @@
           // and at 1280 the inspector column carries the same structure
           await atWideWidth(async function () {
             FM.inspector.openCategory('border'); await sleep(200);
-            tile('shadow').click(); await sleep(150);
+            tile('Shadow').click(); await sleep(150);
             if (title() !== 'Shadow') throw new Error('at 1280 the Shadow tile did not open a page headed Shadow (‘' + title() + '’)');
             if (document.querySelectorAll('#inspector .bs-switch .bs-sw').length !== 5) throw new Error('at 1280 the Shadow page has no five-button switcher row');
             if (btns().indexOf('Inside') >= 0) throw new Error('at 1280 the Shadow page also carries Outline’s rows');
@@ -208887,10 +208909,13 @@
      Proves at 380, with a shape selected (js/mobile.js fltApply, js/inspector.js openFxTab): Add effect → Filters opens the tab
      with the sheet's top on the sheet line (the top of the play row, F10's line); from the Effects card's own tab it opens small,
      at the docked top; a scroll past 24 px grows it to the line, and back at the top it shrinks to the docked top; leaving the tab
-     re-docks it. Every reading is taken with the sheet's transition finished (so a runner that fires no frames reads the end).
+     re-docks it. The review's three (R3, R4, R5): small with a filter picked, the Add bar is on screen (it used to ride the
+     lowering below the bottom edge); a pull down on the small sheet starts from where it rests (it used to jump up by the drop);
+     deselecting on the tab takes the Filters dock down with the sheet, and the next selection slides up with its motion on.
+     Every reading is taken with the sheet's transition finished (so a runner that fires no frames reads the end).
      CONTROLS: the docked top is well below the line (the two heights differ), and at 1280 the inspector column does not move.
      FAILS BEFORE #1243 F9 by its own sentence: opened from Add effect, Filters starts at the docked top. */
-  test('1243 F9 · on a phone, Filters opened from Add effect starts grown to the play row, from the Effects card it starts small, a swipe down grows it to the play row and back at the top it shrinks, and leaving it re-docks (CONTROLS: the docked top is lower, and at 1280 nothing moves)', { item: '1243', budgetMs: 40000 }, async function () {
+  test('1243 F9 · on a phone, Filters opened from Add effect starts grown to the play row, from the Effects card it starts small, a swipe down grows it to the play row and back at the top it shrinks, while small its Add bar stays on screen and a pull down follows the finger from where it rests, and leaving it or deselecting re-docks it (CONTROLS: the docked top is lower, and at 1280 nothing moves)', { item: '1243', budgetMs: 40000 }, async function () {
     const realMount = FM.fxThumbs && FM.fxThumbs.mountFilter, realMountFx = FM.fxThumbs && FM.fxThumbs.mount;
     if (FM.fxThumbs) { FM.fxThumbs.mountFilter = function () {}; FM.fxThumbs.mount = function () {}; }   // LOOP rule 17: no thumbnail queue left behind
     const ip = document.getElementById('inspector-panel');
@@ -208909,7 +208934,7 @@
           const fb = attached(mode('#fx-browser', 'Filters'), 'the Filters tab in the Add effect browser');
           fb.click();
           let top = await settled(350);
-          if (!(FM.inspector.filtersOpen && FM.inspector.filtersOpen())) throw new Error('tapping Filters in the Add effect browser did not open the Filters tab');
+          if (!document.querySelector('#inspector .flt-top')) throw new Error('tapping Filters in the Add effect browser did not open the Filters tab');   // read off the panel (review R8), not a seam
           if (Math.abs(top - line) > 1) throw new Error('opened from Add effect, the Filters sheet starts at ' + Math.round(top) + ' px, not grown to the play row at ' + line + ' px (docked: ' + dock + ') — his words: "from add effect → filters… automatically have it expanded"');
           // 2. From the Effects card's own tab: small
           attached(mode('#inspector', 'Visual'), 'the Effects card’s Visual tab').click();
@@ -208926,10 +208951,43 @@
           ip.scrollTop = 0; ip.dispatchEvent(new Event('scroll'));
           top = await settled(200);
           if (Math.abs(top - dock) > 1) throw new Error('scrolled back to the top, the Filters sheet stays at ' + Math.round(top) + ' px instead of shrinking to ' + dock + ' — his words: "swipe back up to the top… it shrinks again"');
+          // 4b. (review R3) small, a filter picked: its Add bar is on screen, not carried below the bottom edge by the lowering
+          const ftile = attached(document.querySelector('#inspector .flt-tile[data-fltid]'), 'a filter tile');
+          ftile.click(); await sleep(80);
+          const cbar = attached(document.querySelector('#inspector .flt-commit'), 'the Filters Add bar');
+          cbar.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} });
+          const cr = cbar.getBoundingClientRect();
+          if (cbar.classList.contains('hidden') || !(cr.height > 20)) throw new Error('CONTROL: picking a filter did not bring up its Add bar (' + cbar.className + ', ' + Math.round(cr.height) + ' px tall), so where it sits measures nothing');
+          if (cr.bottom > innerHeight + 0.5) throw new Error('with the Filters sheet small and a filter picked, its Add bar runs ' + Math.round(cr.top) + '–' + Math.round(cr.bottom) + ' px on a ' + innerHeight + ' px screen — below the bottom edge, so there is no way to add the pick');
+          attached(document.querySelector('#inspector .fxb-commit-clear'), 'the Add bar’s Clear').click(); await sleep(60);
+          ip.scrollTop = 0; ip.dispatchEvent(new Event('scroll'));
+          top = await settled(150);
+          if (Math.abs(top - dock) > 1) throw new Error('setup: after Clear the Filters sheet is at ' + Math.round(top) + ' px, not small at ' + dock);
+          // 4c. (review R4) a pull down on the small sheet follows the finger from where it rests, never jumping up by the drop first
+          const pullOn = attached(document.querySelector('#inspector .fxmode'), 'the Filters sheet’s tab row');
+          const pev = (type, y) => pullOn.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 9243, isPrimary: true, pointerType: 'touch', clientX: 190, clientY: y, buttons: type === 'pointercancel' ? 0 : 1 }));
+          const y0 = Math.round(dock) + 30;
+          pev('pointerdown', y0); pev('pointermove', y0 + 20);
+          const pulled = ip.getBoundingClientRect().top, held = ip.style.transform;
+          pev('pointercancel', y0 + 20);   // a cancel snaps back and never dismisses
+          top = await settled(350);
+          if (!held) throw new Error('CONTROL: the pull on the Filters sheet never armed (no inline transform), so where it went measures nothing');
+          if (Math.abs(pulled - (dock + 20)) > 2) throw new Error('pulled 20 px down, the small Filters sheet’s top is at ' + Math.round(pulled) + ' px, not ' + Math.round(dock + 20) + ' — it jumped from where it rests (' + Math.round(dock) + ') before following the finger');
+          if (Math.abs(top - dock) > 1 || !L || FM.scene.selectedId !== L.id) throw new Error('setup: the cancelled pull did not hand the Filters sheet back where it rests (' + Math.round(top) + ' px, selected ' + FM.scene.selectedId + ')');
           // 5. leaving the tab re-docks it
           attached(mode('#inspector', 'Visual'), 'the Visual tab').click();
           top = await settled(200);
           if (ip.classList.contains('insp-flt') || Math.abs(top - dock) > 1) throw new Error('leaving Filters left the sheet at ' + Math.round(top) + ' px (' + ip.className + ')');
+          // 6. (review R5) deselecting on the Filters tab takes its state down with the sheet, and the next selection slides up as ever
+          attached(mode('#inspector', 'Filters'), 'the Effects card’s Filters tab').click();
+          await settled(200);
+          if (!ip.classList.contains('insp-flt')) throw new Error('CONTROL: back on the Filters tab the sheet is not in its Filters dock, so nothing here is carried');
+          FM.selectLayer(null); await settled(120);
+          if (ip.classList.contains('insp-flt') || ip.style.getPropertyValue('--insp-drop')) throw new Error('with nothing selected the closed sheet still carries the Filters dock (' + ip.className + ')');
+          FM.selectLayer(L.id);
+          const slide = ip.style.transition;
+          await settled(300);
+          if (slide === 'none') throw new Error('selecting a layer after deselecting on Filters brought the sheet up with its motion switched off — it appeared instead of sliding up');
           // CONTROL at 1280: the inspector column does not move
           await atWideWidth(async function () {
             FM.inspector.openCategory('effects'); await sleep(200);
@@ -208989,6 +209047,8 @@
         const kids = [].slice.call(sheet.children);
         const shown0 = kids.filter(function (k) { return !(maskY1084(k) >= 74.5); });
         if (shown0.length) throw new Error('at the start part of the menu is already uncovered (' + shown0.map(function (k) { return k.id || k.className; }).join(', ') + ')');
+        const masked = function (k) { const cs = getComputedStyle(k); return /gradient/.test(String(cs.maskImage || '') + ' ' + String(cs.webkitMaskImage || '')); };
+        if (!kids.length || !kids.every(masked)) throw new Error('CONTROL: while it grows the menu’s contents carry no reveal mask, so the probe for one left behind would see nothing');
         const rowC = rr.top + rr.height / 2;
         seek1084(list, D / 2);
         const kr = skin.getBoundingClientRect(), skinC = kr.top + kr.height / 2;
@@ -209001,6 +209061,8 @@
         list.forEach(function (x) { try { x.finish(); } catch (e) {} });
         await sleep(STRETCH1084 + 120);
         if (getComputedStyle(c.rowNow()).visibility === 'hidden') throw new Error('the stretch has finished and the Tap to add a layer row is still hidden');
+        const held = kids.filter(masked);
+        if (held.length) throw new Error('the menu has landed and its contents are still masked (' + held.map(function (k) { return k.id || k.className; }).join(', ') + ') — the reveal’s mask is for the 300 ms it runs, not for as long as the menu stays open');
         await shutRow1084(c);
         // CONTROL: less motion — today's menu, the row left alone
         window.matchMedia = function (qq) {

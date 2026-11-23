@@ -4436,7 +4436,13 @@ body.home-open #toast { z-index: 205; }
   #inspector-panel.open.insp-flt:has(.flt-top) { transform: translateY(var(--insp-drop, 0px)); transition: transform 280ms cubic-bezier(.2, .8, .2, 1), box-shadow .22s ease; }
   #inspector-panel.insp-flt .fxmode { position: sticky; top: 0; z-index: 3; background: var(--panel); }
   #inspector-panel.insp-flt .flt-top { position: sticky; top: var(--flt-tabs-h, 40px); z-index: 3; background: var(--panel); }
-  @media (prefers-reduced-motion: reduce) { #inspector-panel.open.insp-flt:has(.flt-top) { transition: none; } }
+  /* review R3: the lowered sheet's box runs --insp-drop past the screen's bottom edge, so the sticky Add bar rides that much higher
+     (keeping it on screen, in step with the rise) and the list keeps that much room at its end, so its last rows can still be
+     reached while it is small. --insp-drop-max is the full drop (js/mobile.js fltApply), constant either way, so growing never
+     changes how far the list scrolls. */
+  #inspector-panel.insp-flt .flt-commit { bottom: var(--insp-drop, 0px); transition: bottom 280ms cubic-bezier(.2, .8, .2, 1); }
+  #inspector-panel.insp-flt > #inspector { padding-bottom: var(--insp-drop-max, 0px); }
+  @media (prefers-reduced-motion: reduce) { #inspector-panel.open.insp-flt:has(.flt-top), #inspector-panel.insp-flt .flt-commit { transition: none; } }
 
   /* grab/close handle pinned to the top of the sheet — tap to dismiss */
   #insp-grab {
