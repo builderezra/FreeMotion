@@ -129814,7 +129814,7 @@
     return pid;
   }
 
-  test('1258 · with nothing remembered, New project opens on 60 fps, its size line says 60 fps and Create makes a 60 fps project (CONTROL: a remembered 24 opens on 24)', { item: '1258', budgetMs: 90000 }, async function () {
+  test('1258 · with nothing remembered, New project opens on 60 fps, its size line says 60 fps, Custom… starts its box on 60, and Create makes a 60 fps project (CONTROL: a remembered 24 opens on 24)', { item: '1258', budgetMs: 90000 }, async function () {
     const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
     const keep = { a: ls1258(K1258), b: ls1258(F1258) };
     try {
@@ -129830,6 +129830,18 @@
       const r = await open1258('nothing remembered');
       if (r.sel !== '60') throw new Error('with nothing remembered the New project dialog opens with the frame rate on ' + r.sel + ', not 60 fps - his words: by default, 60 FPS should be selected');
       if (r.fps !== 60) throw new Error('with nothing remembered the size line says ' + r.said + ', not 60 fps');
+      /* Custom… starts its box on the default too, and an emptied box still means 60 (review F1) */
+      const fsel = document.getElementById('hm-new-fps'), fbox = document.getElementById('hm-new-fps-num');
+      const sizeSays = function () { return (document.getElementById('hm-new-size') || {}).textContent || ''; };
+      fsel.value = 'custom'; fsel.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(80);
+      if (String(fbox.value) !== '60') throw new Error('with nothing remembered, picking Custom… puts ' + fbox.value + ' in the frame-rate box, not 60');
+      if (!/(^|\D)60\s*fps/.test(sizeSays())) throw new Error('with Custom… picked and the box untouched the size line says ' + sizeSays() + ', not 60 fps');
+      fbox.value = ''; fbox.dispatchEvent(new Event('input', { bubbles: true }));
+      await sleep(80);
+      if (!/(^|\D)60\s*fps/.test(sizeSays())) throw new Error('with the Custom… box emptied the size line says ' + sizeSays() + ', not the default 60 fps');
+      fsel.value = '60'; fsel.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(80);
       const pid = await create1258(made, 'nothing remembered');
       const card = FM.projects.list().find(function (p) { return p.id === pid; });
       if (!FM.scene.project || FM.scene.project.fps !== 60) throw new Error('Create on the untouched dialog made a project at ' + (FM.scene.project && FM.scene.project.fps) + ' fps, not the 60 it showed');
