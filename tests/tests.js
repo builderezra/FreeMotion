@@ -59674,7 +59674,11 @@
       const a = aRoot.getBoundingClientRect(), c = cv.getBoundingClientRect();
       const vpH = document.documentElement.clientHeight;
       if (a.top < 40) throw new Error('the audio browser starts at y=' + Math.round(a.top) + ' — it is still covering the canvas');
-      if (Math.abs(a.top - c.bottom) > 2) throw new Error('the audio sheet starts at y=' + Math.round(a.top) + ' but the canvas ends at y=' + Math.round(c.bottom) + ' — it is supposed to go right up to the canvas');
+      /* #1243 F10 reversed "right up to the canvas": every effects sheet starts at the top of the play row ("covering that row…
+         is where… the visual menu should stop… And the filters menu the same"), and never over the canvas */
+      const tr = document.getElementById('transport').getBoundingClientRect().top;
+      if (Math.abs(a.top - tr) > 2) throw new Error('the audio sheet starts at y=' + Math.round(a.top) + ' but the play row starts at y=' + Math.round(tr) + ' — #1243 F10: it stops at the play row');
+      if (a.top < c.bottom - 1) throw new Error('the audio sheet (top ' + Math.round(a.top) + ') covers the canvas (bottom ' + Math.round(c.bottom) + ')');
       if (Math.abs(a.bottom - vpH) > 2) throw new Error('the audio sheet stops at ' + Math.round(a.bottom) + ' in a ' + vpH + 'px viewport — it should cover everything below the canvas');
       /* The header must not keep the status-bar inset it needs when it IS the top of the screen. Read
          as a number rather than trusted: env(safe-area-inset-top) is 0 in this browser, so the check
@@ -59811,7 +59815,10 @@
       if (!root || root.classList.contains('hidden')) throw new Error('the effects browser did not open');
       if (!root.classList.contains('fxb-sheet')) throw new Error('at 390px the browser is still the full-screen dialog — it is supposed to become a sheet');
       const r = root.getBoundingClientRect(), c = cv.getBoundingClientRect();
-      if (Math.abs(r.top - c.bottom) > 2) throw new Error('the sheet starts at y=' + Math.round(r.top) + ' but the canvas ends at y=' + Math.round(c.bottom) + ' — it is supposed to go right up to the canvas');
+      /* #1243 F10 reversed "right up to the canvas": the sheet starts at the top of the play row, below the canvas */
+      const tr = document.getElementById('transport').getBoundingClientRect().top;
+      if (Math.abs(r.top - tr) > 2) throw new Error('the sheet starts at y=' + Math.round(r.top) + ' but the play row starts at y=' + Math.round(tr) + ' — #1243 F10: "covering that row… is where… the visual menu should stop"');
+      if (r.top < c.bottom - 1) throw new Error('the sheet (top ' + Math.round(r.top) + ') covers the canvas (bottom ' + Math.round(c.bottom) + ')');
       /* Against the LAYOUT viewport, not `innerHeight`. Inside the suite's iframe the two disagree —
          the frame is styled 844 tall while `innerHeight` still reported 760 — so the first version of
          this assertion failed on correct code and, worse, fired during a mutation check and made a
