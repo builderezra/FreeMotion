@@ -4428,6 +4428,15 @@ body.home-open #toast { z-index: 205; }
      outranks that rule's (0,2,1) and any future one shaped like it. The transition above now carries
      box-shadow too, so it fades over the same 220ms as the slide instead of snapping off. */
   #inspector-panel:not(.open) { box-shadow: none; }
+  /* #1243 F9 — "When you start to swipe up… the filters menu should then expand… swipe back up to the top… it shrinks again".
+     On the Filters tab the sheet is laid out from the sheet line and lowered to its docked top by --insp-drop (js/mobile.js
+     fltApply), so growing and shrinking is this one transform: 280 ms, ease-out. Only where the panel really holds Full's
+     Filters tab (:has its search row), so no other panel in this sheet can ever be lowered by it. The tab row and the search
+     ride the top edge, so the move reads as one panel rising. */
+  #inspector-panel.open.insp-flt:has(.flt-top) { transform: translateY(var(--insp-drop, 0px)); transition: transform 280ms cubic-bezier(.2, .8, .2, 1), box-shadow .22s ease; }
+  #inspector-panel.insp-flt .fxmode { position: sticky; top: 0; z-index: 3; background: var(--panel); }
+  #inspector-panel.insp-flt .flt-top { position: sticky; top: var(--flt-tabs-h, 40px); z-index: 3; background: var(--panel); }
+  @media (prefers-reduced-motion: reduce) { #inspector-panel.open.insp-flt:has(.flt-top) { transition: none; } }
 
   /* grab/close handle pinned to the top of the sheet — tap to dismiss */
   #insp-grab {
@@ -10893,6 +10902,47 @@ body:has(#el-browser:not(.hidden)) #opt-bar { display: none; }
   box-shadow: 0 0 0 2px var(--panel-2);
 }
 @media (prefers-reduced-motion: reduce) { .bs-tile { transition: none; } }
+/* ---- #1243 F7: ONE FEATURE'S PAGE AT A TIME ------------------------------------------------------
+   His words: "when you actually press on one it opens up that menu and then has a back button… top… say what menu you're in…
+   thumb can easily reach". The header (‹ back, the name, the on/off switch) holds the top of the panel as it scrolls, and the
+   switcher row of the same pictures holds its bottom, so the next feature is one thumb tap away on any length of page. The
+   card's own ‹ row is the header's job while a page is open, so there is one back row, not two. */
+#inspector:has(> .cat-body > .bs-head) > .cat-back { display: none; }
+.bs-head {
+  position: sticky; top: 0; z-index: 3; display: grid; grid-template-columns: 44px 1fr 56px; align-items: center;
+  min-height: 46px; margin: 0 0 6px; background: var(--panel); border-bottom: 1px solid var(--line-soft);
+}
+.bs-back {
+  width: 44px; height: 44px; border: 0; background: none; color: var(--text); font: inherit; font-size: 26px; line-height: 1;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.bs-title { text-align: center; font-weight: 600; font-size: 15px; color: var(--text); }
+.bs-onoff {
+  justify-self: end; position: relative; width: 46px; height: 28px; margin-right: 4px; padding: 0; border-radius: 999px;
+  border: 1px solid var(--line); background: var(--panel-3, var(--panel-2)); cursor: pointer; transition: background .16s ease, border-color .16s ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.bs-onoff::before { content: ''; position: absolute; left: -9px; right: -5px; top: -9px; bottom: -9px; }   /* a 60 × 46 touch target */
+.bs-knob { position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--text-dim); transition: transform .16s ease, background .16s ease; }
+.bs-onoff.on { background: var(--accent-soft); border-color: var(--accent); }
+.bs-onoff.on .bs-knob { transform: translateX(18px); background: var(--accent); }
+.bs-onoff:focus-visible, .bs-back:focus-visible, .bs-sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.bs-rows-off { opacity: .42; filter: saturate(.4); }
+.bs-switch {
+  position: sticky; bottom: 0; z-index: 3; display: flex; gap: 6px; margin: 12px 0 0; padding: 8px 0 calc(8px + env(safe-area-inset-bottom, 0px));
+  background: var(--panel); border-top: 1px solid var(--line-soft);
+}
+.bs-sw {
+  position: relative; flex: 1 1 0; min-width: 44px; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; padding: 4px 2px; border: 1px solid transparent; border-radius: 10px; background: none; color: var(--text-dim);
+  font: inherit; font-size: 10.5px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.bs-sw .bs-art { width: 34px; height: 22px; }
+.bs-sw-name { line-height: 1.1; white-space: nowrap; }
+.bs-sw.lit::after { content: ''; position: absolute; top: 5px; right: 7px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.bs-sw.cur { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+.bs-sw.cur .bs-sw-name { color: var(--text); font-weight: 600; }
+@media (prefers-reduced-motion: reduce) { .bs-onoff, .bs-knob { transition: none; } }
 
 /* ---- INSIDE EDIT GROUP, THE NESTING INDENT SAYS NOTHING (queue 632) ---------------------------
    Ezra: "Inside groups the ui is cooked on the left it has heaps of wasted space".

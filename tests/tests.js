@@ -3761,6 +3761,8 @@
       if (!L2.shadow) throw new Error('opening the card did not create a shadow to read');
       if ((L2.shadow.dx || 0) !== 0 || (L2.shadow.dy || 0) !== 0) throw new Error('a brand-new shadow still starts offset (' + L2.shadow.dx + ',' + L2.shadow.dy + '), so the plain shadow is still the one you have to go and find');
       L2.shadow.enabled = true; FM.inspector.refresh(); FM.inspector.openCategory('border');
+      /* #1243 F7: a tile opens its feature's page — the Shadow rows live on the Shadow page (the real tap, not a seam) */
+      attached(document.querySelector('#inspector .bs-tile[data-kind="shadow"]'), 'the Shadow tile').click();
       const rows = [].slice.call(document.querySelectorAll('#inspector .prop-row, .insp-body .prop-row'));
       const styleRow = rows.filter(r => /^Style$/.test(((r.querySelector('label') || {}).textContent || '').trim()))[0];
       if (!styleRow) throw new Error('no Style row on an enabled shadow — nothing tells you the other kind exists (rows: ' + rows.map(r => ((r.querySelector('label') || {}).textContent || '').trim()).join(', ').slice(0, 160) + ')');
@@ -3784,6 +3786,7 @@
          SELECTED with the Outline & Shadows card open. Thirty tests later, 699 narrowed to phone width and its control
          swipe on a clip moved nothing one run in two: the stale selection had the phone treating the timeline as a
          solo view with a docked sheet racing the swipe. Bisected with ?after=&upto= across 65 tests. */
+      FM._bsPage = null;
       FM.scene.layers = layers0;
       try { FM.selectLayer(null); } catch (e) {}
       if (FM.refreshAll) FM.refreshAll();
@@ -7374,84 +7377,75 @@
     } finally { _isoK.put(); }
   });
 
-  test('528: the effects sheet re-pins to the canvas when the canvas moves', { item: '528' }, async function () {
-    /* Queue 528. Ezra: "Effects menu could pop up slightly higher to remove this slight gap."
-       ⚠️ THE FIRST PASS COULD NOT REPRODUCE IT, and that is the interesting part. `--fxb-top` is the
-       canvas's measured bottom, so AT THE MOMENT OF OPENING it is exact — measured at 380px and at his
-       own 440px, on 1:1, 9:16, 16:9 and 4:5, the sheet sat 0.17-0.35px under the canvas. Rounding, not a
-       gap. Calling it "already fixed" there would have been wrong.
-       It appears when the canvas MOVES while the sheet is already up, because the pin was computed once
-       and never again. MEASURED before the fix: open on a 9:16 project, switch it to 16:9, and the canvas
-       bottom rises from 424.8 to 364.5 while the sheet stays at 425 — a 60.5px gap. A window `resize` did
-       not fix it either, so a rotate or the keyboard appearing strands it the same way.
-       ⚠️ IT DRIVES `FM.fxSheet` DIRECTLY rather than opening the browser, and that is deliberate. Opening
-       it starts the thumbnail machinery, and an earlier version of this test did exactly that: tiles
-       generated inside its phone-width block outlived it and the NEXT test that compares a tile against
-       its subject reported six effects as "indistinguishable" — a failure with nothing wrong in the
-       effects at all. `FM.fxSheet` is the seam queue 300 created for precisely this ("the one function
-       every browser calls"), it is the only code this fix touches, and it drags nothing else in.
-       So the assertion is on `--fxb-top`, the value the fix writes, rather than on a painted rect — which
-       also means it does not depend on the sheet being visible. */
-    const root = document.getElementById('fx-browser');
+  /* #1243 F10 REVERSES QUEUE 277/528 ON A PHONE. This was '528: the effects sheet re-pins to the canvas when the canvas moves',
+     which pinned the sheet's top to the canvas bottom — the rule he has now turned round. His words: "the visual menu… will open
+     up to wherever… the bottom of the canvas is… I hate it… it covers the entire… bottom area… covering that row [the switch /
+     play / jump / undo row] is where… the visual menu should stop… And the filters menu the same."
+     Queue 528's half that still holds is kept: the pin is RE-MEASURED when what it is pinned to moves (control 3 is now "the
+     play row moved", by a shorter screen), and the watcher goes with the sheet.
+     ⚠️ IT STILL DRIVES `FM.fxSheet` DIRECTLY rather than opening the browser, as 528 did and for its reason: opening it starts
+     the thumbnail machinery, whose tiles outlived the phone-width block and failed a later test. FM.fxSheet is the one
+     function every browser calls (queue 300), so #fx-browser and #afx-browser are both held to it here.
+     FAILS BEFORE #1243 F10 by its own sentence: on 9:16 the sheet starts at the canvas bottom, short of the play row. */
+  test('528 · #1243 F10: on a phone the effects sheet stops at the play row — its top is the transport row’s top on a 9:16, a 1:1 and a 16:9 project (below the canvas on 16:9), the audio browser’s too, and it re-pins when the row moves (CONTROL: at 1280 it still sits in the inspector column)', { item: '528', budgetMs: 30000 }, async function () {
+    const root = document.getElementById('fx-browser'), aroot = document.getElementById('afx-browser');
     if (!root) throw new Error('#fx-browser is not in the DOM, so there is no sheet root to place');
-    if (typeof FM.fxSheet !== 'function') throw new Error('FM.fxSheet is missing — that is the seam this fix lives in');
+    if (typeof FM.fxSheet !== 'function') throw new Error('FM.fxSheet is missing — that is the seam this lives in');
     const P = FM.scene.project;
-    const saved = { w: P.width, h: P.height, wasSheet: root.classList.contains('fxb-sheet') };
-    const pinned = () => {
-      const v = root.style.getPropertyValue('--fxb-top');
-      return v ? parseFloat(v) : null;
-    };
-    const canvasBottom = () => {
-      const cv = document.getElementById('preview');
-      if (!cv) throw new Error('no #preview canvas to pin against');
-      return cv.getBoundingClientRect().bottom;
-    };
+    const saved = { w: P.width, h: P.height, wasSheet: root.classList.contains('fxb-sheet'), aWas: !!(aroot && aroot.classList.contains('fxb-sheet')) };
+    const pinned = (r) => { const v = (r || root).style.getPropertyValue('--fxb-top'); return v ? parseFloat(v) : null; };
+    const rowTop = () => { const t = document.getElementById('transport'); if (!t) throw new Error('no #transport (the play row) to stop at'); return t.getBoundingClientRect().top; };
+    const canvasBottom = () => { const cv = document.getElementById('preview'); if (!cv) throw new Error('no #preview canvas'); return cv.getBoundingClientRect().bottom; };
+    const aspect = async (w, h) => { P.width = w; P.height = h; if (FM.resizeCanvas) FM.resizeCanvas(); if (FM.refreshAll) FM.refreshAll(); await sleep(260); };
     try {
-      return await atPhoneWidth(async function () {
-        P.width = 1080; P.height = 1920;
-        if (FM.resizeCanvas) FM.resizeCanvas();
-        if (FM.refreshAll) FM.refreshAll();
-        await sleep(250);
-
-        FM.fxSheet(root, true);
-        await sleep(120);
-        /* CONTROL 1: the phone branch, not the desktop one. Queue 397 pins the sheet to the INSPECTOR
-           column on PC, where its top has nothing to do with the canvas — measuring that would compare
-           two unrelated boxes, which is exactly how the first draft of this test reported a phantom
-           21.13px "gap". */
-        if (root.classList.contains('fxb-in-inspector')) throw new Error('the sheet placed itself in INSPECTOR mode at phone width — its top is the inspector rect there, so the canvas comparison below would be meaningless');
-        const first = pinned(), firstBottom = canvasBottom();
-        // CONTROL 2: it placed at all.
-        if (first === null) throw new Error('--fxb-top was never set, so there is no pin to test');
-        if (first > firstBottom + 0.01) throw new Error('the sheet pinned to ' + first + ' with the canvas bottom at ' + firstBottom.toFixed(2) + ' — it already sits below the canvas the moment it is placed, which is queue 528 at rest');
-
-        // ---- MOVE THE CANVAS under the placed sheet. This is the whole bug.
-        P.width = 1920; P.height = 1080;
-        if (FM.resizeCanvas) FM.resizeCanvas();
-        if (FM.refreshAll) FM.refreshAll();
-        await sleep(500);
-        const secondBottom = canvasBottom(), second = pinned();
-        /* CONTROL 3, and without it this test is worthless: the canvas has to have actually MOVED. If it
-           did not, "still pinned" is trivially true and would stay green with the re-measure deleted. */
-        if (Math.abs(secondBottom - firstBottom) < 8) throw new Error('the canvas bottom barely moved (' + firstBottom.toFixed(2) + ' → ' + secondBottom.toFixed(2) + '), so this fixture is not exercising the bug and the assertion below would pass for free');
-        if (second > secondBottom + 0.01) throw new Error('the canvas moved to ' + secondBottom.toFixed(2) + ' and the sheet stayed pinned at ' + second + ' — a ' + (second - secondBottom).toFixed(2) + 'px gap opened under the canvas. That is queue 528: the pin is set once and never re-measured.');
-
-        // …and it must survive a SECOND move, so the watcher is not a one-shot
-        P.width = 1080; P.height = 1350;
-        if (FM.resizeCanvas) FM.resizeCanvas();
-        if (FM.refreshAll) FM.refreshAll();
-        await sleep(500);
-        const thirdBottom = canvasBottom(), third = pinned();
-        if (third > thirdBottom + 0.01) throw new Error('a SECOND canvas move left a ' + (third - thirdBottom).toFixed(2) + 'px gap — the re-measure only fires once');
-
+      await atSize921(380, 700, async function () {
+        for (const a of [[1080, 1920, '9:16'], [1080, 1080, '1:1'], [1920, 1080, '16:9']]) {
+          await aspect(a[0], a[1]);
+          FM.fxSheet(root, true);
+          await sleep(140);
+          // CONTROL: the phone branch, not the PC one (queue 397 pins it to the inspector column there)
+          if (root.classList.contains('fxb-in-inspector')) throw new Error('setup: at a phone width the sheet placed itself in the inspector column, so its top says nothing about the play row');
+          const top = pinned(), tr = rowTop(), cb = canvasBottom();
+          if (top === null) throw new Error('--fxb-top was never set on a ' + a[2] + ' project, so there is no pin to test');
+          if (Math.abs(top - tr) > 1) throw new Error('on a ' + a[2] + ' project the effects sheet starts at ' + top + ' px, not at the top of the play row (' + tr.toFixed(1) + ' px; the canvas ends at ' + cb.toFixed(1) + ') — his words: "covering that row… is where… the visual menu should stop"');
+          if (a[2] === '16:9') {
+            // CONTROL: on a wide canvas the row is well below the canvas, so this fixture tells the two lines apart
+            if (!(top > cb + 8)) throw new Error('CONTROL: on 16:9 the sheet top (' + top + ') is not more than 8 px below the canvas bottom (' + cb.toFixed(1) + '), so this fixture cannot tell the play row from the canvas');
+            if (aroot) {
+              FM.fxSheet(aroot, true); await sleep(120);
+              const at = pinned(aroot);
+              if (at === null || Math.abs(at - tr) > 1) throw new Error('the AUDIO effects sheet starts at ' + at + ' px on 16:9, not at the play row (' + tr.toFixed(1) + ') — "And the filters menu the same": every effects sheet stops there');
+              FM.fxSheet(aroot, false);
+            }
+          }
+          FM.fxSheet(root, false);
+        }
+        // ---- THE ROW MOVES under a placed sheet (a shorter screen): the pin follows it (queue 528's half that stays)
+        FM.fxSheet(root, true); await sleep(140);
+        const before = rowTop(), fe = window.frameElement;
+        fe.style.height = '600px'; window.dispatchEvent(new Event('resize'));
+        await sleep(600);
+        const after = rowTop();
+        // CONTROL 3: the play row really moved, or "still pinned" would be true for free
+        if (Math.abs(after - before) < 8) throw new Error('CONTROL: the play row barely moved (' + before.toFixed(1) + ' → ' + after.toFixed(1) + ') when the screen got shorter, so this cannot see a stale pin');
+        if (Math.abs(pinned() - after) > 1) throw new Error('the play row moved to ' + after.toFixed(1) + ' and the sheet stayed at ' + pinned() + ' — the pin is set once and never re-measured (queue 528)');
         // ---- the watcher must not outlive the sheet
         FM.fxSheet(root, false);
         await sleep(120);
-        if (root._fxbRO || root._fxbUnwatch) throw new Error('leaving sheet mode left the resize watcher attached — it would keep re-placing a sheet that is not on screen for the rest of the session');
+        if (root._fxbRO || root._fxbUnwatch) throw new Error('leaving sheet mode left the resize watcher attached');
         if (root.style.getPropertyValue('--fxb-top')) throw new Error('--fxb-top survived leaving sheet mode');
-      }, 380);
+      });
+      // CONTROL at 1280: the PC browser still sits over the inspector column, unchanged by F10
+      await atWideWidth(async function () {
+        FM.fxSheet(root, true); await sleep(140);
+        const ip = document.getElementById('inspector-panel').getBoundingClientRect();
+        if (!root.classList.contains('fxb-in-inspector')) throw new Error('CONTROL: at 1280 the effects browser no longer sits in the inspector column (queue 397)');
+        if (Math.abs(pinned() - Math.round(ip.top)) > 1) throw new Error('CONTROL: at 1280 the browser’s top is ' + pinned() + ', not the inspector column’s ' + Math.round(ip.top));
+        FM.fxSheet(root, false);
+      }, 1280);
     } finally {
       try { FM.fxSheet(root, saved.wasSheet); } catch (e) {}
+      try { if (aroot) FM.fxSheet(aroot, saved.aWas); } catch (e) {}
       P.width = saved.w; P.height = saved.h;
       if (FM.resizeCanvas) FM.resizeCanvas();
       if (FM.refreshAll) FM.refreshAll();
@@ -83231,13 +83225,19 @@
          box tells you whether it is on. */
       const outline = tiles.filter(t => /^Outline$/.test(((t.querySelector('.bs-name') || {}).textContent || '').trim()))[0];
       if (outline.classList.contains('on')) throw new Error('Outline reads as ON before anything was turned on');
+      /* #1243 F7: the tile OPENS Outline's page and the page's switch turns it on; ‹ back shows the tile lit */
       outline.click();
+      const sw610 = document.querySelector('#inspector .bs-head .bs-onoff');
+      if (!sw610) throw new Error('tapping the Outline tile opened no page with an on/off switch (#1243 F7)');
+      sw610.click();
+      attached(document.querySelector('#inspector .bs-back'), 'the Outline page’s ‹ back').click();
       FM.inspector.refresh(); FM.inspector.openCategory('border');
       const after = [].slice.call(document.querySelectorAll('#inspector .bs-tile, .insp-body .bs-tile'))
         .filter(t => /^Outline$/.test(((t.querySelector('.bs-name') || {}).textContent || '').trim()))[0];
       if (!after || !after.classList.contains('on')) throw new Error('tapping the Outline tile did not turn it on — the tile is decorative');
       if (!(FM.scene.layers[0].stroke && FM.scene.layers[0].stroke.enabled)) throw new Error('the tile looks on but the layer has no outline — it is not wired to the property');
     } finally {
+      FM._bsPage = null;
       FM.scene.layers = layers0;
       if (FM.refreshAll) FM.refreshAll();
       if (FM.inspector) FM.inspector.refresh();
@@ -92558,6 +92558,8 @@
     const hasPosition = () => [].slice.call(document.querySelectorAll('#inspector label, .insp-body label, #inspector .seg-label, .insp-body .seg-label')).some(l => /^Position$/.test((l.textContent || '').trim()));
     const mk = (extra) => { const L = FM.makeLayer('shape', Object.assign({ x: 150, y: 150, shapeW: 120, shapeH: 120, fill: '#ff0000' }, extra)); L.start = 0; L.duration = 3; return L; };
     const openKinds = [['spiral', mk({ shape: 'spiral' })], ['open path', mk({ shape: 'path', closed: false, points: [[0.1, 0.1], [0.9, 0.5], [0.1, 0.9]] })]];
+    /* #1243 F7: the tile opens Outline's page; its switch is what turns the outline on */
+    const switchOn780 = (what) => { attached(document.querySelector('#inspector .bs-head .bs-onoff'), what + ': the Outline page’s on/off switch').click(); };
     try {
       for (const pair of openKinds) {
         const what = pair[0], L = pair[1];
@@ -92566,15 +92568,15 @@
         const tile = outlineTile();
         if (!tile) throw new Error('a ' + what + ' has no Outline tile in Outline & Shadows — the renderer borders it, so the toggle must be offered (v15.54 removed it)');
         if (tile.classList.contains('on')) throw new Error(what + ': Outline reads ON before anything was turned on');
-        tile.click(); FM.inspector.refresh(); FM.inspector.openCategory('border');
-        if (!(L.stroke && L.stroke.enabled)) throw new Error(what + ': tapping Outline did not set stroke.enabled');
+        tile.click(); switchOn780(what); FM.inspector.refresh(); FM.inspector.openCategory('border');
+        if (!(L.stroke && L.stroke.enabled)) throw new Error(what + ': turning Outline on did not set stroke.enabled');
         if (hasPosition()) throw new Error(what + ': the card offers Position, which the renderer ignores on an open kind');
       }
       // control: a closed shape still gets Position once its outline is on
       const R = mk({ shape: 'rect' }); FM.scene.layers.length = 0; FM.scene.layers.push(R);
       FM.selectLayer(R.id); FM.refreshAll(); FM.inspector.refresh(); FM.inspector.openCategory('border');
       const rt = outlineTile(); if (!rt) throw new Error('control: a rect lost its Outline tile');
-      rt.click(); FM.inspector.refresh(); FM.inspector.openCategory('border');
+      rt.click(); switchOn780('the rect'); FM.inspector.refresh(); FM.inspector.openCategory('border');
       if (!hasPosition()) throw new Error('control: a rect with its outline on no longer offers Position');
       // MEASURED: the border on a spiral is ink the renderer actually draws (the #386 probe, on an open kind)
       const W = 300, H = 300, cv = document.createElement('canvas'); cv.width = W; cv.height = H; const ctx = cv.getContext('2d');
@@ -92590,6 +92592,7 @@
       if (on.g < 100) throw new Error('the Outline is on but the spiral drew ' + on.g + ' green pixels — the toggle does nothing on an open kind');
       if (on.r < 150) throw new Error('turning the outline on erased the spiral itself (' + on.r + ' red pixels)');
     } finally {
+      FM._bsPage = null;
       FM.scene.layers.length = 0; layers0.forEach(l => FM.scene.layers.push(l)); FM.scene.selectedId = sel0;
       try { FM.refreshAll(); FM.inspector.refresh(); } catch (e) {}
     }
@@ -98090,11 +98093,24 @@
     }
   });
 
-  test('564: with Outline and Shadow both on, the Outline & Shadows card heads each feature\'s rows with its own label, in order', { item: '564', budgetMs: 30000 }, async function () {
+  /* #1243 F7 SUPERSEDES QUEUE 564's HEADINGS. This was '564: with Outline and Shadow both on, the Outline & Shadows card heads
+     each feature's rows with its own label, in order'. 564's complaint was one unbroken column of two features' rows with
+     nothing saying where one stopped; #1243 F7 answers it by never putting two features on screen at once ("when you actually
+     press on one it opens up that menu and then has a back button"). So the same fixture now holds the new promise: with both
+     on, each feature's page carries only its own rows under a header naming it. */
+  test('564 · with Outline and Shadow both on, each opens on a page of its own — the Outline page has only Outline rows under a header saying Outline, the Shadow page only Shadow rows, and Shadow switched off says so on its switch (CONTROL: both tiles are lit)', { item: '564', budgetMs: 30000 }, async function () {
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     if (!FM.inspector || !FM.inspector.openCategory) throw new Error('seam missing: FM.inspector.openCategory');
     const saved = FM.scene, savedSel = FM.scene.selectedId;
     const hadHome = !!(FM.home && FM.home.isOpen && FM.home.isOpen());
+    const btnTexts = () => [].map.call(document.querySelectorAll('#inspector .bs-page-rows button'), b => (b.textContent || '').trim());
+    const open = async (kind) => {
+      const t = document.querySelector('#inspector .bs-tile[data-kind="' + kind + '"]');
+      if (!t) throw new Error('the Outline & Shadows card has no ' + kind + ' tile to open');
+      t.click(); await sleep(120);
+      const h = document.querySelector('#inspector .bs-head .bs-title');
+      return h ? h.textContent.trim() : '';
+    };
     try {
       if (hadHome) FM.home.close();
       const L = FM.makeLayer('shape', { name: 's564', shape: 'rect', x: 540, y: 960, shapeW: 400, shapeH: 300, fill: '#4080c0', start: 0, duration: 4 });
@@ -98103,19 +98119,25 @@
       FM.scene = scene([L], { project: { width: 1080, height: 1920, fps: 30, duration: 4, background: '#000000' } });
       FM.selectLayer(L.id); FM.refreshAll(); await sleep(120);
       FM.inspector.openCategory('border'); await sleep(250);
-      const labels = [].slice.call(document.querySelectorAll('.insp-sub-label.bs-sub')).map(e => e.textContent.trim());
-      if (labels.indexOf('Outline') < 0 || labels.indexOf('Shadow') < 0) throw new Error('Outline and Shadow are both on and their rows carry no section labels (' + JSON.stringify(labels) + ') — Position, Color, Size, Style, Blur, Opacity run on as one column with nothing saying where one feature stops (queue 564)');
-      if (labels.indexOf('Outline') > labels.indexOf('Shadow')) throw new Error('the section labels are out of order: ' + labels.join(' > '));
-      // the label sits ABOVE its rows: the first prop row after "Outline" is Outline\'s (Position), not Shadow\'s
-      const outlineHead = [].slice.call(document.querySelectorAll('.insp-sub-label.bs-sub')).find(e => e.textContent.trim() === 'Outline');
-      let n = outlineHead.nextElementSibling, seen = [];
-      while (n && !(n.classList && n.classList.contains('bs-sub')) && seen.length < 6) { seen.push((n.textContent || '').trim().slice(0, 12)); n = n.nextElementSibling; }
-      if (!seen.some(t => /Position|Color|Size/.test(t))) throw new Error('the Outline label is not followed by Outline\'s own rows: ' + seen.join(' | '));
-      // off again: no orphan header
+      // CONTROL: the front page shows both features lit, so both really are on
+      const lit = [].filter.call(document.querySelectorAll('#inspector .bs-tile.on'), t => /^(outline|shadow)$/.test(t.dataset.kind)).length;
+      if (lit !== 2) throw new Error('CONTROL: with Outline and Shadow both on, ' + lit + ' of their tiles are lit — the fixture is not the one this checks');
+      if (await open('outline') !== 'Outline') throw new Error('the Outline tile did not open a page headed Outline');
+      const o = btnTexts();
+      if (o.indexOf('Inside') < 0) throw new Error('the Outline page has no Position row (Inside / Center / Outside): ' + o.join(', '));
+      if (o.indexOf('Soft') >= 0 || o.indexOf('Drop') >= 0) throw new Error('the Outline page also carries Shadow’s Style row (Soft / Drop) — two features’ rows run on as one column again (queue 564)');
+      document.querySelector('#inspector .bs-back').click(); await sleep(120);
+      if (await open('shadow') !== 'Shadow') throw new Error('the Shadow tile did not open a page headed Shadow');
+      const s = btnTexts();
+      if (s.indexOf('Soft') < 0) throw new Error('the Shadow page has no Style row (Soft / Drop): ' + s.join(', '));
+      if (s.indexOf('Inside') >= 0) throw new Error('the Shadow page also carries Outline’s Position row — two features at once');
+      // off again: the page says so on its switch, and its rows are greyed rather than gone
       L.shadow.enabled = false; FM.inspector.refresh(); await sleep(150);
-      const labels2 = [].slice.call(document.querySelectorAll('.insp-sub-label.bs-sub')).map(e => e.textContent.trim());
-      if (labels2.indexOf('Shadow') >= 0) throw new Error('Shadow is off and its section label is still on the card');
+      const sw = document.querySelector('#inspector .bs-head .bs-onoff');
+      if (!sw || sw.getAttribute('aria-checked') !== 'false') throw new Error('Shadow is off and its page’s switch does not say so (' + (sw ? sw.getAttribute('aria-checked') : 'no switch') + ')');
+      if (!document.querySelector('#inspector .bs-page-rows.bs-rows-off')) throw new Error('Shadow is off and its rows are not greyed');
     } finally {
+      FM._bsPage = null;
       FM.scene = saved; FM.scene.selectedId = savedSel;
       try { FM.refreshAll(); } catch (e) {}
       if (hadHome && FM.home && FM.home.open) FM.home.open();
@@ -168089,14 +168111,33 @@
     [].slice.call(document.querySelectorAll('.add-stretch-edge, .add-stretch-skin, .add-stretch-dim')).forEach(function (n) { n.remove(); });
   }
 
-  /* 1084 h — THE STRETCH ITSELF (his clauses 1 and 3; D4b). Setting on, a project with layers, a tap on the row: the menu
-     does not swing up. A clip-path inset on it starts on the row's own box and grows up AND down to the whole menu over
-     STRETCH1084 ms (keyframes, and the computed clip seeked to 0, half way and the end). While it moves it is opaque and
-     unblurred (D4b fix 2: the old b smeared the timeline through a moving, blurred, see-through sheet). The row's own words
-     are still where the row was as it starts and gone by 40% (fix 3: the row IS the shape). The menu's contents fade in
-     ONCE, over the last 40%, never dipping (fix 1: the flicker). It ends fully open, where the menu rests.
-     Fails on e191b921 at 'with no clip-path stretch on it': the row opens the menu with openAdd() and nothing else. */
-  test('1084 h · setting on, a project with layers: a tap on the Tap to add a layer row stretches that row up and down into the add menu over 300 ms, from its own box to the whole menu', { item: '1084', budgetMs: 15000 }, async function () {
+  /* #1243 G8: THE BAR HE SEES — the row's dashed ::before box, as a VIEWPORT rect read off the page (its resolved left and width
+     inside the row's border, the row's own top and bottom). The stretch starts from this, not from the row's layout box. */
+  function bar1084(row) {
+    const rr = row.getBoundingClientRect(), pre = getComputedStyle(row, '::before'), cs = getComputedStyle(row);
+    let l = parseFloat(pre.left), w = parseFloat(pre.width);
+    if (!/px$/.test(pre.left) || !/px$/.test(pre.width)) {
+      const v = function (k) { return parseFloat(cs.getPropertyValue(k)); };
+      l = v('--ar-x0') - (v('--ar-bl') || 0); w = v('--ar-x1') - v('--ar-x0');
+    }
+    const left = rr.left + row.clientLeft + l;
+    return { left: left, right: left + w, top: rr.top, bottom: rr.bottom };
+  }
+  /* #1243 G8: how far down the menu's contents are still covered — the y of a child's computed mask-position, in % (75: all
+     covered, 0: all shown), or NaN when there is no mask at all */
+  function maskY1084(k) {
+    const cs = getComputedStyle(k), p = String(cs.maskPosition || cs.webkitMaskPosition || '').trim().split(/[\s,]+/);
+    return p.length >= 2 && /%$/.test(p[1]) ? parseFloat(p[1]) : NaN;
+  }
+
+  /* 1084 h — THE STRETCH ITSELF (his clauses 1 and 3; D4b; REWRITTEN FOR #1243 G8). This was '1084 h · setting on, a project
+     with layers: a tap on the Tap to add a layer row stretches that row up and down into the add menu over 300 ms, from its
+     own box to the whole menu'. #1243 G8 (his words: "how it expands out from the tap to add layer… doesn't… feel like… the way
+     I described it to you before") changes three of its promises: the shape starts on the BAR (the dashed box), not the row's
+     whole box; the row's words ride up and cross into the menu's tab row by half way, not fade where they were by 35%; and the
+     menu is uncovered TOP-DOWN by a mask, not faded in over the last 40%. Everything else is as it was: no swing, 300 ms,
+     opaque and unblurred while it moves, up and down, ends fully open where the menu rests. */
+  test('1084 h · setting on, a project with layers: a tap on the Tap to add a layer row stretches its bar up and down into the add menu over 300 ms, from the bar to the whole menu, opaque while it moves, its words gone by half way and the menu uncovered top-down once', { item: '1084', budgetMs: 15000 }, async function () {
     insetControl1084();
     return grow1084(true, () => onRows1084(async function (c) {
       const sheet = c.sheet;
@@ -168105,7 +168146,7 @@
         if (!words) throw new Error('setup: the add row has no label to look for');
         c.tap();
         // measured in the click's own task, so nothing has moved the row since the stretch read it
-        const rr = c.rowNow().getBoundingClientRect();
+        const rr = c.rowNow().getBoundingClientRect(), br = bar1084(c.rowNow());
         if (!sheet.classList.contains('open')) throw new Error('the tap on the Tap to add a layer row did not open the add menu');
         const a = clipAnim1084(sheet);
         if (!a) throw new Error('the add menu opened from the Tap to add a layer row with no clip-path stretch on it — it still swings up from the bottom (queue 1084 clause 3: the row itself expands up and down until it fills the menu’s place)');
@@ -168115,17 +168156,17 @@
         if (css.length) throw new Error('something else moves the menu while the row stretches (' + css.join(', ') + ') — two motions at once, the swing his request replaces');
         const sb = sheet.getBoundingClientRect();
         if (rr.top < sb.top - 0.5 || rr.bottom > sb.bottom + 0.5) throw new Error('setup: the row (' + box1084(rr) + ') is not inside the menu’s box (' + box1084(sb) + '), so its start would be clamped');
-        const vr = vis1084(rr, sb);
-        // ITS KEYFRAMES: the row's own box, to the whole menu
+        const vr = vis1084(br, sb);
+        // ITS KEYFRAMES: the bar's own box, to the whole menu
         const kf = a.effect.getKeyframes();
         const k0 = inset1084(sheet, kf[0].clipPath), k1 = inset1084(sheet, kf[kf.length - 1].clipPath);
-        if (!k0.ok || !near1084(k0, vr, 2)) throw new Error('the stretch starts from ' + (k0.ok ? box1084(k0) : '‘' + k0.raw + '’') + ', not from the row’s own box ' + box1084(vr) + ' (queue 1084 clause 3: the row ITSELF expands)');
+        if (!k0.ok || !near1084(k0, vr, 2)) throw new Error('the stretch starts from ' + (k0.ok ? box1084(k0) : '‘' + k0.raw + '’') + ', not from the bar ' + box1084(vr) + ' (queue 1084 clause 3, #1243 G8: the bar ITSELF expands)');
         if (!k1.ok || k1.top > sb.top + 0.5 || k1.bottom < sb.bottom - 0.5 || k1.left > sb.left + 0.5 || k1.right < sb.right - 0.5) throw new Error('the stretch ends at ' + (k1.ok ? box1084(k1) : '‘' + k1.raw + '’') + ', short of the whole menu ' + box1084(sb) + ' — it would end cut off, then jump open');
         // …AND WHAT IT SHOWS, seeked
         const list = stretchAnims1084(sheet);
         const at = function (t) { seek1084(list, t); return inset1084(sheet); };
         const q0 = at(0);
-        if (!q0.ok || !near1084(q0, vr, 2)) throw new Error('at the start the menu is clipped to ' + (q0.ok ? box1084(q0) : '‘' + q0.raw + '’') + ', not to the row it stretches from ' + box1084(vr));
+        if (!q0.ok || !near1084(q0, vr, 2)) throw new Error('at the start the menu is clipped to ' + (q0.ok ? box1084(q0) : '‘' + q0.raw + '’') + ', not to the bar it stretches from ' + box1084(vr));
         // the row's own + and words are where the row was as it starts — nothing blank where the row was (D4b fix 3)
         const skin = document.querySelector('.add-stretch-skin');
         if (!skin || (skin.textContent || '').indexOf(words) < 0) throw new Error('as the row starts to stretch its words (‘' + words + '’) are not on it — D4b: the row’s own + and words stay on the growing shape at first, so the row is seen to BE the shape');
@@ -168138,30 +168179,31 @@
           if (!(al > 0.99)) throw new Error('at ' + Math.round(t) + ' ms the stretching menu is ' + cs.backgroundColor + ' — see-through while it moves, so the timeline smears behind it (D4b fix 2: an opaque panel)');
           if (cs.backdropFilter && cs.backdropFilter !== 'none') throw new Error('at ' + Math.round(t) + ' ms the stretching menu blurs what is behind it (' + cs.backdropFilter + ') — never a blur on moving content (D4b fix 2)');
         });
-        // UP AND DOWN: half way the shape still holds the row and has moved out on each side that has room
+        // UP AND DOWN: half way the shape still holds the bar and has moved out on each side that has room
         const qm = at(D / 2);
-        if (!qm.ok || qm.top > vr.top + 0.5 || qm.bottom < vr.bottom - 0.5) throw new Error('half way the shape (' + (qm.ok ? box1084(qm) : qm.raw) + ') no longer holds the row ' + box1084(vr) + ' — it must grow out of it');
-        if (vr.top - sb.top > 4 && !(qm.top < vr.top - 1)) throw new Error('half way the top edge has not moved up from the row (' + Math.round(qm.top) + ' against ' + Math.round(vr.top) + ') — his words: it expands up and down');
-        if (sb.bottom - vr.bottom > 4 && !(qm.bottom > vr.bottom + 1)) throw new Error('half way the bottom edge has not moved down from the row (' + Math.round(qm.bottom) + ' against ' + Math.round(vr.bottom) + ') — his words: it expands up and down');
+        if (!qm.ok || qm.top > vr.top + 0.5 || qm.bottom < vr.bottom - 0.5) throw new Error('half way the shape (' + (qm.ok ? box1084(qm) : qm.raw) + ') no longer holds the bar ' + box1084(vr) + ' — it must grow out of it');
+        if (vr.top - sb.top > 4 && !(qm.top < vr.top - 1)) throw new Error('half way the top edge has not moved up from the bar (' + Math.round(qm.top) + ' against ' + Math.round(vr.top) + ') — his words: it expands up and down');
+        if (sb.bottom - vr.bottom > 4 && !(qm.bottom > vr.bottom + 1)) throw new Error('half way the bottom edge has not moved down from the bar (' + Math.round(qm.bottom) + ' against ' + Math.round(vr.bottom) + ') — his words: it expands up and down');
         if (!(qm.bottom - qm.top < sb.height - 2)) throw new Error('half way the shape already covers the whole menu — it must grow, not appear');
-        at(0.4 * D);
-        if (!(+getComputedStyle(skin).opacity < 0.05)) throw new Error('40% of the way the row’s words still show (' + getComputedStyle(skin).opacity + ') over the growing menu — they fade over the first 35% (D4b)');
-        // THE CONTENTS FADE IN ONCE, over the last 40%, never dipping (D4b fix 1: no flicker)
+        if (!(+getComputedStyle(skin).opacity < 0.05)) throw new Error('half way the row’s words still show (' + getComputedStyle(skin).opacity + ') over the growing menu — #1243 G8: they cross into the tab row between 20% and 50%');
+        // THE CONTENTS ARE UNCOVERED TOP-DOWN, ONCE (#1243 G8: a mask behind the moving edge, never a dip back)
         const kids = [].slice.call(sheet.children);
         if (!kids.length) throw new Error('setup: the menu has no contents to watch');
-        const last = kids.map(function () { return -1; });
+        at(0);
+        const hid = kids.filter(function (k) { return !(maskY1084(k) >= 74.5); });
+        if (hid.length) throw new Error('at 0 ms part of the menu (' + hid.map(function (k) { return (k.id || k.className) + ' ' + maskY1084(k); }).join(', ') + ') is already uncovered while the shape is still the bar — #1243 G8: the menu is revealed top-down behind the moving edge');
+        const last = kids.map(function () { return 999; });
         for (let i = 0; i <= 10; i++) {
           const t = D * i / 10;
           at(t);
           kids.forEach(function (k, j) {
-            const o = +getComputedStyle(k).opacity, name = k.id || k.className || k.tagName;
-            if (o < last[j] - 0.01) throw new Error('the menu’s ' + name + ' dips from ' + last[j].toFixed(2) + ' to ' + o.toFixed(2) + ' at ' + Math.round(t) + ' ms — it flickers (D4b fix 1: the contents fade in once)');
-            if (t < 0.6 * D - 1 && o > 0.02) throw new Error('at ' + Math.round(t) + ' ms the menu’s ' + name + ' already shows (' + o.toFixed(2) + ') while the shape is still small — the contents fade in over the LAST 40% only (D4b)');
-            last[j] = o;
+            const y = maskY1084(k), name = k.id || k.className || k.tagName;
+            if (y > last[j] + 0.01) throw new Error('the menu’s ' + name + ' is covered again (mask ' + last[j].toFixed(1) + '% → ' + y.toFixed(1) + '%) at ' + Math.round(t) + ' ms — it flickers (D4b fix 1: the contents arrive once)');
+            last[j] = y;
           });
         }
-        const dimKid = kids.filter(function (k) { return !(+getComputedStyle(k).opacity > 0.98); });
-        if (dimKid.length) throw new Error('at the end of the stretch part of the menu is not fully shown (' + dimKid.map(function (k) { return k.id || k.className; }).join(', ') + ')');
+        const covered = kids.filter(function (k) { return !(maskY1084(k) <= 0.5); });
+        if (covered.length) throw new Error('at the end of the stretch part of the menu is still covered (' + covered.map(function (k) { return (k.id || k.className) + ' ' + maskY1084(k); }).join(', ') + ')');
         // ENDS FULLY OPEN: once it has all played nothing of the menu is cut off, and it rests where it rests
         list.forEach(function (x) { x.finish(); });
         const cpf = getComputedStyle(sheet).clipPath, qf = inset1084(sheet);
@@ -168205,14 +168247,15 @@
     }));
   });
 
-  /* 1084 j — CLAUSE 4 (no clashing lights) AND THE CLOSE (D4b). The press lights the row's band (CONTROL: there is a light
-     to hand over); the click that stretches the row stops the band at once, and the light is the shape's moving edge
-     instead: an edge piece that cannot be hit, on the row at the start, on the clip's edge half way (±2 px), gone at the end
-     where the menu's own top rim takes over. No lap runs round the menu (that is the empty screen's), and the arriving menu
-     takes no taps (#981's guard). CLOSE: the SAME clip animation runs backwards (D4b: one curve both ways, nothing
-     toggled); 40% into it the contents are gone while the shape is still most of the menu (they fade out FIRST); it lands
-     back on the row; and afterwards nothing is left. Fails on e191b921 at 'no stretch for its light to hand over to'. */
-  test('1084 j · the row press light hands over to the stretch: its band stops as the row becomes the shape, a lit edge rides the moving edge, and closing plays the same animation backwards onto the row and leaves nothing behind', { item: '1084', budgetMs: 15000 }, async function () {
+  /* 1084 j — CLAUSE 4 (no clashing lights) AND THE CLOSE (D4b; REWRITTEN FOR #1243 G8). This was '1084 j · the row press light
+     hands over to the stretch: its band stops as the row becomes the shape, a lit edge rides the moving edge, and closing plays
+     the same animation backwards onto the row and leaves nothing behind'. #1243 G8 moves two of its readings: the lit edge
+     starts on the BAR (the dashed box), and on the close the menu is covered again from the bottom up behind the falling edge
+     (the reveal's mask played backwards) instead of fading out first — it lands back on the bar, everything covered.
+     The rest is unchanged: the press lights the row's band (CONTROL), the click stops it at once and the light is the shape's
+     moving edge, which cannot be hit, rides the clip's edge half way (±2 px) and is gone at the end; no lap round the menu; the
+     arriving menu takes no taps (#981); the close is the SAME clip animation backwards; nothing is left behind. */
+  test('1084 j · the row press light hands over to the stretch: its band stops as the bar becomes the shape, a lit edge rides the moving edge, and closing plays the same animation backwards onto the bar, covering the menu again, and leaves nothing behind', { item: '1084', budgetMs: 15000 }, async function () {
     insetControl1084();
     return grow1084(true, () => onRows1084(async function (c) {
       const sheet = c.sheet;
@@ -168221,10 +168264,10 @@
         const lit = c.pulseOf();
         if (!lit || !lit.classList.contains('is-pulsing')) throw new Error('CONTROL: the press did not light the row’s band (#616), so there is no light here to hand over');
         c.click(p);
-        const rr = c.rowNow().getBoundingClientRect();
+        const br = bar1084(c.rowNow());
         const a = clipAnim1084(sheet);
         if (!a) throw new Error('the row press opened the add menu with no stretch for its light to hand over to (queue 1084 clause 4)');
-        const D = a.effect.getComputedTiming().duration, sb = sheet.getBoundingClientRect(), vr = vis1084(rr, sb);
+        const D = a.effect.getComputedTiming().duration, sb = sheet.getBoundingClientRect(), vr = vis1084(br, sb);
         // ONE LIGHT: the band stops the moment the row becomes the shape, and no lap runs round the menu
         const band = c.pulseOf();
         if ((lit.classList.contains('is-pulsing') || lit.getAnimations().length) || (band && band.classList.contains('is-pulsing'))) throw new Error('the row’s press band keeps running while the row stretches into the menu — two lights at once (queue 1084 clause 4: rework them so they match)');
@@ -168239,7 +168282,7 @@
         });
         const list = stretchAnims1084(sheet);
         seek1084(list, 0);
-        if (!near1084(edge.getBoundingClientRect(), vr, 2)) throw new Error('at the start the lit edge is at ' + box1084(edge.getBoundingClientRect()) + ', not on the row ' + box1084(vr));
+        if (!near1084(edge.getBoundingClientRect(), vr, 2)) throw new Error('at the start the lit edge is at ' + box1084(edge.getBoundingClientRect()) + ', not on the bar ' + box1084(vr));
         seek1084(list, D / 2);
         const qm = inset1084(sheet), er = edge.getBoundingClientRect();
         if (!qm.ok || !near1084(er, qm, 2)) throw new Error('half way the lit edge (' + box1084(er) + ') is not on the shape’s edge (' + (qm.ok ? box1084(qm) : qm.raw) + ')');
@@ -168256,27 +168299,31 @@
         await s.ready;
         if (!(s.playbackRate < 0)) throw new Error('the close does not play the stretch backwards (playbackRate ' + s.playbackRate + ')');
         const back = stretchAnims1084(sheet);
-        // THE CONTENTS GO FIRST: 40% into the close they are gone, while the shape is still most of the menu
+        // 40% INTO THE CLOSE the menu is being covered again from the bottom up, while the shape is still most of the menu
         seek1084(back, 0.6 * D);
         const kids = [].slice.call(sheet.children);
-        const shown = kids.filter(function (k) { return +getComputedStyle(k).opacity > 0.02; });
-        if (shown.length) throw new Error('part of the menu (' + shown.map(function (k) { return k.id || k.className; }).join(', ') + ') still shows 40% into the close — its contents fade out FIRST (D4b)');
+        const open6 = kids.filter(function (k) { return !(maskY1084(k) > 1); });
+        if (open6.length) throw new Error('40% into the close part of the menu (' + open6.map(function (k) { return (k.id || k.className) + ' ' + maskY1084(k); }).join(', ') + ') is still fully uncovered — #1243 G8: the reveal runs back, covering the menu behind the falling edge');
         const q6 = inset1084(sheet);
-        if (!q6.ok || !(q6.bottom - q6.top > 0.75 * sb.height)) throw new Error('40% into the close the shape is ' + (q6.ok ? Math.round(q6.bottom - q6.top) + ' px tall' : q6.raw) + ' of a ' + Math.round(sb.height) + ' px menu — the contents go first, THEN the shape shrinks');
+        if (!q6.ok || !(q6.bottom - q6.top > 0.75 * sb.height)) throw new Error('40% into the close the shape is ' + (q6.ok ? Math.round(q6.bottom - q6.top) + ' px tall' : q6.raw) + ' of a ' + Math.round(sb.height) + ' px menu — it shrank before the menu was covered');
         seek1084(back, 0);
-        const vr2 = vis1084(c.rowNow().getBoundingClientRect(), sb), q0 = inset1084(sheet);
-        if (!q0.ok || !near1084(q0, vr2, 2)) throw new Error('the close ends at ' + (q0.ok ? box1084(q0) : q0.raw) + ', not back on the row ' + box1084(vr2));
+        const vr2 = vis1084(bar1084(c.rowNow()), sb), q0 = inset1084(sheet);
+        if (!q0.ok || !near1084(q0, vr2, 2)) throw new Error('the close ends at ' + (q0.ok ? box1084(q0) : q0.raw) + ', not back on the bar ' + box1084(vr2));
+        const bare = kids.filter(function (k) { return !(maskY1084(k) >= 74.5); });
+        if (bare.length) throw new Error('back on the bar part of the menu is still uncovered (' + bare.map(function (k) { return (k.id || k.className) + ' ' + maskY1084(k); }).join(', ') + ')');
         back.forEach(function (x) { try { x.finish(); } catch (e) {} });
         await sleep(D + 450);
         // NOTHING LEFT BEHIND — the same reads that found the pieces above now find none
         const left = [];
         if (document.querySelectorAll('.add-stretch-edge, .add-stretch-skin, .add-stretch-dim').length) left.push('a piece of the stretch');
         if (sheet.getAnimations().length) left.push(sheet.getAnimations().length + ' animation(s) on the menu');
-        if (kids.some(function (k) { return k.getAnimations().length; })) left.push('a fade on its contents');
+        if (kids.some(function (k) { return k.getAnimations().length; })) left.push('a reveal on its contents');
+        if (kids.some(function (k) { return isFinite(maskY1084(k)) && getComputedStyle(k).maskImage !== 'none' && getComputedStyle(k).webkitMaskImage !== 'none'; })) left.push('a mask on its contents');
         if (getComputedStyle(sheet).clipPath !== 'none') left.push('a clip (' + getComputedStyle(sheet).clipPath + ')');
         ['add-grow', 'closing', 'open', 'is-arriving'].forEach(function (k) { if (sheet.classList.contains(k)) left.push('.' + k); });
         if (sheet.style.transform || sheet.style.transition) left.push('an inline ' + (sheet.style.transform ? 'transform ' + sheet.style.transform : 'transition ' + sheet.style.transition));
         if (sheet.getBoundingClientRect().top < innerHeight - 2) left.push('the menu still on screen (top ' + Math.round(sheet.getBoundingClientRect().top) + ')');
+        if (c.rowNow().style.visibility === 'hidden' || getComputedStyle(c.rowNow()).visibility === 'hidden') left.push('the Tap to add a layer row hidden');
         if (left.length) throw new Error('after the menu closed, these were left behind: ' + left.join('; '));
       } finally { await shutRow1084(c); }
     }));
@@ -208756,5 +208803,211 @@
       FM.settings.set('collabLabs', !!was); C.ui.syncLabs();
       if (homeWasOpen && FM.home && FM.home.open && !FM.home.isOpen()) FM.home.open();
     }
+  });
+
+  /* #1243 F7 — his words: "the outlines and shadows menu… big buttons… opens up below… scroll deep… when you actually press on one
+     it opens up that menu and then has a back button… Or… put all of the logos on like the right side layered up… press on one it
+     switches to that menu… top… say what menu you're in… thumb can easily reach… like… the position and scale menu."
+     Built as the plan's recommended C (js/inspector.js, the border card): tiles → one feature's page with ‹ back, its name and
+     its switch, and a switcher row of the same pictures along the bottom. Proves, through the real taps, at 380 and at 1280:
+     the Shadow tile opens a page headed Shadow holding Shadow's rows and none of Outline's (both on, so the old card would have
+     run them together); five switcher buttons each at least 44 px, the row's bottom on screen with nothing scrolled; one tap
+     swaps to Outline; a feature that is off shows its rows greyed and inert and stores nothing until its switch is turned on;
+     ‹ back returns to the tiles. CONTROL: the front page lights both Outline and Shadow, so both are really on.
+     FAILS BEFORE #1243 F7 by its own sentence: the Shadow tile toggles Shadow off and no page headed Shadow opens. */
+  test('1243 F7 · Outline & Shadows opens one feature at a time — the Shadow tile opens a page headed Shadow with only Shadow rows, a switch, and five pictures along the bottom in reach that swap to Outline in one tap; an off feature shows its rows greyed and stores nothing until switched on; ‹ goes back to the tiles, at 380 and at 1280 (CONTROL: both lit on the tiles)', { item: '1243', budgetMs: 30000 }, async function () {
+    const q = (s) => document.querySelector('#inspector ' + s);
+    const title = () => { const t = q('.bs-head .bs-title'); return t ? t.textContent.trim() : ''; };
+    const btns = () => [].map.call(document.querySelectorAll('#inspector .bs-page-rows button'), b => (b.textContent || '').trim());
+    const tile = (k) => attached(q('.bs-tile[data-kind="' + k + '"]'), 'the ' + k + ' tile');
+    const sw = (k) => attached(q('.bs-switch .bs-sw[aria-label^="' + k + '"]'), 'the ' + k + ' button in the switcher row');
+    try {
+      await atPhoneWidth(async function () {
+        await editorWithShape(async function (L) {
+          L.stroke = { enabled: true, width: 8, color: '#ffffff', position: 'center' };
+          L.shadow = { enabled: true, blur: 16, dx: 0, dy: 0, color: '#000000', alpha: 100 };
+          delete L.trimPath;
+          FM.inspector.openCategory('border'); await sleep(200);
+          const tiles = document.querySelectorAll('#inspector .bs-tile');
+          if (tiles.length !== 5) throw new Error('setup: the shape’s Outline & Shadows card shows ' + tiles.length + ' tiles, not five');
+          if (!tile('outline').classList.contains('on') || !tile('shadow').classList.contains('on')) throw new Error('CONTROL: with Outline and Shadow both on the tiles do not light both, so the fixture is not the one this checks');
+          tile('shadow').click(); await sleep(150);
+          if (title() !== 'Shadow') throw new Error('tapping the Shadow tile did not open a page headed Shadow (header: ‘' + title() + '’; Shadow is now ' + (L.shadow.enabled ? 'on' : 'off') + ') — his words: "when you actually press on one it opens up that menu and then has a back button"');
+          const s = btns();
+          if (s.indexOf('Soft') < 0 || s.indexOf('Drop') < 0) throw new Error('the Shadow page does not carry Shadow’s Style row: ' + s.join(', '));
+          if (s.indexOf('Inside') >= 0) throw new Error('the Shadow page also carries Outline’s Position row (Inside / Center / Outside) — two features at once, the deep scroll he described');
+          const back0 = document.querySelector('#inspector > .cat-back');
+          if (back0 && getComputedStyle(back0).display !== 'none') throw new Error('a feature page shows two back rows (the card’s ‹ and the page’s ‹)');
+          const ip = document.getElementById('inspector-panel');
+          const bar = attached(q('.bs-switch'), 'the switcher row'), b5 = bar.querySelectorAll('.bs-sw');
+          if (b5.length !== 5) throw new Error('the switcher row has ' + b5.length + ' buttons, not one for each of the five features');
+          [].forEach.call(b5, function (b) { const r = b.getBoundingClientRect(); if (r.width < 44 || r.height < 44) throw new Error('the switcher’s ' + b.getAttribute('aria-label') + ' button is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' px — under the 44 px a thumb needs'); });
+          const br = bar.getBoundingClientRect();
+          if (ip.scrollTop > 0 || document.getElementById('inspector').scrollTop > 0) throw new Error('setup: the panel is already scrolled, so the switcher’s reach is not measured from the top');
+          if (br.bottom > innerHeight + 0.5 || br.top < ip.getBoundingClientRect().top) throw new Error('the switcher row is not on screen without scrolling (' + Math.round(br.top) + '–' + Math.round(br.bottom) + ' px of a ' + innerHeight + ' px screen) — his words: "thumb can easily reach"');
+          sw('Outline').click(); await sleep(150);
+          if (title() !== 'Outline') throw new Error('one tap on Outline in the switcher row did not swap to the Outline page (header: ‘' + title() + '’)');
+          const o = btns();
+          if (o.indexOf('Inside') < 0 || o.indexOf('Soft') >= 0) throw new Error('the Outline page does not carry only Outline’s rows: ' + o.join(', '));
+          sw('Trim path').click(); await sleep(150);
+          const rows = attached(q('.bs-page-rows'), 'the Trim path page’s rows'), onoff = attached(q('.bs-head .bs-onoff'), 'the Trim path switch');
+          if (!rows.classList.contains('bs-rows-off') || !rows.hasAttribute('inert')) throw new Error('Trim path is off and its page’s rows are not greyed and inert');
+          if (onoff.getAttribute('aria-checked') !== 'false') throw new Error('Trim path is off and its switch says ' + onoff.getAttribute('aria-checked'));
+          if (L.trimPath != null) throw new Error('only opening the Trim path page stored a trimPath on the layer — nothing may change until the switch is turned on');
+          onoff.click(); await sleep(150);
+          if (!(L.trimPath && L.trimPath.enabled)) throw new Error('turning the Trim path switch on did not turn Trim path on');
+          const rows2 = q('.bs-page-rows');
+          if (!rows2 || rows2.hasAttribute('inert')) throw new Error('Trim path is on and its rows still take no touch');
+          attached(q('.bs-back'), 'the page’s ‹ back').click(); await sleep(150);
+          if (q('.bs-head') || !q('.bs-tiles')) throw new Error('‹ back did not return to the tiles');
+          // and at 1280 the inspector column carries the same structure
+          await atWideWidth(async function () {
+            FM.inspector.openCategory('border'); await sleep(200);
+            tile('shadow').click(); await sleep(150);
+            if (title() !== 'Shadow') throw new Error('at 1280 the Shadow tile did not open a page headed Shadow (‘' + title() + '’)');
+            if (document.querySelectorAll('#inspector .bs-switch .bs-sw').length !== 5) throw new Error('at 1280 the Shadow page has no five-button switcher row');
+            if (btns().indexOf('Inside') >= 0) throw new Error('at 1280 the Shadow page also carries Outline’s rows');
+          }, 1280);
+        });
+      }, 380);
+    } finally { FM._bsPage = null; }
+  });
+
+  /* #1243 F9 — his words: "going from the visual effects menu and pressing add effect and then tapping on the filters menu… it
+     makes it really small… When you start to swipe up… the filters menu should then expand… to the same level where the visual
+     menu would go… swipe back up to the top… it shrinks again… from add effect → filters… automatically have it expanded…
+     seamless… switching… from the preview area… can still stay small… make sure… it looks really good."
+     Proves at 380, with a shape selected (js/mobile.js fltApply, js/inspector.js openFxTab): Add effect → Filters opens the tab
+     with the sheet's top on the sheet line (the top of the play row, F10's line); from the Effects card's own tab it opens small,
+     at the docked top; a scroll past 24 px grows it to the line, and back at the top it shrinks to the docked top; leaving the tab
+     re-docks it. Every reading is taken with the sheet's transition finished (so a runner that fires no frames reads the end).
+     CONTROLS: the docked top is well below the line (the two heights differ), and at 1280 the inspector column does not move.
+     FAILS BEFORE #1243 F9 by its own sentence: opened from Add effect, Filters starts at the docked top. */
+  test('1243 F9 · on a phone, Filters opened from Add effect starts grown to the play row, from the Effects card it starts small, a swipe down grows it to the play row and back at the top it shrinks, and leaving it re-docks (CONTROLS: the docked top is lower, and at 1280 nothing moves)', { item: '1243', budgetMs: 40000 }, async function () {
+    const realMount = FM.fxThumbs && FM.fxThumbs.mountFilter, realMountFx = FM.fxThumbs && FM.fxThumbs.mount;
+    if (FM.fxThumbs) { FM.fxThumbs.mountFilter = function () {}; FM.fxThumbs.mount = function () {}; }   // LOOP rule 17: no thumbnail queue left behind
+    const ip = document.getElementById('inspector-panel');
+    const settled = async (ms) => { await sleep(ms || 120); ip.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} }); await sleep(30); return ip.getBoundingClientRect().top; };
+    const mode = (sel, label) => [].filter.call(document.querySelectorAll(sel + ' .fxmode-btn'), b => b.textContent.trim() === label)[0];
+    try {
+      await atPhoneWidth(async function () {
+        await editorWithShape(async function (L) {
+          const line = FM.mobile.sheetLine(), tr = document.getElementById('transport').getBoundingClientRect().top;
+          if (!(line > 0) || Math.abs(line - tr) > 1.5) throw new Error('setup: the sheet line (' + line + ') is not the top of the play row (' + tr + ')');
+          FM.inspector.openCategory('effects');
+          const dock = await settled(300);
+          if (!(dock > line + 40)) throw new Error('CONTROL: the docked sheet’s top (' + dock + ') is not well below the play row (' + line + '), so grown and small could not be told apart');
+          // 1. Add effect → Filters: opens grown
+          FM.fxBrowser.open(L); await sleep(200);
+          const fb = attached(mode('#fx-browser', 'Filters'), 'the Filters tab in the Add effect browser');
+          fb.click();
+          let top = await settled(350);
+          if (!(FM.inspector.filtersOpen && FM.inspector.filtersOpen())) throw new Error('tapping Filters in the Add effect browser did not open the Filters tab');
+          if (Math.abs(top - line) > 1) throw new Error('opened from Add effect, the Filters sheet starts at ' + Math.round(top) + ' px, not grown to the play row at ' + line + ' px (docked: ' + dock + ') — his words: "from add effect → filters… automatically have it expanded"');
+          // 2. From the Effects card's own tab: small
+          attached(mode('#inspector', 'Visual'), 'the Effects card’s Visual tab').click();
+          await settled(200);
+          attached(mode('#inspector', 'Filters'), 'the Effects card’s Filters tab').click();
+          top = await settled(300);
+          if (Math.abs(top - dock) > 1) throw new Error('opened from the Effects card, Filters starts at ' + Math.round(top) + ' px, not small at the docked ' + dock + ' px — his words: "switching… from the preview area… can still stay small"');
+          // 3. a swipe down the list grows it
+          ip.scrollTop = 60; ip.dispatchEvent(new Event('scroll'));
+          if (ip.scrollTop < 30) throw new Error('setup: the Filters list cannot scroll (' + ip.scrollTop + '), so there is no swipe to read');
+          top = await settled(150);
+          if (Math.abs(top - line) > 1) throw new Error('scrolled 60 px down, the Filters sheet stays at ' + Math.round(top) + ' px instead of growing to the play row (' + line + ') — his words: "When you start to swipe up… the filters menu should then expand"');
+          // 4. back at the top it shrinks
+          ip.scrollTop = 0; ip.dispatchEvent(new Event('scroll'));
+          top = await settled(200);
+          if (Math.abs(top - dock) > 1) throw new Error('scrolled back to the top, the Filters sheet stays at ' + Math.round(top) + ' px instead of shrinking to ' + dock + ' — his words: "swipe back up to the top… it shrinks again"');
+          // 5. leaving the tab re-docks it
+          attached(mode('#inspector', 'Visual'), 'the Visual tab').click();
+          top = await settled(200);
+          if (ip.classList.contains('insp-flt') || Math.abs(top - dock) > 1) throw new Error('leaving Filters left the sheet at ' + Math.round(top) + ' px (' + ip.className + ')');
+          // CONTROL at 1280: the inspector column does not move
+          await atWideWidth(async function () {
+            FM.inspector.openCategory('effects'); await sleep(200);
+            const r0 = ip.getBoundingClientRect();
+            FM.inspector.openFxTab('filters', { tall: true }); await sleep(300);
+            const r1 = ip.getBoundingClientRect();
+            if (ip.classList.contains('insp-flt') || Math.abs(r1.top - r0.top) > 0.5 || Math.abs(r1.height - r0.height) > 0.5) throw new Error('CONTROL: at 1280 the inspector column moved for Filters (' + Math.round(r0.top) + '/' + Math.round(r0.height) + ' → ' + Math.round(r1.top) + '/' + Math.round(r1.height) + ')');
+            FM.inspector.openCategory('effects');
+          }, 1280);
+        });
+      }, 380);
+    } finally {
+      if (FM.fxBrowser && FM.fxBrowser.close) { try { FM.fxBrowser.close(); } catch (e) {} }
+      if (FM.fxThumbs) { if (realMount) FM.fxThumbs.mountFilter = realMount; if (realMountFx) FM.fxThumbs.mount = realMountFx; }
+      if (FM.fxThumbs && FM.fxThumbs.stopAll) FM.fxThumbs.stopAll();
+      FM._fxPreview = null;
+    }
+  });
+
+  /* #1243 G8 — his words: "the animation for it expanding… could… use a bit of improvement… how it expands out from the tap to
+     add layer… doesn't… feel like… the way I described it to you before." What he described (#1084, 6 Oct): "the tap to add layer
+     basically expands up and down until it's created that menu like it'll just like expand from where it was on the timeline to
+     fill up the screen area where it's supposed to be". Built as the plan's recommended A in js/mobile.js stretchAdd.
+     Proves at 380, the switch on, a project short enough that the bar ends well before the row does (CONTROL): the stretch starts
+     on the dashed bar, not the row's box; it reaches the menu's sides by 30% (its keyframe); the real row is hidden while it moves
+     and shown again after; half way the + and words have risen from the row towards the menu's top and gone, the tab row taking
+     their place; the menu is covered at the start and uncovered at the end by a mask; the moving edge starts in #1243 G7's
+     pressed look. CONTROL: with less motion asked for, the menu arrives as today with the row left alone.
+     FAILS BEFORE #1243 G8 by its own sentence: the stretch starts on the row's whole box. */
+  test('1243 G8 · on a phone the Tap to add a layer bar itself grows into the Add menu — from the dashed bar, not the row, widening by 30%, the row hidden while it moves, its words rising into the tab row by half way, the menu uncovered top-down, the edge starting pressed (CONTROLS: the bar ends short of the row, and less motion gets today’s menu)', { item: '1243', budgetMs: 30000 }, async function () {
+    insetControl1084();
+    return grow1084(true, () => onRows1084(async function (c) {
+      const sheet = c.sheet, P = FM.scene.project, dur0 = P.duration;
+      const mmDesc = Object.getOwnPropertyDescriptor(window, 'matchMedia'), realMM = window.matchMedia;
+      try {
+        P.duration = 1; FM.scene.layers.forEach(function (l) { l.duration = 1; });
+        FM.refreshAll(); if (FM.timeline && FM.timeline.rebuild) FM.timeline.rebuild();
+        await sleep(300);
+        const row = c.rowNow(), rr = row.getBoundingClientRect(), br = bar1084(row);
+        if (!(br.right < rr.right - 20)) throw new Error('CONTROL: on a 1 s project the bar (' + box1084(br) + ') still runs to the row’s end (' + box1084(rr) + '), so the bar and the row cannot be told apart');
+        c.tap();
+        if (!sheet.classList.contains('open')) throw new Error('the tap on the row did not open the add menu');
+        const a = clipAnim1084(sheet);
+        if (!a) throw new Error('setup: the row did not stretch into the menu (switch on), so there is no stretch to read');
+        const D = a.effect.getComputedTiming().duration, sb = sheet.getBoundingClientRect(), vb = vis1084(br, sb), vr = vis1084(rr, sb);
+        const kf = a.effect.getKeyframes(), k0 = inset1084(sheet, kf[0].clipPath);
+        if (!k0.ok || !near1084(k0, vb, 1.5)) throw new Error('the stretch starts from ' + (k0.ok ? box1084(k0) : k0.raw) + ', not from the dashed bar he sees ' + box1084(vb) + ' (the row’s whole box is ' + box1084(vr) + ') — #1243 G8: the bar itself grows into the menu');
+        const kw = kf.filter(function (k) { return Math.abs(k.offset - 0.3) < 0.001 && k.clipPath; })[0], qw = kw ? inset1084(sheet, kw.clipPath) : { ok: false };
+        if (!qw.ok || Math.abs(qw.left - sb.left) > 1 || Math.abs(qw.right - sb.right) > 1) throw new Error('the bar has not widened to the menu’s sides by 30% of the stretch (' + (qw.ok ? box1084(qw) : 'no keyframe at 30%') + ')');
+        if (getComputedStyle(c.rowNow()).visibility !== 'hidden') throw new Error('while the bar grows into the menu the real row is still drawn under it — two bars at once');
+        const edge = attached(document.querySelector('.add-stretch-edge'), 'the moving edge');
+        const tabs = sheet.querySelector('.addmenu-tabs'), skin = attached(document.querySelector('.add-stretch-skin'), 'the row’s + and words');
+        const list = stretchAnims1084(sheet).concat(tabs ? tabs.getAnimations() : []);
+        seek1084(list, 0);
+        const ecs = getComputedStyle(edge);
+        if (ecs.borderTopStyle !== 'solid' || !/150, 232, 255/.test(ecs.borderTopColor) || !/14px/.test(ecs.boxShadow)) throw new Error('the moving edge does not start in the pressed look (' + ecs.borderTopStyle + ' ' + ecs.borderTopColor + ', ' + ecs.boxShadow + ') — #1243 G7: solid and lit');
+        const kids = [].slice.call(sheet.children);
+        const shown0 = kids.filter(function (k) { return !(maskY1084(k) >= 74.5); });
+        if (shown0.length) throw new Error('at the start part of the menu is already uncovered (' + shown0.map(function (k) { return k.id || k.className; }).join(', ') + ')');
+        const rowC = rr.top + rr.height / 2;
+        seek1084(list, D / 2);
+        const kr = skin.getBoundingClientRect(), skinC = kr.top + kr.height / 2;
+        if (!(skinC < rowC - 2 && skinC > sb.top - 1)) throw new Error('half way the row’s + and words sit at y ' + Math.round(skinC) + ', not between the row (' + Math.round(rowC) + ') and the menu’s top (' + Math.round(sb.top) + ') — they ride up into the tab row');
+        if (!(+getComputedStyle(skin).opacity < 0.05)) throw new Error('half way the row’s words still show (' + getComputedStyle(skin).opacity + ')');
+        if (tabs && !(+getComputedStyle(tabs).opacity > 0.95)) throw new Error('half way the menu’s tab row has not taken the words’ place (opacity ' + getComputedStyle(tabs).opacity + ')');
+        seek1084(list, D);
+        const covered = kids.filter(function (k) { return !(maskY1084(k) <= 0.5); });
+        if (covered.length) throw new Error('at the end part of the menu is still covered (' + covered.map(function (k) { return k.id || k.className; }).join(', ') + ')');
+        list.forEach(function (x) { try { x.finish(); } catch (e) {} });
+        await sleep(STRETCH1084 + 120);
+        if (getComputedStyle(c.rowNow()).visibility === 'hidden') throw new Error('the stretch has finished and the Tap to add a layer row is still hidden');
+        await shutRow1084(c);
+        // CONTROL: less motion — today's menu, the row left alone
+        window.matchMedia = function (qq) {
+          if (/prefers-reduced-motion:\s*reduce/.test(qq)) return { matches: true, media: qq, onchange: null, addListener: function () {}, removeListener: function () {}, addEventListener: function () {}, removeEventListener: function () {}, dispatchEvent: function () { return false; } };
+          return realMM.call(window, qq);
+        };
+        c.tap();
+        if (!sheet.classList.contains('open') || clipAnim1084(sheet)) throw new Error('CONTROL: with less motion asked for the menu did not arrive as today (no stretch)');
+        if (getComputedStyle(c.rowNow()).visibility === 'hidden') throw new Error('CONTROL: with less motion the row was hidden anyway');
+      } finally {
+        if (mmDesc) Object.defineProperty(window, 'matchMedia', mmDesc); else delete window.matchMedia;
+        P.duration = dur0;
+        await shutRow1084(c);
+      }
+    }));
   });
 })();

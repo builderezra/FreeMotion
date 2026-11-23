@@ -163,15 +163,19 @@ window.FM = window.FM || {};
   /* A BUTTON, not a label+checkbox. The whole tile is the target — on a phone a 44px-square tile is a
      far easier thing to hit than a 15px box, and `aria-pressed` keeps it a toggle for a screen reader
      rather than an unlabelled button. */
-  function bsTile(kind, label, on, onChange, wide) {
+  /* #1243 F7: A TILE OPENS ITS FEATURE'S PAGE now, and no longer toggles it ("when you actually press on one it opens up that
+     menu and then has a back button"); the page's own switch turns it on. The lit dot (.on) still says which are on, and the
+     label says it too, since the tile is no longer a pressed/unpressed toggle. */
+  function bsTile(kind, label, on, onOpen, wide) {
     const t = el('button', 'bs-tile' + (on ? ' on' : '') + (wide ? ' bs-wide' : ''));
     t.type = 'button';
-    t.setAttribute('aria-pressed', on ? 'true' : 'false');
+    t.dataset.kind = kind;
+    t.setAttribute('aria-label', label + (on ? ', on' : ', off'));
     const art = el('span', 'bs-art'); art.innerHTML = BS_ART[kind] || '';
     t.appendChild(art);
     t.appendChild(el('span', 'bs-name', label));
     t.appendChild(el('span', 'bs-dot'));
-    t.addEventListener('click', () => { if (!on) pendingReveal = { sub: label }; onChange(!on); commitH(); });   // #912: its rows drop in under the grid
+    t.addEventListener('click', () => onOpen());
     return t;
   }
 
@@ -7368,10 +7372,25 @@ window.FM = window.FM || {};
         body.appendChild(rangeRow('Gain', () => cg.gain, v => { cg.gain = v; }, 0, 3, 0.02));
       }
     } else if (key === 'border') {
-      /* THE TILE GRID IS APPENDED FIRST and every toggle goes into it, so the five controls read as one
-         block and each one's detail rows fall below the grid rather than splitting it in half. */
+      /* #1243 F7 — ONE FEATURE AT A TIME, EASY SWITCHING. His words: "the outlines and shadows menu… big buttons… opens up
+         below… scroll deep… when you actually press on one it opens up that menu and then has a back button… Or… put all of
+         the logos on like the right side layered up… press on one it switches to that menu… top… say what menu you're in…
+         thumb can easily reach… like… the position and scale menu."
+         The plan's recommended C (his first idea plus one-tap switching): the FRONT PAGE is the tiles, each with a lit dot
+         while its feature is on, and a tap OPENS that feature's page instead of toggling it. A FEATURE PAGE has a header —
+         ‹ back to the tiles, the feature's name, its on/off switch — then only that feature's rows (greyed and inert while
+         it is off, so he sees the controls before turning it on), and a switcher row of the same pictures along the bottom,
+         in thumb reach, the current one lit: one tap swaps the page. Nothing that is stored changes: layer.stroke / shadow /
+         trimPath / repeater, their keyframes and Paste style are exactly as before; only the grouping does.
+         (Not built: the picks he was also offered — (A) the pages with no switcher row, and (B) the pictures stacked down the
+         right side, which is Position & Scale's rail and so Alight Motion's, #1243 F6.)
+         FM._bsPage is the page on show (null: the tiles); it lasts while this card stays open on this layer. */
+      if (FM._bsPageFor !== layer.id) FM._bsPage = null;
+      FM._bsPageFor = layer.id;
+      const bsPage = FM._bsPage || null;
+      const bsKinds = [];   // what this layer offers, in tile order: { kind, label, on, set, wide }
+      const bsRows = el('div', 'bs-page-rows');   // the open page's rows (the blocks below fill it only for their own page)
       const bsGrid = el('div', 'bs-tiles');
-      body.appendChild(bsGrid);
       // ===== BORDER (AM parity, keyframeable) =====
       // Reuses layer.stroke as the single border. position = inside/center/outside. Group border = silhouette
       // dilation → outside only. size + colour are keyframeable (◆); position is a plain choice.
@@ -7394,17 +7413,13 @@ window.FM = window.FM || {};
         if (!layer.stroke) layer.stroke = { enabled: false, width: layer.type === 'text' ? 6 : 8, color: layer.type === 'text' ? '#000000' : '#ffffff' };
         const stk = layer.stroke;
         if (stk.position == null) stk.position = (layer.type === 'text' || layer.type === 'group') ? 'outside' : 'center';
-        bsGrid.appendChild(bsTile('outline', 'Outline', stk.enabled, v => { stk.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
-        if (stk.enabled) {
-          /* SECTIONS (queue 564, the fix he delegated: "you figure out the best fix"). Each enabled feature's rows used to
-             run straight into the next feature's — Outline + Shadow open together gave one unbroken column of Position,
-             Color, Size, Style, Blur, Color, Opacity with nothing saying where one stopped. Every feature now heads its
-             rows with a small label and a divider (the same insp-sub-label the Draw-on rows already use). */
-          body.appendChild(el('div', 'insp-sub-label bs-sub', 'Outline'));
-          if (layer.type !== 'group' && !openKind) body.appendChild(segRow('Position', [['inside', 'Inside'], ['center', 'Center'], ['outside', 'Outside']], () => stk.position, v => { stk.position = v; }));
-          body.appendChild(kfColorRow(stk, 'color', 'Color', stk.color || '#ffffff'));
-          if (openKind) body.appendChild(el('div', 'insp-hint', 'Hugs the line from behind, as thick again as the line — set the line under Line width.'));   // queue 780
-          else body.appendChild(kfNumRow(stk, 'width', 'Size', 0, 100, 1, 6, ''));
+        bsKinds.push({ kind: 'outline', label: 'Outline', on: !!stk.enabled, set: v => { stk.enabled = v; FM.requestRender(); FM.inspector.refresh(); } });
+        /* (queue 564's section headings went with #1243 F7: one feature is on screen at a time, and its page says which.) */
+        if (bsPage === 'outline') {
+          if (layer.type !== 'group' && !openKind) bsRows.appendChild(segRow('Position', [['inside', 'Inside'], ['center', 'Center'], ['outside', 'Outside']], () => stk.position, v => { stk.position = v; }));
+          bsRows.appendChild(kfColorRow(stk, 'color', 'Color', stk.color || '#ffffff'));
+          if (openKind) bsRows.appendChild(el('div', 'insp-hint', 'Hugs the line from behind, as thick again as the line — set the line under Line width.'));   // queue 780
+          else bsRows.appendChild(kfNumRow(stk, 'width', 'Size', 0, 100, 1, 6, ''));
         }
       }
       // ===== TRIM PATH + DASHES (shape only) — both act on the STROKE, so they sit with the border.
@@ -7414,34 +7429,33 @@ window.FM = window.FM || {};
       if (layer.type === 'shape') {
         const hasStroke = openKind || (layer.stroke && layer.stroke.enabled);
         const tp0 = layer.trimPath;
-        bsGrid.appendChild(bsTile('trim', 'Trim path', !!(tp0 && tp0.enabled), v => {
+        bsKinds.push({ kind: 'trim', label: 'Trim path', on: !!(tp0 && tp0.enabled), set: v => {
           if (v) { if (!layer.trimPath) layer.trimPath = { enabled: true, start: 0, end: 1, offset: 0 }; else layer.trimPath.enabled = true; }
           else if (layer.trimPath) layer.trimPath.enabled = false;
           FM.requestRender(); FM.inspector.refresh();
-        }));
-        if (layer.trimPath && layer.trimPath.enabled) {
-          body.appendChild(el('div', 'insp-sub-label bs-sub', 'Trim path'));   // queue 564
-          const tp = layer.trimPath;
-          body.appendChild(kfScaledRow(tp, 'start', 'Start', 0, 100, 1, 0, '%', 100));
-          body.appendChild(kfScaledRow(tp, 'end', 'End', 0, 100, 1, 100, '%', 100));
-          body.appendChild(kfScaledRow(tp, 'offset', 'Offset', 0, 100, 1, 0, '%', 100));
-          body.appendChild(el('div', 'insp-hint', hasStroke ? 'Keyframe End 0→100% to draw the stroke on.' : 'Trim shows on the stroke — turn on Outline above.'));
+        } });
+        if (bsPage === 'trim') {
+          // never switched on: its rows are drawn from the defaults it would start with, greyed and inert, and nothing is stored
+          const tp = layer.trimPath || { enabled: false, start: 0, end: 1, offset: 0 };
+          bsRows.appendChild(kfScaledRow(tp, 'start', 'Start', 0, 100, 1, 0, '%', 100));
+          bsRows.appendChild(kfScaledRow(tp, 'end', 'End', 0, 100, 1, 100, '%', 100));
+          bsRows.appendChild(kfScaledRow(tp, 'offset', 'Offset', 0, 100, 1, 0, '%', 100));
+          bsRows.appendChild(el('div', 'insp-hint', hasStroke ? 'Keyframe End 0→100% to draw the stroke on.' : 'Trim shows on the stroke — turn on Outline too.'));
         }
         // Dashes live inside the stroke object (created lazily on first enable).
         if (!layer.stroke) layer.stroke = { enabled: false, width: 8, color: '#ffffff' };
         const dstroke = layer.stroke;
-        bsGrid.appendChild(bsTile('dashes', 'Dashes', !!(dstroke.dash && dstroke.dash.enabled), v => {
+        bsKinds.push({ kind: 'dashes', label: 'Dashes', on: !!(dstroke.dash && dstroke.dash.enabled), set: v => {
           if (v) { if (!dstroke.dash) dstroke.dash = { enabled: true, length: 12, gap: 8, offset: 0 }; else dstroke.dash.enabled = true; }
           else if (dstroke.dash) dstroke.dash.enabled = false;
           FM.requestRender(); FM.inspector.refresh();
-        }));
-        if (dstroke.dash && dstroke.dash.enabled) {
-          body.appendChild(el('div', 'insp-sub-label bs-sub', 'Dashes'));   // queue 564
-          const dh = dstroke.dash;
-          body.appendChild(rangeRow('Length', () => dh.length, v => { dh.length = Math.max(0, v); }, 0, 100, 1));
-          body.appendChild(rangeRow('Gap', () => dh.gap, v => { dh.gap = Math.max(0, v); }, 0, 100, 1));
-          body.appendChild(kfNumRow(dh, 'offset', 'Offset', -200, 200, 1, 0, ''));
-          if (!hasStroke) body.appendChild(el('div', 'insp-hint', 'Dashes show on the stroke — turn on Outline above.'));
+        } });
+        if (bsPage === 'dashes') {
+          const dh = dstroke.dash || { enabled: false, length: 12, gap: 8, offset: 0 };
+          bsRows.appendChild(rangeRow('Length', () => dh.length, v => { dh.length = Math.max(0, v); }, 0, 100, 1));
+          bsRows.appendChild(rangeRow('Gap', () => dh.gap, v => { dh.gap = Math.max(0, v); }, 0, 100, 1));
+          bsRows.appendChild(kfNumRow(dh, 'offset', 'Offset', -200, 200, 1, 0, ''));
+          if (!hasStroke) bsRows.appendChild(el('div', 'insp-hint', 'Dashes show on the stroke — turn on Outline too.'));
         }
       }
       // ===== SHADOW (AM parity, keyframeable) =====
@@ -7457,9 +7471,9 @@ window.FM = window.FM || {};
       if (sh.alpha == null) sh.alpha = 100;
       /* "Shadow", not "Drop shadow" — the toggle now turns on either kind, and the old label was half of
          why he thought the offset one was all there was. */
-      bsGrid.appendChild(bsTile('shadow', 'Shadow', sh.enabled, v => { sh.enabled = v; FM.requestRender(); FM.inspector.refresh(); }));
-      if (sh.enabled) {
-        body.appendChild(el('div', 'insp-sub-label bs-sub', 'Shadow'));   // queue 564
+      bsKinds.push({ kind: 'shadow', label: 'Shadow', on: !!sh.enabled, set: v => { sh.enabled = v; FM.requestRender(); FM.inspector.refresh(); } });
+      if (bsPage === 'shadow') {
+        const body = bsRows;   // this page's rows, not the card's (#1243 F7)
         /* THE CHOICE, MADE VISIBLE. Position X/Y are still right there below and still keyframeable —
            this row does not replace them, it just means you do not have to know that a shadow becomes
            the normal kind by zeroing two sliders that are already at 8.
@@ -7486,21 +7500,55 @@ window.FM = window.FM || {};
       // Its own block since it multiplies the WHOLE shape, not just the outline.
       if (layer.type === 'shape') {
         const rp0 = layer.repeater;
-        bsGrid.appendChild(bsTile('repeater', 'Repeater', !!(rp0 && rp0.enabled), v => {
+        bsKinds.push({ kind: 'repeater', label: 'Repeater', on: !!(rp0 && rp0.enabled), wide: true, set: v => {
           if (v) { if (!layer.repeater) layer.repeater = { enabled: true, copies: 3, offsetX: 40, offsetY: 0, rotation: 0, scale: 1, opacity: 1, anchorX: 0.5, anchorY: 0.5 }; else layer.repeater.enabled = true; }
           else if (layer.repeater) layer.repeater.enabled = false;
           FM.requestRender(); FM.inspector.refresh();
-        }, true));   // wide: Repeater spans both columns so the grid does not end on a lonely half-tile
-        if (layer.repeater && layer.repeater.enabled) {
-          body.appendChild(el('div', 'insp-sub-label bs-sub', 'Repeater'));   // queue 564
-          const rp = layer.repeater;
-          body.appendChild(kfNumRow(rp, 'copies', 'Copies', 1, 50, 1, 3, ''));
-          body.appendChild(kfNumRow(rp, 'offsetX', 'Offset X', -500, 500, 1, 40, ''));
-          body.appendChild(kfNumRow(rp, 'offsetY', 'Offset Y', -500, 500, 1, 0, ''));
-          body.appendChild(kfNumRow(rp, 'rotation', 'Rotation', -360, 360, 1, 0, '°'));
-          body.appendChild(kfNumRow(rp, 'scale', 'Scale', 0.1, 2, 0.01, 1, ''));
-          body.appendChild(kfScaledRow(rp, 'opacity', 'Opacity falloff', 0, 100, 1, 100, '%', 100));
+        } });   // wide: Repeater spans both columns so the grid does not end on a lonely half-tile
+        if (bsPage === 'repeater') {
+          const rp = layer.repeater || { enabled: false, copies: 3, offsetX: 40, offsetY: 0, rotation: 0, scale: 1, opacity: 1, anchorX: 0.5, anchorY: 0.5 };
+          bsRows.appendChild(kfNumRow(rp, 'copies', 'Copies', 1, 50, 1, 3, ''));
+          bsRows.appendChild(kfNumRow(rp, 'offsetX', 'Offset X', -500, 500, 1, 40, ''));
+          bsRows.appendChild(kfNumRow(rp, 'offsetY', 'Offset Y', -500, 500, 1, 0, ''));
+          bsRows.appendChild(kfNumRow(rp, 'rotation', 'Rotation', -360, 360, 1, 0, '°'));
+          bsRows.appendChild(kfNumRow(rp, 'scale', 'Scale', 0.1, 2, 0.01, 1, ''));
+          bsRows.appendChild(kfScaledRow(rp, 'opacity', 'Opacity falloff', 0, 100, 1, 100, '%', 100));
         }
+      }
+      /* #1243 F7: THE PAGE. A page this layer does not offer (a video has no Trim path) is the tiles. */
+      const bsCur = bsKinds.filter(k => k.kind === bsPage)[0] || null;
+      if (!bsCur) {
+        FM._bsPage = null;
+        bsKinds.forEach(k => bsGrid.appendChild(bsTile(k.kind, k.label, k.on, () => { FM._bsPage = k.kind; FM.inspector.refresh(); }, k.wide)));
+        body.appendChild(bsGrid);
+      } else {
+        const head = el('div', 'bs-head');
+        const back = el('button', 'bs-back', '‹');
+        back.type = 'button'; back.title = 'Back to Outline & Shadows'; back.setAttribute('aria-label', 'Back to Outline & Shadows');
+        back.addEventListener('click', () => { FM._bsPage = null; FM.inspector.refresh(); });
+        const name = el('div', 'bs-title', bsCur.label);
+        const sw = el('button', 'bs-onoff' + (bsCur.on ? ' on' : ''));
+        sw.type = 'button'; sw.setAttribute('role', 'switch'); sw.setAttribute('aria-checked', bsCur.on ? 'true' : 'false');
+        sw.setAttribute('aria-label', bsCur.label + (bsCur.on ? ' is on' : ' is off'));
+        sw.appendChild(el('span', 'bs-knob'));
+        sw.addEventListener('click', () => { bsCur.set(!bsCur.on); commitH(); });
+        head.append(back, name, sw);
+        body.appendChild(head);
+        // off: the controls show, greyed, and take no touch until the switch turns the feature on
+        if (!bsCur.on) { bsRows.classList.add('bs-rows-off'); bsRows.setAttribute('inert', ''); bsRows.setAttribute('aria-disabled', 'true'); }
+        body.appendChild(bsRows);
+        const bar = el('div', 'bs-switch');
+        bar.setAttribute('role', 'tablist'); bar.setAttribute('aria-label', 'Outline & Shadows');
+        bsKinds.forEach(k => {
+          const b = el('button', 'bs-sw' + (k === bsCur ? ' cur' : '') + (k.on ? ' lit' : ''));
+          b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', k === bsCur ? 'true' : 'false');
+          b.setAttribute('aria-label', k.label + (k.on ? ', on' : ', off'));
+          const art = el('span', 'bs-art'); art.innerHTML = BS_ART[k.kind] || '';   // the app's own constant drawings, nothing user-supplied
+          b.append(art, el('span', 'bs-sw-name', k.label));
+          b.addEventListener('click', () => { if (k === bsCur) return; FM._bsPage = k.kind; FM.inspector.refresh(); });
+          bar.appendChild(b);
+        });
+        body.appendChild(bar);
       }
     } else if (key === 'element') {
       // (Visible → timeline eye; Parent → Move & Transform. The old Visible/Parent rows were removed
@@ -7819,14 +7867,21 @@ window.FM = window.FM || {};
        IT LIVES INSIDE THIS OBJECT rather than being assigned next to FM.fxModeToggle further up, which
        is where it was first written: that is ~2300 lines before `FM.inspector` exists, so it threw on
        load. A parse check does not catch that — only running it does. */
-    openFxTab(key) {
+    openFxTab(key, o) {
       /* DELEGATES rather than setting fxTab itself, and the first version did not — it wrote
          `fxTab = 'filters'` and then called openCategory('effects'), which sets `fxTab = 'visual'` on
          its way past. The tab was correct for about a line. openCategory has carried the right mapping
          all along ('filters' and 'audiofx' both land on the Effects card with the matching side up), so
          this is a translation from the toggle's vocabulary to that one and nothing else. */
+      /* #1243 F9 — "from add effect → filters… automatically have it expanded… switching… from the preview area… can still
+         stay small". Only the Add effect browser's toggle passes { tall: true }; the phone's docked sheet then opens the Filters
+         tab grown to the sheet line (js/mobile.js fltApply). Every other way in opens it small. */
+      if (FM._fltOpen) FM._fltOpen(key === 'filters' && !!(o && o.tall));
       this.openCategory(key === 'audio' ? 'audiofx' : key === 'filters' ? 'filters' : 'effects');
     },
+    /* #1243 F9: is the docked sheet showing Full's Filters tab right now? Read off the panel itself (its search row), so a
+       panel that draws something else in this sheet never counts. */
+    filtersOpen() { return view === 'effects' && !!root && !!root.querySelector('.flt-top'); },
     ownsCanvas() {
       if (view === 'transform') return 'transform';
       if (FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive()) return 'points';
@@ -8182,6 +8237,8 @@ window.FM = window.FM || {};
         if (panelEl) panelEl.scrollTop = kept.sheet;
       }
       animateNav(root, layer);
+      if (view !== 'border') FM._bsPage = null;   // #1243 F7: leaving Outline & Shadows, it opens on its tiles next time
+      if (FM._fltSync) FM._fltSync();   // #1243 F9: the Filters tab came or went, so the phone's sheet re-docks (js/mobile.js)
     },
   };
 })(window.FM);
