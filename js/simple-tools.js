@@ -1785,8 +1785,12 @@ window.FM = window.FM || {};
       b.insertBefore(cv, b.firstChild);
       run.appendChild(b); cvs.push([cv, p]);
     });
+    /* #1259, his words (23 Nov): "in the simple editor, the effects is just all the same image and they don't really actually show you what
+       it is that is happening". A preset used to be drawn live on the one sample photo (mountPreset), and the presets come first in this
+       row, so the first screen was a dozen near-identical photos. Every tile now shows the drawn picture of the effect it puts on the
+       item: a preset shows its base effect's picture (S.itemEffects gives a preset's `type` as its fx), a stock effect its own. */
     const T = FM.fxThumbs;
-    if (T) lazyTiles(run, cvs, q => { if (q[1].preset && T.mountPreset) T.mountPreset(q[0], q[1].preset, null); else if (T.mount) T.mount(q[0], q[1].type); });   // #1243 S11: as they come into view
+    if (T && T.mount) lazyTiles(run, cvs, q => T.mount(q[0], q[1].type));   // #1243 S11: as they come into view
   }
 
   /* ═══ PHASE 3 · CLIPS › EXTRAS (queue 980; DESIGN §8.5 the Clips row "Add clips … · Extras (D21, from Phase 3): saved elements, shapes
