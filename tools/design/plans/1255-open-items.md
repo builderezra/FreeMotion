@@ -1,5 +1,6 @@
 # #1255 redesign: everything open, unfinished, or waiting on Ezra
-Kept by the logger, last updated 21 Nov 2026 02:20 AWST. This file is the durable copy; his words are verbatim under #1255 in REQUESTS.md.
+Kept by the logger, last updated 23 Nov 2026 17:00 AWST. This file is the durable copy; his words are verbatim under #1255 in REQUESTS.md.
+**His correction, 23 Nov 16:44-16:52 (verbatim):** "this whole project like thing we were doing was supposed to be like rethinking how everything could be laid out, not just recoloring stuff" / "the layout now is fine, but I'm just like open to inspiration and new ideas" / "we literally came up with some new designs. They're not even in here." (about the real-app page). So every surface gets today's layout POLISHED plus new layout ideas (never a recolour alone), and the real-app page must show his picks.
 His plan (21 Nov 02:10): "finish this up and we can properly do EVERYTHING when monday 4pm hits", i.e. after the weekly reset on **Mon 23 Nov 16:00 AWST**.
 His process rule: before ANY switch-over, ONE simple decisions chat covering every decision, his earlier likes ("still like them?"), and each change shown before/after, ending with "ready to switch over?". The builder builds nothing from these designs until he says he is ready.
 
@@ -15,6 +16,26 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
   - The real-app theme prototypes are in ~/fm-design/: theme-light.css and theme-cutline.css (the design copy of the app).
 
 ## A. Waiting on Ezra's answer (logger's recommendation in brackets)
+0. **MUST-PICK: Home bottom nav** (his ask 23 Nov 16:20: "Make sure that I actually pick one when you send them through").
+   - Options N1-N6 for Templates / Elements / Tutorials next to the +, keeping the + and Projects, on H9r/H9a.
+   - Being drawn 23 Nov. Chase until he names one.
+0b. **MUST-PICK, 23 Nov: one pick for each of his notes from 16:30-16:52.**
+   - SENT TO HIM at 18:13 as one pick list, with the N1-N6 picture. Chase each until he names one.
+   - Every option is on the canvas, on the pages home-nav, menus, create, inspector and simple-2.
+   - It is also on the real-app page (v3) as "Pick one" rows: 14 to pick.
+   - Recommended:
+     - N1 (the judge's pick; the designer preferred N2 Library)
+     - D1, O2, S1, K3, P2, L2, Q2, X3
+     - and from before, C3 and Template icon 1
+   - **QUESTION FOR HIM (asked 18:13):** with no layer selected there is no ••• at the top right today (removed in v6.13, queue 35; it shows notes and the cog). Which menu did "or when you don't have a layer selected" mean? The S*-none boards assume the ⧉ Layer actions menu.
+   - **D1-D4: how every dropdown connects to its button.** Shown on the Home card •••, the copy/duplicate menu, the editor's top-right ••• and the parent picker. [D1 pointer recommended: his own "an arrow coming off of it"]
+   - **O1-O5: the opening animation for every dropdown.** "not just the boring ass unfold animation".
+   - **S1-S3: the thinner top-right ••• menu.** The colours become a row you swipe through.
+   - **P1-P3: the Paste look dialog.** Today's colours were hidden by thick white outlines, and light mode was poor.
+   - **L1-L3: the Simple editor's Look panel.** It had wasted space below.
+   - **Q1-Q2: the Simple editor's effects panel with each effect's own picture.** Today every tile shows the same image. The picture fix itself can ship in today's look.
+   - **X1-X3: the Simple editor's Extras.** Elements, Shape and Template each get a real home in the A2r pattern.
+   - **K1-K3: the Create sheet's Simple/Full editor choice.** 60 fps is the default in all three. The feature itself can ship in today's look.
 1. **Identity:** confirm the orange look, "Cutline" [recommended; he said "orange looks really good" but wanted to see it in the editor first].
 2. **The Full editor switch:** keep today's behaviour, or colour it by the SELECTED layer as he described?
    - Today it is white at rest and takes a layer's colour only while you hold that layer by its handle (app.js:3437).
@@ -23,7 +44,7 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
 5. **"Selected" look across menus** (light review M8): (a) a vermilion fill, or (b) a white chip with a vermilion ring [(b) recommended; it's a taste call, so show both].
 5b. **Real-app re-skin taste calls** (reskin/NOTES.md):
    - The moving gradient ring on the inspector cards (#339) was removed for minimalism. OK?
-   - Tool glyphs are now one ink colour instead of per-tool colours. OK?
+   - ~~Tool glyphs are now one ink colour instead of per-tool colours. OK?~~ HE ANSWERED, 23 Nov 16:41: NO. Each category button keeps its old colour on its ICON only, with the outline staying black/white, no glow, subtle ("it shouldn't just be black and white"). Drawn as G1 (inspector/G1-*).
    - Timeline bars are coloured by layer TYPE, so two text layers share a colour. OK, or keep per-clip colours?
 6. **M3:** for PC only (with M1 on phone), or both?
 7. **Simple editor E1:** he liked it, but it has no computer version yet. Confirm E1, then draw its computer version.
@@ -43,6 +64,10 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
        - Turned on, the top buttons sit about 36 pt below the clock area, out of the blur, which ends 33-34 pt below it on all ten of his screenshots.
        - Also fixed: the open-project glitch (the top changed twice; now once). Added: a test card under Settings > Reports > "Top of the screen test".
        - ASK HIM: turn Sharp top on, or keep the buttons where they are? The comparison picture was sent 21 Nov ~13:40.
+       - v18.49 went LIVE 21 Nov 23:58 (b79e297a). His three checks:
+         1. Turn on Sharp top. If he keeps it on, the builder flips the default.
+         2. Open and close a project: the top should change once.
+         3. Only if something's still wrong: one screenshot of Settings > Reports > Top of the screen test.
 10. **Light mode on his iPhone** (light review M13): check that the clock and battery stay readable in light mode before it ships. He has to look on his phone.
 11. Earlier release questions still open:
     - v18.43: on PC, the two-row grid became one scrolling row. Does he want the grid back?
@@ -67,7 +92,12 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
    - The real-app "new look" page: crawl, review, fix, publish.
    Then design work STOPS until Monday 16:00.
 2. From Mon 23 Nov 16:00 (logger):
-   - Designs for every remaining menu, on the real-app re-skin.
+   - RUNNING 23 Nov 17:00:
+     - the real-app page rebuilt so every screen shows his pick, or the options, or "colours only so far" (wf_ec0a40bd-964)
+     - his 16:30-16:52 notes drawn as options (wf_dc808500-a2a; see A0b)
+     - the Home nav N1-N6 (wf_8814ffde-70c)
+     - the card ••• menu D1-D4 (wf_0062dd33-d35)
+   - Designs for every remaining menu: today's layout polished PLUS new layout ideas, never only a recolour (his correction above).
    - A motion spec (sheets, menus, tabs, selection, press feedback, the theme switch).
    - The logo fix: use the app's REAL logo and wordmark assets, never a redraw; retint only if he approves.
    - E1's computer version.
@@ -86,6 +116,7 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
 - Inside a category: M1 (phone), M3 (PC); M5 = the press-and-hold preview; M6 = the settings look with TODAY's sliders.
 - Audio menus: the same layouts as the visual effects, with the 52 new audio pictures (U1-U8 dropped).
 - Look: Cutline (orange). Minimal ("less is more").
+- Category buttons (Colouring & Media, Outline & Shadows, Mixing and the rest): each icon keeps its own colour; the outline is neutral black/white; no glow (23 Nov, his own spec, drawn as G1).
 
 ## D. Build rules he set
 - Minimal; no hero card for the open project.
@@ -99,3 +130,11 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
 - The real logo is used, never redrawn.
 - Dark is the default; light mode is a setting and must be tasteful.
 - Phone AND computer both matter.
+- The redesign RETHINKS layouts, never only recolours. Every surface gets today's layout polished plus new ideas (23 Nov).
+- Every dropdown opens FROM its button and stays visibly connected to it, with a quick opening animation that is not the plain unfold. This covers the Home card •••, the copy/duplicate menu, the editor's top-right •••, the parent picker and any others (23 Nov).
+- No glow anywhere. Outlines are hairlines, never thick white (23 Nov, the Paste look dialog). That includes the Full editor's layer switch: his T1r/T4r boards still draw a coloured glow on it (.sw-track box-shadow), and the build must drop it.
+- One connector system for every dropdown (his D pick). The build spec is the D1 pointer in the logger's polish/tmp/logger/w1/notes-A1.md: 12x9 SVG, top -9px, centred on the opener. The menu placement passes the opener's rect.
+- Builder items that do NOT wait for the redesign (23 Nov):
+  - 60 fps selected by default.
+  - A Simple/Full editor choice when creating a project.
+  - The Simple editor's effects each show their own picture.

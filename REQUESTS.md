@@ -40208,6 +40208,298 @@ re-opened #480, which I had marked done and had not fixed.
       His second message (11:02), "the top bar glitches in and out when loading in ... loading in and out of project", is a second fault (what happens WHILE the app changes between Home and a project). It is logged above and is looked at in the same piece of work.
       UNBLOCKED 21 Nov for clause 4 and for the 11:02 glitch: both are the builder's, as ordinary bugs. Every design clause still waits for the decisions chat.
       📍 **v18.49 (21 Nov): the cure for the blur ships as a switch, and the open/close glitch is cured on the page's side** — measured on all ten of his screenshots, the iPhone's blur ends 33 to 34 pt below the clock area on every screen. "Sharp top buttons" (Settings, Appearance; only on an iPhone Home Screen app) starts every top bar's first letter or button 36 pt below the clock area, with each screen's colour still running to the top. It is OFF until he turns it on (his #920 words: "I like B but I don't want the buttons lower"). Opening a project no longer changes the top twice. "Top of the screen test" (Settings, Reports) is a purple card with a ruler: one screenshot of it from his phone gives the blur's real reach and what colours it. Nothing was seen on an iPhone and nothing is ticked. One line of Simple's (the stage height) is covered by a shared rule for now; the line a Simple release should write is in ~/fm-builder/wf/B-blur.md, Step 2. If he keeps Sharp top on, a later release makes it the default.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, ~16:20 AWST: #1255 Home's bottom nav: keep the + where it is, rethink Templates / Elements / Tutorials; make him PICK one**
+      **His words (verbatim):** I'm looking at the new Look Real app that shows every screen, and the first thing I'm going to say is that the home section, I think the plus button, I don't know, it's kind of in a good spot, I guess. But the buttons next to it, like templates, elements, and tutorials, and projects might need rethinking. I mean, projects being a home is fine. I don't know, the others could be rethought. I mean, they're okay how they are now, but there might be better options. So let's just explore those options. Make sure that I actually pick one when you send them through in case I miss it.
+
+      **His clauses:**
+      1. [ ] The + button on Home is in a good spot. Keep it.
+      2. [ ] Projects as the home tab is fine.
+      3. [ ] Templates, Elements and Tutorials (the buttons next to the +) could be rethought. They're OK now, but there may be better options.
+      4. [ ] Explore those options.
+      5. [ ] When the options come through, make sure he actually PICKS one, so it isn't missed.
+
+      **Logger's plan (not his words):**
+      - Draw the options for the Home bottom nav on his picked Home (H9r on phone, H9a on PC), in dark and light, keeping the + and Projects, with one recommended.
+      - Put them on the canvas.
+      - Add "Home nav pick" to 1255-open-items.md A as a MUST-ANSWER, and chase it until he picks.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, ~16:30 AWST: #1255 the project card's ••• menu is fine, but should visibly connect to the three dots**
+      **His words (verbatim):** I think the drop-down menu for when you press the three dots is fine. Like in the project card ... menu, it's fine, but it could use like, it could have like a little something connecting it to the three dots, if that makes sense.
+
+      **His clauses:**
+      1. [ ] The ••• dropdown on a project card is fine as it is.
+      2. [ ] It could use "a little something" that connects it to the three dots it came from.
+
+      **Logger's plan (not his words):**
+      - Draw 3-4 small options in Cutline, phone and PC, dark and light, on H9r/H9a:
+        - a small pointer or notch on the menu aimed at the dots
+        - the dots button staying lit, or turning into an accent chip, while open
+        - the menu growing out of the dots
+        - a hairline joining the two
+      - One recommended. He picks one (with the Home nav pick).
+      📥 **Follow-up, via INBOX — 23 Nov 2026, about 16:38 AWST: #1255 the copy/duplicate button's menu and the editor's top-right ••• menu connect to their buttons, open with a nicer animation, and the ••• menu gets thinner with a swipe row of colours**
+      **His words (verbatim), first message:** the drop-down menu for when you press the select all layers / copy selected layers, like just pretty much the copy and duplicate button. When you press that, it shouldn't open up. It should open up a drop-down menu. Sorry, it should do that, but it should like be connected as well. Like it should have like an arrow coming off of it or whatever, just so it actually looks stylish and not just like a random ugly pop-up. And it should have like a little animation that isn't just the boring ass unfold animation, because like, you know, it could just be like a, I don't know, just think of something that looks nice and show me the options.
+
+      **His words (verbatim), second message:** Same for the three-dot drop-down menu from the top right when you have a layer selected or not, or when you don't have a layer selected. I also think it could be thinner. You could make it thinner and just make it the colors at the bottom. You have to slide to choose between different ones. Like it's just a little swipe you do. So then it's just a thinner menu.
+
+      **His clauses:**
+      1. [ ] The copy/duplicate button (select all layers / copy selected layers) keeps opening a dropdown menu.
+      2. [ ] That menu is visibly connected to its button ("an arrow coming off of it or whatever"), so it looks stylish, not "a random ugly pop-up".
+      3. [ ] It opens with a nice little animation, not the plain unfold. Show him the options.
+      4. [ ] The same for the top-right ••• menu, both with a layer selected and with none.
+      5. [ ] The ••• menu could be thinner: the colours at the bottom become a row you swipe through, so the menu can be narrow.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, about 16:41 AWST: #1255 the category buttons (Colouring & Media, Outline & Shadows, Mixing and the rest) keep their colours, on the icon only**
+      **His words (verbatim):** With like coloring and media, outline and shadows, mixing and all the others, I think they should keep their colors, but only for the logo and not for the entire, like it shouldn't just be black and white. It should keep its color like it would have had before, but the outline around it should stay black and white, and it shouldn't have any like glowing or anything, just more subtle.
+
+      **His clauses:**
+      1. [ ] The category buttons keep their colours, on the icon only, not the whole button. Not just black and white.
+      2. [ ] Each icon keeps the colour it had before.
+      3. [ ] The outline around the button stays black and white.
+      4. [ ] No glow. More subtle.
+
+      **Logger's note:** this answers the re-skin taste call "tool glyphs one ink colour?" (1255-open-items A5b): NO. Each category keeps its own colour on its icon.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, about 16:44 AWST: #1255 the parent picker drops down from its button; the Paste look dialog's thick white outlines; the redesign must rethink layouts, not just recolour**
+      **His words (verbatim), first message:** The parent picker should also drop down from where the parent picker button is, and it should actually be like connected to it as well. Like it should have like a little animation dropping down from it and be connected to it. The pasting look dialog section should also carry across colors for each button. Wait, it kind of does actually now that I'm looking at it close. You do have the colors. It's just got such thick white outlines. You can't really tell. So it looks really shitty. And on the light one as well, it looks really shitty because it's just like not done properly. So make sure that menu actually looks good. I don't know if you've even gone through all these and polished them all yet and like actually done anything other than just like recoloring it, because this whole project like thing we were doing was supposed to be like rethinking how everything could be laid out, not just recoloring stuff. Just so you know.
+
+      **His words (verbatim), second message:** Like, the layout now is fine, but I'm just like open to inspiration and new ideas.
+
+      **His clauses:**
+      1. [ ] The parent picker drops down from where its button is.
+      2. [ ] It is connected to the button, with a little animation dropping down from it.
+      3. [ ] The Paste look dialog has the per-button colours, but thick white outlines hide them. It looks bad in dark AND in light. Make that menu actually look good.
+      4. [ ] The redesign was meant to RETHINK how everything is laid out, not just recolour it.
+      5. [ ] Today's layouts are fine, but he is open to inspiration and new ideas.
+
+      **Logger's note:** the real-app page so far IS only the recolour (step one). This week's W1 is the layout rethink of every remaining menu: today's layout polished, plus 1-2 new ideas each, before and after, with one recommended.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, about 16:47 AWST: #1255 the Simple editor's Look panel wastes space; its Clips Extras need real homes for Elements, Shape and Template**
+      **His words (verbatim), first message:** I don't like the simple look panel with the filters that open up because it's got lots of wasted space down below. I think that could be used a bit better, the space there.
+
+      **His words (verbatim), second message:** Also, I'm noticing in the simple clips extras section, it doesn't have the new design pattern that we agreed on when making like the new ad menu for the complex editor. And also it shouldn't even look like that. I mean, it should, you know, not just be like a lazy tack on, like elements, shape and template should have their own like homes that are actually, you know, that actually seem like they're thought out and smartly thought out and placed.
+
+      **His clauses:**
+      1. [ ] The Simple editor's Look panel (the filters that open up) has lots of wasted space below it. Use that space better.
+      2. [ ] The Simple editor's Clips "Extras" section doesn't use the design pattern agreed for the Full editor's new ADD menu (A2r).
+      3. [ ] It shouldn't look like a lazy tack-on. Elements, Shape and Template each get their own thought-out, well-placed home.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, about 16:52 AWST: #1255 the real-app "new look" page shows the whole app in new colours, but none of the designs he picked (the ADD menu he liked is not in it)**
+      **His words (verbatim):** Also, the add menu in the pictures, they don't even represent anything that we agreed on, the design that we agreed on. Like, I literally said I like one of the new designs and you didn't even do it. This is basically just showing me the whole app in new colors, which is like, okay, but it's like, come on, we literally came up with some new designs. They're not even in here.
+
+      **His clauses:**
+      1. [ ] The ADD menu in the real-app pictures doesn't show the design he agreed on (A2r).
+      2. [ ] He said he liked one of the new designs, and it isn't in there.
+      3. [ ] The page is just the whole app in new colours. That's OK, but the new designs they came up with are not in it.
+
+      **Logger's note (not his words):** he is right. The page was only step one: today's screens in the new colours. His picks (H9r/H9a, A2r, T1r/T4r, B1r/B4r, M1/M3, E1) live on the design canvas, not in the page, and the page never said so.
+
+      **Logger's plan for all of today's #1255 blocks (not his words):**
+      - The real-app page gets rebuilt so every screen shows HIS PICK where he has made one, and the options to pick from where he hasn't. Today's screen stays beside it as the "before". A screen with no layout change planned says so.
+      - One design job, started about 16:55, is drawing options for all of today's notes. Each has today's layout polished, plus new ideas, with one recommended:
+        - connected dropdowns D1-D4 (the pointer D1 is recommended, his "arrow") on the copy menu, the ••• menu and the parent picker
+        - five opening animations
+        - the thinner ••• menu with a swipe row of colours
+        - category icons in colour
+        - the Paste look dialog
+        - the Simple Look panel
+        - Simple Extras
+        - the Simple editor's effect pictures
+        - the Create sheet
+      - They go on the design canvas and the rebuilt page for him to pick. The builder builds nothing from them until his decisions chat and his "ready". The 60 fps default and the Simple effect pictures are the exception: they can ship in today's look.
+      📌 **Builder, 23 Nov 16:52:** the 7 follow-ups above are logged word for word: his notes of 23 Nov on the real-app page and on the menus. They are design clauses, so nothing is built from them before the ONE decisions chat and his "ready"; the logger draws the options. His other requests of the same half hour are their own entries: #1258, #1259. Clause 4 of the first message (the fade) and his 11:02 clause (the glitch) are still open, waiting for his eyes on v18.49.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 20:53 AWST: #1255 no emojis in the app (the Detect speech button); caption and text editing pop up from the BOTTOM, properly; no "tap a clip to…" hint pop-ups**
+      **His words (verbatim):** With the detect speech, I don't like that it has an emoji on the detect speech button. It should be like a picture that you made, not an emoji. I don't really like use of emojis on text in our app. I prefer you would design something yourself. Honestly, on the caption queue typing page and honestly every text page, I feel like it should all pop up from the bottom, not from the top, because that just makes more sense because everything's on the bottom usually. It could probably all just fit on the bottom and then the screen wouldn't even need to move around and stuff. It could just go where the ad layer would go. Don't take a shortcut to making it look like that. Do it the proper way. I'm also noticing a pop-up that says tap a clip to split or change its speed. There shouldn't be any explanations like that. We have tutorials for a reason, and there could be a tutorial when the first time you load into the app is, but not, you know, constantly there.
+
+      **His clauses:**
+      1. [ ] The Detect speech button has an emoji on it. Replace it with an icon we design, not an emoji.
+      2. [ ] A standing rule: no emojis on text or buttons anywhere in the app. Design our own icons instead.
+      3. [ ] The caption cue typing page, and EVERY text page, pops up from the BOTTOM, not the top, because everything else is at the bottom.
+      4. [ ] It should all fit at the bottom, so the screen doesn't move around. It could go where the add-layer row would go.
+      5. [ ] "Don't take a shortcut to making it look like that. Do it the proper way."
+      6. [ ] Remove pop-ups that explain things, like "tap a clip to split or change its speed". There shouldn't be explanations like that.
+      7. [ ] Tutorials exist for that. A tutorial the first time you load the app is fine, but no hints that keep showing.
+
+      **Logger's notes (not his words):**
+      - The emoji is at js/captions.js:555: `el('button', 'btn cap-detect-btn', '🎙 Detect speech')`.
+      - Clause 2 needs a sweep of every emoji used as an icon in the app's own text and buttons, each replaced by a drawn icon in the app's icon style.
+      - The hint text was not found word for word. The nearest are Simple's band words "Tap a clip to see its tools" (simple-tools.js:160) and the spine-words.js lines. His screenshot came from the real-app page, which is the design copy at v18.47, so it may be worded differently in the code.
+      - Clauses 3-5 are #1255 design. The logger draws the options (the caption cue editor and the text editor as bottom sheets in the add-layer row's place, phone and PC) after v18.50 ships, when the laptop is free.
+      - Clauses 1, 2, 6 and 7 can ship in today's look; the new icon gets drawn as options first.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:00 AWST: #1255 his pick for the Simple editor's Look panel is L1, not the recommended L2**
+      **His words (verbatim):** With the look panel, pick one, where you recommended L2. I actually think L1 is better.
+
+      **His clauses:**
+      1. [ ] Simple editor Look panel: he picks L1, today's layout polished, with the space below used. The recommended L2 (two rows) loses.
+
+      **Logger's note (not his words):** L1 is canvas page simple-2, board simple/L1-dark-phone. It has only a dark phone board so far. The logger draws L1 in light and on PC in the next batch. Nothing is built before his decisions chat.
+      📌 **Builder, 23 Nov, on the 20:53 follow-up above:** clauses 6 and 7 (no pop-ups that explain things; tutorials do that) are the builder's in today's look: a sweep of every standing hint in both editors, each one listed with its words and where it shows, removed unless it is a tutorial or an error. The ones in the Simple editor go with the next Simple release. Clauses 1 and 2 (no emoji on the Detect speech button, none anywhere as an icon) are the builder's once the logger's drawn icon is picked; the sweep that lists every emoji used as an icon can be done before. Clauses 3 to 5 (text and caption editing from the bottom, done properly) are design: they wait for the options and his pick.
+      📌 **Builder, 23 Nov 20:59:** the 2 follow-ups above are logged word for word: his notes of 23 Nov on the real-app page and on the menus. They are design clauses, so nothing is built from them before the ONE decisions chat and his "ready"; the logger draws the options. His other requests of the same half hour are their own entries: #1260. Clause 4 of the first message (the fade) and his 11:02 clause (the glitch) are still open, waiting for his eyes on v18.49.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:10 AWST: #1255 the Simple Clips Extras options (X1-X3) are confusing. Think harder and make the choice easy; the "Recommended" mark blocks the view; tapping an option shows even more options (the clock in this header was the logger's guess: it was written between 20:58 and 21:20 AWST, in this order)**
+      **His words (verbatim):** On regards to simple clips extras, pick one. X3 being the one you recommend. I'm kind of confused what it even is, like why they're all so different, what the options are. And you've got like recommended text that blocks the view. And then for some reason, when I click on it, it shows even more options. And honestly, I think you just need to think about that one a bit harder and then actually make it easier for me to decide.
+
+      **His clauses:**
+      1. [ ] He can't tell what X3 (the recommended one) even is, why the options are all so different, or what the options are.
+      2. [ ] The "Recommended" text blocks the view.
+      3. [ ] Tapping an option shows even more options.
+      4. [ ] Think harder about that one, and make it EASIER for him to decide.
+
+      **Logger's plan (not his words):**
+      - Redraw X as three options framed the same way, so they compare at a glance. Each is one storyboard: where you tap in the Simple editor, then where Shape, Elements and Template each live, plus a one-line idea and the number of taps to each.
+      - An independent judge picks the recommendation. The A2r pattern he named should weigh heavily.
+      - The "Recommended" mark sits ABOVE the picture, never on it, on the boards AND everywhere on the real-app page.
+      - Tapping an option opens only that option, in dark and light.
+      - It runs first in tonight's design run, after v18.50 ships.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:12 AWST: #1255 the Simple Speed row is fine, apart from an ugly line under "×1" (the clock in this header was the logger's guess: it was written between 20:58 and 21:20 AWST, in this order)**
+      **His words (verbatim):** The speed row looks fine. It's just that you've got a line underneath where it says times 1, and it's like a really ugly looking line.
+
+      **His clauses:**
+      1. [ ] The Simple Speed row's layout is fine.
+      2. [ ] Remove the ugly line under the "×1" value.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:14 AWST: #1255 the Simple Transition row needs MANY options, each with a little animation showing what it does (the clock in this header was the logger's guess: it was written between 20:58 and 21:20 AWST, in this order)**
+      **His words (verbatim):** Transition row is bad because it should have a lot of options, and they should have like little clips that show you what the transitions are, like little animations that give you an example of what it would look like.
+
+      **His clauses:**
+      1. [ ] The Simple Transition row is bad: it should have a lot of options.
+      2. [ ] Each transition gets a little clip or animation, an example of what it would look like.
+
+      **Logger's plan for both (not his words):**
+      - Both are in tonight's design run (batch B6, codes SSP and STR). SSP keeps today's layout and removes the line.
+      - STR lists every transition the app has, offers all of them, and gives each tile a looping A-to-B animation. It also notes which transitions to add and how the builder can make the tile animations for real, like the effect pictures library.
+      - An animated picture per transition is also a builder item that could ship in today's look once designed.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:17 AWST: #1255 no ugly line under a selected item, anywhere (seen on the Sound styles row) (the clock in this header was the logger's guess: it was written between 20:58 and 21:20 AWST, in this order)**
+      **His words (verbatim):** With the sound styles row, you've got it so whenever you have something selected, it has an ugly line under it as well. I'm pretty sure you probably have that on a lot of areas. So just make sure that you don't have any of that.
+
+      **His clauses:**
+      1. [ ] The Simple Sound styles row draws an ugly line under whatever is selected.
+      2. [ ] That is probably in a lot of places.
+      3. [ ] Make sure there is none of that anywhere.
+
+      **Logger's notes (not his words):**
+      - This is a standing rule: a selected or active item is never marked with a line under it. Show selection with a soft filled chip or a thin ring. It is also the same complaint as the Speed row's "×1" line (21:12).
+      - It partly answers the open "selected look" question (1255-open-items A5): not an underline.
+      - The re-skin's "cut" underline mark (theme-cutline.css) is likely the source in many places. The recommended Home nav N1 also draws a short cut mark under the active tab, so that mark goes too.
+      - Tonight's design run carries the rule into every batch.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:19 AWST: #1255 the add-effects menu for TEXT should be made for text: text effects and easy colour changes, no picture adjustments like brightness (inspiration: CapCut) (the clock in this header was the logger's guess: it was written between 20:58 and 21:20 AWST, in this order)**
+      **His words (verbatim):** I think the adding effects menu for text should be more specialized towards text and not have random bullshit in it. Like, you don't really need a brightness effect for text, it's just text. Like, you want more text based effects and you just want to simply be able to like change the colors and that sort of stuff. Kind of like what CapCut has, take inspo from that.
+
+      **His clauses:**
+      1. [ ] The add-effects menu for a text layer should be specialised for text.
+      2. [ ] No irrelevant effects: brightness is not needed for text.
+      3. [ ] More text-based effects.
+      4. [ ] Simple colour changes and that sort of thing.
+      5. [ ] Take inspiration from CapCut.
+
+      **Logger's plan (not his words):**
+      - Tonight's design run, batch B2, code TFX, starts by sorting every effect offered for text today. Each one is text-worthy (outline, shadow, glow, neon, wave, typewriter…), colour, or not-for-text (brightness, contrast, keying…).
+      - It then draws a text-made menu: today's polished but text-only, a Colour | Style | Effects | Animate idea, and one more, with every tile showing its effect ON text.
+      - Simple shows only the text set.
+      - In Full (his "as much choice as possible"), the text set comes first and "All effects" stays one tap away. That is the logger's reading, so ask him.
+      - CapCut is inspiration only: ideas, not their look. The note in BEFORE-PUBLISHING.md about copied UI applies.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:22 AWST: #1255 will the PC ADD menu (A2r) still look good when you drag it taller or shorter? (the clock in this header was the logger's guess: it was written between 20:58 and 21:20 AWST, in this order)**
+      **His words (verbatim):** I'm curious for the computer one, what happens when you start dragging the add menu up and down? Like, it looks good at the level that you've got it at, but will it continue to look that good?
+
+      **His clauses:**
+      1. [ ] On the computer, what happens to the ADD menu (A2r) when you drag it up and down?
+      2. [ ] It looks good at the height shown. Will it keep looking that good at other heights?
+
+      **Logger's answer and plan (not his words):**
+      - Honest answer: the board shows ONE height only, so it is not proven yet.
+      - Tonight's design run (batch BX, code AH) draws A2r on PC at its shortest, default and tallest drag heights, using the app's real min and max.
+      - The rules that keep it right:
+        - tabs pinned;
+        - tiles keep their size, never stretched;
+        - more rows as it grows;
+        - a single scrolling row at the shortest height;
+        - nothing clipped.
+      - The exact CSS goes to the builder for the build.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:24 AWST: #1255 his pick for the ADD sheet's Template tab icon: the recommended one (1, "Stacked cards") (the clock in this header was the logger's guess: it was written between 20:58 and 21:20 AWST, in this order)**
+      **His words (verbatim):** Go for the recommended template option.
+
+      **His clauses:**
+      1. [ ] The Template tab icon on the ADD sheet (A2r) is the recommended option: icon 1, "Stacked cards" (from add/A2-tplicons).
+
+      **Logger's note (not his words):** this answers 1255-open-items A3. It goes into the A2r build at integration, after his decisions chat.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:35 AWST: #1255 B4r on PC: the effects menu opens fully and pushes the canvas aside. That is fine, as long as it causes no bugs (the clock in this header was the logger's guess: it was written between 20:58 and 21:20 AWST, in this order)**
+      **His words (verbatim):** I'm interested though, because when you show the PC version, the entire effects menu opens up massively, and then it kind of like pushes the canvas off to the side, which is fine, but I'm just wondering how that functions exactly. Like, can you drag it up and down? Is it forced to open up? I think I'm fine with it being forced to open up fully, and then it just like pushing the canvas to be smaller. As long as that doesn't cause any bugs, just fix it.
+
+      **His clauses:**
+      1. [ ] On PC (B4r), the effects menu opens big and pushes the canvas to the side. That's fine.
+      2. [ ] How does it work? Can you drag it up and down, or is it forced open?
+      3. [ ] He is fine with it forced open fully, with the canvas shrinking to fit.
+      4. [ ] As long as it causes no bugs: "just fix it", i.e. make it work that way.
+
+      **Logger's answer and build rule (not his words):**
+      - In B4r the effects browser is a full-height panel on the LEFT, about 340 px at 1440 wide, with Esc and ✕ to close.
+      - There is no drag. The canvas and the timeline move right and shrink to fit beside it, and closing gives the space back.
+      - Today the browser lives in the bottom band, which is why that version could be dragged.
+      - Build rule for integration: forced fully open, no drag. While it is open, the canvas keeps its aspect ratio and is refit in one step, not animated jank.
+      - Tests to add:
+        - taps and handles on the canvas still land in the right place (the pointer mapping after the refit);
+        - nothing overlaps or clips at 1280 and 1440;
+        - playback and the playhead are unaffected;
+        - opening and closing restores the exact layout;
+        - the timeline stays usable at the narrower width.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:38 AWST: #1255 the design's effect tiles look better than the app's real effect covers; show the real covers in the new layout, maybe revise them later (the clock in this header was the logger's guess: it was written between 20:58 and 21:20 AWST, in this order)**
+      **His words (verbatim):** Also, all of the different effects look very good in your one, in your example one, but we don't actually have effect covers that look like those. And I'm thinking, like, let's see what the effect covers look like currently on it, but we might need to do some revisions and change them up so they look as good as it looks like in your one, for example. But we'll come to that later, I guess. We'll see. I'm not sure.
+
+      **His clauses:**
+      1. [ ] The effect tiles in the B1r/B4r design look very good, but the real effect covers don't look like those.
+      2. [ ] Show what the current covers look like in the new layout.
+      3. [ ] The covers might need revising so they look as good as the design's. That comes later; he's not sure yet.
+
+      **Logger's plan (not his words):**
+      - Tonight's design run (batch BX, code FXR) draws B1r and B4r filled with the REAL effect pictures, plus a side-by-side of the design's tiles against the real covers for the 12 effects shown.
+      - It adds an honest verdict per cover and one proposal for a cover revision style.
+      - No cover is redrawn. His earlier rule (21 Nov) was to keep today's effect pictures, so revising them is his call later.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:40 AWST: #1255 his pick for the effects browser's category button style: C2 (Cut Paper). C3 looks repetitive (the clock in this header was the logger's guess: it was written between 20:58 and 21:20 AWST, in this order)**
+      **His words (verbatim):** I think C2 in the effects browser category button style is the best. I think C3 just looks repetitive and shit. Like, it just looks like the same thing over and over again, and it looks terrible.
+
+      **His clauses:**
+      1. [ ] The category button style is C2 (Cut Paper).
+      2. [ ] C3 (Split Frame, which the page recommended) looks repetitive, "the same thing over and over again", and terrible.
+
+      **Logger's note (not his words):** this answers 1255-open-items A4. C2 goes on B1r/B4r at integration (boards browser/B1r-C2-*, B4r-C2-*). Tonight's design run uses C2 wherever category buttons appear.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:45 AWST: #1255 opening the effects menu: the panel should rise and the canvas shrink in one smooth animation (like a comments sheet rising under a video), not cut to a new page (the clock in this header was the logger's guess: it was written between 20:58 and 21:20 AWST, in this order)**
+      **His words (verbatim):** I'm just realizing now what you've done is that when you open up, like when you for instance, the section M1 affects category keying with mask, right? That section you've got there. I realized when you actually open up a effects menu, it opens up really high and then makes the canvas really small. I liked kind of what it was like before because it still let you see the canvas in full size and be able to see how it is affected by the effects that you are adding. I think it does make sense being smaller though. I think it would just be good that if you have like a little animation so that when you do open up the effects menu, it like expands, it doesn't like cut to a different page, like it has like a little animation where like the panel goes up and then the canvas shrinks. Kind of like what TikTok has when you open up a comment section.
+
+      **His clauses:**
+      1. [ ] In M1 (inside a category, e.g. Keying), opening the effects menu takes the panel very high and makes the canvas very small.
+      2. [ ] Before, he liked seeing the canvas at full size, to see how the effects change it.
+      3. [ ] But a smaller canvas does make sense.
+      4. [ ] Add an animation: the panel expands up and the canvas shrinks. No cut to a different page.
+      5. [ ] Like TikTok's comment section opening.
+
+      **Logger's plan (not his words):**
+      - Tonight's design run (batch BX, code MO) draws animated options:
+        - MO1, one smooth move;
+        - MO2, with a soft spring;
+        - MO3, which stops at a middle height first so the canvas stays bigger, then goes full on a drag or second tap;
+        - the PC version, where the B4r panel slides in while the canvas shrinks in step.
+      - It comes with exact timings and how to build it without jank (FLIP on the stage).
+      - This starts the motion spec (W2).
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:50 AWST: #1255 effect settings (M6) must use the DRAG value control, not sliders; on PC try hover + scroll wheel and click-drag so it's the same on both; test it; teach it in the tutorials (the clock in this header was the logger's guess: it was written between 20:58 and 21:20 AWST, in this order)**
+      **His words (verbatim):** You're also showing under effect settings my pick, but I didn't actually want the sliders like that. I wanted it to be like the dragging sort of thing because it's more precise. Like, because the sliders, you can only do like so much and it can only be so precise. But the dragging can be as precise as you want and have as much as you want. It just needs to be not janky and done well. For mobile at least. For PC, I'm not sure if it actually works well on PC. Because if you think about it, on PC, you're clicking and stuff, and doing that on PC is a pain in the butt. So maybe sliders for PC, but you could also just make it so you hover over it on PC and then use your scroll wheel to scroll. That might actually be good. So then it can be the same on both. It's just that you use your scroll wheel to scroll it very slowly, or you can just click on it and drag it. I think we should test that out. It'll just need to be in the tutorials that you can do that.
+
+      **His clauses:**
+      1. [ ] The M6 board shows sliders. He did NOT want sliders like that.
+      2. [ ] He wants the dragging control: more precise, with as much range as wanted.
+      3. [ ] It must not be janky, and must be done well, on mobile at least.
+      4. [ ] PC: dragging is a pain with a mouse, so maybe sliders on PC. Or hover + scroll wheel (slowly), and click-and-drag also works, so it's the same on both.
+      5. [ ] Test that out.
+      6. [ ] The drag and the scroll wheel need to be taught in the tutorials.
+
+      **Logger's plan (not his words):**
+      - Tonight's design run (batch BX, code M6V) finds today's drag control and redraws M6 with it (M6r), phone and PC, dark and light.
+      - It also builds a live PROTOTYPE he can try on his phone and PC: 4 effect values, a few drag "feels" to compare, hover + wheel and click-drag on PC. The logger publishes it for him to test.
+      - The tutorial line goes to the builder for the tutorials.
+      - His 21 Nov words "the sliders should be like how they are now" meant this drag control. The M6 board misread them.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:55 AWST: #1255 M6 on PC: the effect settings take a lot of room and the toolbar buttons below don't fit. Hide Export while the settings are open, and keep the timeline usable (the clock in this header was the logger's guess: it was written between 20:58 and 21:20 AWST, in this order)**
+      **His words (verbatim):** You know what? At first, for M6 on PC, on computer, the effect settings, when you're actually editing the effect settings, it kind of like taking up that much screen space at first kind of made me think that looks shit and will not work. And maybe I'm right because all of the different buttons that are supposed to be on the menu down there don't fit. I mean, maybe you could just get rid of the export button when you're in the settings menu to then fit the other things in, because you need the other buttons, but not the export button, because you don't need to export in that screen. So maybe do that and we'll see how it goes. We'll give it a chance to be able to have all those different effects things open at once while being able to move around in the timeline.
+
+      **His clauses:**
+      1. [ ] On PC, the M6 effect settings take a lot of screen space. At first he thought it looked bad and wouldn't work.
+      2. [ ] The buttons on the menu below (the toolbar) don't fit.
+      3. [ ] Hide the Export button while the effect settings are open, to make room. Export isn't needed there.
+      4. [ ] Give it a chance: the effect settings stay open while you move around the timeline.
+
+      **Logger's plan (not his words):** tonight's design run (batch BX, code M6V) draws M6r on PC at 1440 and 1280 wide. With the settings open, every toolbar button fits and Export is hidden, and it comes back on close. The timeline stays usable while the settings are open. The notes list the bar's buttons and how they fit.
+      📌 **Builder, 23 Nov 21:23:** the 13 follow-ups above are logged word for word: his notes of 23 Nov on the real-app page and on the menus. They are design clauses, so nothing is built from them before the ONE decisions chat and his "ready"; the logger draws the options. His other requests of the same half hour are their own entries: #1261. Clause 4 of the first message (the fade) and his 11:02 clause (the glitch) are still open, waiting for his eyes on v18.49.
 - [ ] **1256 — The light Home: the strip under the clock is a little lighter than the page under it, with nothing open and under every dim (hunt MEDIUM #1256)** (21 Nov, found by the review inside v18.48's build of #1255 clause 4; not his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       🔎 **What was measured (v18.48's build, a phone-width run on the laptop):** every top-edge tab on the light Home is the screen's BACKGROUND colour (#920's rule): #fafdff with nothing open, #acb4bb under a dim, #f4f6f9 under Settings. But the page really paints a tint there (#hm-bleed's gradient and the glows of #home-screen::before, which drift) and its dims blur what is under them. Under a dim the real pixels at the top centre read about #94a8b6, 10 to 24 levels darker than the tab. With nothing open the page paints about #d6eef5 against the #fafdff tab, about 20 levels: an ESTIMATE worked back from the dims' pixels, not measured with nothing open.
@@ -40220,3 +40512,104 @@ re-opened #480, which I had marked done and had not fixed.
       🔎 **What happened:** v18.49's first ship was refused at 20:15 on 21 Nov by one test, '1253 · opening the Blur effects at 380 builds Soften Skin, Sharpen, Temporal Denoise and Lens Blur a slice per frame, no frame spending more than 40 ms building them ...': "opening the Blur effects spent 67 ms building the four pictures in one" frame. v18.49 does not touch the effect pictures. Run alone at 380 straight afterwards the test passed 3 of 3 on v18.49's code and 2 of 2 on v18.48's. The laptop had been running full test passes for seven hours; nothing heavy was found on the Windows side. It cost one three-hour ship.
       🛠 **To do, at the root (his rule: no retry shortcuts):** (1) measure what a frame really costs while those four pictures build at 380, on a cool laptop and under a 2x slowdown, and print the number on a pass too, so the margin is known; (2) if two pictures can take a step in the same frame, make it one step a frame; (3) if one step alone can pass 40 ms at half speed, make the heavy steps finer, which is also what a slow phone would feel; (4) only then decide whether the app's slices or the test's number should move. Never loosen the number just to pass.
       Nothing is asked of him.
+- [ ] **1258 — New projects default to 60 FPS, and the Create menu lets him choose the Simple editor or not** (23 Nov 2026, about 16:36 AWST, his words, via the logging chat)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      **His words (verbatim):** Just logging this now, by default, 60 FPS should be selected. And also there should be an option when you press create, like when you're in the create menu and creating a new project, there should be an option to, you know, decide whether you're going to use simple editor or not.
+
+      **His clauses:**
+      1. [ ] 60 FPS is selected by default.
+      2. [ ] When creating a new project (the Create menu), there is an option to choose whether to use the Simple editor or not.
+
+      **Logger's plan (not his words):**
+      - Not a #1255 redesign item, so it can ship in today's look when its turn comes.
+      - A design job is drawing 2-3 ways to show the Simple / Full choice on the Create sheet, with one recommended. It is also finding where the frame-rate default, the editor choice and any tests that pin 30 fps live in the code.
+      - The ready-to-build plan follows in a later INBOX block.
+      📌 **Builder, 23 Nov: when this is built.** Both clauses live on Home's Create sheet. Clause 1 needs no pick (60 FPS becomes the selected frame rate of a new project; a project already made keeps its own). Clause 2 is a look he must pick: the logger is drawing two or three ways to show the Simple / Full choice, one recommended, and its ready-to-build plan comes through the INBOX. They are built together with the Home clauses of #1243 (the Settings and Home group), which is where the Create sheet is being worked on; it waits its turn behind the older items, his rule.
+      📥 **The logger's ready-to-build plan, via INBOX — 23 Nov 2026, about 17:50 AWST (a logger follow-up; no new words from him)**
+      Both plans were found by the design job's agents in the design copy (~/fm-design, v18.47). Re-check the line numbers against v18.49. The full notes are in the logger scratchpad: polish/tmp/logger/w1/notes-A2E.md and notes-D1.md.
+
+      **#1258 clause 1: 60 fps by default. It can ship in today's look.**
+      - The default 30 is at home.js:3478 (`String(saved.fps || 30)`), with fallbacks in npFps at home.js:3307-3308. The custom box value is 30 at home.js:3481 and index.html:1739. The 60 option is at index.html:1734.
+      - THE CATCH: the dialog remembers his last picks in localStorage 'fm.newproj' (home.js:3292, written at Create at home.js:3511). His phone almost certainly holds fps:30, so changing only the fallback would show him nothing.
+        - So add a one-time migration. If `!localStorage['fm.newproj.fps60']` and saved.fps === 30, open on 60 and set the flag. After that his own pick is remembered as today.
+      - Tests to ADD:
+        - With no fm.newproj, the dialog opens with #hm-new-fps '60', the readout says 60 fps, and the project is created at 60.
+        - The 30-to-60 migration happens once, and a 30 picked afterwards is remembered.
+      - Tests to RE-RUN: these create through the dialog without seeding fps, so they now make 60 fps projects; none assert fps: 117036, 123885, 129430, 129682, sm2aCreate 203479.
+      - Unchanged: 50724, 64551, 118303, 118011 and 200571 pin 30 for other paths. 108093 and 108151 seed fps:30 themselves.
+
+      **#1258 clause 2: the Simple/Full choice on Create.**
+      - Today there is NO choice in the dialog. The only door is the cog's Editor block (app.js:9725-9764, which calls FM.editor.request at editor-mode.js:273).
+        - The choice is stored per project card (`editor`) and per device in 'fm.editor.last' (editor-mode.js:46-59).
+        - New projects use forNew(), which gives 'simple' only if fm.editor.last === 'simple', via newEditor() at home.js:1371-1373 and projects.create at home.js:3522.
+      - Options drawn: K1, K2 and K3. K3 is recommended: an "Editor: Simple | Full" switch in the footer beside Create.
+      - The CONTROL can ship in today's look. The new sheet layout in K1-K3 is #1255 redesign and waits for his decisions chat.
+      - Behaviour:
+        - A radiogroup "Editor" [Simple | Full] beside Create, starting at newEditor(). Create passes the chosen value at home.js:3522.
+        - Only a deliberate tap on it writes 'fm.editor.last', as the cog switch would. An untouched Create writes nothing, so the 2A tests (tests.js:203524/203552/203588) pass unchanged.
+      - Tests to ADD:
+        - With fm.editor.last 'full', tap Simple then Create: the card's editor is 'simple', the project opens in Simple, and last becomes 'simple'.
+        - An untouched Create writes nothing.
+        - The control's first value equals FM.editor.forNew().
+      - He has not picked K1-K3 yet. The logger is asking him. Since 21 Oct the rule is to ship the recommended pick and let him correct it.
+
+- [ ] **1259 — The Simple editor's effects all show the same picture, so they don't show what each one does** (23 Nov 2026, about 16:50 AWST, his words, via the logging chat)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      **His words (verbatim):** Also in the simple editor, the effects is just all the same image and they don't really actually show you what it is that is happening. So that obviously will need a lot of work. I don't know if you've had time to get to that yet.
+
+      **His clauses:**
+      1. [ ] In the Simple editor, every effect shows the same image.
+      2. [ ] They don't show what each effect actually does. This needs a lot of work.
+
+      **Logger's plan (not his words):**
+      - The Full editor has had its own animated picture for every effect since v18.40 (fx-pics, #1243).
+      - First check whether the Simple editor's effect tiles can show those same pictures, each effect its own. If they can, this is a builder fix that ships in today's look.
+      - The design job below also draws how the Simple editor's effects should look.
+      📌 **Builder, 23 Nov: when this is built.** This is the Simple editor's own screen, so it is a Simple release (it runs the lock that proves the Full editor did not change). First step, as the logger says: check whether Simple's effect tiles can show the pictures the Full editor has had since v18.40 (fx-pics, one drawn animation per effect), each effect its own. It goes with the next Simple work, which is the oldest open item (#980).
+      📥 **The logger's ready-to-build plan, via INBOX — 23 Nov 2026, about 17:50 AWST (a logger follow-up; no new words from him)**
+      Both plans were found by the design job's agents in the design copy (~/fm-design, v18.47). Re-check the line numbers against v18.49. The full notes are in the logger scratchpad: polish/tmp/logger/w1/notes-A2E.md and notes-D1.md.
+
+      **#1259: the Simple editor's effects all show the same picture. The fix ships in today's look.**
+      - Cause 1: the Add effect picker on a title or overlay (itemFxFill, js/simple-tools.js:1770-1790) lists the 12 presets FIRST (FM.EFFECT_PRESETS, js/fx-presets.js:17-42).
+        - They are mounted with T.mountPreset(cv, preset, null) at simple-tools.js:1789.
+        - A recipe never gets a drawn picture (fx-thumbs.js:1829 `!m`, 1877 "ONLY STOCK TILES"; picUpgrade at 2020 skips them).
+        - So all 12 render live on the same yellow-car photo, and they fill the first screen.
+      - Cause 2: .sm-fx-th is 40x24 (styles.css:12949). The 192x192 square picture is squashed to 5:3 at that size, so nothing reads. This also hits the project row's Effects picker (fxFill, simple-tools.js:1669-1694).
+      - Fix:
+        - (a) Change simple-tools.js:1789 to `if (T && T.mount) lazyTiles(run, cvs, q => T.mount(q[0], q[1].type));`. Each preset then shows its own base effect's drawn picture, and this drops 12 live renders from the strip, which helps the S11 phone-stall guard. Coverage is complete: _pics() is "ready" with 238, all 42 grades and all 197 item effects have pictures, and so does every preset's base effect.
+        - (b) In styles.css:12948-12951, set `#sm-tray[data-row="effects"] .sm-fx-tile{min-width:62px;padding:0 4px}` and `.sm-fx-th{width:48px;height:48px;border-radius:6px}`. Check the tray row's height rule for data-row="effects" (it grows from about 56 to 76 px), and bump the styles.css ?v=.
+      - Tests:
+        - Mount a preset tile with pictures enabled and assert cv._fxPic === preset.fx.
+        - Assert the .sm-fx-th box is square.
+      - The bigger hold-to-play effects sheet (Q2, recommended) is #1255 redesign and waits for his decisions chat.
+- [ ] **1260 — GO HARD this week. He has a free usage reset, so use it fully, but don't waste it on pointless work** (23 Nov 2026, 20:56 AWST, his words, via the logging chat)
+      **STATUS: 📌 NOTE — nothing to build**
+      **His words (verbatim):** Boy, I want to see progress like going hard this week. Like, I do not care about storage being used up because I've literally got a free reset. So I can literally reset all usage. So you can just like absolutely smash all the stuff out that needs to be done. Obviously don't waste usage on pointless stuff, but like, you know, just don't slow down.
+
+      **His clauses:**
+      1. [ ] He wants to SEE progress: go hard this week.
+      2. [ ] Usage running out doesn't matter. He has a free reset and can reset all usage. ("storage" here means usage.)
+      3. [ ] Smash out everything that needs doing.
+      4. [ ] Don't waste usage on pointless work.
+      5. [ ] Don't slow down.
+
+      **Logger's notes (not his words):**
+      - The glide line for this week (1% to ~90% by Mon 30 Nov 16:00) is OFF. Keep every useful lane busy instead.
+        - Builder: code-only work in worktrees during passes (its own rules), workflows and Codex lanes in the gaps.
+        - Logger: the remaining #1255 design batches back to back.
+      - The quiet-laptop rules for passes and ships still hold: a broken ship wastes more than it saves.
+      - "Pointless" means re-testing the same thing, idle waiting, duplicate work and fixes nobody asked for.
+      📌 **Builder, 23 Nov: this is the receipt for a standing instruction about pace.** Nothing to build under this number, so it no longer holds the queue. What it changes, from 21:00 on 23 Nov until he says otherwise: the pace line is OFF; every useful lane is kept busy (code-only building in worktrees while a pass or a ship runs, workflows and Codex lanes in the gaps, releases back to back, more than one item in a release); the quiet-laptop rules for passes and ships stay, because a refused ship wastes more than it saves; no pointless work (re-testing the same thing, idle waits, duplicates, fixes nobody asked for).
+- [ ] **1261 — The Simple editor's Export panel is too simple: only two frame-rate choices. Keep it simple, but give it more options (the clock in this header was the logger's guess: it was written between 20:58 and 21:20 AWST, in this order)** (23 Nov 2026, 21:05 AWST, his words, via the logging chat)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      **His words (verbatim):** The simple export panel is honestly probably too simple. Like, you only have two choices for frames. That's not enough. Like, it should stay simple like that, but it should still have more options.
+
+      **His clauses:**
+      1. [ ] The Simple Export panel offers only two frame-rate choices. That's not enough.
+      2. [ ] It should stay simple like it is.
+      3. [ ] But it should still have more options.
+
+      **Logger's plan (not his words):**
+      - The next #1255 design batch draws the Simple Export panel (code SEX) as today's polished plus new layouts. It keeps the panel simple at a glance but adds more frame rates (at least 24, 25, 30, 50, 60), plus whichever Full-export choices a Simple user needs, such as size/quality and format.
+      - The extra frame rates themselves can ship in today's look, so the builder may treat that part as a normal item.
+      📌 **Builder, 23 Nov: Simple's own panel, so a Simple release (it runs the lock).** The export menu shipped in v18.46 (#1243 S6) with two frame rates. His words: "it should stay simple like that, but it should still have more options". To build with the next Simple work after release 13: more frame rates first (the ones Full's export already offers), and the list of what else "more options" could mean drawn as two or three small options for him, one recommended. js/exporter.js cannot change in a Simple release, so every option must be one the exporter already takes.
