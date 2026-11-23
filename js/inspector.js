@@ -7383,7 +7383,7 @@ window.FM = window.FM || {};
          in thumb reach, the current one lit: one tap swaps the page. Nothing that is stored changes: layer.stroke / shadow /
          trimPath / repeater, their keyframes and Paste style are exactly as before; only the grouping does.
          (Not built: the picks he was also offered — (A) the pages with no switcher row, and (B) the pictures stacked down the
-         right side, which is Position & Scale's rail and so Alight Motion's, #1243 F6.)
+         right side, which is Position & Scale's rail and so [the reference app]'s, #1243 F6.)
          FM._bsPage is the page on show (null: the tiles); it lasts while this card stays open on this layer. */
       if (FM._bsPageFor !== layer.id) FM._bsPage = null;
       FM._bsPageFor = layer.id;
