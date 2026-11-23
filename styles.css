@@ -12958,6 +12958,11 @@ body.ed-simple .sm-exp-seg { flex: 1 1 auto; min-width: 0; display: flex; gap: 2
 body.ed-simple .sm-exp-b { flex: 1 1 0; min-width: 0; min-height: 38px; padding: 0 4px; border: 0; border-radius: 9px; background: transparent; color: var(--text-dim);
   font: 600 14px/1 system-ui, sans-serif; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 body.ed-simple .sm-exp-b[aria-pressed="true"] { background: var(--text); color: var(--panel); }
+/* #1261: Smoothness holds every rate Full's Export offers (six or seven), as bare numbers, so its row fits a phone: the unit sits once,
+   small, under the row's name, and the project's own rate wears a dot under its number (in the button's own ink, so it reads pressed or not) */
+body.ed-simple .sm-exp-unit { display: block; margin-top: 2px; font: 600 11px/1 system-ui, sans-serif; opacity: .75; }
+body.ed-simple .sm-exp-b.sm-exp-own { position: relative; }
+body.ed-simple .sm-exp-b.sm-exp-own::after { content: ''; position: absolute; left: 50%; bottom: 5px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; }
 body.ed-simple .sm-exp-foot { display: flex; flex-direction: column; gap: 8px; }
 body.ed-simple .sm-exp-size { text-align: center; color: var(--text-dim); font: 600 13px/1.2 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
 body.ed-simple .sm-exp-go { min-height: 48px; padding: 0 16px; border: 0; border-radius: 12px; background: var(--accent, #29d9bb); color: #04140f;

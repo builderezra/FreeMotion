@@ -1129,9 +1129,16 @@ window.FM = window.FM || {};
     if (short > 0 && short < 2160 && out.indexOf(short) < 0) out.push(short);
     return out.sort((a, b) => a - b);
   }
-  /* Smoothness: 30 and 60, and the project's own rate when it is neither (24, 25, …) */
+  /* Smoothness. #1261, his words (23 Nov): "The simple export panel is honestly probably too simple. Like, you only have two choices for
+     frames. That's not enough. Like, it should stay simple like that, but it should still have more options." It offered 30 and 60 (and
+     the project's own rate when neither). It now offers every rate Full's Export offers — read from Full's own list (index.html #exp-fps,
+     the numbered rungs: 15 · 25 · 30 · 50 · 60 · 120), so the two can never drift apart — and the project's own rate when it is none of
+     them (24, 48, …): every one a rate the exporter already takes. Same row, same buttons; the project's own is marked (exportSeg). */
+  const FULL_RATES = [15, 25, 30, 50, 60, 120];   // what #exp-fps lists today, if it cannot be read
   function exportRates() {
-    const pf = +(FM.scene.project || {}).fps || 30, out = [30, 60];
+    const pf = +(FM.scene.project || {}).fps || 30;
+    let out = Array.from(document.querySelectorAll('#exp-fps option')).map(o => +o.value).filter(f => f > 0 && isFinite(f));
+    if (!out.length) out = FULL_RATES.slice();
     if (!out.some(f => Math.abs(f - pf) < 1e-6)) out.push(pf);
     return out.sort((a, b) => a - b);
   }
@@ -1199,12 +1206,20 @@ window.FM = window.FM || {};
   }
   /* one segmented row: its name, then a button per choice (aria-pressed: the one picked). A press picks it, keeps it for next time and
      puts the size right, in place, so focus stays on the button pressed */
-  function exportSeg(box, key, label, list, cur, name, pick) {
+  /* o (#1261, Smoothness): unit, a small word under the row's name (the buttons are then bare numbers, so six or seven fit the phone's
+     row); own, the value to mark as the project's own (a dot under it, and said in its name); spoken, a choice's full name */
+  function exportSeg(box, key, label, list, cur, name, pick, o) {
+    o = o || {};
     const row = el('div', 'sm-exp-row'); row.dataset.row = key;
-    row.appendChild(el('span', 'sm-exp-l', label));
+    const lab = el('span', 'sm-exp-l', label);
+    if (o.unit) lab.appendChild(el('span', 'sm-exp-unit', o.unit));
+    row.appendChild(lab);
     const seg = el('div', 'sm-exp-seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', label);
     list.forEach(v => {
       const b = el('button', 'sm-exp-b', name(v)); b.type = 'button'; b.dataset.exp = key + '-' + v;
+      const own = o.own != null && Math.abs(v - o.own) < 1e-6;
+      if (own) b.classList.add('sm-exp-own');
+      if (o.spoken) { const s = o.spoken(v, own); b.setAttribute('aria-label', s); b.title = s; }
       b.setAttribute('aria-pressed', Math.abs(v - cur) < 1e-6 ? 'true' : 'false');
       b.addEventListener('click', e => {
         e.stopPropagation();
@@ -1242,7 +1257,10 @@ window.FM = window.FM || {};
     top.append(panelBack(), exportPoster(), what);
     box.appendChild(top);
     exportSeg(box, 'q', w.exportQuality || 'Quality', exportRungs(), expP, p => typeof w.exportRung === 'function' ? w.exportRung(p) : p + 'p', v => { expP = v; });
-    exportSeg(box, 'fps', w.exportSmooth || 'Smoothness', exportRates(), expFps, f => typeof w.exportFps === 'function' ? w.exportFps(f) : f + ' fps', v => { expFps = v; });
+    /* #1261: every rate Full's Export offers, as bare numbers under "Smoothness · fps", the project's own marked */
+    const pf = +(FM.scene.project || {}).fps || 30, fpsName = f => typeof w.exportFps === 'function' ? w.exportFps(f) : (Math.round(f * 100) / 100) + ' fps';
+    exportSeg(box, 'fps', w.exportSmooth || 'Smoothness', exportRates(), expFps, f => String(Math.round(f * 100) / 100), v => { expFps = v; },
+      { unit: w.exportFpsUnit || 'fps', own: pf, spoken: (f, own) => fpsName(f) + (own ? ', ' + (w.exportFpsOwn || 'the project’s own') : '') });
     /* the size, then Save video: stacked on a phone, side by side in the PC band (styles.css), so the whole card fits its ~206 px at 1280 × 800 */
     const foot = el('div', 'sm-exp-foot');
     const go = el('button', 'sm-exp-go', w.exportGo || 'Save video'); go.type = 'button'; go.dataset.exp = 'go';

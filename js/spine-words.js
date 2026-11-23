@@ -257,6 +257,9 @@ window.FM = window.FM || {};
       exportTitle: 'Export video', exportHead: 'Export', exportQuality: 'Quality', exportSmooth: 'Smoothness',
       exportRung: p => p >= 2160 ? '4K' : p + 'p', exportFps: f => (Math.round(f * 100) / 100) + ' fps',
       exportSize: s => 'About ' + s, exportGo: 'Save video', exportEmpty: 'Add a clip first, then export it',
+      /* #1261 (his words: "you only have two choices for frames. That's not enough… it should stay simple like that"): Smoothness offers
+         every rate Full's Export does, as bare numbers, the unit once under the row's name, the project's own rate marked and named */
+      exportFpsUnit: 'fps', exportFpsOwn: 'the project’s own',
       exportLen: s => { s = Math.max(0, +s || 0); if (s > 0 && s < 1) return (Math.round(s * 10) / 10) + ' s'; s = Math.round(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); },
       music: 'Music from your files', sfx: 'Sound effects', voice: 'Record voice', closeAll: 'Close all gaps',   // (moreOpts went with Simple's ⋯, #1243 S5; review L3-10)
       /* #1255's 20:53 follow-up, his words: "I'm also noticing a pop-up that says tap a clip to split or change its speed. There shouldn't

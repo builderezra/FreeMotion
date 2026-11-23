@@ -207781,12 +207781,14 @@
   const r12Btn = () => ['m-export', 'btn-export'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length) || document.getElementById('btn-export');
   const r12Box = () => document.querySelector('#inspector .sm-exp');
   const r12Row = k => Array.from(document.querySelectorAll('#inspector .sm-exp .sm-exp-row[data-row="' + k + '"] .sm-exp-b'));
-  const r12Words = k => r12Row(k).map(b => b.textContent).join(', ');
-  const r12On = k => r12Row(k).filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.textContent).join(', ');
+  /* #1261: Smoothness's buttons are bare numbers (the unit is under the row's name), so a rate reads back as “30 fps” here */
+  const r12Face = (k, b) => k === 'fps' ? b.textContent + ' fps' : b.textContent;
+  const r12Words = k => r12Row(k).map(b => r12Face(k, b)).join(', ');
+  const r12On = k => r12Row(k).filter(b => b.getAttribute('aria-pressed') === 'true').map(b => r12Face(k, b)).join(', ');
   /* Full's Export card's rounding (js/export-card.js mb): KB under 1 MB, one decimal under 10 MB */
   const r12Mb = bytes => { const n = bytes / 1e6; return !(n > 0) ? '0 KB' : n < 1 ? Math.max(1, Math.round(n * 1000)) + ' KB' : (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10) + ' MB'; };
 
-  test('1243 R12 · S6 Export at 380 and 1280 opens a panel (the sheet from the stage’s bottom edge on a phone, the left band on a PC) with the frame, the length, Quality 720p · 1080p and Smoothness 30 fps · 60 fps, its size and Save video all on screen, and starts nothing until Save video; picking 60 fps changes the size to what the exporter is then given, Save video exports the clips only at 1080p and 60 fps and closes the panel, the pick is there next time, and Export pressed again closes it (CONTROL: before the press no panel is up and the bar is the project row)', { item: '980', budgetMs: 150000 }, async function () {
+  test('1243 R12 · S6 Export at 380 and 1280 opens a panel (the sheet from the stage’s bottom edge on a phone, the left band on a PC) with the frame, the length, Quality 720p · 1080p and Smoothness 15 · 25 · 30 · 50 · 60 · 120 fps, its size and Save video all on screen, and starts nothing until Save video; picking 60 fps changes the size to what the exporter is then given, Save video exports the clips only at 1080p and 60 fps and closes the panel, the pick is there next time, and Export pressed again closes it (CONTROL: before the press no panel is up and the bar is the project row)', { item: '980', budgetMs: 150000 }, async function () {
     smNeedP2();
     const ex = FM.exporter, run0 = ex.run, dlg = document.getElementById('export-dialog'), fails = [], put = r12Mem();
     let got = null;
@@ -207826,7 +207828,7 @@
             });
             /* what it says, simply */
             if (r12Words('q') !== '720p, 1080p' || r12On('q') !== '1080p') fails.push(at + 'Quality reads “' + r12Words('q') + '” with “' + r12On('q') + '” picked, want 720p, 1080p with 1080p picked (a 1920×1080 frame: no 4K)');
-            if (r12Words('fps') !== '30 fps, 60 fps' || r12On('fps') !== '30 fps') fails.push(at + 'Smoothness reads “' + r12Words('fps') + '” with “' + r12On('fps') + '” picked, want 30 fps, 60 fps with the project’s 30 picked');
+            if (r12Words('fps') !== '15 fps, 25 fps, 30 fps, 50 fps, 60 fps, 120 fps' || r12On('fps') !== '30 fps') fails.push(at + 'Smoothness reads “' + r12Words('fps') + '” with “' + r12On('fps') + '” picked, want Full’s 15, 25, 30, 50, 60 and 120 with the project’s 30 picked (#1261)');
             const len = box.querySelector('.sm-exp-len');
             if (!len || len.textContent !== '0:06') fails.push(at + 'the length reads “' + (len && len.textContent) + '”, want 0:06 (the clips, not the song’s 9 s)');
             const pic = box.querySelector('.sm-exp-pic');
@@ -207865,15 +207867,16 @@
     if (fails.length) throw new Error(fails.join(' · '));
   });
 
-  test('1243 R12 · S6 Export never offers more than the frame: a 3840×2160 frame offers 720p · 1080p · 4K and opens on 4K, a 2560×1440 one offers 720p · 1080p and its own 1440p and opens on it, a 1920×1080 one stops at 1080p, a 1600×900 one offers 720p and its own 900p, a 320×240 one only its own 240p; Smoothness adds a 25 fps project’s own rate beside 30 and 60 and opens on it, and Save video on 4K exports the frame at its own size at 25 fps (CONTROL: a 30 fps project offers just 30 fps and 60 fps)', { item: '980', budgetMs: 120000 }, async function () {
+  test('1243 R12 · S6 Export never offers more than the frame: a 3840×2160 frame offers 720p · 1080p · 4K and opens on 4K, a 2560×1440 one offers 720p · 1080p and its own 1440p and opens on it, a 1920×1080 one stops at 1080p, a 1600×900 one offers 720p and its own 900p, a 320×240 one only its own 240p; Smoothness adds a 24 fps project’s own rate to Full’s six and opens on it, and Save video on 4K exports the frame at its own size at 24 fps (CONTROL: a 30 fps project offers just Full’s six)', { item: '980', budgetMs: 120000 }, async function () {
     smNeedP2();
     const ex = FM.exporter, run0 = ex.run, fails = [], put = r12Mem();
     let got = null;
     ex.run = async o => { got = o; };
     const cases = [
-      { W: 3840, H: 2160, fps: 25, q: '720p, 1080p, 4K', on: '4K', f: '25 fps, 30 fps, 60 fps', fon: '25 fps', save: true },
+      /* #1261: Full's six rates (15, 25, 30, 50, 60, 120); a 24 fps project's own rate is added among them */
+      { W: 3840, H: 2160, fps: 24, q: '720p, 1080p, 4K', on: '4K', f: '15 fps, 24 fps, 25 fps, 30 fps, 50 fps, 60 fps, 120 fps', fon: '24 fps', save: true },
       { W: 2560, H: 1440, fps: 30, q: '720p, 1080p, 1440p', on: '1440p' },
-      { W: 1920, H: 1080, fps: 30, q: '720p, 1080p', on: '1080p', f: '30 fps, 60 fps', fon: '30 fps', control: true },
+      { W: 1920, H: 1080, fps: 30, q: '720p, 1080p', on: '1080p', f: '15 fps, 25 fps, 30 fps, 50 fps, 60 fps, 120 fps', fon: '30 fps', control: true },
       { W: 1600, H: 900, fps: 30, q: '720p, 900p', on: '900p' },
       { W: 320, H: 240, fps: 30, q: '240p', on: '240p' }
     ];
@@ -207892,7 +207895,7 @@
             if (go) go.click();
             for (let i = 0; i < 60 && !got; i++) await v.sleep(20);
             if (!got) fails.push(at + 'Save video did not start an export');
-            else if (got.scale !== 1 || got.fps !== 25) fails.push(at + 'Save video exported scale ' + got.scale + ' at ' + got.fps + ' fps, want the frame’s own size (scale 1) at 25 fps');
+            else if (got.scale !== 1 || got.fps !== 24) fails.push(at + 'Save video exported scale ' + got.scale + ' at ' + got.fps + ' fps, want the frame’s own size (scale 1) at 24 fps');
           }
           FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(100);
         }, { W: c.W, H: c.H, fps: c.fps });
@@ -207904,7 +207907,8 @@
   /* Review R12-1 / R12-C1: the panel's pick was worked out only when Export opened, so a frame size or rate changed under the open panel
      (Canvas from the cog, an undo, Home and another project) left nothing pressed and Save video exported the old 2160 rung over the new
      1080 short side: scale 2, an upscale. The change is made the way Canvas's Apply makes it (the project's numbers, then refreshAll). */
-  test('1243 R12 · S6 Export follows the frame under it: with the panel up on a 3840×2160 25 fps frame, the frame changed to 1920×1080 at 30 fps leaves 1080p and 30 fps pressed, and Save video exports the frame at its own size, never an upscale (CONTROL: before the change 4K and 25 fps are pressed)', { item: '980', budgetMs: 90000 }, async function () {
+  /* #1261: a 24 fps frame, not 25 — 25 is one of Full's rates Smoothness offers on every project now, so a pick of 25 would rightly stay */
+  test('1243 R12 · S6 Export follows the frame under it: with the panel up on a 3840×2160 24 fps frame, the frame changed to 1920×1080 at 30 fps leaves 1080p and 30 fps pressed, and Save video exports the frame at its own size, never an upscale (CONTROL: before the change 4K and 24 fps are pressed)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     const ex = FM.exporter, run0 = ex.run, put = r12Mem(), fails = [];
     let got = null;
@@ -207915,7 +207919,7 @@
         got = null;
         document.getElementById('btn-export').click(); await r4Settle(300);
         if (!r12Box()) throw new Error('setup: Export opened no panel');
-        if (r12On('q') !== '4K' || r12On('fps') !== '25 fps') throw new Error('CONTROL: on the 3840×2160 25 fps frame the panel has “' + r12On('q') + '” and “' + r12On('fps') + '” pressed, want 4K and 25 fps');
+        if (r12On('q') !== '4K' || r12On('fps') !== '24 fps') throw new Error('CONTROL: on the 3840×2160 24 fps frame the panel has “' + r12On('q') + '” and “' + r12On('fps') + '” pressed, want 4K and 24 fps');
         const P = FM.scene.project;
         P.width = 1920; P.height = 1080; P.fps = 30;
         FM.refreshAll(); await r4Settle(200);
@@ -207927,7 +207931,7 @@
         if (!got) fails.push('Save video did not start an export');
         else if (got.scale > 1 + 1e-9 || got.fps !== 30) fails.push('Save video exported scale ' + got.scale + ' at ' + got.fps + ' fps, want at most the frame’s own size (scale 1) at 30 fps');
         FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(100);
-      }, { W: 3840, H: 2160, fps: 25 });
+      }, { W: 3840, H: 2160, fps: 24 });
     } finally { ex.run = run0; put(); }
     if (fails.length) throw new Error(fails.join(' · '));
   });
@@ -208335,6 +208339,51 @@
         }
       }, 380);
     } finally { await sm2aPut(st); }
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  /* ═══ RELEASE 13 · #1261 · SIMPLE'S EXPORT, MORE FRAME RATES ═══
+     His words (23 Nov): "The simple export panel is honestly probably too simple. Like, you only have two choices for frames. That's not
+     enough. Like, it should stay simple like that, but it should still have more options." Smoothness offers every rate Full's Export
+     offers (its own list, #exp-fps), in the same row of buttons, the project's own marked, and the rate picked is the one the exporter is
+     handed. FM.exporter.run is stubbed to record what it is given (r12Mem puts his last pick aside and back). */
+  test('1261 · at 380 Simple’s Export offers every rate Full’s Export offers in its one Smoothness row, each pressable, the project’s own marked and named, and every rate picked reaches the export call (CONTROL: a 30 fps project opens on 30, the rate marked as its own)', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    const ex = FM.exporter, run0 = ex.run, put = r12Mem(), fails = [];
+    let got = null;
+    ex.run = async o => { got = o; };
+    try {
+      const full = Array.from(document.querySelectorAll('#exp-fps option')).map(o => +o.value).filter(f => f > 0).sort((a, b) => a - b);
+      if (full.length < 6) throw new Error('CONTROL: Full’s Export lists only ' + full.join(', ') + ' as rates');
+      await r4At(380, 800, async function () {
+        await smP2((W, H) => smClips3(W, H), async function (v) {
+          try { localStorage.removeItem('fm.sm.export'); } catch (e) {}
+          const open = async () => { if (!r12Box()) { r12Btn().click(); await r4Settle(300); } return r12Box(); };
+          if (!(await open())) throw new Error('setup: Export opened no panel');
+          if (r12On('fps') !== '30 fps') throw new Error('CONTROL: on a 30 fps project Smoothness opens on ' + r12On('fps') + ', want the project’s own 30');
+          const offered = r12Row('fps').map(b => +b.textContent);
+          if (offered.join() !== full.join()) fails.push('Smoothness offers ' + offered.join(', ') + ', Full’s Export offers ' + full.join(', '));
+          const own = r12Row('fps').filter(b => b.classList.contains('sm-exp-own'));
+          if (own.length !== 1 || own[0].textContent !== '30' || !/own/.test(own[0].getAttribute('aria-label') || '')) fails.push('the rate marked as the project’s own is ' + (own.map(b => b.textContent + ' (“' + b.getAttribute('aria-label') + '”)').join(', ') || 'none') + ', want 30 alone, named as its own');
+          if (r12Row('fps').some(b => b !== own[0] && /own/.test(b.getAttribute('aria-label') || ''))) fails.push('a rate that is not the project’s is named as its own');
+          for (const f of full) {
+            if (!(await open())) { fails.push('Export did not open again for ' + f + ' fps'); break; }
+            const b = r12Row('fps').find(x => +x.textContent === f);
+            if (!b) { fails.push('no ' + f + ' fps button'); continue; }
+            if (!r4Hits(b)) fails.push(f + ' fps is not pressable where it is (' + r4Txt(r4Box(b)) + ')');
+            b.click(); await r4Settle(60);
+            if (r12On('fps') !== f + ' fps') fails.push('pressing ' + f + ' leaves ' + r12On('fps') + ' picked');
+            got = null;
+            r12Box().querySelector('.sm-exp-go').click();
+            for (let i = 0; i < 60 && !got; i++) await v.sleep(20);
+            if (!got) fails.push('Save video at ' + f + ' fps started no export');
+            else if (got.fps !== f) fails.push('Save video with ' + f + ' fps picked exported at ' + got.fps + ' fps');
+            await r4Settle(150);
+          }
+          FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
+        }, { W: 1920, H: 1080 });
+      });
+    } finally { ex.run = run0; put(); }
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
   });
 
