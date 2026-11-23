@@ -1374,10 +1374,11 @@ window.FM = window.FM || {};
     if (!host) return null;
     /* #972: a NEW host is the block being opened (friendsClosed lets go of the old one) — the invite starts frosted. A
        redraw into the same host is not an opening, even without keepStep: Settings' apply() redraws it that way. */
-    if (fhost !== host) { fhost = host; fhostShowedCode = false; veilInvite(); }
+    if (fhost !== host) { fhost = host; fhostShowedCode = false; veilInvite(); frHelp = false; }
     watchFriendsHost();
     if (!(o && o.keepStep)) shareStep = 'main';
     U.friendsBar();
+    if (frHelp) return drawFriendsHelp(host);   // #1243 ST8: the "?" page stays up through a redraw until its ‹
     if (!U.labsOn()) return drawLabsOff(host);
     const s = C.session;
     if (s && !s.isOwner) return drawGuestPanel(s, host);
@@ -1386,31 +1387,60 @@ window.FM = window.FM || {};
     if (lc && lc.collab) return drawLinkedPanel(lc, host);
     return drawFriendsIdle(host);
   };
-  function drawFriendsIdle(host) {
+  /* ═══ #1243 ST8 — his words: "in the friends menu… It does have a lot of clutter. Like instead of having a section that's like how to use
+     it, it because it shouldn't show you how to use it every single time. So all of the tutorial, like it should be bare bones simple
+     just so it works, and then have a question mark button… that'll take you to another menu that gives you a tutorial like it will just
+     show you the steps." So the block is bare (not shared yet: the title, Start sharing, Join and the switch; off: the title, one line,
+     Join and the switch), and how it works — the steps and what gets sent — is one tap away behind the "?" in its head, with ‹ back.
+     The steps are lesson 17's own (tutorials/17-work-with-friends.md through FM.tutorials), so the block and the Tutorials tab never
+     disagree; the three short steps show at once and stay if the lesson cannot load (offline). Name and colour are still asked for at
+     Start sharing (U.profile, armShare), and "New people join as" is in the live view's ⚙ Sharing settings. */
+  let frHelp = false;
+  function helpButton(host) {
+    const q = btn('cs-help', '?', function () { frHelp = true; if (fhost === host && host.isConnected) U.renderFriends(host, { keepStep: true }); });
+    q.setAttribute('aria-label', 'How Work with friends works');
+    return q;
+  }
+  function drawFriendsHelp(host) {
     const c = mountHost(host);
     const head = el('div', 'cs-head');
+    const bk = el('div', 'cs-backrow');
+    const back = btn('cs-backbtn', '‹', function () { frHelp = false; if (fhost === host && host.isConnected) U.renderFriends(host, { keepStep: true }); });
+    back.setAttribute('aria-label', 'Back');
+    bk.appendChild(back);
+    bk.appendChild(el('h2', 'fm-ask-title', 'How Work with friends works'));
+    head.appendChild(bk);
+    c.appendChild(head);
+    const body = el('div', 'cs-body cs-helpbody');
+    const art = el('div', 'cs-lesson');
+    art.appendChild(howItWorks(!U.labsOn()));   // at once, and the offline answer
+    body.appendChild(art);
+    body.appendChild(privacyBlock());
+    c.appendChild(body);
+    if (FM.tutorials && FM.tutorials.load && FM.tutorials.render) {
+      FM.tutorials.load('17-work-with-friends.md').then(function (src) {
+        if (!frHelp || fhost !== host || !art.isConnected) return;
+        const box = el('div', 'cs-lesson-full');
+        FM.tutorials.render(src, box);           // createElement + textContent only (js/tutorials.js)
+        if (box.querySelector('.tut-steps li')) { art.textContent = ''; art.appendChild(box); }
+      }, function () {});
+    }
+    try { back.focus({ preventScroll: true }); } catch (e) {}
+    return c;
+  }
+  function drawFriendsIdle(host) {
+    const c = mountHost(host);
+    const head = el('div', 'cs-head cs-head-q');
     head.appendChild(el('h2', 'fm-ask-title', 'Share “' + projectName() + '” live'));   // #967 B4: the action is Share live
     head.appendChild(el('div', 'cs-state', stateLine(null)));
     /* #967: the one-shot line — what just happened (Stop sharing from Home, a name prompt he backed out of). */
     if (shareNote) { head.appendChild(el('div', 'cs-note', shareNote)); shareNote = null; }
-    head.appendChild(howItWorks());
+    head.appendChild(helpButton(host));          // #1243 ST8: the steps moved behind it (were howItWorks() here)
     c.appendChild(head);
     const body = el('div', 'cs-body');
     c.appendChild(body);
-    /* Him, as the others will see him — and NOT memberRows(), which also lists a stored room's offline members. The row's
-       second line is said here, not by statusLine(): nothing is shared, so he is nobody's "Owner" yet (critic's finding). */
-    const have = U.getProfile();
-    const me = have || { name: 'You', color: suggestColor() };   // #967: the colour Set up… will pre-select
-    const ul = el('ul', 'cs-people');
-    const li = personRow(me.name, me.color, 'you', null, null);
-    const pr = li.querySelector('.cs-prole');
-    /* #967 B4 (J1-8): with no name yet the row's name IS "You", so the line under it does not say it again. */
-    if (pr) pr.textContent = have ? 'You — your name and colour, as others see them' : 'Pick the name and colour others will see';
-    li.appendChild(btn('cs-role cs-fr-profile', have ? 'Change…' : 'Set up…', function () {
-      U.profile({ force: true }).then(function () { if (fhost === host && host.isConnected) U.renderFriends(host, { keepStep: true }); });
-    }));
-    ul.appendChild(li);
-    body.appendChild(ul);
+    /* (#1243 ST8: his "you" row with Set up… / Change… went — Start sharing asks for the name and colour the first time, and
+       ⚙ Sharing settings has them after.) */
     const start = btn('cs-start accent', 'Start sharing', function () {
       start.disabled = true;
       armShare().then(function (ok) {
@@ -1421,16 +1451,13 @@ window.FM = window.FM || {};
       }, function () { start.disabled = false; });
     });
     body.appendChild(start);
-    /* #967 batch 2 (J1-8): what the tap gets him, said before he taps — and still that opening this shares nothing. */
-    body.appendChild(el('div', 'cs-fr-hint', 'You’ll get a link, a QR and a short code to send. Nothing’s shared until you tap Start sharing.'));
-    body.appendChild(joinAsRow({ pending: true }));
+    /* (#1243 ST8: the line under Start sharing and "New people join as" went: bare bones. What he gets is said behind the "?"; who a
+       link lets in is set in ⚙ Sharing settings once there is a room.) */
     body.appendChild(joinLinkRow());
     /* #967 B5 (J4-5): the project's comments outlive the sharing — after Stop sharing this was the one place they had gone. */
     if (hasComments()) body.appendChild(commentsRow());
     c.appendChild(offRow(host));
-    const foot = el('div', 'cs-foot');
-    foot.appendChild(btn('cs-done', 'Done', function () { closeAny(); }));
-    c.appendChild(foot);
+    /* (#1243 ST9: no foot of its own — this only ever draws into the cog, whose universal Done is under every block) */
     return c;
   }
   /* With Labs off the bar still shows (his pick) — and opened, it says what live sharing is and offers the one switch.
@@ -1439,24 +1466,23 @@ window.FM = window.FM || {};
      turned on where it will be turned off, and the words say so instead of pointing at Settings (J3-1, his pick A). */
   function drawLabsOff(host) {
     const c = mountHost(host);
-    const head = el('div', 'cs-head');
+    const head = el('div', 'cs-head cs-head-q');
     head.appendChild(el('h2', 'fm-ask-title', 'Work with friends'));   // #967 B4: the feature's one name
     head.appendChild(el('div', 'cs-state', 'Off'));                    // "still being tested" is said once, on the Settings switch
     /* Kept, not used up: turning it off draws this block twice (C.end → onDetach, then syncLabs' own redraw — and for a
        guest a third time when C.leave settles), and a one-shot line spent on the first draw left the owner with silence.
        It goes when the block closes (U.friendsClosed) or the feature comes back on (U.syncLabs). */
     if (offNote) head.appendChild(el('div', 'cs-note', offNote));
-    head.appendChild(howItWorks(true));
+    head.appendChild(helpButton(host));          // #1243 ST8: the steps and the privacy note moved behind it
     c.appendChild(head);
     const body = el('div', 'cs-body');
     c.appendChild(body);
     body.appendChild(el('div', 'collab-sub', 'Share this project live and edit it together, each on your own phone or computer. It stays off until you turn it on — and you can turn it off here any time.'));
     body.appendChild(joinLinkRow());
+    /* The privacy line stays HERE, beside the switch it is about (turning it on here is turning on exactly that); the ? repeats it. */
     body.appendChild(privacyBlock());
     c.appendChild(offRow(host));
-    const foot = el('div', 'cs-foot');
-    foot.appendChild(btn('cs-done', 'Done', function () { closeAny(); }));
-    c.appendChild(foot);
+    /* (#1243 ST9: no foot of its own — the cog's universal Done) */
     return c;
   }
 
@@ -1522,6 +1548,7 @@ window.FM = window.FM || {};
     veilInvite();                               // #972: closed — the next opening starts frosted
     pendingLinkRole = null;
     offNote = null;                             // said once, where he was looking — not again at the next opening
+    frHelp = false;                             // #1243 ST8: the next opening starts on the block, not its "?" page
     U.friendsBar();
   };
   /* THE BAR: what is true in one line, and who is here. Names and colours came from other devices: textContent, and the
@@ -1606,6 +1633,7 @@ window.FM = window.FM || {};
     } else {
       head.appendChild(el('h2', 'fm-ask-title', 'Share “' + projectName() + '” live'));
       head.appendChild(el('div', 'cs-state', stateLine(s)));
+      if (host && shareStep === 'main') { head.classList.add('cs-head-q'); head.appendChild(helpButton(host)); }   // #1243 ST8
     }
     /* Rendered once and consumed: it says what happened to the code that is no longer on screen. */
     if (shareNote) { head.appendChild(el('div', 'cs-note', shareNote)); shareNote = null; }
@@ -1683,7 +1711,9 @@ window.FM = window.FM || {};
     /* #967: while the five letters are being checked, "They match" is the ONE blue button — Done sat blue right under it
        on a phone (measured at 390×844: [They match, Done], the foot starting at the check's bottom edge), and Done is the
        natural "I've checked" word, which turned the friend away. It stays a way out, just not the one lit up. */
-    foot.appendChild(btn('cs-done' + (sasPending ? '' : ' accent'), 'Done', function () { if (host) closeAny(); else closeCard(); }));
+    /* #1243 ST9, his words: "get rid of the done button in the friends section and maybe just have instead have like a universal done
+       button". In the cog the block has none (the cog's own Done is under every block); the stand-alone Share card keeps its own. */
+    if (!host) foot.appendChild(btn('cs-done' + (sasPending ? '' : ' accent'), 'Done', function () { closeCard(); }));
     c.appendChild(foot);
     return c;
   }
@@ -3311,7 +3341,7 @@ window.FM = window.FM || {};
           return leaveKeeping(s);
         });
     }));
-    foot.appendChild(btn('cs-done accent', 'Done', function () { if (host) closeAny(); else closeCard(); }));
+    if (!host) foot.appendChild(btn('cs-done accent', 'Done', function () { closeCard(); }));   // #1243 ST9: in the cog, its universal Done
     c.appendChild(foot);
     return c;
   }
@@ -3462,7 +3492,7 @@ window.FM = window.FM || {};
       if (C.watchOnly && C.watchOnly(pid)) { leaveWatching(pid, host); return; }   // #1091: nothing to keep — Leave deletes it
       U.leaveKeep(pid, function () { if (host) closeAny(); else closeCard(); });
     }));
-    foot.appendChild(btn('cs-done accent', 'Done', function () { if (host) closeAny(); else closeCard(); }));
+    if (!host) foot.appendChild(btn('cs-done accent', 'Done', function () { closeCard(); }));   // #1243 ST9: in the cog, its universal Done
     c.appendChild(foot);
     return c;
   }

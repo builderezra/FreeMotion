@@ -251,3 +251,6 @@ ideas rather than only borrowed ones, and it is a good seed to design the rest o
 - **#1243 ST7, the aspect-ratio presets.** His pick, 9 Nov: *"just do logos without names for the aspect ratios"*. They show the platforms' logos
   (TikTok, Instagram and so on) with no names. Those marks are other companies' trademarks: draw them ourselves as simple glyphs (no downloaded
   brand assets), and check each platform's brand rules before a store release, or swap them for neutral icons there.
+  **Built (#1243 ST7):** TikTok, Instagram, YouTube and Facebook, as our own line drawings in the chip's ink, in ONE table
+  (`FM.ASPECT_USES` / `PLAT_SVG` in js/app.js) read by the cog's Canvas chips and Home's New project chips. Swapping them for
+  neutral icons is that one table.

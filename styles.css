@@ -3711,8 +3711,14 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
   display: flex; align-items: center; justify-content: center;
   background: rgba(0,0,0,.65); backdrop-filter: blur(3px);
 }
-.aspect-row { display: flex; gap: 7px; margin-bottom: 16px; }
-.aspect-chip { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 5px; padding: 9px 0 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text-dim); cursor: pointer; font-size: 11px; height: 58px; }
+/* #1243 ST7: three by two, so each chip has room for the row of marks under its ratio (js/app.js FM.ASPECT_USES); was one row of six */
+.aspect-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-bottom: 16px; }
+.aspect-chip { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; padding: 8px 0 7px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text-dim); cursor: pointer; font-size: 11px; height: 66px; }
+/* the marks: 13 px line drawings in the chip's own ink (dim at rest, dark on the lit chip), the row the same height on every chip */
+.ac-uses { display: flex; align-items: center; justify-content: center; gap: 4px; height: 13px; flex: none; }
+.ac-uses svg { width: 13px; height: 13px; flex: none; }
+.hm-aspect .ac-uses { margin-top: 2px; color: var(--text-dim); }
+.hm-aspect.active .ac-uses { color: var(--accent); }
 .aspect-chip:hover { background: var(--panel-3); color: var(--text); }
 .aspect-chip.on { background: var(--accent); color: #06231d; border-color: var(--accent); }
 .ac-frame { border: 1.5px solid currentColor; border-radius: 1px; }
@@ -12193,6 +12199,53 @@ body.text-editing .collab-cmt, #stage:has(> #collab-people.cp-hidden) > .collab-
 .cs-body > .cs-joinlink { margin-top: 12px; }
 .cs-keepopen { color: var(--text); }
 .cs-body > .cs-add + .cs-comments { margin: 12px 0 0; }   /* the Share panel's Comments, moved below the invite (J1-6) */
+/* #1243 ST8: the "?" in the block's head (js/collab-ui.js helpButton) — a 32 px round button at the head's top right, its catch 44 px —
+   and the page it opens: the steps (lesson 17, drawn by FM.tutorials) and what gets sent, with ‹ back. */
+.cs-head.cs-head-q { position: relative; padding-right: 44px; }
+.cs-help { position: absolute; top: 0; right: 0; width: 32px; height: 32px; padding: 0; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text); font: inherit; font-weight: 800; font-size: 16px; line-height: 1; cursor: pointer; }
+.cs-help::before { content: ''; position: absolute; inset: -6px; }
+.cs-help:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cs-helpbody .cs-lesson { font-size: 14px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
+.cs-helpbody .tut-title { display: none; }   /* the page's own head says what it is */
+.cs-helpbody .tut-intro { margin: 0 0 10px; }
+.cs-helpbody .cs-lesson p { margin: 0 0 10px; }
+.cs-helpbody .tut-steps li { margin-bottom: 10px; }
+.cs-helpbody .cs-privacy { margin-top: 10px; }
+/* ═══ #1243 ST8 (BUG) — his words: "in the friends menu, for some reason on mobile, you have to like scroll this one really weird small
+   spot instead of it like allowing you to scroll the whole thing." The spot was .cs-body: the head (title, state, the three-line how-to),
+   the switch row and Done were pinned around it, and at 390×844 that left it about 146 px. ON A PHONE THE WHOLE BLOCK SCROLLS NOW, at
+   every height: #cv-fr-body is the one scroller under the block's bar, and the head, the body, the switch and the live view's foot
+   (⚙ · Stop sharing) all move with it. Nothing is pinned (the block's own Done went: his "get rid of the done button in the friends
+   section"). A PC keeps its layout. */
+@media (max-width: 700px) {
+  #canvas-dialog.cv-bars.cv-fr-big > #cv-friends > #cv-fr-body { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scroll-padding-bottom: 0; }
+  #canvas-dialog.cv-bars.cv-fr-big.cv-flying > #cv-friends > #cv-fr-body { overflow-y: hidden; }   /* no scrollbar coming and going mid-air */
+  #canvas-dialog.cv-bars.cv-fr-big > #cv-friends > #cv-fr-body > .cs-body { flex: 1 0 auto; min-height: auto; overflow: visible; }
+  #canvas-dialog.cv-bars.cv-fr-big > #cv-friends > #cv-fr-body > .cs-foot { position: static; margin: 0; padding: 12px 0 0; background: none; box-shadow: none; }
+}
+/* ═══ #1243 ST1 — his words: "the animation for in the settings, how we've got the four different settings options, how you've got app
+   settings, canvas, friends, and then the editor mode. Basically, make it so that the animation is just a bit better, like improve it a
+   bit. Like, just put some polish and effort into it." Pick A (recommended), cascade and unfold. THE ENTRANCE CASCADES: each block
+   swings in 45 ms after the one before it, in the order the blocks stand (js/app.js cvStagger writes --cv-i: top to bottom on a phone,
+   from the cog outward on a PC), the scrim leading. Was: all at one instant. Reduced motion: the delays are only set when motion is
+   welcome. */
+@media (prefers-reduced-motion: no-preference) {
+  body #canvas-dialog#canvas-dialog.cv-pair.cv-pair.cv-pair > * { animation-delay: calc(var(--cv-i, 0) * 45ms); }
+}
+/* ═══ #1243 ST5 — his words: "when you're in that menu and you press app settings, like, it's fine that the app settings is like on the
+   left, but I think you should make it have like an animation, because all the others have like an animation when you open them, except
+   for app settings. It kind of just boots you out of it." The cog no longer vanishes in one frame under an undimmed editor: Settings
+   opens over it with its dim already at full strength (js/settings.js fromCog), the panel slides in from the left as always, and the
+   cog's blocks leave — App settings toward the panel, the others 24 px the other way — fading, one after another, before the cog is
+   put away (js/app.js, the App settings bar). Settings' ✕ becomes ‹, back to the cog. */
+@keyframes cv-leave { to { opacity: 0; transform: translateX(24px); } }
+@keyframes cv-leave-app { to { opacity: 0; transform: translateX(-32px) scale(.97); } }
+body #canvas-dialog#canvas-dialog.cv-leaving.cv-leaving.cv-leaving > * { animation: cv-leave 190ms cubic-bezier(.4, 0, 1, 1) forwards; animation-delay: calc(var(--cv-i, 0) * 20ms); pointer-events: none; }
+body #canvas-dialog#canvas-dialog.cv-leaving.cv-leaving.cv-leaving > #cv-app { animation-name: cv-leave-app; }
+#canvas-dialog.cv-leaving { pointer-events: none; }
+.set-scrim.set-from-cog { transition: none; background: rgba(4, 6, 10, .62); }
+.set-close.set-back { font-size: 26px; line-height: 1; padding: 0 0 3px; }
 
 /* ── §16.3's courtesy: a Viewer or a Commenter sees what they cannot change, and is told why ── */
 body.collab-ro #add-fab { display: none; }

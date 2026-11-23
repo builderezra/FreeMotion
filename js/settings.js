@@ -440,6 +440,7 @@ window.FM = window.FM || {};
 
   let panel = null, scrim = null, escBound = null;
   let _onClose = null;   // queue 930: FM.settings.openAt(…, { onClose }) — who to hand back to when Settings closes
+  let cogBack = false;   // #1243 ST5: opened from the cog's App settings bar — the ✕ is ‹, back to the cog
 
   function build() {
     let footWords = () => {};                 // #967 B4: the footer's words follow the Work with friends switch (set below)
@@ -454,7 +455,13 @@ window.FM = window.FM || {};
     const close = el('button', 'set-close', '✕');
     close.type = 'button'; close.setAttribute('aria-label', 'Close settings');
     if (FM.drawnX) FM.drawnX(close, 28);   // queue 965: his pick B — the search ✕'s drawn disc at 28px, in the same 34px button
-    close.addEventListener('click', () => FM.settings.close());
+    /* #1243 ST5: opened from the cog's App settings bar, this is ‹ — back to the cog, all closed (open() below turns it) */
+    close.addEventListener('click', () => {
+      if (!cogBack) { FM.settings.close(); return; }
+      cogBack = false;
+      FM.settings.close({ handBack: false });
+      setTimeout(() => { if (!FM.settings.isOpen() && FM.openCanvasDialog && !(FM.home && FM.home.isOpen && FM.home.isOpen())) FM.openCanvasDialog({ block: 'none' }); }, 200);
+    });
     head.appendChild(close);
 
     const body = el('div', 'set-body');
@@ -1250,10 +1257,19 @@ window.FM = window.FM || {};
     set(k, v) { state[k] = v; save(); apply(); },
     // subscribe to changes (home re-sorts, the add menu redraws, …)
     onChange(fn) { if (typeof fn === 'function') listeners.push(fn); },
-    open() {
+    open(opts) {
       if (!scrim) build();
       // rebuild the controls each open so they always show the live values
       scrim.remove(); scrim = null; panel = null; build();
+      /* #1243 ST5 (his words: "you press app settings… make it have like an animation… It kind of just boots you out of it"). From the
+         cog the dim is ALREADY there on the first frame — the cog's own was under it, and a fade from nothing let the editor show
+         through for a quarter second — and the panel still slides in from the left. Its ✕ becomes ‹, back to the cog. */
+      cogBack = !!(opts && opts.fromCog);
+      if (cogBack) {
+        scrim.classList.add('set-from-cog');
+        const x = panel.querySelector('.set-close');
+        if (x) { x.textContent = '‹'; x.classList.remove('fm-x'); x.classList.add('set-back'); x.setAttribute('aria-label', 'Back to the settings cog'); }
+      }
       // guard: close() nulls scrim, and a close in the SAME frame as the open (a double-tap, or a
       // script driving both) left this callback holding a dead reference — "Cannot read properties
       // of null (reading 'classList')". Harmless to skip: if it's already closed there is nothing to
@@ -1288,7 +1304,8 @@ window.FM = window.FM || {};
          (queue 930 review, round 2). And never over a Settings he has already reopened. */
       const back = (opts && opts.handBack === false) ? null : _onClose; _onClose = null;
       if (back) setTimeout(() => { if (FM.settings.isOpen()) return; try { back(); } catch (e) {} }, 280);   // after the slide-out
-      scrim.classList.remove('open');
+      cogBack = false;
+      scrim.classList.remove('open', 'set-from-cog');   // #1243 ST5: the dim fades out as it always has
       if (escBound) { document.removeEventListener('keydown', escBound); escBound = null; }
       const s = scrim; scrim = null; panel = null;
       setTimeout(() => s.remove(), 260);   // after the slide-out

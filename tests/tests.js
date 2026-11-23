@@ -118275,7 +118275,8 @@
         const unOpen = stub1132(FM.settings, 'open', function () { opened++; });
         try {
           FM.openCanvasDialog({ block: 'none' }); await entranceDone(dlg); await sleep(40);
-          document.getElementById('cv-app-bar').click(); await sleep(60);
+          /* #1243 ST5: the cog's blocks now leave with an animation under Settings (styles.css cv-leave) before it is put away */
+          document.getElementById('cv-app-bar').click(); await sleep(450);
           if (!dlg.classList.contains('hidden')) throw new Error('the App settings bar left the cog open — Settings would open behind it');
           if (opened !== 1) throw new Error('the App settings bar did not open Settings (' + opened + ')');
         } finally { unOpen(); try { FM.closeCanvasDialog(); } catch (e) {} }
@@ -119272,7 +119273,10 @@
     });
   });
 
-  test('967 10 the name prompt finishes on Return, backing out of it from Start sharing says a name is needed, and the idle row’s colour is the one the prompt picks', { item: '967', budgetMs: 60000 }, async function () {
+  /* #1243 ST8 RENAMED THIS — it was '967 10 …, and the idle row’s colour is the one the prompt picks'. The bare block (his #1243 "bare bones
+     simple just so it works") has no row of his own, so there is no preview colour to agree with: the name and colour are asked for at
+     Start sharing, which still pre-selects one. */
+  test('967 10 the name prompt finishes on Return, backing out of it from Start sharing says a name is needed, and the prompt Start sharing raises comes with a colour already picked', { item: '967', budgetMs: 60000 }, async function () {
     /* J1-7. */
     const C = need921S7('the name prompt');
     await withLabs921(async function (ui) {
@@ -119292,7 +119296,7 @@
         if (res === 'still up' || !res || res.name !== 'Mia') throw new Error('Return in the name field did nothing (' + JSON.stringify(res) + ') — on an iPhone the keyboard’s return key is how you finish');
         if (document.getElementById('collab-profile')) throw new Error('the prompt stayed up after Return');
         if (/cursor/i.test(promptText)) throw new Error('the prompt talks about a cursor — a phone has none (J1-7)');
-        /* The idle Friends row and the prompt agree on the colour. */
+        /* Start sharing from the bare block raises the prompt with a colour already picked. */
         localStorage.removeItem('fm.profile');
         Math.random = function () { return 0.5; };
         await editorWithShape(async function () {
@@ -119301,15 +119305,11 @@
               FM.openCanvasDialog({ block: 'friends' });
               await entranceDone(document.getElementById('canvas-dialog')); await land945();
               const body = document.getElementById('cv-fr-body');
-              const dot = body.querySelector('.cs-person .cs-dot');
-              if (!dot) throw new Error('setup: the idle block has no row for him');
-              const idle = getComputedStyle(dot).backgroundColor;
+              if (!body.querySelector('.cs-start')) throw new Error('setup: the idle block has no Start sharing');
               body.querySelector('.cs-start').click();
               await settle921(120);
               const on = document.querySelector('#collab-profile .collab-swatch[aria-pressed="true"]');
-              if (!on) throw new Error('setup: the prompt pre-selected nothing');
-              const picked = getComputedStyle(on).backgroundColor;
-              if (picked !== idle) throw new Error('the idle row shows ' + idle + ' and the prompt it opens pre-selects ' + picked + ' — the preview and the pick disagree');
+              if (!on) throw new Error('the prompt Start sharing raised pre-selected no colour');
               document.querySelector('#collab-profile .fm-ask-cancel').click();
               await settle921(200);
               const note = body.querySelector('.cs-note');
@@ -121118,6 +121118,9 @@
             if (!o) throw new Error(what + ': the Friends block has no “Work with friends” on/off row — once it is on, nothing here can turn it off (J3-1): “' + fr().textContent.slice(0, 140) + '”');
             if (o.label !== 'Work with friends') throw new Error(what + ': the row is labelled “' + o.label + '”');
             if (o.on !== on) throw new Error(what + ': the row’s switch reads ' + (o.on ? 'on' : 'off') + ' while the feature is ' + (on ? 'on' : 'off'));
+            /* #1243 ST8: on a phone the whole block is the one scroller and nothing is pinned, so the row is at the foot of what scrolls —
+               brought into view the way a finger would (scrollIntoView moves only a scroller he can scroll), then read */
+            o.sw.scrollIntoView({ block: 'nearest' });
             box967(o.sw, document.getElementById('cv-friends'), what + ': the switch');
             return o;
           };
@@ -121623,7 +121626,10 @@
     }
   });
 
-  test('967 B2 8 the Friends block says how it works in three steps, off and on; Start sharing says what he will get; the short code says what the friend does; and in the Share panel the invite comes straight under the people, Comments after it, and “Keep FreeMotion open” is in the panel, not a toast', { item: '967', budgetMs: 120000 }, async function () {
+  /* #1243 ST8 REWROTE THIS — it was '967 B2 8 the Friends block says how it works in three steps, off and on; Start sharing says what he will
+     get; …'. His #1243 words: "it shouldn't show you how to use it every single time… bare bones… and then have a question mark button
+     … that'll take you to another menu… the steps." The three steps moved behind the block's ?, and the line under Start sharing went. */
+  test('967 B2 8 the Friends block keeps how it works behind its ? — three steps there, off and on, and none on the block itself; the short code says what the friend does; and in the Share panel the invite comes straight under the people, Comments after it, and “Keep FreeMotion open” is in the panel, not a toast', { item: '967', budgetMs: 120000 }, async function () {
     /* R5 / J5-2, J1-8, J5-4 (owner half); J1-6, J1-12, J1-13 (order half), J5-8 — his pick A. Measured at v17.06: nothing
        said it in steps, Comments sat between the people and the invite, and the keep-open toast landed over the short code. */
     const C = need921S7('how it works');
@@ -121644,20 +121650,20 @@
               for (const on of [false, true]) {
                 FM.settings.set('collabLabs', on); ui.syncLabs();
                 FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
-                const ol = fr.querySelector('.cs-how');
-                const li = ol ? Array.prototype.map.call(ol.children, function (x) { return x.textContent.replace(/\s+/g, ' ').trim(); }) : [];
-                if (li.length !== 3 || !STEPS.every(function (re, i) { return (i || on ? re : STEP1_OFF).test(li[i]); })) throw new Error((on ? 'turned on' : 'turned off') + ', the block does not say how it works in three steps (' + JSON.stringify(li) + ') (J5-2)');
-                if (!ol.getClientRects().length) throw new Error('the three steps are not on show');
+                if (fr.querySelector('.cs-how')) throw new Error((on ? 'turned on' : 'turned off') + ', the block still shows the steps every time (#1243 ST8: “it shouldn’t show you how to use it every single time”)');
                 /* …and step 1 names a control that is really in the block, on show — a step he cannot follow is worse than none. */
                 const step1 = on ? fr.querySelector('.cs-start') : fr.querySelector('.cs-offrow [role=switch]');
-                if (!step1 || !step1.getClientRects().length) throw new Error((on ? 'turned on' : 'turned off') + ', step 1 says “' + li[0] + '” but the block has no ' + (on ? 'Start sharing button' : '“Work with friends” switch') + ' on show');
-                const first = fr.querySelector('.cs-start') || fr.querySelector('[role=switch]');
-                if (first && ol.getBoundingClientRect().bottom > first.getBoundingClientRect().top + 1) throw new Error('the three steps are not at the top of the block, above ' + (first.className || first.tagName));
-                if (on) {
-                  const start = fr.querySelector('.cs-start');
-                  const hint = start && start.nextElementSibling;
-                  if (!hint || !/You’ll get a link, a QR and a short code to send\./.test(hint.textContent)) throw new Error('under Start sharing: “' + (hint && hint.textContent) + '” — it should say what he will get (J1-8)');
-                } else { FM.closeCanvasDialog(); await settle921(80); }
+                if (!step1 || !step1.getClientRects().length) throw new Error((on ? 'turned on' : 'turned off') + ', the block has no ' + (on ? 'Start sharing button' : '“Work with friends” switch') + ' on show for step 1 to name');
+                const q = fr.querySelector('.cs-help');
+                if (!q || !q.getClientRects().length) throw new Error((on ? 'turned on' : 'turned off') + ', the block has no ? to open the steps behind');
+                q.click();   // read in the same task: the lesson, once loaded, takes the three steps' place
+                const ol = fr.querySelector('.cs-how');
+                const li = ol ? Array.prototype.map.call(ol.children, function (x) { return x.textContent.replace(/\s+/g, ' ').trim(); }) : [];
+                /* the three short steps are drawn at once (the lesson replaces them once it has loaded): read them before it does */
+                if (li.length !== 3 || !STEPS.every(function (re, i) { return (i || on ? re : STEP1_OFF).test(li[i]); })) throw new Error((on ? 'turned on' : 'turned off') + ', behind the ? the block does not say how it works in three steps (' + JSON.stringify(li) + ') (J5-2)');
+                fr.querySelector('.cs-backbtn').click(); await settle921(40);
+                if (!step1.isConnected && !(on ? fr.querySelector('.cs-start') : fr.querySelector('.cs-offrow [role=switch]'))) throw new Error((on ? 'turned on' : 'turned off') + ', ‹ did not bring the block back');
+                if (!on) { FM.closeCanvasDialog(); await settle921(80); }
               }
               /* Start sharing, for real. */
               got.length = 0;
@@ -122949,7 +122955,10 @@
     });
   });
 
-  test('967 B4 6 the small lines say what is true — “Nothing’s shared until you tap Start sharing.”, “Not sharing” after a stop, Stop sharing says the link stops too, a friend’s Leave is “Leave (keep my copy)”, Comments drop the export clause, Settings’ footer stops promising everything stays here once the switch is on, and the idle row says You once', { item: '967', budgetMs: 150000 }, async function () {
+  /* #1243 ST8 REWROTE THIS — it was '967 B4 6 the small lines say what is true — “Nothing’s shared until you tap Start sharing.”, … and the
+     idle row says You once'. The bare block (his #1243 "bare bones simple just so it works") has neither the line under Start sharing nor
+     his own row; the promise is said behind the ?, in lesson 17's own words. */
+  test('967 B4 6 the small lines say what is true — behind the Friends block’s ? it says nothing is shared until Start sharing, “Not sharing” after a stop, Stop sharing says the link stops too, a friend’s Leave is “Leave (keep my copy)”, Comments drop the export clause, Settings’ footer stops promising everything stays here once the switch is on, and the bare block has no row of his own', { item: '967', budgetMs: 150000 }, async function () {
     /* J1-8, J3-10, J4-16, J5-10 (b)(c)(d)(e)(f). */
     const C = need921S7('the small lines');
     await withFakeNet921(async function () {
@@ -122966,10 +122975,11 @@
                 /* The idle row, with no name set up yet: "You" once. */
                 localStorage.removeItem('fm.profile');
                 FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
-                const pn = fr.querySelector('.cs-people .cs-pname'), pr = fr.querySelector('.cs-people .cs-prole');
-                if (!pn || pn.textContent !== 'You' || !pr || /^You\b/.test(pr.textContent)) throw new Error('the idle row reads “' + (pn && pn.textContent) + '” / “' + (pr && pr.textContent) + '” — You twice (J1-8)');
-                const hint = fr.querySelector('.cs-fr-hint');
-                if (!hint || hint.textContent !== 'You’ll get a link, a QR and a short code to send. Nothing’s shared until you tap Start sharing.') throw new Error('under Start sharing: “' + (hint && hint.textContent) + '”');
+                if (!fr.querySelector('.cs-start')) throw new Error('setup: the not-shared block has no Start sharing');
+                if (fr.querySelector('.cs-people') || fr.querySelector('.cs-fr-hint')) throw new Error('the bare block still has ' + (fr.querySelector('.cs-people') ? 'his own row' : 'the line under Start sharing') + ' (#1243 ST8: “bare bones simple just so it works”)');
+                fr.querySelector('.cs-help').click();
+                await until921S6('the lesson behind the ?', function () { return /Nothing is shared until you tap Start sharing/.test(fr.textContent.replace(/\s+/g, ' ')) ? 1 : 0; }, 4000)
+                  .catch(function () { throw new Error('behind the ? nothing says it is not shared until Start sharing: “' + fr.textContent.replace(/\s+/g, ' ').slice(0, 300) + '”'); });
                 FM.closeCanvasDialog(); await settle921(80);
                 ui.setProfile('Test Person', ui.PALETTE[0]);
                 FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
@@ -200628,45 +200638,32 @@
      way drawSas brings They match in (scrollIntoView, block nearest), lands ABOVE the pinned Done and wins its hit-test — red without
      the body's scroll-padding, where it lands under Done (J3-5: a tap there pressed Done). CONTROL for that reading: at one short
      size at least Start sharing starts below the foot, so the scroll it checks really happened. */
-  test('1132 with Friends open on a short phone the Work with friends switch and Done stay in reach — its body scrolls under a pinned Done — at 380×667, 320×568 and 375×553, Labs on and off; at 390×760 and 390×700 nothing takes a scroll; CONTROL at 390×844', { item: '1132', budgetMs: 210000 }, async function () {
-    const C = need921S7('the open Friends block on a short phone');
+  /* #1243 ST8 REWROTE THIS — it was '1132 with Friends open on a short phone the Work with friends switch and Done stay in reach — its
+     body scrolls under a pinned Done — at 380×667, 320×568 and 375×553, Labs on and off; at 390×760 and 390×700 nothing takes a scroll;
+     CONTROL at 390×844'. His #1243 words: "you have to like scroll this one really weird small spot instead of it like allowing you to
+     scroll the whole thing" and "get rid of the done button in the friends section". On a phone the whole block is the one scroller now
+     at every height, nothing is pinned, and the block has no Done of its own. */
+  test('1132 with Friends open on a phone the Work with friends switch and Start sharing are in reach by scrolling the one block — no Done of its own — at 390×844, 390×760, 390×700, 380×667, 320×568 and 375×553, Labs on and off (CONTROL: at a short size the switch starts below the block’s window, so the scroll really happened)', { item: '1132', budgetMs: 210000 }, async function () {
+    const C = need921S7('the open Friends block on a phone');
     const was = FM.settings.get('collabLabs');
-    let needed = 0;   // short sizes where Start sharing began below the pinned foot: the scrollIntoView reading's CONTROL
-    await race1132('1132 with Friends open on a short phone the Work with friends switch and Done stay in reach', 205000, async function () {
+    let needed = 0;   // sizes where the switch began below the block's window: the reach reading's CONTROL
+    await race1132('1132 with Friends open on a phone the Work with friends switch and Start sharing are in reach', 205000, async function () {
     await withFakeNet921(async function () {
       await editorWithShape(async function () {
         await with945(async function () {
           const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-friends'), body = document.getElementById('cv-fr-body');
           const reach = function (where, el, what) {
             if (!el) throw new Error(where + ': setup: no ' + what + ' in the open Friends block');
-            for (let p = el.parentElement; p && p !== dlg; p = p.parentElement) {
-              const oy = getComputedStyle(p).overflowY;
-              if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 1) {
-                const pr = p.getBoundingClientRect(), r0 = el.getBoundingClientRect();
-                p.scrollTop += (r0.top + r0.height / 2) - (pr.top + pr.height / 2);
-              }
-            }
+            const b0 = fr.getBoundingClientRect(), r0 = el.getBoundingClientRect();
+            if (r0.top + r0.height / 2 > b0.bottom) needed++;
+            el.scrollIntoView({ block: 'nearest' });
             const r = el.getBoundingClientRect(), b = fr.getBoundingClientRect(), vh = vh921();
             const x = r.left + r.width / 2, y = r.top + r.height / 2;
             if (!(r.height > 0) || y < b.top || y > b.bottom || y < 0 || y > vh) throw new Error(where + ': ' + what + ' is out of reach — its centre (' + Math.round(y) + ') is outside the Friends block ' + R978(b) + ' or the ' + Math.round(vh) + ' px screen');
             const at = document.elementFromPoint(x, y);
             if (!at || !el.contains(at)) throw new Error(where + ': ' + what + ' is covered at its centre by ' + (at && (at.id || at.className)) + ' (it ' + R978(r) + ' in Friends ' + R978(b) + ')');
           };
-          /* K1: where the block fits, the control is on screen as it opens — in no scroller with anything to scroll, none scrolled */
-          const still = function (where, el, what) {
-            if (!el) throw new Error(where + ': setup: no ' + what + ' in the open Friends block');
-            for (let p = el.parentElement; p && p !== dlg; p = p.parentElement) {
-              const oy = getComputedStyle(p).overflowY;
-              if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 1) throw new Error(where + ': ' + what + ' sits in a scroller (' + (p.id || p.className) + ') with ' + (p.scrollHeight - p.clientHeight) + ' px to scroll — here the head, the switch and Done fit, so it must be on screen with no scroll at all, as on 82371927 (967 B2 1, 967 2)');
-              if (p.scrollTop > 0.5) throw new Error(where + ': setup: ' + (p.id || p.className) + ' is already scrolled ' + Math.round(p.scrollTop) + ' px as the block opens');
-            }
-            const r = el.getBoundingClientRect(), b = fr.getBoundingClientRect(), vh = vh921();
-            const x = r.left + r.width / 2, y = r.top + r.height / 2;
-            if (!(r.height > 0) || y < b.top || y > b.bottom || y < 0 || y > vh) throw new Error(where + ': ' + what + ' is not on screen as the block opens — its centre (' + Math.round(y) + ') is outside the Friends block ' + R978(b) + ' or the ' + Math.round(vh) + ' px screen');
-            const at = document.elementFromPoint(x, y);
-            if (!at || !el.contains(at)) throw new Error(where + ': as the block opens ' + what + ' is covered at its centre by ' + (at && (at.id || at.className)) + ' (it ' + R978(r) + ' in Friends ' + R978(b) + ')');
-          };
-          const check = async function (label, labs, fits) {
+          const check = async function (label, labs) {
             const where = label + ', Labs ' + (labs ? 'on' : 'off');
             window.__fmStep = '1132 Friends in reach: ' + where;
             FM.settings.set('collabLabs', labs); C.ui.syncLabs(); await sleep(40);
@@ -200676,36 +200673,16 @@
               if (!dlg.classList.contains('cv-none')) throw new Error(where + ': setup: the cog did not open all closed');
               document.getElementById('cv-fr-exp').click(); await land945();
               if (!dlg.classList.contains('cv-fr-big') || !body.children.length) throw new Error(where + ': setup: the Friends ⤢ did not open the block with its content');
-              if (fits) {
-                still(where, body.querySelector('.cs-offrow [role=switch]'), 'the Work with friends switch');
-                still(where, body.querySelector('.cs-foot .cs-done'), 'Done');
-              }
+              if (body.querySelector('.cs-done')) throw new Error(where + ': the Friends block still has a Done of its own');
               reach(where, body.querySelector('.cs-offrow [role=switch]'), 'the Work with friends switch');
-              reach(where, body.querySelector('.cs-foot .cs-done'), 'Done');
               reach(where, body.querySelector(labs ? '.cs-start' : '.cs-joinlink'), labs ? 'Start sharing' : 'Got an invite?');
-              if (fits === false && labs) {
-                /* the short sizes: brought in as drawSas brings They match in, it lands above the pinned Done (J3-5) */
-                const st = body.querySelector('.cs-start');
-                body.scrollTop = 0; await sleep(20);
-                const s0 = st.getBoundingClientRect(), f0 = body.querySelector('.cs-foot').getBoundingClientRect();
-                if (s0.bottom > f0.top + 0.5) needed++;
-                st.scrollIntoView({ block: 'nearest' }); await sleep(20);
-                const sr = st.getBoundingClientRect(), ft = body.querySelector('.cs-foot').getBoundingClientRect();
-                if (sr.bottom > ft.top + 0.5) throw new Error(where + ': scrolled into view the way drawSas brings They match in, Start sharing lands under the pinned Done (its bottom ' + sr.bottom.toFixed(1) + ', the foot’s top ' + ft.top.toFixed(1) + ') — a tap there presses Done (J3-5)');
-                const sat = document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2);
-                if (!sat || !st.contains(sat)) throw new Error(where + ': scrolled into view the way drawSas does it, Start sharing is covered at its centre by ' + (sat && (sat.id || sat.className)));
-              }
-              body.scrollTop = 0; await sleep(20);
-              const d = body.querySelector('.cs-foot .cs-done'), dr = d.getBoundingClientRect(), at = document.elementFromPoint(dr.left + dr.width / 2, dr.top + dr.height / 2);
-              if (!at || !d.contains(at)) throw new Error(where + ': with the block back at its top Done is gone (its centre hits ' + (at && (at.id || at.className)) + ') — it is not pinned');
             } finally { FM.closeCanvasDialog(); await sleep(60); }
           };
           try {
-            /* fits: true — nothing may take a scroll (K1); false — the short sizes, where the body scrolls under a pinned Done */
-            for (const [label, w, h, fits] of [['390×844 (CONTROL)', 390, 844, null], ['390×760', 390, 760, true], ['390×700', 390, 700, true], ['380×667', 380, 667, false], ['320×568', 320, 568, false], ['375×553', 375, 553, false]]) {
-              await atSize921(w, h, async function () { await check(label, true, fits); await check(label, false, fits); });
+            for (const [label, w, h] of [['390×844', 390, 844], ['390×760', 390, 760], ['390×700', 390, 700], ['380×667', 380, 667], ['320×568', 320, 568], ['375×553', 375, 553]]) {
+              await atSize921(w, h, async function () { await check(label, true); await check(label, false); });
             }
-            if (!needed) throw new Error('CONTROL: at none of the short sizes did Start sharing start below the pinned Done, so the scrollIntoView reading scrolled nothing and proved nothing');
+            if (!needed) throw new Error('CONTROL: at no size did the switch start below the Friends block’s window, so the reach reading scrolled nothing and proved nothing');
           } finally { FM.settings.set('collabLabs', !!was); C.ui.syncLabs(); }
         });
       });
@@ -208867,6 +208844,206 @@
       } finally { row.dispatchEvent(new PointerEvent('pointerup', Object.assign({}, o, { buttons: 0 }))); }
       if (row.classList.contains('is-pressed')) throw new Error('letting go left the row pressed');
       if (pre().borderTopStyle !== 'dashed') throw new Error('letting go did not put the dashed box back (' + pre().borderTopStyle + ')');
+    });
+  });
+
+  /* ═══ #1243 SETTINGS (ST1–ST9, plan 1243-E.md) ═══════════════════════════════════════════════════════════════════════════
+     #1243 ST7 — his words: "when choosing like your aspect ratio, it would probably be a good idea to like tell people like what it is
+     for… what apps would use what aspect ratio… So just like a little TikTok logo or whatever." His pick (9 Nov): "just do logos without
+     names for the aspect ratios". The marks a person would see are read from the chips themselves (data-plat on each drawn mark), against
+     the table written HERE, not the app's own. */
+  const ST7_WANT = { '9:16': 'tiktok,instagram,youtube', '16:9': 'youtube', '4:5': 'instagram,facebook', '1:1': 'instagram,facebook', '4:3': 'tablet', custom: '' };
+  test('1243 ST7 · every aspect chip in the cog’s Canvas card and in New project shows the little marks of the apps that use that shape (TikTok, Instagram and YouTube on 9:16), drawn by the app with no platform names on screen, each chip on screen, unclipped and its own tap target at 380 and 1280 (CONTROLS: the chip still shows its ratio, and Custom shows no marks)', { item: '1243', budgetMs: 60000 }, async function () {
+    const NAMES = /tiktok|instagram|youtube|facebook/i;
+    const marks = function (chip) { return [].map.call(chip.querySelectorAll('.ac-uses svg[data-plat]'), function (s) { return s.getAttribute('data-plat'); }).join(','); };
+    const readChips = function (where, chips) {
+      if (chips.length !== 6) throw new Error(where + ': setup: ' + chips.length + ' aspect chips, not 6');
+      chips.forEach(function (chip) {
+        const k = chip.getAttribute('data-aspect'), got = marks(chip);
+        if (got !== ST7_WANT[k]) throw new Error(where + ': the ' + k + ' chip shows the marks [' + got + '], not [' + ST7_WANT[k] + '] — his words: “what apps would use what aspect ratio… a little TikTok logo”');
+        if (NAMES.test(chip.textContent)) throw new Error(where + ': the ' + k + ' chip writes a platform name on screen (“' + chip.textContent.trim() + '”) — his pick: “logos without names”');
+        if (chip.querySelector('img')) throw new Error(where + ': the ' + k + ' chip holds an <img> — the marks are drawn by the app, never downloaded brand art');
+        if (k !== 'custom' && chip.textContent.indexOf(k) < 0) throw new Error(where + ': CONTROL: the ' + k + ' chip does not show its ratio (“' + chip.textContent.trim() + '”) — the reader cannot see the chip’s words');
+      });
+    };
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        const look = async function (label) {
+          FM.openCanvasDialog(); await entranceDone(dlg); await land945();
+          try {
+            const chips = [].slice.call(dlg.querySelectorAll('.aspect-chip[data-aspect]'));
+            readChips(label + ', the Canvas card', chips);
+            chips.forEach(function (chip) {
+              const k = chip.getAttribute('data-aspect'), r = chip.getBoundingClientRect();
+              if (!(r.height >= 44 && r.width >= 44)) throw new Error(label + ': the ' + k + ' chip is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' px — under a 44 px tap');
+              if (chip.scrollWidth > chip.clientWidth + 1 || chip.scrollHeight > chip.clientHeight + 1) throw new Error(label + ': the ' + k + ' chip’s marks overflow it (' + chip.scrollWidth + '×' + chip.scrollHeight + ' in ' + chip.clientWidth + '×' + chip.clientHeight + ')');
+              chip.scrollIntoView({ block: 'nearest' });
+              const r2 = chip.getBoundingClientRect(), at = document.elementFromPoint(r2.left + r2.width / 2, r2.top + r2.height / 2);
+              if (!at || !chip.contains(at)) throw new Error(label + ': the ' + k + ' chip is covered at its centre by ' + (at && (at.id || at.className)));
+              const row = chip.querySelector('.ac-uses'), rr = row && row.getBoundingClientRect();
+              if (k !== 'custom' && !(rr && rr.width > 0 && rr.height > 0 && rr.left >= r2.left - 0.5 && rr.right <= r2.right + 0.5 && rr.bottom <= r2.bottom + 0.5)) throw new Error(label + ': the ' + k + ' chip’s marks are not drawn inside it (' + (rr ? [rr.left, rr.top, rr.width, rr.height].map(Math.round) : 'none') + ')');
+            });
+          } finally { FM.closeCanvasDialog(); await sleep(40); }
+        };
+        await atPhoneWidth(function () { return look('380'); }, 380);
+        await atWideWidth(function () { return look('1280'); }, 1280);
+        /* New project (Home's + → the dialog): the same marks, so the two places a ratio is chosen agree */
+        readChips('New project', [].slice.call(document.querySelectorAll('#hm-dialog .hm-aspect[data-aspect]')));
+      });
+    });
+  });
+
+  /* #1243 ST8 — his words: "in the friends menu, for some reason on mobile, you have to like scroll this one really weird small spot instead
+     of it like allowing you to scroll the whole thing. Or you just fitting it in properly. It does have a lot of clutter. Like instead of
+     having a section that's like how to use it… it shouldn't show you how to use it every single time… bare bones simple just so it works,
+     and then have a question mark button… that'll take you to another menu that gives you a tutorial like it will just show you the steps." */
+  test('1243 ST8 · on a phone the open Friends block scrolls as ONE whole under its bar — its head moves with it, nothing pinned — shows no how-to, no hint line and no Done of its own, and its ? opens the steps with a back arrow, live and not shared, at 380×800, 390×844 and 375×553 (CONTROLS: live, there is more than a screen to scroll, and ‹ brings Start sharing back)', { item: '1243', budgetMs: 150000 }, async function () {
+    const C = need921S7('the Friends block, bare');
+    const was = FM.settings.get('collabLabs');
+    await withFakeNet921(async function () {
+      await editorWithShape(async function () {
+        await with945(async function () {
+          const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-friends'), body = document.getElementById('cv-fr-body');
+          const scrollers = function () {
+            return [fr].concat([].slice.call(fr.querySelectorAll('*'))).filter(function (n) { const oy = getComputedStyle(n).overflowY; return (oy === 'auto' || oy === 'scroll') && n.getClientRects().length; });
+          };
+          const oneScroller = function (where) {
+            const s = scrollers();
+            if (s.length !== 1) throw new Error(where + ': ' + s.length + ' places scroll inside the Friends block (' + s.map(function (n) { return n.id || n.className; }).join(', ') + ') — his words: “scroll this one really weird small spot instead of… the whole thing”');
+            const bar = document.getElementById('cv-fr-bar').getBoundingClientRect().height, fb = fr.getBoundingClientRect().height;
+            if (s[0].clientHeight < fb - bar - 4) throw new Error(where + ': the one scroller (' + (s[0].id || s[0].className) + ') is ' + s[0].clientHeight + ' px tall in a ' + Math.round(fb) + ' px block — a small spot, not the whole block');
+            return s[0];
+          };
+          const idle = async function (label) {
+            window.__fmStep = '1243 ST8: ' + label + ', not shared';
+            FM.settings.set('collabLabs', true); C.ui.syncLabs();
+            FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+            try {
+              if (!body.querySelector('.cs-start')) throw new Error(label + ': setup: the not-shared block has no Start sharing');
+              oneScroller(label + ', not shared');
+              ['.cs-how', '.cs-fr-hint', '.cs-done'].forEach(function (sel) { const n = body.querySelector(sel); if (n && n.getClientRects().length) throw new Error(label + ': the bare block still shows ' + sel + ' — his words: “it shouldn’t show you how to use it every single time”'); });
+              const q = body.querySelector('.cs-help');
+              if (!q || !/How Work with friends works/.test(q.getAttribute('aria-label') || '')) throw new Error(label + ': the block has no ? button (his words: “have a question mark button”)');
+              const qr = q.getBoundingClientRect(), at = document.elementFromPoint(qr.left + qr.width / 2, qr.top + qr.height / 2);
+              if (!at || !q.contains(at)) throw new Error(label + ': the ? is covered by ' + (at && (at.id || at.className)));
+              q.click(); await settle921(60);
+              const steps = body.querySelectorAll('.tut-steps li, .cs-how li');
+              if (steps.length < 3) throw new Error(label + ': the ? page shows ' + steps.length + ' steps — his words: “it will just show you the steps”');
+              const back = body.querySelector('.cs-backbtn');
+              if (!back) throw new Error(label + ': the ? page has no ‹ back');
+              back.click(); await settle921(60);
+              if (!body.querySelector('.cs-start')) throw new Error(label + ': CONTROL: ‹ did not bring the block (Start sharing) back');
+            } finally { FM.closeCanvasDialog(); await settle921(60); }
+          };
+          try {
+            for (const [label, w, h] of [['380×800', 380, 800], ['390×844', 390, 844], ['375×553', 375, 553]]) {
+              await atSize921(w, h, function () { return idle(label); });
+            }
+            await withLabs921(async function () {
+              await withCollab921([layer921('A')], async function () {
+                await atSize921(390, 844, async function () {
+                  window.__fmStep = '1243 ST8: 390×844, live';
+                  FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                  try {
+                    if (!body.querySelector('.cs-stop')) throw new Error('setup: the block is not the live Share panel');
+                    if (body.querySelector('.cs-done')) throw new Error('live, the Friends block still has its own Done');
+                    const s = oneScroller('390×844, live');
+                    if (!(s.scrollHeight > s.clientHeight + 40)) throw new Error('CONTROL: live, the block has nothing to scroll (' + s.scrollHeight + ' in ' + s.clientHeight + '), so this reads nothing');
+                    const head = body.querySelector('.cs-head'), t0 = head.getBoundingClientRect().top;
+                    s.scrollTop = 120; await sleep(30);
+                    if (!(head.getBoundingClientRect().top < t0 - 60)) throw new Error('live, scrolling the block left its head pinned (' + Math.round(t0) + ' → ' + Math.round(head.getBoundingClientRect().top) + ') — the whole block should move');
+                  } finally { FM.closeCanvasDialog(); await settle921(60); }
+                });
+              });
+            });
+          } finally { FM.settings.set('collabLabs', !!was); C.ui.syncLabs(); }
+        });
+      });
+    });
+  });
+
+  /* #1243 ST5 — his words: "when you're in that menu and you press app settings, like, it's fine that the app settings is like on the left,
+     but I think you should make it have like an animation, because all the others have like an animation when you open them, except for
+     app settings. It kind of just boots you out of it. So change that." */
+  test('1243 ST5 · App settings opens with an animation — Settings dims over the cog from its first frame, the cog’s blocks leave one after another instead of vanishing, then the cog is put away, and Settings’ ‹ brings the cog back all closed, at 380 and 1280 (CONTROL: with reduced motion the cog goes at once)', { item: '1243', budgetMs: 90000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        const alpha = function (el) { const m = /rgba?\(([^)]+)\)/.exec(getComputedStyle(el).backgroundColor || ''); const p = m ? m[1].split(',').map(parseFloat) : []; return p.length > 3 ? p[3] : (p.length ? 1 : 0); };
+        let unMM = null;
+        const run = async function (label) {
+          window.__fmStep = '1243 ST5: ' + label;
+          FM.openCanvasDialog({ block: 'none' }); await entranceDone(dlg); await land945();
+          try {
+            document.getElementById('cv-app-bar').click();
+            const scrim = document.querySelector('.set-scrim');
+            if (!scrim) throw new Error(label + ': the App settings bar opened no Settings');
+            if (alpha(scrim) < 0.55) throw new Error(label + ': on its first frame Settings’ dim is ' + alpha(scrim).toFixed(2) + ' — the editor shows through as the cog goes (his words: “It kind of just boots you out of it”)');
+            if (dlg.classList.contains('hidden')) throw new Error(label + ': the cog vanished in the same frame — it should leave with an animation');
+            const leaving = dlg.getAnimations({ subtree: true }).filter(function (a) { return /^cv-leave/.test(a.animationName || ''); });
+            if (leaving.length < 3) throw new Error(label + ': ' + leaving.length + ' of the cog’s blocks animate as it goes');
+            const delays = leaving.map(function (a) { return a.effect.getTiming().delay; }).sort(function (a, b) { return a - b; });
+            if (!(delays[delays.length - 1] - delays[0] >= 40)) throw new Error(label + ': the blocks leave at one instant (delays ' + delays.join(', ') + ' ms), not one after another');
+            await sleep(450);
+            if (!dlg.classList.contains('hidden')) throw new Error(label + ': 450 ms on, the cog is still up under Settings');
+            if (!FM.settings.isOpen()) throw new Error(label + ': Settings is not open');
+            const x = document.querySelector('.set-scrim .set-close');
+            if (!x || x.textContent.trim() !== '‹' || !/settings cog/i.test(x.getAttribute('aria-label') || '')) throw new Error(label + ': opened from the cog, Settings’ close is “' + (x && x.textContent.trim()) + '”, not ‹ back to the cog');
+            x.click(); await sleep(520);
+            if (FM.settings.isOpen()) throw new Error(label + ': ‹ did not close Settings');
+            if (dlg.classList.contains('hidden') || !dlg.classList.contains('cv-none')) throw new Error(label + ': ‹ did not bring the cog back all closed (' + dlg.className + ')');
+          } finally { if (FM.settings.isOpen()) FM.settings.close({ handBack: false }); try { FM.closeCanvasDialog(); } catch (e) {} await sleep(300); }
+        };
+        try {
+          await atPhoneWidth(function () { return run('380'); }, 380);
+          await atWideWidth(function () { return run('1280'); }, 1280);
+          /* CONTROL: with reduced motion nothing animates, so the cog goes at once */
+          unMM = stub1132(window, 'matchMedia', reduce1132(window.matchMedia));
+          await atPhoneWidth(async function () {
+            FM.openCanvasDialog({ block: 'none' }); await sleep(60);
+            document.getElementById('cv-app-bar').click();
+            if (!dlg.classList.contains('hidden')) throw new Error('CONTROL: with reduced motion the cog did not go at once');
+            if (FM.settings.isOpen()) FM.settings.close({ handBack: false });
+            await sleep(300);
+          }, 380);
+        } finally { if (unMM) unMM(); if (FM.settings.isOpen()) FM.settings.close({ handBack: false }); try { FM.closeCanvasDialog(); } catch (e) {} await sleep(300); }
+      });
+    });
+  });
+
+  /* #1243 ST1 — his words: "the animation for in the settings, how we've got the four different settings options, how you've got app settings,
+     canvas, friends, and then the editor mode. Basically, make it so that the animation is just a bit better, like improve it a bit. Like,
+     just put some polish and effort into it." Pick A (recommended): cascade and unfold. */
+  test('1243 ST1 · the cog’s blocks swing in one after another in the order they stand (each at least 30 ms after the last), at 380 and 1280 (CONTROL: the first block does not wait at all)', { item: '1243', budgetMs: 90000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        let unMM = null;
+        const run = async function (label) {
+          window.__fmStep = '1243 ST1: ' + label;
+          FM.openCanvasDialog({ block: 'none' });
+          /* on a PC hung UNDER… or OVER the cog, the cascade starts at the cog: bottom up when the column grows up from it */
+          const up = document.body.classList.contains('cv-anchored') && document.body.classList.contains('cv-up');
+          try {
+            const blocks = [dlg.querySelector('.export-card'), document.getElementById('cv-friends'), document.getElementById('cv-editor'), document.getElementById('cv-app')].filter(function (b) { return b && b.getClientRects().length; });
+            const read = blocks.map(function (b) {
+              const a = b.getAnimations().filter(function (x) { return window.CSSAnimation && x instanceof CSSAnimation; })[0];
+              return { b: b, t: b.offsetTop, e: b.offsetTop + b.offsetHeight, d: a ? a.effect.getTiming().delay : null };
+            });
+            if (read.some(function (x) { return x.d === null; })) throw new Error(label + ': setup: a block has no entrance animation (' + read.map(function (x) { return (x.b.id || x.b.className) + ':' + x.d; }).join(' ') + ')');
+            read.sort(function (a, b) { return up ? b.e - a.e : a.t - b.t; });
+            if (read[0].d !== 0) throw new Error(label + ': CONTROL: the first block in the order waits ' + read[0].d + ' ms — the reading is off by a constant, so it says nothing about the order');
+            for (let i = 1; i < read.length; i++) {
+              if (!(read[i].d - read[i - 1].d >= 30)) throw new Error(label + ': the blocks do not swing in one after another in the order they stand (delays ' + read.map(function (x) { return (x.b.id || 'canvas') + ' ' + x.d; }).join(', ') + ' ms) — his words: “put some polish and effort into it”');
+            }
+          } finally { FM.closeCanvasDialog(); await sleep(40); }
+        };
+        try {
+          await atPhoneWidth(function () { return run('380'); }, 380);
+          await atWideWidth(function () { return run('1280'); }, 1280);
+        } finally { if (unMM) unMM(); try { FM.closeCanvasDialog(); } catch (e) {} await sleep(40); }
+      });
     });
   });
 

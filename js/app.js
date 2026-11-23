@@ -8451,9 +8451,12 @@ window.FM = window.FM || {};
     const appBar = document.getElementById('cv-app-bar');
     if (appBar) appBar.addEventListener('click', () => {
       const dlg = document.getElementById('canvas-dialog');
-      // leave this dialog first, or the panel opens behind it — through its one close (queue 945), which also unpins the PC anchor
-      if (FM.closeCanvasDialog) FM.closeCanvasDialog(); else if (dlg) dlg.classList.add('hidden');
-      if (FM.settings && FM.settings.open) FM.settings.open();
+      /* #1243 ST5 ("all the others have like an animation when you open them, except for app settings. It kind of just boots you
+         out of it"): Settings opens OVER the cog with its dim already there (fromCog), and the cog's blocks leave under it before
+         the cog is put away (FM._cvLeave) — it used to vanish in one frame, under an undimmed editor, before Settings had begun. Its
+         one close still runs (queue 945), which also unpins the PC anchor. */
+      if (FM.settings && FM.settings.open) FM.settings.open({ fromCog: true });
+      if (FM._cvLeave) FM._cvLeave(); else if (FM.closeCanvasDialog) FM.closeCanvasDialog(); else if (dlg) dlg.classList.add('hidden');
     });
     // The PC top bar's ⋯ (#btn-more) used to live here, opening FM.projectMoreItems with nothing
     // selected and FM.layerMenuItems with a clip selected. Both halves were duplicates by the end:
@@ -9605,6 +9608,43 @@ window.FM = window.FM || {};
       else if (FM.scene.selectedId) FM.deleteLayer(FM.scene.selectedId);
     });
 
+    /* ═══ #1243 ST7: WHAT EACH ASPECT RATIO IS FOR. His words: "when choosing like your aspect ratio, it would probably be a good idea
+       to like tell people like what it is for … what apps would use what aspect ratio. So like Instagram would use what, TikTok would
+       use what … So just like a little TikTok logo or whatever." And his pick, 9 Nov: "just do logos without names for the aspect
+       ratios". ONE table, read by both places a ratio is chosen (the cog's Canvas card and Home's New project), so they cannot
+       disagree. The marks are OUR OWN simple line drawings in the app's ink — no downloaded brand art, no colours — and the names
+       are said only to a screen reader (role="img" + aria-label), never on screen. They are other companies' trademarks:
+       BEFORE-PUBLISHING.md lists them to re-check before any store release. 4:3 names no app: its mark is a plain tablet. */
+    const PLAT_SVG = {
+      tiktok: '<path d="M13 3.5v11a3.6 3.6 0 1 1-3.6-3.6"/><path d="M13 3.5c.5 2.6 2.4 4.3 5.2 4.5"/>',
+      instagram: '<rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="3.8"/><circle cx="17.1" cy="6.9" r=".9" fill="currentColor" stroke="none"/>',
+      youtube: '<rect x="2.5" y="5.5" width="19" height="13" rx="4"/><path d="M10.2 9.3v5.4l4.6-2.7z" fill="currentColor" stroke="none"/>',
+      facebook: '<circle cx="12" cy="12" r="9"/><path d="M15 7.6h-1.6a2.4 2.4 0 0 0-2.4 2.4V21M8.8 12.6h5.6"/>',
+      tablet: '<rect x="3.5" y="5" width="17" height="14" rx="2.2"/><path d="M11 16.2h2"/>'
+    };
+    const PLAT_NAME = { tiktok: 'TikTok', instagram: 'Instagram', youtube: 'YouTube', facebook: 'Facebook', tablet: 'iPad and older TVs' };
+    FM.ASPECT_USES = { '9:16': ['tiktok', 'instagram', 'youtube'], '16:9': ['youtube'], '4:5': ['instagram', 'facebook'], '1:1': ['instagram', 'facebook'], '4:3': ['tablet'], custom: [] };
+    /* Adds the marks row to every chip under `root` that carries a data-aspect (both dialogs' chips); once per chip. */
+    FM.paintAspectUses = (root) => {
+      (root || document).querySelectorAll('.aspect-chip[data-aspect], .hm-aspect[data-aspect]').forEach(chip => {
+        if (chip.querySelector('.ac-uses')) return;
+        const uses = FM.ASPECT_USES[chip.dataset.aspect] || [];
+        const row = document.createElement('span'); row.className = 'ac-uses';
+        if (uses.length) { row.setAttribute('role', 'img'); row.setAttribute('aria-label', 'For ' + uses.map(k => PLAT_NAME[k]).join(', ')); }
+        else row.setAttribute('aria-hidden', 'true');
+        uses.forEach(k => {
+          const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          s.setAttribute('viewBox', '0 0 24 24'); s.setAttribute('fill', 'none'); s.setAttribute('stroke', 'currentColor');
+          s.setAttribute('stroke-width', '2'); s.setAttribute('stroke-linecap', 'round'); s.setAttribute('stroke-linejoin', 'round');
+          s.setAttribute('aria-hidden', 'true'); s.dataset.plat = k;
+          s.innerHTML = PLAT_SVG[k];   // fixed strings from the table above, never user data
+          row.appendChild(s);
+        });
+        chip.appendChild(row);
+      });
+    };
+    FM.paintAspectUses(document);
+
     // canvas-size / aspect-ratio dialog (AM-style)
     let cvAspect = '9:16';
     const cvDialog = document.getElementById('canvas-dialog');
@@ -10139,7 +10179,9 @@ window.FM = window.FM || {};
         cvPlace(o.from || (FM.settings && FM.settings.lastCanvasOpener) || document.getElementById('btn-settings'));
         cvWatchWidth(true);
         cvRoleNote();
+        cvDialog.classList.remove('cv-leaving');   // #1243 ST5: a cog reopened while it was leaving comes back whole
         cvDialog.classList.remove('hidden');
+        cvStagger();     // #1243 ST1: the entrance cascades in the order the blocks stand in
         FM.modalFocus(cvDialog, o.from || (FM.settings && FM.settings.lastCanvasOpener) || document.activeElement);
         cvOpenFp = cvPendingFp();   // LAST: every control is seeded from the project, so "pending" means his unapplied picks only
         cvPendingDot();
@@ -10159,6 +10201,34 @@ window.FM = window.FM || {};
         FM.modalFocus(cvDialog, null);
       };
       FM.closeCanvasDialog = cvClose;
+      /* #1243 ST1: the order of the entrance's cascade (styles.css --cv-i) is the order the blocks STAND in: top to bottom on a phone, and
+         on a PC from the cog outward (bottom up when the column grows up from it). Read from their resting offsets (an entrance's
+         transform does not move those), right after the dialog is shown and before a frame is drawn, so every swing starts on time. */
+      const cvStagger = () => {
+        const up = document.body.classList.contains('cv-anchored') && document.body.classList.contains('cv-up');
+        [cvEd, cvFr, cvCard, cvApp].filter(b => b && b.getClientRects().length)
+          .map(b => ({ b: b, t: b.offsetTop, e: b.offsetTop + b.offsetHeight }))
+          .sort((x, y) => up ? y.e - x.e : x.t - y.t)
+          .forEach((x, i) => x.b.style.setProperty('--cv-i', String(i)));
+      };
+      /* #1243 ST5: the App settings bar's way out. Settings is already opening over the cog (its dim at full strength from the first
+         frame); the blocks leave one after another (styles.css cv-leave), and only then is the cog put away. Reduced motion, or a page
+         with nothing animating: at once, as before. */
+      FM._cvLeave = () => {
+        if (cvDialog.classList.contains('hidden')) return;
+        const reduce = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+        cvPairSettle();
+        if (reduce || !cvDialog.getAnimations) { cvClose(); return; }
+        try { cvDialog.getAnimations({ subtree: true }).forEach(a => { const t = a.effect && a.effect.getComputedTiming ? a.effect.getComputedTiming() : null; if (t && isFinite(t.endTime)) a.finish(); }); } catch (e) {}
+        cvStagger();
+        cvDialog.classList.add('cv-leaving');
+        const mine = cvDialog.getAnimations({ subtree: true }).filter(a => a.animationName === 'cv-leave' || a.animationName === 'cv-leave-app');
+        let done = false;
+        const fin = () => { if (done) return; done = true; if (cvDialog.classList.contains('cv-leaving') && !cvDialog.classList.contains('hidden')) cvClose(); cvDialog.classList.remove('cv-leaving'); };
+        if (!mine.length) { fin(); return; }
+        Promise.all(mine.map(a => a.finished)).then(fin, fin);
+        setTimeout(fin, 400);   // a tab with no frames (rAF/animations paused) still puts the cog away
+      };
       /* #978 review: THE SWITCH IN THE PAIR MOVES THE BUTTON IT HANGS FROM. On a PC the Friends block holds the only Work
          with friends switch, and flipping it adds or takes away the Share button beside Export — which shifts the cog along
          the transport row. The pair was placed once, at open, so it was left hanging off where its button USED to be: turned
