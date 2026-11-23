@@ -40503,6 +40503,74 @@ re-opened #480, which I had marked done and had not fixed.
 
       **Logger's plan (not his words):** tonight's design run (batch BX, code M6V) draws M6r on PC at 1440 and 1280 wide. With the settings open, every toolbar button fits and Export is hidden, and it comes back on close. The timeline stays usable while the settings are open. The notes list the bar's buttons and how they fit.
       📌 **Builder, 23 Nov 21:23:** the 13 follow-ups above are logged word for word: his notes of 23 Nov on the real-app page and on the menus. They are design clauses, so nothing is built from them before the ONE decisions chat and his "ready"; the logger draws the options. His other requests of the same half hour are their own entries: #1261. Clause 4 of the first message (the fade) and his 11:02 clause (the glitch) are still open, waiting for his eyes on v18.49.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:24 AWST: #1255 the Audio react sheet needs rethinking; its slider lines are invisible, just floating dots**
+      **His words (verbatim):** Honestly, the audio react sheet is kind of like, I don't know. It's not the best, really. That could probably be rethought as well. I don't like how the lines on the sliders are invisible and it's just floating dots.
+
+      **His clauses:**
+      1. [ ] The Audio react sheet is not the best. It could be rethought.
+      2. [ ] The slider lines (tracks) are invisible, so the sliders are just floating dots. He doesn't like that.
+
+      **Logger's plan (not his words):**
+      - Tonight's design run (batch B7, code MAR) redraws it, with two bold new layouts.
+      - A standing rule now: every slider or value track is clearly visible in dark and light (at least 3:1), never a floating dot. The re-skin's faint track colour is the likely cause in many places.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:24 AWST: #1255 the Audio react sheet on the computer doesn't look designed for a computer: it's phone-sized**
+      **His words (verbatim):** And also the fact that the version on computer doesn't even look like it was designed for computer. It's like got the phone, size.
+
+      **His clauses:**
+      1. [ ] On the computer, the Audio react sheet doesn't look designed for a computer.
+      2. [ ] It is phone-sized.
+
+      **Logger's plan (not his words):**
+      - In tonight's design run (B7, MAR), the PC version uses the width, for example a side panel with the waveform and the reacting values side by side.
+      - A standing rule for every batch: PC boards are designed for the computer, never a phone-sized sheet on a big screen.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:26 AWST: #1255 the Full Export dialog: drop the confusing "You'll get" and the "What to make" heading; "More options" just says "More options"**
+      **His words (verbatim):** In the export dialog full, where it says you'll get, why does it say you'll get? Is that the title of the video or what? Like, why does it say you'll get there? I don't know about that. And I don't think it needs to say what to make either. And more options can just be more options. If people want to know what's in it, they'll tap on it to go in.
+
+      **His clauses:**
+      1. [ ] The "You'll get" line in the Full Export dialog is confusing (is it the video's title?). He doesn't get why it's there.
+      2. [ ] The dialog doesn't need "What to make" either.
+      3. [ ] "More options" should just say "More options". People tap it to see what's inside.
+
+      **Logger's plan (not his words):**
+      - Tonight's design run (B7, MXD) drops "You'll get" and "What to make". If the result is shown at all, it's shown plainly, e.g. "1080p · 30 fps · MP4 · about 24 MB", with no label.
+      - The row says just "More options".
+      - A general lesson for every batch: fewer words, and a label only where it is needed.
+      - The label changes themselves are text-only and could also ship in today's look.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:26 AWST: #1255 the Export progress overlay could be cleaner**
+      **His words (verbatim):** Export progress overlay could probably be a bit cleaner looking.
+
+      **His clauses:**
+      1. [ ] The Export progress overlay should look cleaner.
+
+      **Logger's plan (not his words):** in tonight's design run (B7, MXP), MXP1 is today's overlay made much cleaner: one clear progress element, fewer words, calm. MXP2 and MXP3 are cleaner new takes.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:27 AWST: #1255 should the whole settings cog menu be rethought? Potentially**
+      **His words (verbatim):** Should we rethink how the whole settings cog menu works? Potentially.
+
+      **His clauses:**
+      1. [ ] Consider rethinking how the whole settings cog menu (the editor's cog) works.
+
+      **Logger's answer and plan (not his words):**
+      - Yes, recommended. It has grown into a catch-all.
+      - Tonight's design run (B4, code FC, its own designer) maps everything the cog opens today, then rethinks how it WORKS:
+        - FC1 is regrouped and polished.
+        - FC2 is a split: the cog keeps project and canvas settings, sharing gets its own home, and the editor switch sits where you'd look for it.
+        - FC3 is bolder.
+      - It covers phone and PC, with a table of where every item lives in each option.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:31 AWST: #1255 what he didn't comment on he likes (he is double-checking the open picks); his rule for EVERY button menu; the ••• "no layer selected" question answered**
+      **His words (verbatim):** I'm pretty sure everything I didn't pick, I didn't say anything because I like it, but just quickly open up all the things I haven't picked yet just so I can double check. You're going to have to remind me or send me a screenshot of which message where I said the question with no letter selected, there's no 3 dots. Because I was talking about 3 dots on sections a lot, about a lot of different things. I think my general consensus though was that all the 3 dot menus and like every menu that you open up, that's like comes off of a button that opens up a menu, a drop down menu. It should actually, the menu should actually drop down with like an animation and be connected to the button that you pressed in a like stylish way. And that basically, you know, like it should just be polished. And I think I said for the 3 dot menu, when you have a layer selected, I just wanted it to be more compact. And I think I explained how it should be compact
+
+      **His clauses:**
+      1. [ ] Everything he didn't comment on, he likes. He wants to see all the not-yet-picked items once more to double-check.
+      2. [ ] Remind him which message the "no layer selected, no ••• today" question came from, since he talked about ••• menus a lot.
+      3. [ ] His general rule: EVERY menu that opens from a button (all the ••• menus and every dropdown) drops down with an animation and is connected to the button in a stylish way. Polished.
+      4. [ ] For the ••• menu with a layer selected: more compact, as he described (the thinner menu with the colours you swipe).
+
+      **Logger's notes (not his words):**
+      - Sent at 21:31: two pictures of everything still waiting on a pick (N, D, O, S, K, P, Q), recommended ringed. His answer goes in when he replies.
+      - The no-layer question is ANSWERED by clause 3: it was his 16:38 message ("Same for the three-dot drop-down menu from the top right when you have a layer selected or not, or when you don't have a layer selected…").
+        - The rule simply covers every button menu, whatever is selected. There is no separate "no layer" ••• to design.
+        - The S*-none boards (the Layer actions menu with the paste strip) stay as an extra, not a pick.
+      📌 **Builder, 24 Nov 01:23:** the 6 follow-ups above are logged word for word: his notes of 23 Nov on the real-app page and on the menus. They are design clauses, so nothing is built from them before the ONE decisions chat and his "ready"; the logger draws the options. His other requests of the same half hour are their own entries: #1262. Clause 4 of the first message (the fade) and his 11:02 clause (the glitch) are still open, waiting for his eyes on v18.49.
 - [ ] **1256 — The light Home: the strip under the clock is a little lighter than the page under it, with nothing open and under every dim (hunt MEDIUM #1256)** (21 Nov, found by the review inside v18.48's build of #1255 clause 4; not his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       🔎 **What was measured (v18.48's build, a phone-width run on the laptop):** every top-edge tab on the light Home is the screen's BACKGROUND colour (#920's rule): #fafdff with nothing open, #acb4bb under a dim, #f4f6f9 under Settings. But the page really paints a tint there (#hm-bleed's gradient and the glows of #home-screen::before, which drift) and its dims blur what is under them. Under a dim the real pixels at the top centre read about #94a8b6, 10 to 24 levels darker than the tab. With nothing open the page paints about #d6eef5 against the #fafdff tab, about 20 levels: an ESTIMATE worked back from the dims' pixels, not measured with nothing open.
@@ -40616,3 +40684,44 @@ re-opened #480, which I had marked done and had not fixed.
       - The next #1255 design batch draws the Simple Export panel (code SEX) as today's polished plus new layouts. It keeps the panel simple at a glance but adds more frame rates (at least 24, 25, 30, 50, 60), plus whichever Full-export choices a Simple user needs, such as size/quality and format.
       - The extra frame rates themselves can ship in today's look, so the builder may treat that part as a normal item.
       📌 **Builder, 23 Nov: Simple's own panel, so a Simple release (it runs the lock).** The export menu shipped in v18.46 (#1243 S6) with two frame rates. His words: "it should stay simple like that, but it should still have more options". To build with the next Simple work after release 13: more frame rates first (the ones Full's export already offers), and the list of what else "more options" could mean drawn as two or three small options for him, one recommended. js/exporter.js cannot change in a Simple release, so every option must be one the exporter already takes.
+- [ ] **1262 — Measure the testing properly and change to a better way if there is one; the overheating was probably his games** (23 Nov 2026, 21:33 AWST, his words, via the logging chat)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      **His words (verbatim):** Yeah, of course, I want you to measure it properly. If there's any better way for us to do it, we should be doing it. And when it was overheating, that probably was because I was playing games at the same time.
+
+      **His clauses:**
+      1. [ ] Measure the testing properly: what it catches, what it costs.
+      2. [ ] If there's a better way to do it, we should be doing it.
+      3. [ ] The overheating was probably because he was playing games at the same time.
+
+      **Logger's plan (not his words):**
+      - A read-only measuring job runs as soon as v18.50 is out, beside the design run.
+      - It covers:
+        - every refused ship since 24 Oct, classed as real app bug, test problem, environment (heat, his games), tooling or process;
+        - what a release costs in laptop hours, and how much of the phone pass repeats the desktop pass;
+        - the bugs that got past green tests to his phone;
+        - ranked proposals with hours saved and risk, re-checked by a skeptic.
+      - He gets a short plain report. The builder gets the proposals for ship.sh and the tests (the builder owns those).
+      - His games: memory "windows-load-invisible-to-wsl" already notes that ship.sh's load gate cannot see Windows load. A Windows-load gate is one of the proposals.
+      📥 **From the logger, via INBOX (not his words) — 24 Nov 2026, 02:12 AWST: RESULTS of his 21:33 "measure the testing properly" (logger follow-up; no new words from him)**
+      The full reports are durable in ~/fm-1255/testaudit/ (A-ships, B-cost, C-escapes, D-proposals, E-check). The headlines:
+      - **53 releases (v17.98-v18.50), 90 ship attempts, 37 failed.**
+        - The failures were: 12 test problems, 8 environment, 11 process, 4 tooling, and only 2 real app bugs caught (v18.13, v18.22).
+        - Environment covers 2 refusals from his game, 2 from our own agents/Codex beside a ship, 1 from heat and 3 from restarts.
+        - About 37 of about 192 ship laptop-hours went on failed attempts.
+      - **Cost:** about 5 h 15 per ordinary release and about 8 h 15 per Simple release. A full pass is 74 min, up 25% in a month (4,323 tests).
+      - **The big find:** the 380 "phone pass" never shows the app at phone width.
+        - run.html:28 fixes the app frame at 900x760 in both passes, and _cdp.py:518 sets mobile=False in both.
+        - About 96% of tests answer the same in both passes, and the phone pass repeats most of the desktop pass.
+      - **17 bugs reached his devices this month with every test green.**
+        - 5 were iOS/WebKit-only, 5 were visible on desktop but no test looked, 3 were designs he didn't want, 2 were phone speed, 1 was real touch and 1 is unknown.
+        - The top fade was "fixed" three times on green tests that checked colours instead of what iOS draws.
+      - **The skeptic's verdicts on the proposals** (D-proposals.md and E-check.md):
+        - KEEP #0 (log every ship, each test's time, and the Windows load), #3, #4 (as a trial), #6 and #8.
+        - CHANGE #1: re-run only the ~50 width-reading tests at 380, add a REAL 390x844 / 440x956 screen check, and keep one full 380 pass a week for intermittent races.
+        - CHANGE #2: one full pass per exact tree, fingerprinted over the whole tree minus docs, images included; never reuse a pass where a required test skipped.
+        - CHANGE #5: restore or check the harness after EVERY test and refuse any new leak. A 30-test window missed v18.28's leak.
+        - CHANGE #7: the Windows watcher also logs CPU speed, to catch heat throttling.
+        - NOT NOW: choosing tests by what changed, and two browsers at once.
+      - **Saving:** about 45-50 of about 80 test-hours a week, without dropping a real catch from the month.
+      - **His standing words:** "If there's any better way for us to do it, we should be doing it." So the builder adopts the kept and changed proposals, in order of hours saved, each proved before it is relied on.
+      - **His call:** the 5 iPhone-only bugs need a short look on his phone after releases that change what he sees. Offer him a 3-step check, and he decides.

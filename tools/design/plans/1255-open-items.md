@@ -1,5 +1,5 @@
 # #1255 redesign: everything open, unfinished, or waiting on Ezra
-Kept by the logger, last updated 23 Nov 2026 17:00 AWST. This file is the durable copy; his words are verbatim under #1255 in REQUESTS.md.
+Kept by the logger, last updated 24 Nov 2026 01:30 AWST. This file is the durable copy; his words are verbatim under #1255 in REQUESTS.md.
 **His correction, 23 Nov 16:44-16:52 (verbatim):** "this whole project like thing we were doing was supposed to be like rethinking how everything could be laid out, not just recoloring stuff" / "the layout now is fine, but I'm just like open to inspiration and new ideas" / "we literally came up with some new designs. They're not even in here." (about the real-app page). So every surface gets today's layout POLISHED plus new layout ideas (never a recolour alone), and the real-app page must show his picks.
 His plan (21 Nov 02:10): "finish this up and we can properly do EVERYTHING when monday 4pm hits", i.e. after the weekly reset on **Mon 23 Nov 16:00 AWST**.
 His process rule: before ANY switch-over, ONE simple decisions chat covering every decision, his earlier likes ("still like them?"), and each change shown before/after, ending with "ready to switch over?". The builder builds nothing from these designs until he says he is ready.
@@ -22,12 +22,32 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
 0b. **MUST-PICK, 23 Nov: one pick for each of his notes from 16:30-16:52.**
    - SENT TO HIM at 18:13 as one pick list, with the N1-N6 picture. Chase each until he names one.
    - Every option is on the canvas, on the pages home-nav, menus, create, inspector and simple-2.
-   - It is also on the real-app page (v3) as "Pick one" rows: 14 to pick.
-   - Recommended:
-     - N1 (the judge's pick; the designer preferred N2 Library)
-     - D1, O2, S1, K3, P2, L2, Q2, X3
-     - and from before, C3 and Template icon 1
-   - **QUESTION FOR HIM (asked 18:13):** with no layer selected there is no ••• at the top right today (removed in v6.13, queue 35; it shows notes and the cog). Which menu did "or when you don't have a layer selected" mean? The S*-none boards assume the ⧉ Layer actions menu.
+   - It is also on the real-app page (v4) as "Pick one" rows.
+   - HIS PICKS SO FAR:
+     - L1, not the recommended L2 (21:00)
+     - Template icon 1 (21:24)
+     - C2, not C3 (21:40)
+   - 21:31: "everything I didn't pick, I didn't say anything because I like it". Pictures of the open picks were sent at 21:31 for his double-check.
+   - STILL OPEN: N (N1 recommended, minus the line under the active tab), D (D1), O (O2), S (S1), K (K3), P (P2), Q (Q2).
+   - ~~QUESTION: with no layer selected there is no •••; which menu did he mean?~~ ANSWERED 21:31. His rule covers EVERY menu that opens from a button: it drops down with an animation, joined to the button, polished. The layer ••• gets the compact S version.
+   - ALL DRAWN by 24 Nov 05:45 (runner wf_159660a4-456, 8 batches, 81 surfaces, each with its recommended option). The list is in the logger scratchpad, pick-list-all.md; the boards are in ~/fm-1255/polish/canvas/project/ (simple4, text, home2, editor2, inspector2, simple3, menus2, finish, add2, menu/M6r*).
+     - On the canvas so far: BX and B2 (v36). Still to publish: B3-B8. The page needs splitting first (564 pictures, over its 511-file cap).
+     - Publishing while he was away was blocked by the auto-mode check (03:40). It waits for his OK.
+     - The batches and their codes were:
+     - XA/XB/XC (Extras, redone after his "make it easier for me to decide")
+     - MO1-3 (panel rises, canvas shrinks)
+     - M6r + a live drag-control prototype (no sliders)
+     - FXR (the real effect covers vs the design's)
+     - AH (A2r PC at every drag height)
+     - TFX (text effects)
+     - FC (the cog rethought)
+     - STR (transitions with animated previews)
+     - SEX (Simple export, more options)
+     - MAR (Audio react)
+     - MXD/MXP (export)
+     - LG (the real logo retinted)
+     - E1D (E1 on PC)
+     - and the other colours-only screens
    - **D1-D4: how every dropdown connects to its button.** Shown on the Home card •••, the copy/duplicate menu, the editor's top-right ••• and the parent picker. [D1 pointer recommended: his own "an arrow coming off of it"]
    - **O1-O5: the opening animation for every dropdown.** "not just the boring ass unfold animation".
    - **S1-S3: the thinner top-right ••• menu.** The colours become a row you swipe through.
@@ -39,15 +59,16 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
 1. **Identity:** confirm the orange look, "Cutline" [recommended; he said "orange looks really good" but wanted to see it in the editor first].
 2. **The Full editor switch:** keep today's behaviour, or colour it by the SELECTED layer as he described?
    - Today it is white at rest and takes a layer's colour only while you hold that layer by its handle (app.js:3437).
-3. **Template tab icon:** option 1 "Stacked cards" [recommended by the designer and the judge], or another number from the options sheet.
-4. **Category button style:** C1-C4, shown on the locked B1/B4 layout (the board is being made 21 Nov).
+3. ~~**Template tab icon:** option 1 "Stacked cards", or another number from the options sheet.~~ HE PICKED 1, "Stacked cards" (23 Nov 21:24: "Go for the recommended template option").
+4. ~~**Category button style:** C1-C4.~~ HE PICKED C2 Cut Paper (23 Nov 21:40). C3 "looks repetitive... the same thing over and over again".
 5. **"Selected" look across menus** (light review M8): (a) a vermilion fill, or (b) a white chip with a vermilion ring [(b) recommended; it's a taste call, so show both].
+   - PARTLY ANSWERED 23 Nov 21:12/21:17: NEVER a line under a selected item ("ugly line"), anywhere.
 5b. **Real-app re-skin taste calls** (reskin/NOTES.md):
    - The moving gradient ring on the inspector cards (#339) was removed for minimalism. OK?
    - ~~Tool glyphs are now one ink colour instead of per-tool colours. OK?~~ HE ANSWERED, 23 Nov 16:41: NO. Each category button keeps its old colour on its ICON only, with the outline staying black/white, no glow, subtle ("it shouldn't just be black and white"). Drawn as G1 (inspector/G1-*).
    - Timeline bars are coloured by layer TYPE, so two text layers share a colour. OK, or keep per-clip colours?
 6. **M3:** for PC only (with M1 on phone), or both?
-7. **Simple editor E1:** he liked it, but it has no computer version yet. Confirm E1, then draw its computer version.
+7. **Simple editor E1:** he liked it, but it has no computer version yet. Confirm E1, then draw its computer version. (E1D is being drawn overnight on 24 Nov.)
 8. **ADD sheet on PC:** A2r (A2 with his fixes) [assumed], or the original A2 he said looked good?
 9. ~~**The top "fade over the buttons" bug** (#1255 clause 4): which one?~~ ANSWERED BY EVIDENCE on 21 Nov 02:45, no question for him needed.
    - The builder found it from his screenshots: the ADD sheet's dim leaves the editor's top-edge tab undimmed, so iOS fades the bar colour over the top buttons.
@@ -117,6 +138,11 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
 - Audio menus: the same layouts as the visual effects, with the 52 new audio pictures (U1-U8 dropped).
 - Look: Cutline (orange). Minimal ("less is more").
 - Category buttons (Colouring & Media, Outline & Shadows, Mixing and the rest): each icon keeps its own colour; the outline is neutral black/white; no glow (23 Nov, his own spec, drawn as G1).
+- Simple Look panel: L1 (23 Nov 21:00, over the recommended L2).
+- ADD sheet Template tab icon: 1 "Stacked cards" (23 Nov 21:24).
+- Effects category buttons: C2 Cut Paper (23 Nov 21:40).
+- The effects browser B1r/B4r, re-confirmed 23 Nov 21:30: "I love that new effects menu. That looks so good."
+- Effect settings (M6) use the DRAG value control, not sliders (23 Nov 21:50). On PC: hover + scroll wheel and click-drag. To be tried in a prototype first; it goes in the tutorials.
 
 ## D. Build rules he set
 - Minimal; no hero card for the open project.
@@ -131,7 +157,19 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
 - Dark is the default; light mode is a setting and must be tasteful.
 - Phone AND computer both matter.
 - The redesign RETHINKS layouts, never only recolours. Every surface gets today's layout polished plus new ideas (23 Nov).
-- Every dropdown opens FROM its button and stays visibly connected to it, with a quick opening animation that is not the plain unfold. This covers the Home card •••, the copy/duplicate menu, the editor's top-right •••, the parent picker and any others (23 Nov).
+- Every dropdown opens FROM its button and stays visibly connected to it, with a quick opening animation that is not the plain unfold. This covers the Home card •••, the copy/duplicate menu, the editor's top-right •••, the parent picker and any others (23 Nov). He confirmed it at 21:31 for EVERY menu that comes off a button: "it should just be polished".
+- No emojis as icons anywhere: draw our own (23 Nov 20:53, the Detect speech button).
+- Caption-cue typing and EVERY text page come up from the BOTTOM, in the add-layer row's place, so the screen doesn't move. "Don't take a shortcut... Do it the proper way." (20:53)
+- No explanatory hint pop-ups ("tap a clip to split or change its speed"); tutorials teach. A first-run tutorial is OK (20:53).
+- No line under any selected or active item, anywhere (21:12 Speed ×1, 21:17 Sound styles). N1's active-tab cut mark goes too.
+- Every slider or value track is clearly visible (at least 3:1), never floating dots (21:24, Audio react).
+- PC versions are designed FOR the computer, never phone-sized (21:24, Audio react on PC).
+- On PC the effects browser (B4r) opens FULLY as a left panel with no drag, and the canvas and timeline shrink to fit (21:35). Tests to come with it: the pointer mapping, the fit at 1280/1440, playback, and open/close restoring the layout. "As long as that doesn't cause any bugs."
+- Opening the effects menu animates: the panel rises and the canvas shrinks in step, never a cut (21:45, like a comments sheet).
+- On PC, with effect settings open, Export hides so every toolbar button fits, and the timeline stays usable (21:55).
+- Fewer words: no "You'll get" or "What to make" labels, and "More options" is just "More options" (21:26, Export).
+- Text layers get a text-made effects menu: text effects and easy colours, no picture adjustments. Simple shows the text set only; Full shows it first, with All effects one tap away (21:19).
+- Simple transitions: MANY options, each with a small looping preview (21:14). Simple export: more options while staying simple (21:05).
 - No glow anywhere. Outlines are hairlines, never thick white (23 Nov, the Paste look dialog). That includes the Full editor's layer switch: his T1r/T4r boards still draw a coloured glow on it (.sw-track box-shadow), and the build must drop it.
 - One connector system for every dropdown (his D pick). The build spec is the D1 pointer in the logger's polish/tmp/logger/w1/notes-A1.md: 12x9 SVG, top -9px, centred on the opener. The menu placement passes the opener's rect.
 - Builder items that do NOT wait for the redesign (23 Nov):
