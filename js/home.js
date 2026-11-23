@@ -3290,6 +3290,12 @@ window.FM = window.FM || {};
    * instead of being corrected later in Canvas settings. The picks are remembered for next time.
    */
   const NEWP_KEY = 'fm.newproj';
+  /* queue 1258 clause 1 — his words, 23 Nov: "Just logging this now, by default, 60 FPS should be selected."
+     NP_FPS is the frame rate the dialog stands on when nothing is remembered (it was 30). NP_FPS60_KEY marks the ONE-TIME
+     move of a remembered 30 to 60 (npFps60Once below): his phone holds the 30 every earlier version defaulted to, so a new
+     fallback alone would never show him 60. */
+  const NP_FPS = 60;
+  const NP_FPS60_KEY = 'fm.newproj.fps60';
   const NP_ASPECTS = ['9:16', '16:9', '1:1', '4:5', '4:3', 'custom'];   // whitelist: a corrupt remembered value must not reach the a/b maths as NaN
   let npAspect = '9:16', npBg = '#000000', dlgEsc = null;
   const npEl = id => document.getElementById(id);
@@ -3304,8 +3310,26 @@ window.FM = window.FM || {};
   }
   function npFps() {
     const sel = npEl('hm-new-fps');
-    const raw = (sel && sel.value === 'custom') ? (npEl('hm-new-fps-num') || {}).value : (sel ? sel.value : 30);
-    return Math.max(1, Math.min(120, parseInt(raw, 10) || 30));
+    const raw = (sel && sel.value === 'custom') ? (npEl('hm-new-fps-num') || {}).value : (sel ? sel.value : NP_FPS);
+    return Math.max(1, Math.min(120, parseInt(raw, 10) || NP_FPS));   /* queue 1258: an empty Custom box means the default, 60 */
+  }
+  /* queue 1258 clause 1 — THE ONE-TIME MOVE OF A REMEMBERED 30 TO 60. Every version before this one opened the dialog on 30
+     and remembered it at Create, so his phone's 'fm.newproj' almost certainly says fps 30 although he never chose it; with
+     only the fallback changed he would see nothing. So the first time the dialog opens after this release: the flag is
+     written FIRST, and only if it reads back (a store that refuses writes moves nothing, as before), a remembered 30 becomes
+     60 — in the memory too, so a Cancel does not bring the 30 back next time. The flag is written whatever was remembered
+     (nothing, 30, 24 …), so the move can never fire later: from then on whatever he picks at Create is remembered exactly
+     as before, and a 30 he picks himself stays 30. Projects already made are not touched — their fps is their own. */
+  function npFps60Once(saved) {
+    let fresh = false;
+    try {
+      if (localStorage.getItem(NP_FPS60_KEY)) return;
+      localStorage.setItem(NP_FPS60_KEY, '1');
+      fresh = localStorage.getItem(NP_FPS60_KEY) === '1';
+    } catch (e) { return; }
+    if (!fresh || !saved || Number(saved.fps) !== 30) return;
+    saved.fps = NP_FPS;
+    try { localStorage.setItem(NEWP_KEY, JSON.stringify(saved)); } catch (e) {}
   }
   function npUpdate() {
     const custom = npAspect === 'custom';
@@ -3475,10 +3499,11 @@ window.FM = window.FM || {};
     npEl('hm-new-w').value = saved.w || 1080;
     npEl('hm-new-h').value = saved.h || 1920;
     const fsel = npEl('hm-new-fps'), fnum = npEl('hm-new-fps-num');
-    const wantFps = String(saved.fps || 30);
+    npFps60Once(saved);   /* queue 1258: a 30 every earlier version picked for him opens on 60, once */
+    const wantFps = String(saved.fps || NP_FPS);
     let has = false;
     for (let i = 0; i < fsel.options.length; i++) if (fsel.options[i].value === wantFps) has = true;
-    if (has) { fsel.value = wantFps; fnum.value = 30; }
+    if (has) { fsel.value = wantFps; fnum.value = NP_FPS; }
     else { fsel.value = 'custom'; fnum.value = wantFps; }
     if (/^#[0-9a-f]{6}$/i.test(npBg)) npEl('hm-new-bg').value = npBg;
     const input = npEl('hm-new-name');

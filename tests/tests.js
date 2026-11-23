@@ -129781,6 +129781,107 @@
     }
   });
 
+  /* ═══ #1258 clause 1 — A NEW PROJECT OPENS ON 60 FPS ════════════════════════════════════════════════════════════════
+     His words (23 Nov): "Just logging this now, by default, 60 FPS should be selected."
+     The New project dialog stood on 30 when nothing was remembered, and remembered the 30 at every Create, so his phone
+     holds fps 30 in fm.newproj although he never picked it. Now: nothing remembered opens on 60 and Create makes a 60 fps
+     project; a remembered 30 is moved to 60 ONCE (the flag fm.newproj.fps60), and after that whatever he picks is
+     remembered as before. Both keys are put back as found; every project made here is removed. */
+  const K1258 = 'fm.newproj', F1258 = 'fm.newproj.fps60';
+  function ls1258(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function put1258(k, v) { try { if (v === null || v === undefined) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) {} }
+  function seed1258(fps) { return JSON.stringify({ aspect: '9:16', res: '1080', fps: fps, bg: '#000000', w: 1080, h: 1920 }); }
+  /* + on the Projects tab; answers what the dialog shows: the dropdown, the Custom box, the size line's fps */
+  async function open1258(what) {
+    if (!FM.home.isOpen()) { FM.home.open(); await sleep(900); }
+    FM.home._render('projects'); await sleep(250);
+    const dlg = document.getElementById('hm-dialog');
+    document.getElementById('hm-new').click();
+    await hcUntil('the New project dialog (' + what + ')', function () { return !dlg.classList.contains('hidden'); }, 4000);
+    await sleep(150);
+    const sel = document.getElementById('hm-new-fps'), num = document.getElementById('hm-new-fps-num');
+    const said = (document.getElementById('hm-new-size') || {}).textContent || '';
+    const m = /(\d+)\s*fps/.exec(said);
+    return { sel: sel.value, num: String(num.value), said: said, fps: m ? Number(m[1]) : NaN, shows: sel.value === 'custom' ? Number(num.value) : Number(sel.value) };
+  }
+  function shut1258() { const d = document.getElementById('hm-dialog'); if (d && !d.classList.contains('hidden')) { const c = document.getElementById('hm-cancel'); if (c) c.click(); else d.classList.add('hidden'); } }
+  async function create1258(made, what) {
+    const before = FM.storage.openProjectId();
+    document.getElementById('hm-create').click();
+    const pid = await hcUntil('the project Create made to open (' + what + ')', function () { const id = FM.storage.openProjectId(); return id && id !== before && !FM.home.isOpen() ? id : null; }, 10000);
+    made.push(pid);
+    await sleep(300);
+    return pid;
+  }
+
+  test('1258 · with nothing remembered, New project opens on 60 fps, its size line says 60 fps and Create makes a 60 fps project (CONTROL: a remembered 24 opens on 24)', { item: '1258', budgetMs: 90000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const keep = { a: ls1258(K1258), b: ls1258(F1258) };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      /* CONTROL: the probe reads a frame rate that is not 60 when one is remembered (no flag, so the one-time move runs and must leave a 24 alone) */
+      put1258(F1258, null); put1258(K1258, seed1258(24));
+      const c = await open1258('remembered 24');
+      shut1258(); await sleep(100);
+      if (c.shows !== 24 || c.fps !== 24) throw new Error('CONTROL: with 24 remembered the dialog shows ' + c.sel + ' / box ' + c.num + ' and says ' + c.said + ' - not 24, so the probe cannot read the frame rate it opens on');
+      /* nothing remembered: 60 */
+      put1258(F1258, null); put1258(K1258, null);
+      const r = await open1258('nothing remembered');
+      if (r.sel !== '60') throw new Error('with nothing remembered the New project dialog opens with the frame rate on ' + r.sel + ', not 60 fps - his words: by default, 60 FPS should be selected');
+      if (r.fps !== 60) throw new Error('with nothing remembered the size line says ' + r.said + ', not 60 fps');
+      const pid = await create1258(made, 'nothing remembered');
+      const card = FM.projects.list().find(function (p) { return p.id === pid; });
+      if (!FM.scene.project || FM.scene.project.fps !== 60) throw new Error('Create on the untouched dialog made a project at ' + (FM.scene.project && FM.scene.project.fps) + ' fps, not the 60 it showed');
+      if (!card) throw new Error('setup: the new project has no card');
+      const kept = JSON.parse(ls1258(K1258) || '{}');
+      if (kept.fps !== 60) throw new Error('Create remembered fps ' + kept.fps + ', not the 60 it made the project at');
+    } finally {
+      shut1258();
+      await hcCleanup(made, orig, wasOpen);
+      put1258(K1258, keep.a); put1258(F1258, keep.b);
+    }
+  });
+
+  test('1258 · a 30 remembered from before opens on 60 once and sets the flag; a 30 he picks afterwards is remembered and opens on 30; with the flag already set a remembered 30 opens on 30', { item: '1258', budgetMs: 90000 }, async function () {
+    const wasOpen = FM.home.isOpen(), orig = FM.projects.currentId(), made = [];
+    const keep = { a: ls1258(K1258), b: ls1258(F1258) };
+    try {
+      if (wasOpen) FM.home.close();
+      await sleep(100);
+      /* 1 — his phone today: fps 30 remembered, no flag. The dialog opens on 60, the flag is set, and the memory says 60 so a Cancel does not bring the 30 back */
+      put1258(F1258, null); put1258(K1258, seed1258(30));
+      const a = await open1258('a 30 from before');
+      shut1258(); await sleep(100);
+      if (a.sel !== '60' || a.fps !== 60) throw new Error('with the 30 every earlier version remembered for him (and no flag) the dialog opens on ' + a.sel + ' and says ' + a.said + ' - he would never see the 60 he asked for');
+      if (!ls1258(F1258)) throw new Error('the one-time move to 60 ran but did not set ' + F1258 + ', so it would run again and override a 30 he picks himself');
+      const b = await open1258('after a Cancel');
+      shut1258(); await sleep(100);
+      if (b.sel !== '60') throw new Error('after the move and a Cancel the dialog went back to ' + b.sel + ' - the remembered 30 was not moved, only shown once');
+      /* 2 — he picks 30 himself and creates: it is remembered, and opens on 30 next time */
+      await open1258('he picks 30');
+      const sel = document.getElementById('hm-new-fps');
+      sel.value = '30'; sel.dispatchEvent(new Event('change', { bubbles: true }));
+      await sleep(80);
+      if (!/30\s*fps/.test((document.getElementById('hm-new-size') || {}).textContent || '')) throw new Error('CONTROL: picking 30 in the dropdown did not reach the size line, so the pick did not happen');
+      const pid = await create1258(made, 'he picked 30');
+      if (FM.scene.project.fps !== 30) throw new Error('setup: he picked 30 and the project was made at ' + FM.scene.project.fps + ' fps');
+      const c = await open1258('after he picked 30');
+      shut1258(); await sleep(100);
+      if (c.sel !== '30' || c.fps !== 30) throw new Error('he picked 30 fps and pressed Create, and the next New project opens on ' + c.sel + ' (' + c.said + ') - the move to 60 ran twice and overrode his own pick');
+      /* 3 — the flag already set, a remembered 30: 30 */
+      put1258(F1258, '1'); put1258(K1258, seed1258(30));
+      const d = await open1258('flag set, 30 remembered');
+      shut1258(); await sleep(100);
+      if (d.sel !== '30') throw new Error('with the flag already set a remembered 30 opens on ' + d.sel + ' - the one-time move fired again');
+      if (pid && FM.projects.list().some(function (p) { return p.id === pid; }) === false) throw new Error('setup: the 30 fps project vanished');
+    } finally {
+      shut1258();
+      await hcCleanup(made, orig, wasOpen);
+      put1258(K1258, keep.a); put1258(F1258, keep.b);
+    }
+  });
+
   /* ═══ #986 — the render bugs the #966 inventory found by READING the code (hunt HIGH), each reproduced with a
    * measurement before it was fixed. Every one of these fails on 913186b6. ═══════════════════════════════════════ */
   const _986shot = (layers, t, W, H, rs, bg) => {
