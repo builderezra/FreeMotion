@@ -78,13 +78,16 @@ window.FM = window.FM || {};
            box, and nothing on screen said why. The bottom is now lifted by however much of the window the
            keyboard is covering, and it goes back to 0 when it closes. */
         root.style.setProperty('--fxb-bottom', (FM.kbInset ? FM.kbInset() : 0) + 'px');
+        /* #1243 F10 — REVERSES QUEUE 277/528's "right up to the canvas". His words: "the visual menu… will open up to
+           wherever… the bottom of the canvas is… I hate it… it covers the entire… bottom area… covering that row [the
+           switch / play / jump / undo row] is where… the visual menu should stop… And the filters menu the same."
+           So on a phone the sheet's top is THE SHEET LINE, FM.mobile.sheetLine(): the stage's bottom edge, which is the
+           top of the transport row (#transport). It covers that row and never climbs into the letterbox under a wide
+           canvas, whatever the project's aspect. The one line every phone panel uses (#1243 R rule 3), read, not forked.
+           The canvas bottom is only the fallback for a page with no stage to measure. */
+        const line = FM.mobile && FM.mobile.sheetLine ? FM.mobile.sheetLine() : 0;
         const cv = document.getElementById('preview');
-        /* FLOOR, not round (queue 528). Rounding lands within half a pixel EITHER side of the canvas
-           bottom, so half the time it leaves a hairline of background showing — which is the very thing
-           he is complaining about, just smaller. Flooring can only ever put the sheet AT the canvas
-           bottom or up to 1px under it, so a gap is not a coin flip any more, it is impossible.
-           An overlap of up to 1px is invisible: the sheet is opaque and the canvas edge is straight. */
-        const top = cv ? Math.floor(cv.getBoundingClientRect().bottom) : 0;
+        const top = line > 0 ? line : (cv ? Math.floor(cv.getBoundingClientRect().bottom) : 0);
         root.style.setProperty('--fxb-top', Math.max(0, top) + 'px');
       }
   }
@@ -97,6 +100,9 @@ window.FM = window.FM || {};
     if (cv && window.ResizeObserver) {
       const ro = new ResizeObserver(again);
       ro.observe(cv);
+      /* #1243 F10: the sheet line is the stage's bottom, so the stage and the timeline panel are watched too — a band float
+         or a resize moves the transport row without the canvas changing size. */
+      ['stage', 'timeline-panel'].forEach(id => { const n = document.getElementById(id); if (n) ro.observe(n); });
       root._fxbRO = ro;
     }
     // …and the things a ResizeObserver on the canvas can miss: an orientation change or the visual
@@ -1813,7 +1819,8 @@ window.FM = window.FM || {};
       if (key === 'audio') { if (FM.audioFxBrowser) FM.audioFxBrowser.open(layer); return; }
       // Filters is a list of ready-made looks rather than a grid of tiles, and it lives in the
       // inspector. Hand it back there instead of keeping a second copy of it in here.
-      if (FM.inspector && FM.inspector.openFxTab) FM.inspector.openFxTab(key);
+      /* #1243 F9 — "from add effect → filters… automatically have it expanded": the Filters tab opens grown on a phone. */
+      if (FM.inspector && FM.inspector.openFxTab) FM.inspector.openFxTab(key, { tall: true });
     });
     // The audio answer may not be known yet (it means decoding the file). The toggle rendered
     // optimistically; if the probe comes back "no track", re-render so the side greys out.

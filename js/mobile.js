@@ -64,7 +64,7 @@ window.FM = window.FM || {};
         dockSheet();
         return;
       }
-      if (!has) { insp.style.top = ''; insp.style.maxHeight = ''; close(); userClosed = false; return; }
+      if (!has) { fltDrop(); insp.style.top = ''; insp.style.maxHeight = ''; close(); userClosed = false; return; }   // fltDrop: #1243 F9, review R5
       /* SIMPLE MODE P2.2 (D10): in Simple a selection shows its tools in the tray row; the sheet rises only for a tray tool
          that has a panel ("More"). simpleTools.sheetHeld is false whenever Simple is not on screen, so Full is today's. */
       if (FM.simpleTools && FM.simpleTools.sheetHeld && FM.simpleTools.sheetHeld(id)) { insp.style.top = ''; insp.style.maxHeight = ''; close(); return; }
@@ -154,7 +154,9 @@ window.FM = window.FM || {};
         }
         if (e.cancelable) e.preventDefault();
         var now = e.timeStamp, ddt = now - lastT; if (ddt > 0) vy = (e.clientY - lastY) / ddt; lastY = e.clientY; lastT = now;
-        panel.style.transform = 'translateY(' + Math.max(0, dy) + 'px)';
+        /* #1243 F9 (review R4): from where the sheet RESTS. The small Filters sheet rests lowered by --insp-drop (styles.css), and an
+           inline translateY(dy) alone replaced that, so a pull down first jumped the sheet UP by the drop. No other sheet sets it (0). */
+        panel.style.transform = 'translateY(calc(var(--insp-drop, 0px) + ' + Math.max(0, dy) + 'px))';
       }
       function settle(e, aborted) {
         if (!active || (e && e.pointerId !== pid)) return;
@@ -302,7 +304,7 @@ window.FM = window.FM || {};
         const b = sheetLine();
         if (b > 0) { insp.style.top = Math.min(b, window.innerHeight - 120) + 'px'; insp.style.maxHeight = 'none'; return; }   // 328 px of panel at 380×800, 328 at 320×568 (the line at 240); the 120 px floor is a guard
       }
-      if (!isPhone() || !document.body.classList.contains('m-editing')) { insp.style.top = ''; insp.style.maxHeight = ''; return; }
+      if (!isPhone() || !document.body.classList.contains('m-editing')) { fltOff(); insp.style.top = ''; insp.style.maxHeight = ''; return; }
       const stale = document.getElementById('insp-done');   // queue 835: a row built before this change
       if (stale) stale.remove();
       var tracks = document.getElementById('tl-tracks');
@@ -323,9 +325,87 @@ window.FM = window.FM || {};
         if (!bottom) bottom = tracks.getBoundingClientRect().bottom;
       }
       var top = Math.min(Math.round(bottom + 6), Math.round(window.innerHeight * 0.66));
+      if (fltApply(top)) return;   // #1243 F9: the Filters tab is laid out from the sheet line and lowered to here by a transform
       insp.style.top = top + 'px';
       insp.style.maxHeight = 'none';
     }
+    /* ═══ #1243 F9 — FILTERS GROWS AS YOU SWIPE, AND OPENS GROWN FROM ADD EFFECT ═══════════════════════════════════════
+       His words: "going from the visual effects menu and pressing add effect and then tapping on the filters menu… it makes it
+       really small… When you start to swipe up… the filters menu should then expand… to the same level where the visual menu
+       would go… swipe back up to the top… it shrinks again… from add effect → filters… automatically have it expanded…
+       seamless… switching… from the preview area… can still stay small… make sure… it looks really good."
+       The plan's recommended A: while the docked sheet shows the Filters tab (FM.inspector.filtersOpen) it is laid out ONCE from
+       the sheet line (sheetLine, the stage's bottom: where the visual menu stops, #1243 F10) and lowered to its docked top by a
+       transform (--insp-drop), so growing and shrinking is one 280 ms ease-out transform and the filter rows are never laid out
+       again per frame. Grown once the list has scrolled past 24 px; shrunk again only when a scroll that went past 24 comes
+       back to the top and rests there 80 ms — so a sheet opened grown (Add effect → Filters asks for it, FM._fltOpen) stays
+       grown until he has scrolled down and back. The Effects card's own Filters tab opens it small, as he asked. Leaving the
+       tab, deselecting or a PC width drops it (fltOff) and the dock is today's. */
+    var flt = { pend: null, grown: false, past: false, drop: 0, idle: 0 };
+    function fltSet(drop) { insp.style.setProperty('--insp-drop', Math.max(0, Math.round(drop)) + 'px'); }
+    // on and off with no motion (the top jumps in the same frame the transform makes up for it), then the motion handed back
+    function fltStill(fn) {
+      insp.style.transition = 'none';
+      fn();
+      void insp.offsetHeight;
+      requestAnimationFrame(function () { insp.style.transition = ''; });
+    }
+    function fltOff() {
+      if (!flt || !insp) return;   // a dock before this block has run
+      clearTimeout(flt.idle);
+      flt.pend = null;
+      if (!insp.classList.contains('insp-flt')) return;
+      fltStill(fltClear);
+    }
+    function fltClear() { insp.classList.remove('insp-flt'); insp.style.removeProperty('--insp-drop'); insp.style.removeProperty('--insp-drop-max'); }
+    /* review R5: the sheet is CLOSING (nothing selected), so the Filters state goes with it, in the close's own motion — not by
+       fltOff on the next selection, whose no-motion step would then swallow that sheet's slide up. */
+    function fltDrop() {
+      if (!flt || !insp) return;
+      clearTimeout(flt.idle);
+      flt.pend = null;
+      fltClear();
+    }
+    function fltApply(dockTop) {
+      if (!flt || !insp) return false;
+      var tabs =FM.inspector && FM.inspector.filtersOpen && FM.inspector.filtersOpen();
+      var line = sheetLine();
+      if (!tabs || !(line > 0) || line >= dockTop) { fltOff(); return false; }
+      var entering = !insp.classList.contains('insp-flt');
+      if (entering || flt.pend) { flt.grown = flt.pend === 'tall'; flt.past = false; flt.pend = null; }
+      flt.drop = dockTop - line;
+      var bar = insp.querySelector('#inspector .fxmode');
+      if (bar) insp.style.setProperty('--flt-tabs-h', Math.round(bar.getBoundingClientRect().height) + 'px');
+      var put = function () {
+        insp.classList.add('insp-flt');
+        insp.style.top = line + 'px';
+        insp.style.maxHeight = 'none';
+        insp.style.setProperty('--insp-drop-max', Math.max(0, Math.round(flt.drop)) + 'px');   // review R3: the list's room under the lowered edge (styles.css)
+        fltSet(flt.grown ? 0 : flt.drop);
+      };
+      if (entering) fltStill(put); else put();
+      return true;
+    }
+    if (insp) insp.addEventListener('scroll', function () {
+      if (!insp.classList.contains('insp-flt')) return;
+      var y = insp.scrollTop;
+      clearTimeout(flt.idle);
+      if (y > 24) { flt.past = true; if (!flt.grown) { flt.grown = true; fltSet(0); } return; }
+      if (y <= 0 && flt.past && flt.grown) flt.idle = setTimeout(function () {
+        if (insp.scrollTop > 0 || !insp.classList.contains('insp-flt')) return;
+        flt.grown = false; flt.past = false; fltSet(flt.drop);
+      }, 80);
+    }, { passive: true });
+    /* The inspector says which way the next Filters tab opens (openFxTab: grown from Add effect, small otherwise), and asks for
+       a re-dock whenever the Filters tab comes or goes (the end of its refresh), so leaving it re-docks at once. */
+    FM._fltOpen = function (tall) { flt.pend = tall ? 'tall' : 'small'; };
+    FM._fltSync = function () {
+      if (!isPhone()) return;
+      var want = !!(FM.inspector && FM.inspector.filtersOpen && FM.inspector.filtersOpen());
+      var on = insp.classList.contains('insp-flt');
+      if (on && !want) fltOff();   // whichever dock runs next, the Filters transform is gone first
+      if (want !== on || (want && flt.pend)) { try { dockSheet(); } catch (e) {} }
+    };
     /* ⚠️ THE DOCK HAS TO RUN AFTER AN ADD TOO (queue 531), and this is the SAME root cause as #523.
        Ezra: *"When you add a layer and it instantly opens up it leaves this gap untill you start
        editing … The gap between the editor and the timeline I mean"*.
@@ -641,23 +721,82 @@ window.FM = window.FM || {};
       st.cb = { x: sr.left - st.sheet.x, y: sr.top - st.sheet.y };
       return sr;
     }
+    /* #1243 G8 — "the animation for it expanding… could… use a bit of improvement… how it expands out from the tap to add layer…
+       doesn't… feel like… the way I described it to you before." What he described (#1084, 6 Oct): "the tap to add layer
+       basically expands up and down until it's created that menu like it'll just like expand from where it was on the timeline
+       to fill up the screen area where it's supposed to be". The plan's recommended A, "the bar grows into the menu":
+       - it starts from THE BAR HE SEES — the dashed ::before box between --ar-x0 and --ar-x1, its 10 px corners — not the
+         row's whole layout box with the + column (stretchBarBox);
+       - the bar WIDENS to the menu's sides over the first 30% (STRETCH_WIDE) while its top and bottom move out over all of it;
+       - the real row is hidden while it moves, so there is one bar, not two (stretchHideRow);
+       - its + and words ride up into the menu's tab row and cross-fade into it between 20% and 50% (STRETCH_SKIN_*);
+       - the menu is revealed top-down behind the moving edge by a mask, not faded in where it rests (stretchMask);
+       - the moving edge starts in #1243 G7's pressed look (solid, lit) and hands over to the menu's rim at the end.
+       The other options drawn for him: (B) "the bar splits" — its top edge rides up to the menu's rim and its bottom edge down,
+       the menu showing between them; (C) only the start box and the hidden row. Not built. */
+    var STRETCH_WIDE = 0.3;        // the bar reaches the menu's width by 30% of the stretch
+    var STRETCH_SKIN_HOLD = 0.2;   // the + and words are fully there until 20%…
+    var STRETCH_SKIN_GONE = 0.5;   // …and have crossed into the tab row by 50%
+    var STRETCH_REVEAL_AT = 0.15;  // the mask starts uncovering the menu, top first, at 15%
+    var STRETCH_PRESS_GLOW = '0 0 14px 0px rgba(90, 199, 237, .3)';   // #1243 G7's pressed box-shadow (styles.css .tl-addrow.is-pressed::before)
+    function stretchInsetAt(a, f) {   // the top and bottom insets f of the way from the bar to the menu (the menu: -GROW_TOP_PAD and 0)
+      return { t: a.t + (-GROW_TOP_PAD - a.t) * f, b: a.b + (0 - a.b) * f };
+    }
     function stretchSheetKeys(st) {
-      var a = st.box;
+      var a = st.box, m = stretchInsetAt(a, STRETCH_WIDE);
       var from = 'inset(' + [a.t, a.r, a.b, a.l].map(stretchPx).join(' ') + ' round ' + stretchPx(a.rad) + ')';
+      var wide = 'inset(' + [m.t, 0, m.b, 0].map(stretchPx).join(' ') + ' round ' + stretchPx(a.rad) + ')';
       // the colour lands at 60% and holds there, so the glass's crossfade, played backwards on close, meets it exactly
       return [
         { offset: 0, clipPath: from, backgroundColor: st.from, backdropFilter: 'none' },
+        { offset: STRETCH_WIDE, clipPath: wide },
         { offset: 0.6, backgroundColor: st.panel },
         { offset: 1, clipPath: st.to, backgroundColor: st.panel, backdropFilter: 'none' }
       ];
     }
-    // the lit edge's box: the clip's own numbers (from the row's box to the sheet plus the shadow's reach), so it rides it
+    // the lit edge's box: the clip's own numbers (from the bar to the sheet plus the shadow's reach), so it rides it
     function stretchEdgeKeys(st) {
-      var s = st.sheet, a = st.box;
+      var s = st.sheet, a = st.box, m = stretchInsetAt(a, STRETCH_WIDE);
       return [
-        { left: stretchPx(s.x + a.l), top: stretchPx(s.y + a.t), width: stretchPx(s.w - a.l - a.r), height: stretchPx(s.h - a.t - a.b), borderRadius: stretchPx(a.rad) },
-        { left: stretchPx(s.x), top: stretchPx(s.y - GROW_TOP_PAD), width: stretchPx(s.w), height: stretchPx(s.h + GROW_TOP_PAD), borderRadius: st.R + ' ' + st.R + ' 0px 0px' }
+        { offset: 0, left: stretchPx(s.x + a.l), top: stretchPx(s.y + a.t), width: stretchPx(s.w - a.l - a.r), height: stretchPx(s.h - a.t - a.b), borderRadius: stretchPx(a.rad) },
+        { offset: STRETCH_WIDE, left: stretchPx(s.x), top: stretchPx(s.y + m.t), width: stretchPx(s.w), height: stretchPx(s.h - m.t - m.b) },
+        { offset: 1, left: stretchPx(s.x), top: stretchPx(s.y - GROW_TOP_PAD), width: stretchPx(s.w), height: stretchPx(s.h + GROW_TOP_PAD), borderRadius: st.R + ' ' + st.R + ' 0px 0px' }
       ];
+    }
+    /* THE BAR HE SEES, as insets of the sheet's box sr: the row's ::before (left = --ar-x0 less --ar-bl inside the row's border,
+       width = --ar-x1 - --ar-x0, the row's own top and bottom, its 10 px corners), published by js/timeline.js buildAddRow.
+       A row with no published bar falls back to its own box. */
+    function stretchBarBox(row, sr) {
+      var b = stretchBox(row, sr);
+      if (!b) return null;
+      var cs = getComputedStyle(row), px = function (k) { var v = String(cs.getPropertyValue(k) || '').trim(); return /px$/.test(v) ? parseFloat(v) : NaN; };
+      var x0 = px('--ar-x0'), x1 = px('--ar-x1'), bl = px('--ar-bl');
+      if (!isFinite(x0) || !isFinite(x1) || !(x1 > x0)) return b;
+      var rr = row.getBoundingClientRect(), left = rr.left + row.clientLeft + x0 - (isFinite(bl) ? bl : 0);
+      b.l = Math.max(0, Math.min(sr.width, left - sr.left));
+      b.r = Math.max(0, Math.min(sr.width - b.l, sr.right - (left + (x1 - x0))));
+      b.rad = parseFloat(getComputedStyle(row, '::before').borderTopLeftRadius) || 10;
+      return b;
+    }
+    // the real row(s) hidden while the bar is the moving shape, and shown again whenever the stretch stops or goes
+    function stretchHideRow(st, hide) {
+      var rows = [st.row].concat([].slice.call(document.querySelectorAll('.tl-addrow')));
+      rows.forEach(function (r) { if (r && r.style) r.style.visibility = hide ? 'hidden' : ''; });
+    }
+    /* the menu's contents, masked top-down: a 3×-tall mask, opaque in its top third, clear below its half. At position 75% its
+       soft edge sits just above the box (all hidden); at 0% just below it (all shown); in between the edge runs down the box. */
+    var MASK_POS = (document.documentElement.style.maskPosition !== undefined) ? 'maskPosition' : 'webkitMaskPosition';
+    function stretchMask(k, on) {
+      ['mask-image', '-webkit-mask-image'].forEach(function (p) { if (on) k.style.setProperty(p, 'linear-gradient(#000 0 33.4%, transparent 50%)'); else k.style.removeProperty(p); });
+      ['mask-size', '-webkit-mask-size'].forEach(function (p) { if (on) k.style.setProperty(p, '100% 300%'); else k.style.removeProperty(p); });
+      ['mask-repeat', '-webkit-mask-repeat'].forEach(function (p) { if (on) k.style.setProperty(p, 'no-repeat'); else k.style.removeProperty(p); });
+    }
+    function stretchMaskKeys() {
+      var k0 = {}, k1 = {}, k2 = {};
+      k0.offset = 0; k0[MASK_POS] = '0% 75%';
+      k1.offset = STRETCH_REVEAL_AT; k1[MASK_POS] = '0% 75%';
+      k2.offset = 1; k2[MASK_POS] = '0% 0%';
+      return [k0, k1, k2];
     }
     /* The row as it is drawn this moment: a deep clone with every computed style written inline (its rules are scoped to the
        timeline and would not reach it out here), its press band dropped (the edge carries that light) and its classes and ids
@@ -695,6 +834,8 @@ window.FM = window.FM || {};
         var dimAt = dim ? +getComputedStyle(dim).opacity : 0;
         st.anims.forEach(function (a) { try { a.cancel(); } catch (e) {} });
         st.bits.forEach(function (n) { if (n !== dim && n.parentNode) n.parentNode.removeChild(n); });
+        stretchHideRow(st, false);                                   // #1243 G8: the row is back
+        growKids().forEach(function (k) { stretchMask(k, false); });  // …and the menu's contents carry no mask
         if (dim) {
           dim.style.opacity = String(isFinite(dimAt) ? dimAt : 0);
           dim.animate([{ opacity: dim.style.opacity }, { opacity: 0 }], { duration: 220, easing: 'ease', fill: 'forwards' });   // the slide's own .22 s
@@ -706,7 +847,7 @@ window.FM = window.FM || {};
     function stretchAdd(row) {
       var st = { row: row, anims: [], bits: [] };
       var sr = stretchGeom(st);
-      st.box = stretchBox(row, sr);
+      st.box = stretchBarBox(row, sr);   // #1243 G8: from the bar he sees, not the row's whole box
       if (!st.box) { endStretch(false); return; }
       var scs = getComputedStyle(addSheet), pre = getComputedStyle(row, '::before');
       var rest = stretchRGBA(scs.backgroundColor);
@@ -739,7 +880,9 @@ window.FM = window.FM || {};
       st.edge = document.createElement('div');
       st.edge.className = 'add-stretch-edge';
       st.edge.setAttribute('aria-hidden', 'true');
-      st.edge.style.cssText = 'position:fixed;margin:0;z-index:64;pointer-events:none;box-sizing:border-box;border:1.5px dashed ' + st.dash + ';';
+      /* #1243 G8: the edge starts in G7's PRESSED look (solid, lit, its glow) — the bar as his finger left it — and carries that
+         light out to the menu's rim, where it hands over */
+      st.edge.style.cssText = 'position:fixed;margin:0;z-index:64;pointer-events:none;box-sizing:border-box;border:1.5px solid ' + STRETCH_LIT + ';';
       parent.insertBefore(st.edge, st.skin.nextSibling);
       st.bits.push(st.skin, st.edge);
       var T = { duration: STRETCH_MS, easing: GROW_EASE, fill: 'both' };
@@ -750,16 +893,37 @@ window.FM = window.FM || {};
       var settle = addSheet.animate([{ backgroundColor: st.panel, backdropFilter: 'none' }, { backgroundColor: st.rest, backdropFilter: st.restBlur }], { duration: STRETCH_SETTLE_MS, delay: STRETCH_MS, easing: 'ease-out', fill: 'forwards' });
       settle.id = 'fm-add-settle';
       st.anims.push(st.clip, settle);
-      growKids().forEach(function (k) { st.anims.push(k.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 1 }], L)); });
+      // #1243 G8: the menu is uncovered top-down behind the moving edge (a mask), not faded in where it rests
+      growKids().forEach(function (k) { stretchMask(k, true); var mk = k.animate(stretchMaskKeys(), T); mk.id = 'fm-add-reveal'; st.anims.push(mk); });
       st.edgeAt = st.edge.animate(stretchEdgeKeys(st), T);
       st.anims.push(st.edgeAt);
       st.anims.push(st.edge.animate([
-        { offset: 0, opacity: 1, borderColor: st.dash, boxShadow: '0 0 0px 0px rgba(150, 232, 255, 0)' },
+        { offset: 0, opacity: 1, borderColor: STRETCH_LIT, boxShadow: STRETCH_PRESS_GLOW },
         { offset: 0.15, borderColor: STRETCH_LIT, boxShadow: STRETCH_GLOW },
         { offset: 0.25, opacity: 1 },
         { offset: 1, opacity: 0, borderColor: STRETCH_LIT, boxShadow: STRETCH_GLOW }
       ], L));
-      st.anims.push(st.skin.animate([{ opacity: 1 }, { opacity: 0, offset: 0.35 }, { opacity: 0 }], L));
+      /* #1243 G8: the + and words ride up into the menu's tab row (or its top, with no tab row) and cross into it between 20%
+         and 50%, on the shape's own curve */
+      var rrow = row.getBoundingClientRect(), tabs = addSheet.querySelector('.addmenu-tabs');
+      var tb = tabs ? tabs.getBoundingClientRect() : null;
+      var toY = tb && tb.height > 0 ? tb.top + tb.height / 2 : sr.top + 28;
+      st.skinDy = toY - (rrow.top + rrow.height / 2);
+      st.anims.push(st.skin.animate([
+        { offset: 0, opacity: 1, transform: 'translateY(0px)' },
+        { offset: STRETCH_SKIN_HOLD, opacity: 1 },
+        { offset: STRETCH_SKIN_GONE, opacity: 0 },
+        { offset: 1, opacity: 0, transform: 'translateY(' + stretchPx(st.skinDy) + ')' }
+      ], T));
+      if (tabs) st.anims.push(tabs.animate([{ offset: 0, opacity: 0 }, { offset: STRETCH_SKIN_HOLD, opacity: 0 }, { offset: STRETCH_SKIN_GONE, opacity: 1 }, { offset: 1, opacity: 1 }], T));
+      // #1243 G8: one bar — the real row is hidden while the shape moves, and back once it has stopped
+      stretchHideRow(st, true);
+      /* …and once it has stopped the menu's contents carry no mask either (review R7: a mask held for as long as the menu stays
+         open clips anything drawn outside each box and keeps a costlier composite on phones). unstretchAdd puts it back to run
+         the reveal backwards. */
+      var landed = function () { if (addSheet._stretch === st && addSheet.classList.contains('open')) { stretchHideRow(st, false); growKids().forEach(function (k) { stretchMask(k, false); }); } };
+      st.clip.addEventListener('finish', landed);
+      setTimeout(landed, STRETCH_MS + 40);   // a backgrounded tab advances no animation (as #571)
       if (st.dim) st.anims.push(st.dim.animate([{ opacity: 0 }, { opacity: 1 }], { duration: STRETCH_MS, easing: 'ease-out', fill: 'both' }));
       addSheet._stretch = st;
     }
@@ -767,13 +931,15 @@ window.FM = window.FM || {};
       var st = addSheet._stretch;
       // back onto where the row is NOW: after a pick the rebuilt timeline has a new row a slot further on, so re-aim first
       var live = st.row && st.row.isConnected ? st.row : document.querySelector('.tl-addrow');
-      var box = stretchBox(live, stretchGeom(st));
+      var box = stretchBarBox(live, stretchGeom(st));   // #1243 G8: back onto the bar, as it came out of it
       if (box) {
         st.row = live;
         st.box = box;
         try { st.clip.effect.setKeyframes(stretchSheetKeys(st)); st.edgeAt.effect.setKeyframes(stretchEdgeKeys(st)); } catch (e) {}
         stretchPlaceSkin(st);
       }
+      stretchHideRow(st, true);   // one bar while it runs back; endStretch shows the row again
+      growKids().forEach(function (k) { stretchMask(k, true); });   // review R7: the reveal runs backwards, so its mask is back on
       addSheet.classList.add('closing');
       addSheet.style.transition = 'none';
       addSheet.style.transform = 'translateY(0)';   // held where it rests while the shape runs back onto the row
