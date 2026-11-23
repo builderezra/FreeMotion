@@ -40,7 +40,8 @@ window.FM = window.FM || {};
      New project from template (home.js use() → templates.useAsNew) — which hand it to projects.create as the new card's
      `editor`, so the open() that create ends with reaches syncProject with the card already saying Simple and the project
      arrives in Simple with no Full in between. 'full' for no key and for anything but 'simple': a device that never switched
-     to Simple makes exactly today's card. fm.editor.last is written only by a deliberate switch (set(), from request()); a
+     to Simple makes exactly today's card. fm.editor.last is written only by a deliberate switch (set(), from request()), or by
+     Create when he picked an editor in New project's switch (#1258 clause 2, npEdCommit below; never by a pick he cancelled); a
      hop writes none, so one look at an item in Full never decides where the next project opens. Opening an EXISTING project
      never reads this: its own card decides (homeFor). */
   function forNew() {
@@ -417,19 +418,34 @@ window.FM = window.FM || {};
      the button row itself it pushed Create onto a line of its own at 380). It is put there by THIS file each time the dialog opens (an
      observer on the dialog's class; home.js is not touched),
      and it starts at what a new project would get today (forNew(): this device's fm.editor.last). Create already hands forNew() to
-     the new project's card (home.js newEditor), so a tap here only has to write what forNew() reads: a deliberate tap writes
-     fm.editor.last, as the cog's switch does; an untouched Create writes nothing. Its words are the cog's own (Editor, Simple, Full),
+     the new project's card (home.js newEditor), so the switch only has to write what forNew() reads: a deliberate pick is written
+     to fm.editor.last when Create makes the project (as the cog's switch writes it), a pick he cancelled writes nothing, and an
+     untouched Create writes nothing. Its words are the cog's own (Editor, Simple, Full),
      its buttons carry no data he typed, and it is built with createElement / textContent. Under D22 B with Simple switched off it is
      not drawn (forNew() is always Full then). */
   const NP_CLS = 'sm-np-ed';
+  /* review R13-2: a tap only CHOOSES (npPick); fm.editor.last is written when he makes the project (Create, or Enter in the name
+     field: npEdCommit, heard on the dialog in the capture phase, so it lands before home.js's own handler reads forNew()). A tap
+     on Simple and then Cancel used to leave fm.editor.last on Simple, so the next New project and a template's New project from
+     template opened in Simple although he had cancelled. The pick starts over at forNew() each time the dialog opens. */
+  let npPick = null, npTouched = false, npOpen = false;
   function npEdPick(ed) {
-    try { localStorage.setItem('fm.editor.last', ed); } catch (e) {}
+    npPick = ed; npTouched = true;
     npEdSync();
+  }
+  function npEdCommit(e) {
+    if (!npTouched || !npPick) return;
+    const t = e.target;
+    const create = e.type === 'click' ? !!(t && t.closest && t.closest('#hm-create'))
+      : (e.key === 'Enter' && !!(t && t.id === 'hm-new-name'));
+    if (!create) return;
+    try { localStorage.setItem('fm.editor.last', npPick); } catch (x) {}
+    npTouched = false;
   }
   function npEdSync() {
     const g = document.querySelector('#hm-dialog .' + NP_CLS);
     if (!g) return;
-    const now = forNew();
+    const now = npPick || forNew();
     g.querySelectorAll('button[data-ed]').forEach(b => {
       const on = b.dataset.ed === now;
       b.setAttribute('aria-checked', on ? 'true' : 'false');
@@ -438,7 +454,8 @@ window.FM = window.FM || {};
   }
   function npEdMount() {
     const dlg = document.getElementById('hm-dialog');
-    if (!dlg || dlg.classList.contains('hidden')) return;
+    if (!dlg || dlg.classList.contains('hidden')) { npOpen = false; return; }
+    if (!npOpen) { npOpen = true; npPick = forNew(); npTouched = false; }   /* a fresh opening starts on what a new project gets */
     const acts = dlg.querySelector('.hm-dlg-actions');
     let g = dlg.querySelector('.' + NP_CLS);
     if (!enabled()) { if (g) g.remove(); return; }
@@ -463,7 +480,7 @@ window.FM = window.FM || {};
       seg.addEventListener('keydown', e => {
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
         e.preventDefault(); e.stopPropagation();
-        const next = forNew() === 'simple' ? 'full' : 'simple';
+        const next = (npPick || forNew()) === 'simple' ? 'full' : 'simple';
         npEdPick(next);
         const b = seg.querySelector('button[data-ed="' + next + '"]'); if (b) b.focus();
       });
@@ -476,6 +493,8 @@ window.FM = window.FM || {};
     const dlg = document.getElementById('hm-dialog');
     if (!dlg || typeof MutationObserver !== 'function') return;
     new MutationObserver(npEdMount).observe(dlg, { attributes: true, attributeFilter: ['class'] });
+    dlg.addEventListener('click', npEdCommit, true);
+    dlg.addEventListener('keydown', npEdCommit, true);
     npEdMount();
   }
 

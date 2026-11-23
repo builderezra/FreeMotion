@@ -207782,7 +207782,7 @@
   const r12Box = () => document.querySelector('#inspector .sm-exp');
   const r12Row = k => Array.from(document.querySelectorAll('#inspector .sm-exp .sm-exp-row[data-row="' + k + '"] .sm-exp-b'));
   /* #1261: Smoothness's buttons are bare numbers (the unit is under the row's name), so a rate reads back as “30 fps” here */
-  const r12Face = (k, b) => k === 'fps' ? b.textContent + ' fps' : b.textContent;
+  const r12Face = (k, b) => k === 'fps' ? b.textContent.replace(/\s*fps$/, '') + ' fps' : b.textContent;   /* (review R13-4: a face that already says fps is read once, so the old faces fail by the test’s own sentence) */
   const r12Words = k => r12Row(k).map(b => r12Face(k, b)).join(', ');
   const r12On = k => r12Row(k).filter(b => b.getAttribute('aria-pressed') === 'true').map(b => r12Face(k, b)).join(', ');
   /* Full's Export card's rounding (js/export-card.js mb): KB under 1 MB, one decimal under 10 MB */
@@ -208239,7 +208239,7 @@
   const np1258Sw = () => document.querySelector('#hm-dialog .hm-dlg-card > .sm-np-ed');
   const np1258On = () => { const g = np1258Sw(), b = g && g.querySelector('button[aria-checked="true"]'); return b ? b.dataset.ed : ''; };
   async function np1258Open(last, what) {
-    sm2aLsPut('fm.editor.last', last);
+    if (last !== undefined) sm2aLsPut('fm.editor.last', last);   /* undefined: open again on whatever is stored now */
     if (!FM.home.isOpen()) { FM.home.open(); await sleep(900); }
     FM.home._render('projects'); await sleep(250);
     const dlg = document.getElementById('hm-dialog');
@@ -208308,7 +208308,8 @@
         if (np1258On() !== 'full') fails.push('the switch starts on ' + np1258On() + ', want Full');
         b.click(); await sleep(120);
         if (np1258On() !== 'simple') fails.push('after the tap the switch shows ' + np1258On() + ', want Simple');
-        if (sm2aLs('fm.editor.last') !== 'simple') fails.push('the tap left fm.editor.last ' + sm2aLs('fm.editor.last') + ', want simple');
+        /* review R13-2: the tap only chooses; Create writes it */
+        if (sm2aLs('fm.editor.last') !== 'full') fails.push('the tap alone, before Create, changed fm.editor.last to ' + sm2aLs('fm.editor.last') + ' (want it left full until Create)');
         const r = await np1258Create(st, 'Simple picked');
         if (r.made !== 1 || !r.card) throw new Error('CONTROL: Create made ' + r.made + ' project(s) (card ' + (r.card ? 'found' : 'missing') + ')');
         if (r.mode !== 'simple' || !r.cls) fails.push('the new project opened in ' + r.mode + ', want Simple');
@@ -208319,7 +208320,12 @@
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
   });
 
-  test('1258 · at 380 an untouched Editor switch leaves fm.editor.last as it was: unset on a device that never switched and full after Full, and the project opens in Full (CONTROL: the switch was on show each time and Create made one project)', { item: '980', budgetMs: 90000 }, async function () {
+  /* Review R13-2: a tap on Simple and then Cancel wrote fm.editor.last on the tap, so the next New project (and a template's New
+     project from template, which reads the same forNew()) opened in Simple although he had cancelled. A GUARD more than a proof
+     (review R13-4): on the code before #1258 clause 2 there is no switch, so there it stops at its CONTROL, and its untouched half
+     held then too; its Cancel half has a red of its own sentence only on the code that wrote on the tap. prove.sh may read it as
+     having no red against the release before: that is expected, not a dead test (its mutations are in the release's report). */
+  test('1258 · at 380 an untouched Editor switch, or a tap on Simple and then Cancel, leaves fm.editor.last as it was: unset on a device that never switched and full after Full, New project opens again on Full and the project opens in Full (CONTROL: the switch was on show each time and Create made one project)', { item: '980', budgetMs: 120000 }, async function () {
     const st = sm2aKeep(), fails = [];
     try {
       if (st.wasHome) FM.home.close();
@@ -208328,7 +208334,15 @@
       await atPhoneWidth(async function () {
         for (const last of [null, 'full']) {
           const at = 'fm.editor.last ' + (last || 'unset') + ': ';
-          await np1258Open(last, at);
+          await np1258Open(last, at + 'to cancel');
+          const g0 = np1258Sw(), simple = g0 && g0.querySelector('button[data-ed="simple"]');
+          if (!simple || !r4Shown(g0)) throw new Error('CONTROL ' + at + 'New project shows no Editor switch with a Simple side, so a cancelled pick is not measured');
+          simple.click(); await sleep(120);
+          if (np1258On() !== 'simple') throw new Error('CONTROL ' + at + 'a tap on Simple left the switch on ' + np1258On());
+          document.getElementById('hm-cancel').click(); await sleep(300);
+          if (sm2aLs('fm.editor.last') !== last) fails.push(at + 'a tap on Simple and then Cancel left fm.editor.last ' + JSON.stringify(sm2aLs('fm.editor.last')) + ', want ' + JSON.stringify(last));
+          if (FM.editor.forNew() !== 'full') fails.push(at + 'after Cancel a new project would open in ' + FM.editor.forNew() + ', want Full');
+          await np1258Open(undefined, at + 'again after Cancel');
           const g = np1258Sw();
           if (!g || !r4Shown(g)) throw new Error('CONTROL ' + at + 'New project shows no Editor switch, so an untouched one is not measured');
           if (np1258On() !== 'full') fails.push(at + 'the switch starts on ' + np1258On() + ', want Full');
@@ -208347,7 +208361,7 @@
      enough. Like, it should stay simple like that, but it should still have more options." Smoothness offers every rate Full's Export
      offers (its own list, #exp-fps), in the same row of buttons, the project's own marked, and the rate picked is the one the exporter is
      handed. FM.exporter.run is stubbed to record what it is given (r12Mem puts his last pick aside and back). */
-  test('1261 · at 380 Simple’s Export offers every rate Full’s Export offers in its one Smoothness row, each pressable, the project’s own marked and named, and every rate picked reaches the export call (CONTROL: a 30 fps project opens on 30, the rate marked as its own)', { item: '980', budgetMs: 150000 }, async function () {
+  test('1261 · at 380 Simple’s Export offers every rate Full’s Export offers in its one Smoothness row, each pressable and at least 44 px wide (seven on a 24 fps project too), the project’s own marked and named, and every rate picked reaches the export call (CONTROL: a 30 fps project opens on 30, the rate marked as its own)', { item: '980', budgetMs: 150000 }, async function () {
     smNeedP2();
     const ex = FM.exporter, run0 = ex.run, put = r12Mem(), fails = [];
     let got = null;
@@ -208371,6 +208385,7 @@
             const b = r12Row('fps').find(x => +x.textContent === f);
             if (!b) { fails.push('no ' + f + ' fps button'); continue; }
             if (!r4Hits(b)) fails.push(f + ' fps is not pressable where it is (' + r4Txt(r4Box(b)) + ')');
+            if (b.getBoundingClientRect().width < 44) fails.push(f + ' fps is ' + Math.round(b.getBoundingClientRect().width) + ' px wide, under a finger’s 44');
             b.click(); await r4Settle(60);
             if (r12On('fps') !== f + ' fps') fails.push('pressing ' + f + ' leaves ' + r12On('fps') + ' picked');
             got = null;
@@ -208382,6 +208397,20 @@
           }
           FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
         }, { W: 1920, H: 1080 });
+        /* review R13-5: a 24 fps project adds its own rate, seven buttons; beside the row's name they were 31 px wide at 380 */
+        await smP2((W, H) => smClips3(W, H), async function () {
+          try { localStorage.removeItem('fm.sm.export'); } catch (e) {}
+          r12Btn().click(); await r4Settle(300);
+          if (!r12Box()) throw new Error('setup: Export opened no panel on the 24 fps project');
+          const row = r12Row('fps');
+          if (!row.length) throw new Error('CONTROL: a 24 fps project’s Export has no Smoothness buttons at all');
+          if (row.length !== 7) fails.push('a 24 fps project’s Smoothness offers ' + r12Words('fps') + ', want Full’s six and its own 24');
+          row.forEach(b => {
+            const w = b.getBoundingClientRect().width;
+            if (w < 44 || !r4Hits(b)) fails.push('24 fps project: ' + r12Face('fps', b) + ' is ' + Math.round(w) + ' px wide' + (r4Hits(b) ? '' : ' and not pressable') + ', under a finger’s 44');
+          });
+          FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
+        }, { W: 1920, H: 1080, fps: 24 });
       });
     } finally { ex.run = run0; put(); }
     if (fails.length) throw new Error('380: ' + fails.join(' · '));

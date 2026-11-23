@@ -12963,6 +12963,16 @@ body.ed-simple .sm-exp-b[aria-pressed="true"] { background: var(--text); color: 
 body.ed-simple .sm-exp-unit { display: block; margin-top: 2px; font: 600 11px/1 system-ui, sans-serif; opacity: .75; }
 body.ed-simple .sm-exp-b.sm-exp-own { position: relative; }
 body.ed-simple .sm-exp-b.sm-exp-own::after { content: ''; position: absolute; left: 50%; bottom: 5px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; }
+/* review R13-5: on a narrow phone seven rates beside the row's name were 31 px each (a thumb aimed at 25 landed on 24 or 30), so there
+   Smoothness's name goes on a line of its own ("Smoothness fps") and the buttons take the panel's whole width: about 46 px for seven.
+   Part of the line it adds is paid for by a 6 px gap between the card's rows: at 380 x 760 the card grows 9 px (455-727 to 455-736)
+   and Save video stays in the phone's 307 px sheet without scrolling (measured, review R13-5) */
+@media (max-width: 480px) {
+  body.ed-simple .sm-exp { gap: 6px; }
+  body.ed-simple .sm-exp-row[data-row="fps"] { flex-wrap: wrap; gap: 2px 10px; }
+  body.ed-simple .sm-exp-row[data-row="fps"] > .sm-exp-l { flex: 1 0 100%; line-height: 1; }
+  body.ed-simple .sm-exp-row[data-row="fps"] .sm-exp-unit { display: inline; margin: 0 0 0 4px; }
+}
 body.ed-simple .sm-exp-foot { display: flex; flex-direction: column; gap: 8px; }
 body.ed-simple .sm-exp-size { text-align: center; color: var(--text-dim); font: 600 13px/1.2 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
 body.ed-simple .sm-exp-go { min-height: 48px; padding: 0 16px; border: 0; border-radius: 12px; background: var(--accent, #29d9bb); color: #04140f;

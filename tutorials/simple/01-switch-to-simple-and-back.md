@@ -5,7 +5,7 @@ You'll be able to change a project between the Simple editor (clips one after an
 1. Open any project. <!-- shots/01-01.jpg -->
 2. Tap the gear at the top right (next to the up-arrow). <!-- index.html:394 #m-settings, aria-label "Canvas settings"; shots/01-02.jpg -->
 3. The top block of the panel is the **Editor** row: a switch with **Simple** on the left and **Full** on the right. Tap **Simple**. <!-- js/app.js:8395 edSwitch; js/spine-words.js:13 simple/full; shots/01-03.jpg -->
-4. The panel closes by itself and you are in Simple: your clips sit in one row, and the bottom row says **Clips, Text, Sound, Overlay**. The first time on a device a note appears: "Simple editor. Switch back any time from the ⚙ cog." <!-- js/app.js:8410 closes the cog 260 ms later; js/editor-mode.js:182 the note, once per device; js/spine-words.js:20 -->
+4. The panel closes by itself and you are in Simple: your clips sit in one row, and the bottom row says **Clips, Text, Sound, Overlay**. <!-- js/app.js:8410 closes the cog 260 ms later; no note explains the cog any more (#1255, 23 Nov: no standing how-to lines) -->
 5. To go back, tap the gear again, then **Full**. <!-- js/app.js:8395; shots/01-06.jpg -->
 6. Not sure which one you want? In the same panel tap **What should you use?**. A card explains both in two lines each and says "You're in Simple" or "You're in Full". <!-- js/app.js:8424-8429; js/spine-words.js:16-19; shots/01-05.jpg -->
 7. Your choice is remembered for that project on that phone. Leave the project with the back arrow and open it again: it comes back in the editor you last used there. <!-- js/editor-mode.js:32-36 homeFor reads this device's card for the project; :37 remember writes it; walked: shots/01-08.jpg, 01-09.jpg -->
