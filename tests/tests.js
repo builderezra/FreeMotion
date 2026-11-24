@@ -201383,15 +201383,15 @@
   const smCpMeta = () => FM.history._metaHere() || {};
   const smCpStop = () => { try { if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {} };
 
-  test('simple P3 · Captions at 380 the project row is Clips · Text · Captions · Sound · Overlay · Look · Effects, Captions opens a row of Type captions, Find speech, Caption looks and Style, and a selected caption track’s tray is Edit lines · Style · Find speech · Follows the clips · Stays with the sound | Delete — the last two one two-way choice, ONE step each, their faces one word each on a phone (Follows · Stays) with the five on show and Delete at the strip’s end after its line (#1243 S31)', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P3 · Captions at 380 the project row is Ask & edit · Clips · Text · Captions · Sound · Overlay · Look · Effects, Captions opens a row of Type captions, Find speech, Caption looks and Style, and a selected caption track’s tray is Edit lines · Style · Find speech · Follows the clips · Stays with the sound | Delete — the last two one two-way choice, ONE step each, their faces one word each on a phone (Follows · Stays) with the five on show and Delete at the strip’s end after its line (#1243 S31)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
       await smP2((W, H) => [smCap('Caps', 0, 6, [[0.5, 1.5], [3, 4]], W, H)].concat(smClips3(W, H)), async function (v) {
         const fails = [];
         const tools = Array.from(document.querySelectorAll('#sm-tools .sm-tool')).map(b => b.dataset.tool).join(',');
         /* the stack (sm3-stack): Phase 3 · Effect segments put Effects after Overlay, DESIGN §8.5's order; #1243 S12 put Look (for the whole
-           video) before Effects, R (a)'s order (Ask is not built) */
-        if (tools !== 'clips,text,captions,sound,overlay,look,effects') throw new Error('380: the project tools are ' + tools + ', want clips,text,captions,sound,overlay,look,effects');
+           video) before Effects, R (a)'s order; #1243 S14 put Ask & edit first */
+        if (tools !== 'ai,clips,text,captions,sound,overlay,look,effects') throw new Error('380: the project tools are ' + tools + ', want ai,clips,text,captions,sound,overlay,look,effects');
         const ct = smTool('captions').getBoundingClientRect();
         if (ct.width < 44 || ct.right > innerWidth + 0.5) fails.push('Captions is ' + Math.round(ct.width) + ' px wide or off screen');
         smTool('captions').click(); await v.sleep(80);

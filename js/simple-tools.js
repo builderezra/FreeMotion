@@ -2390,9 +2390,12 @@ window.FM = window.FM || {};
     mode: () => (bar && bar.dataset.mode) || '',
     subFor: () => subFor && { key: subFor.key, id: subFor.id, from: subFor.from, of: subFor.of || null },
     /* #1243 S14: Ask & edit, the project row's first tool. Only while Simple is on screen (in Full this opens nothing: Full has its own
-       door in the Add menu). One menu at a time: a sub-row, Extras and Look's panel close first. The pressed tool lets the focus go, so the
-       assistant's own box may take it (js/ai-chat.js canTakeFocus: only when the focus is on nothing). True when the assistant is up;
-       false, with Simple's line said, for somebody who cannot edit. */
+       door in the Add menu). One menu at a time: a sub-row, Extras and Look's panel close first. A BUTTON that holds the focus lets it
+       go, so the assistant's own box may take it (js/ai-chat.js canTakeFocus: only when the focus is on nothing): the pressed tool, and
+       also the cog, which holds the focus after a switch of editor (js/editor-mode.js: it never falls to the page) and kept it under
+       a press that does not move the focus (a mouse click in Safari; the suite's first run of S14, which is how this was found). A
+       field he is typing in keeps the focus. True when the assistant is up; false, with Simple's line said, for somebody who cannot
+       edit. */
     openAi() {
       if (!isSimple() || !mount() || !FM.aiChat || !FM.aiChat.show) return false;
       /* A VIEWER OR A COMMENTER CHANGES NOTHING, and the assistant writes edits: it does not open for them (nor while a full offline
@@ -2404,7 +2407,7 @@ window.FM = window.FM || {};
       if (extrasUp()) this.closeExtras();
       if (panelFor) dropPanel();
       const a = document.activeElement;
-      if (a && a !== document.body && bar.contains(a) && a.blur) a.blur();
+      if (a && a !== document.body && a.blur && (bar.contains(a) || a.tagName === 'BUTTON')) a.blur();
       FM.aiChat.show();
       aiDock();
       lastSig = ''; this.sync();
