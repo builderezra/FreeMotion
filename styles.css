@@ -1303,6 +1303,7 @@ body.fm-moving .am-glint i, body.fm-playing .am-glint i, body.fm-moving .addmenu
 .eyedrop-btn { flex: none; width: 34px; height: 34px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
 .eyedrop-btn svg { width: 18px; height: 18px; }
 .eyedrop-btn:hover { color: var(--accent); border-color: rgba(41,217,187,.5); }
+.ai-spark-ic { width: 16px; height: 16px; flex: none; vertical-align: -3px; margin-right: 5px; }   /* #1255: the drawn spark on the scene panel, where the sparkles emoji was */
 #crop-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px; box-shadow: 0 6px 24px rgba(0,0,0,.5); max-width: 94vw; }   /* even padding: the bar holds its buttons only (the "Drag to crop" line went, #1255) */
 #crop-bar button { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 999px; padding: 6px 14px; font-size: 12.5px; cursor: pointer; }
 #crop-bar .cb-done { background: var(--accent); border-color: var(--accent); color: #06231d; font-weight: 700; }
@@ -3350,6 +3351,7 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .clip-speed { position: absolute; top: 3px; right: 4px; z-index: 2; font-size: 9.5px; font-weight: 700; line-height: 1; padding: 2px 4px; border-radius: 4px; background: rgba(0,0,0,.55); color: #fff; letter-spacing: .3px; pointer-events: none; }
+.clip-speed .clip-speed-ic { width: 10px; height: 10px; margin-right: 2px; vertical-align: -1.5px; stroke-width: 2.4; }   /* #1255: the drawn ramp, where the lightning emoji was */
 .quick-row { display: flex; gap: 8px; padding: 6px 2px 10px; }
 .qr-btn { flex: 1; height: 36px; display: flex; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text-dim); cursor: pointer; }
 .qr-btn.qr-danger { color: #ff6b7a; border-color: rgba(255, 107, 122, .35); }   /* delete-selection button reads as destructive */
@@ -3452,6 +3454,8 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
 .cap-src, .cap-scope { flex: 1 1 auto; min-width: 0; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 6px 8px; font-size: 12px; }
 .cap-src.hidden { display: none; }
 .cap-detect-btn { flex: 1 1 auto; justify-content: center; }
+/* #1255: its drawing (DS2, sound bars turning into lines), where the microphone emoji was */
+.cap-detect-btn .cap-detect-ic { width: 18px; height: 18px; flex: none; margin-right: 7px; vertical-align: -4px; }
 .cap-detect-btn[disabled] { opacity: .5; cursor: default; }
 @media (max-width: 420px) { .cap-detect { flex-direction: column; align-items: stretch; } }
 

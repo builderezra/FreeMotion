@@ -2179,7 +2179,10 @@ window.FM = window.FM || {};
     if (rampSpeed || (layer.speed && Math.abs(layer.speed - 1) > 1e-3)) {
       const sb = document.createElement('span');
       sb.className = 'clip-speed';
-      sb.textContent = rampSpeed ? '⚡ramp' : (Number.isInteger(layer.speed) ? layer.speed : +layer.speed.toFixed(2)) + '×';
+      /* #1255 (no emoji as an icon): a speed ramp's badge wore the lightning emoji; it is the drawn ramp now (a curve between two
+         speeds, the logger's board) and the word. A fixed string; a flat speed stays plain text. */
+      if (rampSpeed) sb.innerHTML = '<svg class="clip-speed-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 18H7c4.5 0 5.5-12 10-12h3.5"/><circle cx="7" cy="18" r="1.7" fill="currentColor" stroke="none"/><circle cx="17" cy="6" r="1.7" fill="currentColor" stroke="none"/></svg>ramp';
+      else sb.textContent = (Number.isInteger(layer.speed) ? layer.speed : +layer.speed.toFixed(2)) + '×';
       clip.appendChild(sb);
     }
     if (layer.type === 'video') {

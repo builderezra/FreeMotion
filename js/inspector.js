@@ -7275,7 +7275,7 @@ window.FM = window.FM || {};
             : 'it was saved empty, or in a format this panel doesn’t read';
           const t0 = '“' + p.name + '” can’t be applied — ' + why + '. Applying it would wipe this layer’s effects, so it does nothing. Remove it with ✕.';
           pwrap.appendChild(presetRow({
-            name: p.name, cls: ' broken', title: t0, sub: '⚠ ' + why,
+            name: p.name, cls: ' broken', title: t0, sub: why,
             onTap: () => { if (FM.toast) FM.toast('“' + p.name + '” has no effects to apply — ' + why + '. Your effect stack is untouched.', 3600); },
             onDelete: p.builtin ? null : (() => { FM.fxPresets.remove(p.name); })
           }));

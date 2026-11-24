@@ -193,7 +193,7 @@ window.FM = window.FM || {};
     const dead = m.dead || (FM.cssFxUnavailable ? FM.cssFxUnavailable() : []);
     const ctxOK = m.ctxFilterOK != null ? m.ctxFilterOK : !!(FM.ctxFilterOK && FM.ctxFilterOK());
     if (dead.length) {
-      lines.push('🚨 THIS DEVICE CANNOT RUN CANVAS FILTERS, AND HAS NO WEBGL TO STAND IN. Brightness,');
+      lines.push('THIS DEVICE CANNOT RUN CANVAS FILTERS, AND HAS NO WEBGL TO STAND IN. Brightness,');
       lines.push('Saturation, Contrast, Grayscale, Sepia, Invert, Hue Shift, Blur and Glow will do');
       lines.push('NOTHING here, and they fail silently — which is why they work on the PC and not on');
       lines.push('this device. This is queue 645. Send this line; it is the answer that was missing.');

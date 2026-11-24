@@ -552,7 +552,13 @@ window.FM = window.FM || {};
       };
       scope.addEventListener('change', syncScope);
       syncScope();
-      const btn = el('button', 'btn cap-detect-btn', '🎙 Detect speech');
+      /* #1255 (his words, 23 Nov: "The Detect speech button has an emoji on it… no emojis on text or buttons anywhere in the app. Design our
+         own icons instead"): the microphone emoji is now the drawn DS2, "Sound to lines" (the recommended one of the four drawn; he
+         can correct it): sound bars turning into lines of writing. A fixed string. The button's words live in a span of their own, so
+         "Decoding…" and "Listening… 40%" change the words and leave the drawing. */
+      const btn = el('button', 'btn cap-detect-btn');
+      btn.innerHTML = '<svg class="cap-detect-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 10.5v3M6.5 7v10M9.5 9.2v5.6"/><path d="M13.5 8.5h7M13.5 12h7M13.5 15.5h4.5"/></svg>';
+      const lab = el('span', 'cap-detect-l', 'Detect speech'); btn.appendChild(lab);
       btn.title = 'Find where someone is talking and lay down empty cues at those times — all on this device';
       if (!sources.length) { btn.disabled = true; btn.title = 'Import a video or audio clip first — detection reads that clip’s audio'; }
       btn.addEventListener('click', async () => {
@@ -578,22 +584,22 @@ window.FM = window.FM || {};
           return;
         }
         btn.disabled = true;
-        const label = btn.textContent;
-        btn.textContent = 'Decoding…';
+        const label = lab.textContent;
+        lab.textContent = 'Decoding…';
         try {
           let r = null, used = null, tried = 0, firstError = null;
           for (const cand of queue) {
             tried++;
             const tag = queue.length > 1 ? ' (' + tried + '/' + queue.length + ')' : '';
             try {
-              const found = await C.detect(layer, cand, p => { btn.textContent = 'Listening…' + tag + ' ' + Math.round(p * 100) + '%'; }, mode);
+              const found = await C.detect(layer, cand, p => { lab.textContent = 'Listening…' + tag + ' ' + Math.round(p * 100) + '%'; }, mode);
               r = found; used = cand;
               if (r.count || r.gone) break;   // bughunt5 #12: an Undo took the caption or its clip away mid-run: stop, below says so
             } catch (err) {
               if (!firstError) firstError = { err: err, clip: cand };
             }
           }
-          btn.textContent = label; btn.disabled = false;
+          lab.textContent = label; btn.disabled = false;
           if (!r) {
             if (firstError && FM.reportError) FM.reportError('detecting speech for captions', firstError.err);
             const failed = firstError && firstError.clip;
@@ -644,7 +650,7 @@ window.FM = window.FM || {};
              just become a caption track under it: it rebuilds itself as the captions editor (#984 review). */
           if (FM.textEdit && FM.textEdit.cuesChanged) FM.textEdit.cuesChanged();
         } catch (err) {
-          btn.textContent = label; btn.disabled = false;
+          lab.textContent = label; btn.disabled = false;
           if (FM.reportError) FM.reportError('detecting speech for captions', err);   // queue 674: the raw message goes to Settings → Last error, not the screen
           if (FM.toast) FM.toast('Speech detection failed \u2014 the details are in Settings \u2192 Last error \u2192 Copy', 6000);
         }

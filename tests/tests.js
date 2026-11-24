@@ -209130,6 +209130,74 @@
     } finally { _isoK.put(); }
   });
 
+  /* ═══ #1255, his note of 23 Nov 20:53, clauses 1 and 2: NO EMOJI AS AN ICON ════════════════════════════════════════════════════════
+     His words: "The Detect speech button has an emoji on it … no emojis on text or buttons anywhere in the app. Design our own icons
+     instead." A sweep found five places with a real emoji on screen; each now wears the drawing from the design board (Detect speech:
+     DS2, "Sound to lines", the recommended one of four, which he can correct) or plain words. The typed symbols that are not emoji
+     (★ ✓ ✕ ◆ …) change with the redesign's icon set, not here. CONTROLS: the button really starts a detection; the badges are real. */
+  test('1255 emoji · the Detect speech button wears a drawing and no emoji, keeps its drawing while its words say Listening, and reads Detect speech again afterwards; a clip with a speed ramp wears a drawn mark and the word ramp on its badge while a 2× clip still reads 2×; and the backup message, the device report and a broken preset row carry no emoji sign (CONTROL: the press started one detection, and both badges are on their clips)', { item: '1255', budgetMs: 45000 }, async function () {
+    const _isoK = isoKeep(); try {
+    const C = FM.captions, B = { id: 'voice-1255', name: 'Talking clip', type: 'video' }, T = { id: 'caption-1255', captions: [] };
+    const saved = { sources: C.audioSources, detect: C.detect, audio: FM.hasAudioTrack, toast: FM.toast, scope: FM._capScope, src: FM._capSrcId, report: FM.reportError,
+      refresh: FM.inspector && FM.inspector.refresh, rebuild: FM.timeline && FM.timeline.rebuild, changed: FM.textEdit && FM.textEdit.cuesChanged };
+    const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId, keepT = FM.time;
+    const EMOJI = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}️]/u, fails = [];
+    let go = null, entered = 0;
+    try {
+      /* the button */
+      C.audioSources = () => [B]; FM.toast = () => {}; FM.reportError = () => {};
+      if (FM.inspector) FM.inspector.refresh = () => {};
+      if (FM.timeline) FM.timeline.rebuild = () => {};
+      if (FM.textEdit) FM.textEdit.cuesChanged = () => {};
+      FM._capScope = 'clip'; FM._capSrcId = null; FM.hasAudioTrack = () => true;
+      C.detect = async (layer, cand, onP) => { entered++; onP(0.4); await new Promise(r => { go = r; }); layer.captions = [{ a: 0, b: 1, text: '' }]; return { count: 1, stats: {} }; };
+      const row = FM.captionsEditor.detectRow(T, () => {}), btn = row.querySelector('.cap-detect-btn');
+      if (!btn) throw new Error('CONTROL: the detect row has no Detect speech button');
+      const pic = () => btn.querySelector('svg path'), words = () => (btn.textContent || '').trim();
+      if (EMOJI.test(btn.textContent || '')) fails.push('the Detect speech button still carries an emoji (“' + words() + '”) — his words: “Replace it with an icon we design, not an emoji”');
+      if (!pic()) fails.push('the Detect speech button has no drawing of its own');
+      if (words() !== 'Detect speech') fails.push('the button reads “' + words() + '”, want Detect speech');
+      btn.click(); await sleep(60);
+      if (entered !== 1 || !go) throw new Error('CONTROL: the press did not start one detection (' + entered + ' calls), so the button that was read is not the working one · ' + fails.join(' · '));
+      if (!/^Listening/.test(words())) fails.push('while it listens the button reads “' + words() + '”, want Listening… and how far');
+      if (!pic()) fails.push('while it listens the button lost its drawing');
+      go(); await sleep(80);
+      if (words() !== 'Detect speech' || !pic()) fails.push('after the detection the button reads “' + words() + '” ' + (pic() ? 'with' : 'WITHOUT') + ' its drawing, want Detect speech with it');
+      /* the speed badges, on real clips of the timeline */
+      if (FM.timeline) FM.timeline.rebuild = saved.rebuild;
+      const R = FM.makeLayer('video', { name: 'Ramped 1255', x: 270, y: 480, start: 0, duration: 3 }), D = FM.makeLayer('video', { name: 'Double 1255', x: 270, y: 480, start: 0, duration: 3 });
+      R.muted = D.muted = true; D.speed = 2;
+      S.layers = [R, D]; FM.selectLayer(null); FM.time = 0;
+      FM.toggleProp(R, 'speed', 0, 1); FM.time = 1; FM.setProp(R, 'speed', 2, 1); FM.time = 0;
+      if (!FM.isAnimated(R.speed)) throw new Error('CONTROL: the fixture clip’s speed is not a ramp (' + JSON.stringify(R.speed) + '), so no ramp badge can be read · ' + fails.join(' · '));
+      FM.timeline.rebuild(); await sleep(120);
+      const badges = [].slice.call(document.querySelectorAll('.clip-speed'));
+      const ramp = badges.filter(b => /ramp/.test(b.textContent || ''))[0], dbl = badges.filter(b => (b.textContent || '').trim() === '2×')[0];
+      if (!ramp || !dbl) throw new Error('CONTROL: the two clips’ speed badges are not both on the timeline (found ' + badges.map(b => '“' + b.textContent + '”').join(', ') + ') · ' + fails.join(' · '));
+      if (EMOJI.test(ramp.textContent || '')) fails.push('the speed-ramp badge still carries an emoji (“' + ramp.textContent + '”)');
+      if (!ramp.querySelector('svg path')) fails.push('the speed-ramp badge has no drawn mark');
+      if ((ramp.textContent || '').trim() !== 'ramp') fails.push('the speed-ramp badge reads “' + ramp.textContent + '”, want ramp beside its mark');
+      if (dbl.querySelector('svg')) fails.push('a flat 2× badge gained a drawing: only a ramp wears one');
+      /* the three texts, read from the files that write them */
+      for (const [f, bad, what] of [['js/settings.js', /' ⚠️? ' \+/, 'the backup message'], ['js/perf-probe.js', /\u{1F6A8}/u, 'the device report'], ['js/inspector.js', /sub: '⚠ ' \+ why/, 'a broken preset row']]) {
+        const src = await (await fetch('/' + f + '?emoji1255=' + Date.now())).text();
+        if (src.length < 2000) throw new Error('CONTROL: ' + f + ' could not be read (' + src.length + ' characters)');
+        if (bad.test(src)) fails.push(what + ' (' + f + ') still writes an emoji sign');
+      }
+    } finally {
+      if (go) { try { go(); } catch (e) {} }
+      C.audioSources = saved.sources; C.detect = saved.detect; FM.hasAudioTrack = saved.audio;
+      FM.toast = saved.toast; FM.reportError = saved.report; FM._capScope = saved.scope; FM._capSrcId = saved.src;
+      if (FM.inspector) FM.inspector.refresh = saved.refresh;
+      if (FM.timeline) FM.timeline.rebuild = saved.rebuild;
+      if (FM.textEdit) FM.textEdit.cuesChanged = saved.changed;
+      S.layers = keep; S.selectedId = keepSel; FM.time = keepT;
+      try { FM.timeline.rebuild(); } catch (e) {}
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+    } finally { _isoK.put(); }
+  });
+
   /* #1243 G9 — his words: "you have the friends button with like a plus. In the top left in there, get rid of that. We do not
      need that. All right, and make sure it's gone in everything, like not a single trace of it found." */
   test('1243 G9 · no friends person+ anywhere — at 380 and 1280, in Full and in Simple, the feature off and on, and in a live session with nobody in, there is no #btn-share, no person+ look and no person+ drawing in the page (CONTROLS: with a friend in the faces chip shows, and the people door still opens Friends)', { item: '1243', budgetMs: 120000 }, async function () {

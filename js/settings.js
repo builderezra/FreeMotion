@@ -279,15 +279,15 @@ window.FM = window.FM || {};
     const big = miss.filter(m => !m.missing), gone = miss.filter(m => m.missing);
     if (big.length) {
       const names = big.slice(0, 3).map(m => m.file + ' (' + m.mb + ' MB)').join(', ');
-      msg += ' ⚠️ ' + big.length + (big.length === 1 ? ' clip was' : ' clips were') + ' too big to include: ' + names + (big.length > 3 ? ' and more' : '') + '.';
+      msg += ' ' + big.length + (big.length === 1 ? ' clip was' : ' clips were') + ' too big to include: ' + names + (big.length > 3 ? ' and more' : '') + '.';
     }
     if (gone.length) {
       const names = gone.slice(0, 3).map(m => m.file + ' in ' + m.project).join(', ');
-      msg += ' ⚠️ ' + gone.length + (gone.length === 1 ? ' clip has' : ' clips have') + ' no footage stored on this device, so the file has none either: ' + names + (gone.length > 3 ? ' and more' : '') + '.';
+      msg += ' ' + gone.length + (gone.length === 1 ? ' clip has' : ' clips have') + ' no footage stored on this device, so the file has none either: ' + names + (gone.length > 3 ? ' and more' : '') + '.';
     }
     if (missingFonts.length) {
       const names = missingFonts.slice(0, 3).map(f => f.name + ' in ' + f.project).join(', ');
-      msg += ' ⚠️ ' + missingFonts.length + (missingFonts.length === 1 ? ' custom font is' : ' custom fonts are') + ' not in this backup: ' + names + (missingFonts.length > 3 ? ' and more' : '') + '. Text may use a fallback after restore.';
+      msg += ' ' + missingFonts.length + (missingFonts.length === 1 ? ' custom font is' : ' custom fonts are') + ' not in this backup: ' + names + (missingFonts.length > 3 ? ' and more' : '') + '. Text may use a fallback after restore.';
     }
     if (miss.length || missingFonts.length) msg += ' Everything else is in the file.';
     if (FM.toast) FM.toast(msg, miss.length || missingFonts.length ? 12000 : 6000);
