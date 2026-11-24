@@ -205123,9 +205123,10 @@
 
   /* N5 · S15 IN THE PC BAND. Red on v18.36: the six tools share the 371 px band at about 62 px each, never scrolling. #1243 S12 (R9) put Look
      on the row: seven tools of at least 64 px (448) never fit the band, which is at most 420 px (styles.css --insp-w), so the old 1680×1050
-     half (six tools spread to 70 px with no fade) has nothing left to measure, and both windows must now scroll. CONTROL: the band at
-     1680×1050 is wider than at 1280×800, so the two halves measure two different bands. */
-  test('1243 R4 · S15 in the PC band the project row scrolls when its tools overflow: with Look on it its seven tools overflow the band at 1280×800 and at 1680×1050, every tool at least 64 px, the end fade on, and the last pressable once the row is scrolled to its end (CONTROL: the band at 1680×1050 is wider than at 1280×800)', { item: '1243', budgetMs: 90000 }, async function () {
+     half (six tools spread to 70 px with no fade) has nothing left to measure, and both windows must now scroll. #1243 S14 put Ask & edit
+     first on the row: eight tools (512 px). CONTROL: the band at 1680×1050 is wider than at 1280×800, so the two halves measure two
+     different bands. */
+  test('1243 R4 · S15 in the PC band the project row scrolls when its tools overflow: with Ask & edit and Look on it its eight tools overflow the band at 1280×800 and at 1680×1050, every tool at least 64 px, the end fade on, and the last pressable once the row is scrolled to its end (CONTROL: the band at 1680×1050 is wider than at 1280×800)', { item: '1243', budgetMs: 90000 }, async function () {
     smNeedP2();
     const got = {};
     await smHintKeep('1', async function () {
@@ -205146,15 +205147,189 @@
     if (!a || !b) throw new Error('setup: a window did not run: ' + JSON.stringify(got));
     if (!(b.band > a.band + 20)) throw new Error('CONTROL: the band at 1680×1050 (' + Math.round(b.band) + ' px) is not wider than at 1280×800 (' + Math.round(a.band) + ' px), so the two windows measure one band');
     for (const [at, g] of [['1280×800', a], ['1680×1050', b]]) {
-      if (g.n !== 7 || g.tools.split(',').indexOf('look') < 0) fails.push(at + ': the project row holds ' + g.tools + ', want seven tools with Look');
+      if (g.n !== 8 || g.tools.split(',').indexOf('look') < 0 || g.tools.split(',')[0] !== 'ai') fails.push(at + ': the project row holds ' + g.tools + ', want eight tools, Ask & edit first, with Look');
       if (g.ws.some(x => x < 63.5)) fails.push(at + ': the project tools are squeezed to ' + f(g.ws) + ' px, under 64');
       if (!g.run) { fails.push(at + ': the project row has no strip of its own to scroll'); continue; }
-      if (!(g.over > 1)) fails.push(at + ': the seven tools fit the band (' + Math.round(g.over) + ' px over), so nothing is cut');
+      if (!(g.over > 1)) fails.push(at + ': the eight tools fit the band (' + Math.round(g.over) + ' px over), so nothing is cut');
       if (g.fades.indexOf('sm-more-e') < 0) fails.push(at + ': no end fade while tools lie past the band’s edge (' + g.fades.join(',') + ')');
       if (!g.last) fails.push(at + ': scrolled to its end, the last tool is not pressable');
     }
     if (fails.length) throw new Error(fails.join(' · '));
   });
+
+  /* ═══ #1243 S14 — ASK & EDIT FROM SIMPLE'S BAR (R's release 14; plan 1243-A S14, R decision 9) ═════════════════════════════════════════
+     His words (8 Nov): "There's also no way to use the AI… a button in that bottom row at the start that has like the AI option."
+     The first tool of Simple's project row opens Full's own assistant (FM.aiChat, his key; #1243 F2 named it Ask & edit). In Simple it is a
+     panel: the bar hides under it; on a phone it is the sheet from the sheet line (js/ai-chat.js place(), #1243 F3), on a PC it lies
+     over the left band's own box and does not slide. Each test fails on v18.51 by its own sentence: the row's first tool is Clips. */
+
+  /* S14 a · THE BUTTON. CONTROL: Effects, the tool whose sparkle an AI drawing could be taken for, is on the same row with a drawing. */
+  test('1243 S14 · at 380 and 1280 the first tool of Simple’s project row is Ask & edit, at the row’s own left edge with a drawing of its own and its name whole; a press opens the assistant once and the bar gives its place to it, and when the assistant closes the project row is back (CONTROL: Effects is on the same row and its drawing is not the same one)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    if (!FM.aiChat || !FM.aiChat.show) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
+    const showOwn = Object.getOwnPropertyDescriptor(FM.aiChat, 'show'), fails = [];
+    try {
+      await smHintKeep('1', async function () {
+        for (const width of [380, 1280]) {
+          await r4At(width, width > 700 ? 800 : 0, async function () {
+            await smP2(smClips3, async function () {
+              FM.selectLayer(null); await r4Settle(150);
+              const at = width + ': ', all = Array.from(document.querySelectorAll('#sm-tools .sm-tool')), first = all[0], fx = smTool('effects');
+              const d = b => (b && b.querySelector('svg')) ? b.querySelector('svg').innerHTML : '';
+              if (!fx || !d(fx)) throw new Error('CONTROL ' + at + 'Effects is not on the project row with a drawing, so nothing here compares two drawings (' + all.map(b => b.dataset.tool).join(',') + ')');
+              if (!first || first.dataset.tool !== 'ai') { fails.push(at + 'the first tool of the project row is ' + (first ? first.dataset.tool : 'nothing') + ', want Ask & edit — his words: “a button in that bottom row at the start that has like the AI option”'); return; }
+              const run = document.querySelector('#sm-tools > .sm-runbox > .sm-run'), rr = run.getBoundingClientRect(), fr = first.getBoundingClientRect();
+              if (run.scrollLeft > 0.5 || Math.abs(fr.left - rr.left) > 1) fails.push(at + 'Ask & edit starts at ' + fr.left.toFixed(1) + ' px with the row at ' + rr.left.toFixed(1) + ' (scrolled ' + run.scrollLeft + '): it is not at the start of the row');
+              if (!(fr.width >= 63.5)) fails.push(at + 'Ask & edit is ' + fr.width.toFixed(1) + ' px wide, under the row’s 64');
+              const fl = first.querySelector('.sm-tool-l'), face = fl ? fl.textContent : '';
+              if (face !== 'Ask & edit') fails.push(at + 'its face says “' + face + '”, want Ask & edit, the name #1243 F2 gave the assistant');
+              if (fl && (fl.scrollWidth > fl.clientWidth + 1 || fl.getBoundingClientRect().width > fr.width + 0.5)) fails.push(at + 'its name is cut or runs out of the tool (' + fl.scrollWidth + ' px of words in ' + fl.clientWidth + ', the tool is ' + fr.width.toFixed(1) + ')');
+              if (!d(first)) fails.push(at + 'Ask & edit has no drawing');
+              else if (d(first) === d(fx)) fails.push(at + 'Ask & edit wears Effects’ drawing: two tools in one row would look the same');
+              if (!r4Hits(first)) fails.push(at + 'Ask & edit is not pressable at its centre');
+              /* a press opens the assistant, once (a stand-in for show: the real panel is the next test's) */
+              let n = 0;
+              FM.aiChat.show = function () { n++; document.body.classList.add('aic-open'); };
+              first.click(); await r4Settle(200);
+              if (n !== 1) fails.push(at + 'a press on Ask & edit opened the assistant ' + n + ' times, want once');
+              if (r4Mode() !== 'panel') fails.push(at + 'with the assistant up the bar is in mode “' + r4Mode() + '”, want panel — his words: “I don’t want two menus at once”');
+              const tl = document.getElementById('sm-tools');
+              if (tl.getClientRects().length) fails.push(at + 'the project row still shows under the assistant');
+              document.body.classList.remove('aic-open'); await r4Settle(200);
+              if (r4Mode() !== 'project') fails.push(at + 'after the assistant closed the bar is in mode “' + r4Mode() + '”, want the project row back');
+              if (!smTool('ai') || !r4Hits(smTool('ai'))) fails.push(at + 'after the assistant closed Ask & edit is not back and pressable');
+            });
+          });
+        }
+      });
+    } finally {
+      if (showOwn) Object.defineProperty(FM.aiChat, 'show', showOwn); else delete FM.aiChat.show;
+      document.body.classList.remove('aic-open');
+      if (FM.simpleTools && FM.simpleTools._reset) FM.simpleTools._reset();
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* S14 b · WHERE THE REAL PANEL STANDS. No network: opening the assistant sends nothing (it only sends when he does). CONTROL: in Full
+     at 1280 the same assistant stands in Full's right-hand column and carries none of Simple's properties, so the Simple halves
+     measure Simple's place and not a page where it always stands there. */
+  test('1243 S14 · opened from Simple the assistant stands where a Simple panel stands: at 380 from the sheet line to the bottom of the screen with the picture not moved or resized, at 1280 over the left band’s own box, not over the picture and with no slide, its box taking the focus; closed, the project row is back and nothing of Simple’s is left on it (CONTROL: in Full at 1280 the same assistant stands in Full’s right-hand column)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    if (!FM.aiChat || !FM.aiChat.show || !FM.aiChat.hide) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
+    const fails = [], VARS = ['--sm-ai-l', '--sm-ai-t', '--sm-ai-w', '--sm-ai-b'];
+    const chat = () => document.getElementById('ai-chat'), carried = () => VARS.filter(p => chat() && chat().style.getPropertyValue(p));
+    const box = r => '[' + [r.left, r.top, r.right, r.bottom].map(Math.round).join(', ') + ']';
+    try {
+      await smHintKeep('1', async function () {
+        await r4At(380, 0, async function () {
+          await smP2(smClips3, async function () {
+            FM.selectLayer(null); await r4Settle(150);
+            const st0 = document.getElementById('stage').getBoundingClientRect();
+            const b = smTool('ai');
+            if (!b) { fails.push('380: the project row has no Ask & edit'); return; }
+            b.click(); await r4Settle(450);
+            const c = chat();
+            if (!c || !c.classList.contains('open')) { fails.push('380: a press on Ask & edit did not open the assistant'); return; }
+            const r = c.getBoundingClientRect(), line = FM.mobile.sheetLine(), st1 = document.getElementById('stage').getBoundingClientRect();
+            if (!(line > 100)) throw new Error('CONTROL 380: the sheet line reads ' + line + ', so this is not a phone layout with a picture above the timeline');
+            if (Math.abs(r.top - line) > 1.5) fails.push('380: the assistant’s top is at ' + r.top.toFixed(1) + ' px, want the sheet line at ' + line + ' (the picture’s bottom edge), where every Simple panel starts');
+            if (Math.abs(r.bottom - innerHeight) > 1.5 || r.left > 0.5 || Math.abs(r.right - innerWidth) > 0.5) fails.push('380: the assistant is ' + box(r) + ', want the whole width down to the bottom of a ' + innerWidth + ' × ' + innerHeight + ' screen');
+            if (Math.abs(st1.height - st0.height) > 0.5 || Math.abs(st1.top - st0.top) > 0.5) fails.push('380: the picture moved or changed size when the assistant opened (top ' + Math.round(st0.top) + ', ' + Math.round(st0.height) + ' tall → top ' + Math.round(st1.top) + ', ' + Math.round(st1.height) + ' tall): rule 3, the stage never shrinks');
+            if (r4Mode() !== 'panel') fails.push('380: with the assistant up the bar is in mode “' + r4Mode() + '”, want panel');
+            if (carried().length) fails.push('380: on a phone the assistant carries the PC band’s properties (' + carried().join(', ') + ')');
+            FM.aiChat.hide(); await r4Settle(400);
+            if (r4Mode() !== 'project') fails.push('380: after the assistant closed the bar is in mode “' + r4Mode() + '”, want the project row');
+          });
+        });
+        await r4At(1280, 800, async function () {
+          await smP2(smClips3, async function () {
+            FM.selectLayer(null); await r4Settle(150);
+            const band = document.getElementById('inspector-panel').getBoundingClientRect(), stage = document.getElementById('stage').getBoundingClientRect();
+            const b = smTool('ai');
+            if (!b) { fails.push('1280: the project row has no Ask & edit'); return; }
+            b.click();
+            const c = chat();
+            /* no slide: read before anything settles */
+            const dur = c ? getComputedStyle(c).transitionDuration : '';
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+            if (!c || !c.classList.contains('open')) { fails.push('1280: a press on Ask & edit did not open the assistant'); return; }
+            const r = c.getBoundingClientRect();
+            if (dur.split(',').some(t => parseFloat(t) > 0)) fails.push('1280: the assistant slides in over ' + dur + ': in Simple it is simply there, as its other panels are');
+            if ([r.left - band.left, r.top - band.top, r.right - band.right, r.bottom - band.bottom].some(x => Math.abs(x) > 1.5)) fails.push('1280: two frames after the press the assistant is ' + box(r) + ', want the left band’s own box ' + box(band) + ' (his D20 A: a Simple tool’s panel opens in the band)');
+            const ox = Math.min(r.right, stage.right) - Math.max(r.left, stage.left), oy = Math.min(r.bottom, stage.bottom) - Math.max(r.top, stage.top);
+            if (ox > 1 && oy > 1) fails.push('1280: the assistant covers ' + Math.round(ox) + ' × ' + Math.round(oy) + ' px of the picture');
+            if (r4Mode() !== 'panel') fails.push('1280: with the assistant up the bar is in mode “' + r4Mode() + '”, want panel');
+            await r4Settle(300);
+            const inp = c.querySelector('.aic-input'), ae = document.activeElement;
+            if (!inp) fails.push('1280: the assistant has no box to type in (.aic-input)');
+            else if (ae !== inp) fails.push('1280: the assistant’s box did not take the focus: it is on ' + ((ae && (ae.id || ae.className || ae.tagName)) || 'nothing'));
+            FM.aiChat.hide(); await r4Settle(250);
+            if (carried().length) fails.push('1280: closed, the assistant still carries ' + carried().join(', '));
+            if (r4Mode() !== 'project') fails.push('1280: after the assistant closed the bar is in mode “' + r4Mode() + '”, want the project row');
+          });
+        });
+      });
+      await atWideWidth(async function () {
+        if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) throw new Error('CONTROL: the page is still in Simple after the Simple halves · ' + fails.join(' · '));
+        FM.aiChat.show(); await r4Settle(400);
+        const c = chat(), r = c.getBoundingClientRect(), had = carried();
+        FM.aiChat.hide(); await r4Settle(350);
+        if (!(Math.abs(r.right - innerWidth) <= 1.5 && r.left > innerWidth / 2) || had.length) throw new Error('CONTROL: in Full at 1280 the assistant is ' + box(r) + ' carrying ' + (had.join(', ') || 'nothing of Simple’s') + ', want Full’s right-hand column untouched · ' + fails.join(' · '));
+      }, 1280);
+    } finally {
+      try { FM.aiChat.hide(); } catch (e) {}
+      if (FM.simpleTools && FM.simpleTools._reset) FM.simpleTools._reset();
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* S14 c · ONE MENU AT A TIME, AND THE WAY OUT. CONTROL: the Text row was really open before the assistant took its place. */
+  test('1243 S14 · at 1280 the assistant opened over a row of Simple’s bar closes that row, so one menu is up; Escape closes the assistant and the focus goes back to Ask & edit on the project row; and leaving Simple with it open hands it to Full’s right-hand column with nothing of Simple’s on it (CONTROL: the Text row was open first)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    if (!FM.aiChat || !FM.aiChat.show || !FM.aiChat.hide) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
+    const fails = [], VARS = ['--sm-ai-l', '--sm-ai-t', '--sm-ai-w', '--sm-ai-b'];
+    const chat = () => document.getElementById('ai-chat'), carried = () => VARS.filter(p => chat() && chat().style.getPropertyValue(p));
+    const box = r => '[' + [r.left, r.top, r.right, r.bottom].map(Math.round).join(', ') + ']';
+    try {
+      await smHintKeep('1', async function () {
+        await r4At(1280, 800, async function () {
+          await smP2(smClips3, async function () {
+            FM.selectLayer(null); await r4Settle(150);
+            FM.simpleTools.openSub('text'); await r4Settle(200);
+            if (r4Mode() !== 'sub' || !FM.simpleTools.subFor() || FM.simpleTools.subFor().key !== 'text') throw new Error('CONTROL: the Text row did not open (mode “' + r4Mode() + '”), so nothing was there for the assistant to close');
+            if (!FM.simpleTools.openAi || !FM.simpleTools.openAi()) { fails.push('FM.simpleTools.openAi did not open the assistant from Simple'); return; }
+            await r4Settle(250);
+            if (FM.simpleTools.subFor()) fails.push('with the assistant up the Text row is still open under it (' + FM.simpleTools.subFor().key + '): two menus at once');
+            if (r4Mode() !== 'panel') fails.push('with the assistant up the bar is in mode “' + r4Mode() + '”, want panel');
+            /* Escape: js/ai-chat.js answers it itself; Simple puts the focus back on the tool that opened it */
+            const c = chat(), inp = c && c.querySelector('.aic-input');
+            if (inp) inp.focus({ preventScroll: true });
+            (document.activeElement || document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+            await r4Settle(250);
+            if (!c || c.classList.contains('open')) fails.push('Escape left the assistant open');
+            if (r4Mode() !== 'project') fails.push('after Escape the bar is in mode “' + r4Mode() + '”, want the project row (the Text row was closed for good)');
+            const ae = document.activeElement;
+            if (!ae || !ae.dataset || ae.dataset.tool !== 'ai') fails.push('after Escape the focus is on ' + ((ae && ((ae.dataset && ae.dataset.tool) || ae.id || ae.className || ae.tagName)) || 'nothing') + ', want Ask & edit, the tool that opened it');
+            /* leaving Simple with it open */
+            FM.simpleTools.openAi(); await r4Settle(250);
+            if (carried().length !== 4) fails.push('open over the band the assistant carries ' + (carried().join(', ') || 'none') + ' of its four place properties');
+            FM.editor.set('full'); FM.refreshAll(); await r4Settle(400);
+            if (FM.editor.isSimple()) { fails.push('the switch to Full did not happen'); return; }
+            const r = c.getBoundingClientRect();
+            if (!c.classList.contains('open')) fails.push('leaving Simple closed the assistant: in Full it stays up, as Full’s own does');
+            else if (!(Math.abs(r.right - innerWidth) <= 1.5 && r.left > innerWidth / 2)) fails.push('in Full after the switch the assistant is ' + box(r) + ', want Full’s right-hand column');
+            if (carried().length) fails.push('in Full the assistant still carries Simple’s ' + carried().join(', '));
+            FM.aiChat.hide(); await r4Settle(300);
+          });
+        });
+      });
+    } finally {
+      try { FM.aiChat.hide(); } catch (e) {}
+      if (FM.simpleTools && FM.simpleTools._reset) FM.simpleTools._reset();
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
   /* N6 · THE FLOATING LINE (A COMBINED point 5). Red on v18.36: the line is the tray row inside the bar, its bottom 52 px below the bar's
      top, and the tray's tools go while it shows. CONTROL: a live-only line takes no strip (its words go to #sm-live), and a real line's
      words are in .sm-line. */

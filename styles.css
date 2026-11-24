@@ -12851,6 +12851,18 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
    when they all fit and never shrink below 64 px; past that the row scrolls in its strip, the cut-off last tool and the end fade the
    only "more" cue (6 × 64 = 384 at 380, so Effects is just cut; the PC band's 371 px overflows by about 13 and 420 spreads them) */
 #sm-tools .sm-tool { flex: 1 0 64px; min-width: 64px; box-sizing: border-box; }
+/* ═══ #1243 S14: ASK & EDIT FROM SIMPLE'S BAR (js/simple-tools.js openAi, aiDock) ════════════════════════════════════════════════════
+   His words (8 Nov): "There's also no way to use the AI… a button in that bottom row at the start that has like the AI option."
+   On a phone the assistant is already a sheet from the sheet line (js/ai-chat.js place(), #1243 F3), which is where every Simple panel
+   stands, so nothing is added for a phone. On a PC a Simple tool's panel opens in the left band (D20 A, his pick; R decision 9), so
+   while it is OPEN in Simple it lies over the band's own box (--sm-ai-l / t / w / b, measured by aiDock) and it does not slide: a
+   Simple panel is simply there, and a slide in from the screen's right edge would cross the picture. Closed, and in Full, it is
+   exactly Full's (parked off the right edge): both rules ask for body.ed-simple, and only the open one moves it. */
+@media (min-width: 701px) {
+  body.ed-simple #ai-chat { transition: none; }
+  body.ed-simple #ai-chat.open { left: var(--sm-ai-l, 0px); right: auto; top: var(--sm-ai-t, 0px); bottom: var(--sm-ai-b, 0px); width: var(--sm-ai-w, 376px);
+    border-left: 0; border-right: 1px solid var(--line); box-shadow: none; }
+}
 /* ═══ #1243 S3 · S9 · S15 · rule 3 (release 4): ONE BAR, FOUR MODES, ONE STRIP, ONE SHEET LINE ═════════════════════════════════════
    His words (8 Nov): "when you actually tap on a layer, that first row goes away", "I don't want two menus at once", "make it like
    CapCut where you can scroll it". #sm-bar is ONE 56 px row (and its 1 px edge and the safe area) whose contents swap by

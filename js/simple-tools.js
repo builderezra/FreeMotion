@@ -66,6 +66,9 @@ window.FM = window.FM || {};
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
     /* Phase 3 · Effect segments: the D16 A set's Effects, Change effect and Strength (tools/design/plans/simple-mode/vis/kit.js) */
     effects: '<path d="M11 3.5l1.9 5.1 5.1 1.9-5.1 1.9L11 17.5l-1.9-5.1L4 10.5l5.1-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
+    /* #1243 S14: Ask & edit — a speech bubble with two lines of writing and one small spark, our own drawing in the D16 A stroke.
+       Not the assistant's four-point star: beside Effects in this row a second sparkle would read as the same tool (plan 1243-A S14) */
+    ai: '<path d="M5 5.5h8.5a2.5 2.5 0 0 1 2.5 2.5v6a2.5 2.5 0 0 1-2.5 2.5H10L6 20v-3.5H5A2.5 2.5 0 0 1 2.5 14V8A2.5 2.5 0 0 1 5 5.5z"/><path d="M6.5 9.5h6M6.5 12.5h3.5"/><path d="M19.5 2.4l.75 1.85 1.85.75-1.85.75-.75 1.85-.75-1.85-1.85-.75 1.85-.75z"/>',
     change: '<path d="M4 9h13l-3.5-3.5M20 15H7l3.5 3.5"/>',
     strength: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
     /* #1243 R release 8: Opacity, Transform and Transform's row (our own drawings, the D16 A stroke) */
@@ -142,6 +145,7 @@ window.FM = window.FM || {};
        phone width with it up gives the Clips row back, or the bar sat in panel mode with no panel and no way back (the 9 Nov review, MODE-2) */
     if (phone.addEventListener) phone.addEventListener('change', () => {
       if (phone.matches && extrasOpen) { extrasOpen = false; extrasMark(); if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh(); }
+      aiDock();   // #1243 S14: across the phone / PC line the assistant is the phone's sheet or lies over the PC band
       lastSig = ''; FM.simpleTools.sync();
     });
     if (FM.editor && FM.editor.onChange) FM.editor.onChange(m => {
@@ -170,8 +174,23 @@ window.FM = window.FM || {};
        so the sheet's insp-open only re-syncs the bar: a grab-bar or swipe close of the phone sheet puts it back in item mode. Opening
        Home closes a sub-row and Extras. Leaving Simple calls nothing here, so Full is today's. */
     let wasSimple = document.body.classList.contains('ed-simple'), wasSheet = document.body.classList.contains('insp-open'), wasHome = document.body.classList.contains('home-open');
+    let wasAi = document.body.classList.contains('aic-open');   // #1243 S14: Ask & edit up (js/ai-chat.js show / hide)
+    window.addEventListener('resize', () => { if (wasAi) aiDock(); });
     if (window.MutationObserver) new MutationObserver(() => {
-      const b = document.body.classList, s = b.contains('ed-simple'), sh = b.contains('insp-open'), hm = b.contains('home-open');
+      const b = document.body.classList, s = b.contains('ed-simple'), sh = b.contains('insp-open'), hm = b.contains('home-open'), ai = b.contains('aic-open');
+      /* #1243 S14: the assistant opened or closed, or the editor changed with it up: its place over the PC band is set or taken back
+         (aiDock; in Full it only takes Simple's four properties off), and in Simple the bar's mode follows (the sync below) */
+      if (ai !== wasAi || (ai && s !== wasSimple)) aiDock();
+      if (s && ai !== wasAi) {
+        lastSig = ''; FM.simpleTools.sync();
+        /* …and on a PC the focus goes back to the tool that opened it once it closes (its ✕, or Escape, which js/ai-chat.js answers
+           itself): only when the focus is on nothing, or still inside the panel that has just gone */
+        if (!ai && !phone.matches) {
+          const a = document.activeElement, c = document.getElementById('ai-chat'), n = tools.querySelector('[data-tool="ai"]');
+          if (n && (!a || a === document.body || (c && c.contains(a)))) n.focus({ preventScroll: true });
+        }
+      }
+      wasAi = ai;
       if (s && !wasSimple) requestAnimationFrame(() => { if (FM.refreshPreviewScale) FM.refreshPreviewScale(); if (FM.canvasEdit && FM.canvasEdit.stageResized) FM.canvasEdit.stageResized(); });
       /* …and Extras as closeExtras closes it, its band drawn again and Clips no longer pressed: the band kept Extras' menu and title under
          the project row after Home (the 9 Nov review, HW2) */
@@ -466,8 +485,12 @@ window.FM = window.FM || {};
     const w = W();
     tools.textContent = '';
     const run = strip(tools);
-    /* Phase 3 · Clips › Extras: Clips opens its row, Add clips (what Clips did until Phase 3) and Extras (DESIGN §8.5, D21 A) */
-    [{ id: 'clips', label: w.clips || 'Clips', icon: 'clips', title: w.clipsTitle, run: () => FM.simpleTools.openSub('clips') },
+    /* #1243 S14 (his words, 8 Nov: "There's also no way to use the AI… a button in that bottom row at the start that has like the AI
+       option"): Ask & edit is the FIRST tool, so the strip shows it at every width without a scroll. It opens Full's own assistant
+       (openAi below); the name is the one #1243 F2 gave it. */
+    [{ id: 'ai', label: w.ai || 'Ask & edit', icon: 'ai', title: w.aiTitle, run: () => FM.simpleTools.openAi() },
+     /* Phase 3 · Clips › Extras: Clips opens its row, Add clips (what Clips did until Phase 3) and Extras (DESIGN §8.5, D21 A) */
+     { id: 'clips', label: w.clips || 'Clips', icon: 'clips', title: w.clipsTitle, run: () => FM.simpleTools.openSub('clips') },
      /* #1243 S8 (R (a) "Text | sub | Add text · Title looks · Draw"): Text opens its own row, as Clips, Captions and Sound do */
      { id: 'text', label: w.text || 'Text', icon: 'text', title: w.textTitle, run: () => FM.simpleTools.openSub('text') },
      /* Phase 3 · Captions, in the design's order (§8.5) */
@@ -2021,7 +2044,35 @@ window.FM = window.FM || {};
      sheet), or More's / Look's / Edit lines' panel is open for the one selected item: on a phone only while its sheet is really up (a
      grab-bar close leaves panelFor set, finding 20: the mode is item then, and More raises it again as today). ═══ */
   const extrasUp = () => extrasOpen || !!document.querySelector('#add-sheet.open > #add-grid > .addmenu[data-sm="extras"]');
+  /* ═══ #1243 S14 — ASK & EDIT FROM SIMPLE'S BAR. The first tool of the project row opens Full's own assistant (FM.aiChat: HIS key,
+     never a built-in one; with no key it sends him to Settings, exactly as in Full). In Simple's terms it is a PANEL (R decision 9):
+       · on a phone it runs from the sheet line down — js/ai-chat.js place() already reads FM.mobile.sheetLine(), the line every
+         Simple panel uses, so nothing is added there;
+       · on a PC it lies over the left band (aiDock: the band's own box, measured and handed to styles.css as four custom
+         properties that only a rule under body.ed-simple reads, and only while the chat is open — Full never sees them);
+       · the bar hides while it is up (panelUp) and is back when it closes (the body-class observer in mount()).
+     One menu at a time: opening it closes a sub-row, Extras and Look's panel. The assistant writes Full-style edits, which Simple reads
+     back like any other edit (a move can leave a gap chip): an op set that speaks Simple's commands is #1243 AI1's job. ═══ */
+  const aiUp = () => document.body.classList.contains('aic-open');
+  const AI_VARS = ['--sm-ai-l', '--sm-ai-t', '--sm-ai-w', '--sm-ai-b'];
+  let aiSeen = null;   // the band's ResizeObserver while the chat is docked over it
+  function aiDock() {
+    const c = document.getElementById('ai-chat'), band = document.getElementById('inspector-panel');
+    if (!c) return;
+    const on = isSimple() && !phone.matches && aiUp() && !!band;
+    if (!on) {
+      AI_VARS.forEach(p => c.style.removeProperty(p));
+      if (aiSeen) { aiSeen.disconnect(); aiSeen = null; }
+      return;
+    }
+    const r = band.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0)) return;
+    const v = [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.max(0, Math.round(innerHeight - r.bottom))];
+    AI_VARS.forEach((p, i) => { if (c.style.getPropertyValue(p) !== v[i] + 'px') c.style.setProperty(p, v[i] + 'px'); });
+    if (!aiSeen && window.ResizeObserver) { aiSeen = new ResizeObserver(() => aiDock()); aiSeen.observe(band); }
+  }
   function panelUp(ids) {
+    if (aiUp()) return true;   // #1243 S14: the assistant is a panel, whatever is selected under it
     if (extrasUp()) return true;
     if (!panelFor) return false;
     if (panelFor === PROJECT ? ids.length > 0 : (ids.length !== 1 || ids[0] !== panelFor)) return false;   // #1243 S12: Look's is open for no item
@@ -2130,7 +2181,9 @@ window.FM = window.FM || {};
       else if (hadFocus) {
         const row = mode === 'project' ? tools : tray;
         const want = /^(rowBack|fxBack|itemBack|pback)$/.test(focusKey) ? backTo : focusKey;
-        const n = (want && row.querySelector('[data-tool="' + CSS.escape(want) + '"]')) || row.querySelector('button, input');
+        /* with no tool to go back to, the project row's Clips, as before #1243 S14 put Ask & edit first: a stray Enter there must not
+           open the assistant */
+        const n = (want && row.querySelector('[data-tool="' + CSS.escape(want) + '"]')) || (mode === 'project' && row.querySelector('[data-tool="clips"]')) || row.querySelector('button, input');
         if (n) n.focus({ preventScroll: true });
       }
       backTo = '';
@@ -2295,6 +2348,13 @@ window.FM = window.FM || {};
       if (!mount() || !isSimple()) return;
       const ids = FM.selectionIds ? FM.selectionIds() : [];
       if (modeOf(ids) === 'panel') {
+        /* #1243 S14: the assistant goes first (it lies over whatever else is open), and focus goes back to its tool */
+        if (aiUp()) {
+          if (FM.aiChat && FM.aiChat.hide) FM.aiChat.hide();
+          backTo = ''; lastSig = ''; this.sync();
+          const n = tools.querySelector('[data-tool="ai"]'); if (n) n.focus({ preventScroll: true });
+          return;
+        }
         if (extrasUp()) { backTo = 'extras'; this.closeExtras(); return; }
         /* #1243 S6: Export's panel was opened from the Export button, which is not on the bar: focus goes back there */
         if (panelKind === 'export') { backTo = ''; this.closePanel(); const x = exportBtn(); if (x) x.focus({ preventScroll: true }); return; }
@@ -2327,6 +2387,22 @@ window.FM = window.FM || {};
     /* the bar's mode and its sub-row, for the suite */
     mode: () => (bar && bar.dataset.mode) || '',
     subFor: () => subFor && { key: subFor.key, id: subFor.id, from: subFor.from, of: subFor.of || null },
+    /* #1243 S14: Ask & edit, the project row's first tool. Only while Simple is on screen (in Full this opens nothing: Full has its own
+       door in the Add menu). One menu at a time: a sub-row, Extras and Look's panel close first. The pressed tool lets the focus go, so the
+       assistant's own box may take it (js/ai-chat.js canTakeFocus: only when the focus is on nothing). True when the assistant is up. */
+    openAi() {
+      if (!isSimple() || !mount() || !FM.aiChat || !FM.aiChat.show) return false;
+      if (subFor) { subFor = null; segUndrag(); }
+      if (extrasUp()) this.closeExtras();
+      if (panelFor) dropPanel();
+      const a = document.activeElement;
+      if (a && a !== document.body && bar.contains(a) && a.blur) a.blur();
+      FM.aiChat.show();
+      aiDock();
+      lastSig = ''; this.sync();
+      return aiUp();
+    },
+    aiUp: () => aiUp(),
     /* Phase 3 · Clips › Extras: open (nothing selected; a selection is let go first), close, and whether it is up. Only while Simple
        is on screen: in Full openExtras opens nothing. A panel: the Clips row it was opened from stays under it. */
     openExtras() {

@@ -297,6 +297,9 @@ window.FM = window.FM || {};
       trLength: 'Length', trEvery: 'On every cut', trShorter: 'Shorter by 0.1 s', trLonger: 'Longer by 0.1 s',
       /* Phase 3 · Look (queue 980, DESIGN §8.5, §8.7): Look and its panel, Filters and Adjust. #1243 S12: on the project row, for the whole
          video (his words: "you shouldn't have the look menu on each layer… it goes over your entire project immediately") */
+      /* #1243 S14 (his words: "a button in that bottom row at the start that has like the AI option"): the assistant, under the name
+         #1243 F2 gave it everywhere ("think of a better name for it to describe what it actually does") */
+      ai: 'Ask & edit', aiTitle: 'Ask & edit: say what to change, in your own words',
       look: 'Look', lookTitle: 'Filters and Adjust over the whole video', lookFilters: 'Filters', lookAdjust: 'Adjust', lookNone: 'None',
       lookStrength: 'Strength', lookReset: 'Reset',
       adjBright: 'Brightness', adjContrast: 'Contrast', adjSat: 'Saturation', adjExposure: 'Exposure', adjWarmth: 'Warmth', adjVignette: 'Vignette',
