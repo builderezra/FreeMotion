@@ -451,7 +451,7 @@ window.FM = window.FM || {};
         const grip = el('button', 'cap-grip'); grip.type = 'button';
         grip.title = 'Drag to make this caption longer or shorter';
         grip.setAttribute('aria-label', 'Drag to change how long this caption lasts');
-        grip.textContent = '↔';
+        { const mark = FM.drawnIcon && FM.drawnIcon('move'); if (mark) grip.appendChild(mark); }   // #1255: the drawn two-way arrow (a typed one is a colour emoji on an iPhone); the grip keeps its title and its name
         (function () {
           let id = null, x0 = 0, end0 = 0;
           const SEC_PER_PX = 0.02;          // 50px of drag ≈ 1s: fine enough to land on a word, coarse enough to be quick

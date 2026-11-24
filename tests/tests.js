@@ -58143,17 +58143,15 @@
   });
 
   test('the Template icon does not depend on matching the background (queue 546)', { item: '546' }, async function () {
-    /* Ezra picked the "stamp" — a dashed master with a solid copy in front — from five drawn options,
-       after three earlier attempts at this icon he rejected.
-       ⚠️ WHAT THIS GUARDS IS THE MISTAKE I MADE BUILDING IT, not the shape. My first version hid the
-       master's covered corner by filling the copy with `var(--panel-2)`. It looked perfect on the page I
-       checked it on, because that page happened to have that background. On a tile with any other
-       background — an active tab, a hover, a future theme — the fill shows as a slightly-wrong box
-       inside the icon. And removing the fill instead puts the dashed lines straight through the solid
-       copy, which is the EXACT fault he reported on the Sample clip icon the same day.
-       An icon that is only correct against one background is a bug waiting for a theme, and nothing else
-       in the suite would notice. So: the master is an open path that traces only what the copy does not
-       cover, and no shape in this icon may carry an opaque fill. */
+    /* 24 Aug: he picked the "stamp" (a dashed master with a solid copy in front) from five drawn options. 24 Nov (#1255): shown every
+       Template redesign again he picked option 1, STACKED CARDS, for every Templates spot ("Yeah, I picked the recommended one. Just go
+       with the recommended one"), so the stamp is gone, and what this test said about its dashes with it.
+       ⚠️ WHAT THIS STILL GUARDS IS THE MISTAKE MADE BUILDING THE STAMP, which any two-card drawing can repeat: hiding the back card's
+       covered corner by FILLING the front card with the tile's colour. It looked perfect on the page it was checked on, because that
+       page happened to have that background; on an active tab, a hover or another theme the fill shows as a slightly-wrong box inside
+       the icon. So the card behind is an OPEN path that traces only what the card in front does not cover, and no shape in this icon
+       may carry an opaque fill. That the drawing IS his Stacked cards, the same everywhere, is the '1255 icons · one drawing per
+       thing' test's to say. */
     const host = document.createElement('div');
     host.style.cssText = 'position:fixed;left:-10000px;top:0;width:340px;height:620px';
     document.body.appendChild(host);
@@ -58165,13 +58163,11 @@
       const svg = tab.querySelector('svg');
       if (!svg) throw new Error('the Template tab has no icon at all');
       const shapes = [].slice.call(svg.querySelectorAll('path, rect, circle, polygon'));
-      if (shapes.length < 2) throw new Error('the Template icon is down to ' + shapes.length + ' shape(s) — the stamp needs a master and a copy');
-      /* THE CONTROL: the dashed master IS the idea he picked, so its absence must fail here rather than
-         quietly leaving a plain double-box that means nothing. */
-      const dashed = shapes.filter(el => (el.getAttribute('stroke-dasharray') || '').trim());
-      if (!dashed.length) throw new Error('nothing in the Template icon is dashed any more — the "master you copy from" reading is gone');
-      const solid = shapes.filter(el => !(el.getAttribute('stroke-dasharray') || '').trim());
-      if (!solid.length) throw new Error('the Template icon has no solid shape — there is a master but no copy');
+      if (shapes.length < 2) throw new Error('the Template icon is down to ' + shapes.length + ' shape(s): a card behind and a card in front are two');
+      /* THE CONTROL: it is a two-card drawing with an OPEN card behind that is being judged, or the fill rule below says nothing */
+      const open = shapes.filter(el => el.tagName.toLowerCase() === 'path' && !/z\s*$/i.test((el.getAttribute('d') || '').trim()));
+      if (!open.length) throw new Error('nothing in the Template icon is an open path: the card behind must trace only what the card in front does not cover');
+      if (shapes.some(el => (el.getAttribute('stroke-dasharray') || '').trim())) throw new Error('the Template icon still carries the old stamp’s dashes; his pick of 24 Nov is the Stacked cards');
       // …and the fragile bit: no opaque fill anywhere, so it cannot depend on the tile behind it.
       const filled = shapes.map(el => ({ el: el, f: (el.getAttribute('fill') || '').trim() }))
                            .filter(o => o.f && o.f !== 'none' && o.f !== 'transparent');
@@ -169915,9 +169911,9 @@
   });
 
   /* ---- Spin: Turns ---- */
-  test('966 opts Spin has Turns (Flat, Flip ↔, Flip ↕), Flat by default: a new one starts on Flat, an absent key fills to the same, the load sanitiser keeps Flip ↔, and on Flat it draws byte for byte what it draws without the key (CONTROL: it turns the layer)', { item: '966', budgetMs: 30000 }, function () {
+  test('966 opts Spin has Turns (Flat, Flip sideways, Flip over), Flat by default: a new one starts on Flat, an absent key fills to the same, the load sanitiser keeps Flip sideways, and on Flat it draws byte for byte what it draws without the key (CONTROL: it turns the layer)', { item: '966', budgetMs: 30000 }, function () {
     _opNeed('spin', ['axis']);
-    const bad = _opRows('spin', [{ key: 'axis', label: 'Turns', options: 'Flat/Flip ↔/Flip ↕', def: 0 }], { axis: 1 });
+    const bad = _opRows('spin', [{ key: 'axis', label: 'Turns', options: 'Flat/Flip sideways/Flip over', def: 0 }], { axis: 1 });   /* #1255: in words; a typed two-way arrow is a colour emoji on an iPhone */
     const W = 200, H = 200, A = () => E1.cv(W, H, g => { g.fillStyle = '#ff0000'; g.fillRect(60, 80, 40, 40); g.fillStyle = '#0000ff'; g.fillRect(100, 80, 40, 40); });
     const P = _opP('spin', { speed: 70 });
     [0.35, 1.2].forEach(tl => {
@@ -210315,6 +210311,253 @@
     }
     if (fails.length) throw new Error(fails.join(' · '));
     } finally { _isoK.put(); }
+  });
+
+  /* ═══ #1255, THE FIRST CUT OF THE APP'S OWN ICONS (his 23 Nov words: "no emojis on text or buttons anywhere in the app. Design our own
+     icons instead"; the drawings are from the set he passed on 24 Nov: "the pen could definitely be different. The rest are fine") ═════
+     A play triangle, a two-way arrow, a cog and a warning sign are ordinary characters on a PC and COLOUR EMOJI on an iPhone, so a typed
+     one is an emoji in practice, and the first sweep (two code ranges) never saw them. Three tests. (1) Nothing of the kind is typed in
+     the app's own code or its lessons: every script the page loads, its markup, the style sheets and every lesson, comments blanked,
+     escapes read too; the reader is proven on a planted line first. SEVEN LINES STILL TYPE THE COG and are on an owed list, counted per
+     file, that must shrink when they change: each was last written by a Simple release (the Simple editor's first-time note and the
+     lesson that quotes it; the four lines that send him to the cog, v18.18), so their turn is a Simple release. (2) The marks that were
+     typed are drawings where they show, and every mark asked for by name is in the table. (3) A line that names the cog draws it. */
+  test('1255 emoji · no character a phone draws as a colour emoji is typed in the app’s own code or its lessons: every script the page loads, its markup, the style sheets and every lesson are read with their comments blanked, escapes included, and a line still owed its drawing is counted on a list that must shrink with it (CONTROLS: the reader finds a planted play triangle in a string and as an escape and skips the two in comments; a star, a tick, a digit and the copyright sign are not emoji; the app was really read)', { item: '1255', budgetMs: 90000 }, async function () {
+    const CAP = /(?![#*0-9\u00A9\u00AE\u2122])\p{Emoji}/u;   /* the keycap bases are plain digits, and the copyright signs are text on every phone */
+    const read = async function (p, json) { const r = await fetch('/' + p + '?em1255=' + Date.now(), { cache: 'no-store' }); if (!r.ok) throw new Error('CONTROL: ' + p + ' could not be read (' + r.status + ')'); return json ? r.json() : r.text(); };
+    /* comments become spaces (line numbers kept); strings, markup and template text stay */
+    const blank = function (src, kind) {
+      if (kind === 'md') return src.replace(/<!--[\s\S]*?-->/g, function (m) { return m.replace(/[^\n]/g, ' '); });
+      const tok = /['"`]|\/\/|\/\*|<!--/g, out = [], n = src.length;
+      let i = 0;
+      for (;;) {
+        tok.lastIndex = i;
+        const m = tok.exec(src);
+        if (!m) { out.push(src.slice(i)); break; }
+        out.push(src.slice(i, m.index)); i = m.index;
+        const t = m[0];
+        if (t === '//') {
+          if (kind === 'css' || (i > 0 && src[i - 1] === ':')) { out.push(t); i += 2; continue; }
+          let j = src.indexOf('\n', i); if (j < 0) j = n;
+          out.push(' '.repeat(j - i)); i = j;
+        } else if (t === '/*' || t === '<!--') {
+          const end = t === '/*' ? '*/' : '-->';
+          let j = src.indexOf(end, i + t.length); j = j < 0 ? n : j + end.length;
+          out.push(src.slice(i, j).replace(/[^\n]/g, ' ')); i = j;
+        } else {
+          let j = i + 1;
+          while (j < n && src[j] !== t) { if (src[j] === '\\') j++; if (t !== '`' && src[j] === '\n') break; j++; }
+          out.push(src.slice(i, j + 1)); i = j + 1;
+        }
+      }
+      return out.join('');
+    };
+    const ESC = /\\u\{([0-9a-fA-F]{1,6})\}|\\u([0-9a-fA-F]{4})|&#x([0-9a-fA-F]{1,6});|&#([0-9]{1,7});/g, CSSESC = /\\([0-9a-fA-F]{4,6})/g;
+    const hitsIn = function (text, kind) {
+      const found = [];
+      text.split('\n').forEach(function (line, k) {
+        const seen = new Set();
+        if (CAP.test(line)) for (const ch of line) if (CAP.test(ch)) seen.add(ch);
+        const esc = function (re) {
+          re.lastIndex = 0;
+          let m;
+          while ((m = re.exec(line))) {
+            /* an end of a RANGE in a pattern of code points (the one that cuts a line of text into characters) names nothing that is drawn */
+            if (line[m.index - 1] === '-' || line[m.index + m[0].length] === '-') continue;
+            const hex = m[1] || m[2] || m[3], cp = hex ? parseInt(hex, 16) : parseInt(m[4], 10);
+            if (cp > 0 && cp <= 0x10FFFF) { const ch = String.fromCodePoint(cp); if (CAP.test(ch)) seen.add(ch); }
+          }
+        };
+        esc(ESC); if (kind === 'css') esc(CSSESC);
+        seen.forEach(function (ch) { found.push([k + 1, ch]); });
+      });
+      return found;
+    };
+    const PLANT = 'const a = \'▶ play\'; // ▶ in a comment\n/* ▶ */ const b = \'\\u25B6\';\nconst c = \'★ ✓ 7 # ©\';';
+    const ctl = hitsIn(blank(PLANT, 'js'), 'js').map(function (h) { return h[0] + ':' + h[1].codePointAt(0).toString(16); }).join(' ');
+    if (ctl !== '1:25b6 2:25b6') throw new Error('CONTROL: the reader should find the planted play triangle in a string (line 1) and as an escape (line 2), skip the two in comments, and pass a star, a tick, a digit and the copyright sign; it found “' + ctl + '”');
+
+    const html = await read('index.html'), texts = { 'index.html': html };
+    const scripts = Array.from(new Set(Array.from(html.matchAll(/<script src="(js\/[^"?]+)/g)).map(function (m) { return m[1]; })));
+    if (scripts.length < 40) throw new Error('CONTROL: found ' + scripts.length + ' scripts in index.html, so the app was not read');
+    for (const f of scripts.concat(['sw.js'])) texts[f] = await read(f);
+    /* scripts the app loads later by name (a worker, a lazy module) */
+    const later = new Set();
+    Object.keys(texts).forEach(function (f) { for (const m of texts[f].matchAll(/['"`](js\/[\w.-]+\.js)/g)) if (!texts[m[1]]) later.add(m[1]); });
+    for (const f of later) { try { texts[f] = await read(f); } catch (e) { /* a name in a message, not a file of the app */ } }
+    const sheets = Array.from(new Set(['styles.css', 'theme-glass.css'].concat(Array.from(html.matchAll(/<link[^>]+href="([^"?:]+\.css)/g)).map(function (m) { return m[1]; }))));
+    for (const f of sheets) texts[f] = await read(f);
+    const lessons = await read('tutorials/index.json', true);
+    if (!lessons || lessons.length < 20) throw new Error('CONTROL: only ' + (lessons && lessons.length) + ' lessons are listed, so the lessons were not read');
+    texts['tutorials/index.json'] = JSON.stringify(lessons);
+    for (const e of lessons) texts['tutorials/' + e.file] = await read('tutorials/' + e.file);
+    const total = Object.keys(texts).reduce(function (a, f) { return a + texts[f].length; }, 0);
+    if (total < 3e6) throw new Error('CONTROL: only ' + total + ' characters of the app were read');
+
+    /* STILL OWED their drawn cog (FM.IC.cog is ready for them), by how many lines of each file type it: the Simple editor's first-time note and the
+       lesson that quotes it, and the four lines that send him to the cog (storage full, twice; a big import; the device report). Each was last
+       written by a Simple release, so a Simple release changes it, and this list with it: one line more OR fewer than the count fails. */
+    const COG = '\u2699', OWED = { 'js/editor-mode.js': 1, 'js/spine-words.js': 1, 'tutorials/simple/01-switch-to-simple-and-back.md': 1, 'js/app.js': 1, 'js/storage.js': 2, 'js/perf-probe.js': 1 };
+    const bad = [], owedSeen = {};
+    Object.keys(texts).forEach(function (f) {
+      const kind = /\.css$/.test(f) ? 'css' : /\.(md|json)$/.test(f) ? 'md' : /\.html$/.test(f) ? 'html' : 'js';
+      hitsIn(blank(texts[f], kind), kind).forEach(function (h) {
+        if (h[1] === COG && OWED[f] && (owedSeen[f] || 0) < OWED[f]) { owedSeen[f] = (owedSeen[f] || 0) + 1; return; }
+        bad.push(f + ':' + h[0] + ' ' + h[1] + ' (U+' + h[1].codePointAt(0).toString(16).toUpperCase() + ')');
+      });
+    });
+    if (bad.length) throw new Error(bad.length + ' place(s) in the app’s own code or lessons still type a character a phone draws as a colour emoji (his words: “no emojis on text or buttons anywhere in the app. Design our own icons instead”): ' + bad.slice(0, 8).join(' · '));
+    const stale = Object.keys(OWED).filter(function (f) { return (owedSeen[f] || 0) !== OWED[f]; }).map(function (f) { return f + ' types the cog on ' + (owedSeen[f] || 0) + ' line(s), the owed list says ' + OWED[f]; });
+    if (stale.length) throw new Error('a line that was owed its drawn cog has changed and this test’s owed list has not: ' + stale.join(' · '));
+  });
+
+  test('1255 emoji · the marks that were typed characters are the app’s own drawings where they show: a card with no picture and an empty tab of Home wear a drawn mark and no character, every mark Home, the Tutorials tab, the caption list and the scene panel ask for by name is in the icon table, each caption grip is a drawn two-way arrow that keeps its name, Watch a demo run wears a drawn play mark beside its words, and the top bar’s play mark is a drawing (CONTROLS: each drawing has ink; a name that is not in the table draws nothing; the files that name the marks were read; the scene panel showed its no-key screen)', { item: '1255', budgetMs: 60000 }, async function () {
+    const fails = [], TYPED = /(?![#*0-9])\p{Emoji}|[\u25B7\u25C7\u25F1\u2756\u2726]/u;
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:0;top:0;width:340px;opacity:0;pointer-events:none;z-index:-1';
+    const inked = function (svg) {
+      const kids = svg ? svg.querySelectorAll('path,rect,circle') : [];
+      return [].some.call(kids, function (k) { const cs = getComputedStyle(k); return (cs.stroke !== 'none' && parseFloat(cs.strokeWidth) > 0) || (cs.fill !== 'none' && cs.fill !== 'rgba(0, 0, 0, 0)'); });
+    };
+    const drawn = function (box, what) {
+      if (!box) { fails.push(what + ' is not there'); return; }
+      const svg = box.querySelector('svg'), words = (box.textContent || '').trim().slice(0, 14);
+      if (!svg) fails.push(what + ' has no drawing (it reads “' + words + '”)');
+      else if (!inked(svg)) fails.push(what + ' has a drawing with no ink');
+      if (TYPED.test(box.textContent || '')) fails.push(what + ' still types a character (“' + words + '”)');
+    };
+    document.body.appendChild(host);
+    try {
+      if (!FM.ICON || !FM.drawnIcon || !FM.iconHTML) throw new Error('the app has no table of its own drawn icons (FM.ICON, FM.drawnIcon)');
+      if (FM.drawnIcon('no-such-mark-1255') !== null || FM.iconHTML('no-such-mark-1255') !== '') throw new Error('CONTROL: a name that is not in the icon table still draws something');
+      /* every mark asked for by name is in the table: a mistyped name would draw nothing, and nothing else would say so */
+      const src = async function (f) { const r = await fetch('/' + f + '?em1255b=' + Date.now(), { cache: 'no-store' }); const t = r.ok ? await r.text() : ''; if (t.length < 2000) throw new Error('CONTROL: ' + f + ' could not be read (' + t.length + ' characters)'); return t; };
+      const home = await src('js/home.js'), tut = await src('js/tutorials.js'), cap = await src('js/captions.js'), ai = await src('js/ai-panel.js');
+      const asked = [];
+      for (const m of home.matchAll(/emptyState\('([^']*)'/g)) asked.push(['a Home empty state', m[1]]);
+      for (const m of home.matchAll(/drawnMark\('[a-z]+', '[^']+', '([^']*)'\)/g)) asked.push(['a Home card with no picture', m[1]]);
+      for (const m of tut.matchAll(/\bempty\('([^']*)'/g)) asked.push(['a Tutorials empty state', m[1]]);
+      for (const m of (cap + ai).matchAll(/FM\.drawnIcon\('([^']*)'/g)) asked.push(['the caption list or the scene panel', m[1]]);
+      if (asked.length < 14) throw new Error('CONTROL: only ' + asked.length + ' marks asked for by name were read from the four files (want 14 or more), so the names were not checked');
+      asked.forEach(function (a) { if (!Object.prototype.hasOwnProperty.call(FM.ICON, a[1])) fails.push(a[0] + ' asks for “' + a[1] + '”, which is not one of the app’s drawings (' + Object.keys(FM.ICON).join(', ') + ')'); });
+      /* where they show */
+      const card = FM.home._draftCard({ id: 'em1255-no-such-project', name: 'Mark probe 1255', elementDraft: true, libNew: 'element', modified: Date.now() });
+      host.appendChild(card);
+      drawn(card.querySelector('.hm-thumb-empty'), 'a draft card with no picture');
+      if (!FM.home._emptyState) throw new Error('setup: Home has no seam to draw an empty state · ' + fails.join(' · '));
+      ['play', 'tutorial', 'template', 'element'].forEach(function (n) {
+        const es = FM.home._emptyState(n, 'Probe 1255', 'A line.');
+        host.appendChild(es);
+        drawn(es.querySelector('.hm-empty-mark'), 'the empty state’s ' + n + ' mark');
+      });
+      const mk = host.querySelector('.hm-empty-mark svg');
+      if (mk) { const r = mk.getBoundingClientRect(); if (r.width < 20 || r.width > 40 || Math.abs(r.width - r.height) > 0.5) fails.push('an empty state’s mark is ' + r.width.toFixed(1) + ' × ' + r.height.toFixed(1) + ' px, want about 30 px square'); }
+      const layer = { id: 'caption-mark-1255', type: 'text', start: 0, duration: 20, captions: [{ start: 0, end: 1, text: 'One' }, { start: 2, end: 3, text: 'Two' }] };
+      const list = document.createElement('div');
+      host.appendChild(list);
+      FM.captionsEditor.mount(list, layer);
+      const grip = list.querySelector('.cap-grip');
+      if (!grip) throw new Error('CONTROL: the caption list has no grip · ' + fails.join(' · '));
+      drawn(grip, 'the caption grip');
+      if (!(grip.getAttribute('aria-label') || '').trim() || !(grip.title || '').trim()) fails.push('the caption grip lost its name or its title');
+      if (list.querySelectorAll('.cap-grip svg').length !== 2) fails.push('not every caption row’s grip is drawn (' + list.querySelectorAll('.cap-grip svg').length + ' of 2)');
+      /* the scene panel's no-key screen, opened as '690 Aspect on auto …' opens it */
+      if (!FM.aiPanel || !FM.aiKey) throw new Error('setup: no scene panel to read · ' + fails.join(' · '));
+      const hadKey = FM.aiKey.has;
+      try {
+        FM.aiKey.has = function () { return false; };
+        FM.aiPanel.hide(); await sleep(60); FM.aiPanel.show(); await sleep(250);
+        const demo = [].slice.call(document.querySelectorAll('#ai-panel .ai-keyform .ai-link')).filter(function (b) { return /demo/i.test(b.textContent || ''); })[0];
+        if (!demo) throw new Error('CONTROL: the scene panel did not show Watch a demo run · ' + fails.join(' · '));
+        drawn(demo, 'Watch a demo run');
+        if ((demo.textContent || '').trim() !== 'Watch a demo run (no key, no spend)') fails.push('the demo link reads “' + (demo.textContent || '').trim() + '”');
+      } finally { FM.aiKey.has = hadKey; try { FM.aiPanel.hide(); } catch (e) {} await sleep(60); }
+      /* the one in the page's own markup (the Generate button that carried a sparkle went with AI Scene in v18.51, #1243 F2) */
+      const brand = document.querySelector('#topbar .brand');
+      drawn(brand && brand.querySelector('.brand-name'), 'the top bar’s name');
+      if (brand && !/FreeMotion/.test(brand.textContent || '')) fails.push('the top bar no longer says FreeMotion');
+    } finally { host.remove(); }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1255 emoji · a line that names the cog draws the app’s own cog and says Settings to a screen reader: in a toast and in the question box the cog is a drawing with the word Settings hidden beside it, the spoken copy of the toast says Settings, no stand-in character is left on screen, and a plain line is still one piece of plain text (CONTROLS: the toast and the question were shown; Stay closed the question)', { item: '1255', budgetMs: 45000 }, async function () {
+    const t = document.getElementById('toast'), sr = document.getElementById('toast-sr'), fails = [];
+    if (!t || !sr) throw new Error('CONTROL: no toast on the page');
+    if (!FM.IC || !FM.IC.cog || !FM.lineInto || !FM.lineWords) throw new Error('the app has no way to name the cog inside a line (FM.IC.cog, FM.lineInto, FM.lineWords)');
+    const PUA = /[\uE000-\uF8FF]/, ARROW = '\u2192';
+    const frames = function () { return new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); }); };
+    try {
+      FM.hideToast();
+      FM.toast('Change it in ' + FM.IC.cog + ' ' + ARROW + ' Canvas.', 0);
+      if (t.classList.contains('hidden')) throw new Error('CONTROL: the toast did not show');
+      const ic = t.querySelector('svg.fm-ic'), word = t.querySelector('.fm-sr-only');
+      if (!ic || !ic.querySelector('path')) fails.push('the toast shows no drawn cog');
+      if (PUA.test(t.textContent)) fails.push('the toast still holds the stand-in character');
+      if (t.textContent !== 'Change it in Settings ' + ARROW + ' Canvas.') fails.push('the toast reads “' + t.textContent + '”, want Change it in Settings ' + ARROW + ' Canvas. (the word Settings hidden beside the drawing)');
+      if (!word) fails.push('the cog has no name for a screen reader');
+      else { const r = word.getBoundingClientRect(); if (r.width > 2 || r.height > 2) fails.push('the word Settings beside the cog is on screen (' + Math.round(r.width) + ' × ' + Math.round(r.height) + ' px); it is for a screen reader only'); }
+      if (ic) { const r = ic.getBoundingClientRect(), fs = parseFloat(getComputedStyle(t).fontSize); if (r.width < fs * 0.9 || r.width > fs * 1.6 || Math.abs(r.width - r.height) > 0.5) fails.push('the cog in the line is ' + r.width.toFixed(1) + ' × ' + r.height.toFixed(1) + ' px beside ' + fs + ' px text'); }
+      await frames(); await sleep(80);
+      if (sr.textContent !== 'Change it in Settings ' + ARROW + ' Canvas.') fails.push('the spoken copy of the toast reads “' + sr.textContent + '”');
+      FM.hideToast();
+      FM.toast('Saved 1255', 0);
+      if (t.childNodes.length !== 1 || t.firstChild.nodeType !== 3 || t.textContent !== 'Saved 1255') throw new Error('CONTROL: a plain toast is no longer one piece of text (“' + t.textContent + '”, ' + t.childNodes.length + ' nodes) · ' + fails.join(' · '));
+      FM.hideToast();
+      /* the question box */
+      const answered = FM.ask({ title: 'Probe 1255', message: 'To keep it, use ' + FM.IC.cog + ' ' + ARROW + ' App settings.', ok: 'Leave anyway', cancel: 'Stay' });
+      await sleep(150);
+      const msg = document.getElementById('fm-ask-msg');
+      if (!msg || msg.classList.contains('hidden') || !msg.getBoundingClientRect().width) throw new Error('CONTROL: the question box did not show its message · ' + fails.join(' · '));
+      if (!msg.querySelector('svg.fm-ic path')) fails.push('the question box shows no drawn cog');
+      if (msg.textContent !== 'To keep it, use Settings ' + ARROW + ' App settings.' || PUA.test(msg.textContent)) fails.push('the question reads “' + msg.textContent + '”');
+      const stay = document.querySelector('#fm-ask .fm-ask-cancel');
+      if (stay) stay.click();
+      const got = await Promise.race([answered, sleep(1500).then(function () { return 'still open'; })]);
+      if (got === 'still open') throw new Error('CONTROL: Stay did not close the question · ' + fails.join(' · '));
+      if (FM.lineWords('a' + FM.IC.cog + 'b') !== 'aSettingsb' || FM.lineWords('plain') !== 'plain') fails.push('FM.lineWords does not put the word where the cog stands');
+    } finally {
+      try { FM.hideToast(); } catch (e) {}
+      const left = document.querySelector('#fm-ask:not(.hidden) .fm-ask-cancel');
+      if (left) left.click();
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* ═══ #1255, ONE DRAWING PER THING. His words on the Templates icon, 24 Nov: "I just want them to be consistent"; then, shown every
+     Template redesign again: "Yeah, I picked the recommended one. Just go with the recommended one." (option 1, Stacked cards). Today's app
+     drew Templates two ways (four squares on Home's tab, a dashed stamp on the Add menu's tab) and the first icon cut would have made it
+     three. Now the Stacked cards are in the app's one icon table and every Templates spot draws them; Home's Elements and Tutorials marks
+     are their own tabs' drawings, so an empty tab shows its tab's picture. CONTROL: the Projects tab's house is in no table entry, so the
+     comparison is seen to tell two drawings apart. */
+  test('1255 icons · one drawing per thing: the Templates icon is his Stacked cards on Home’s Templates tab, on the Add menu’s Template tab and on Home’s empty Templates tab alike, and Home’s Elements and Tutorials tabs carry the same drawings as their empty-tab marks, each read against the app’s one icon table (CONTROLS: the tabs and the Add menu’s tab were found; the Projects tab’s house matches no entry of the table)', { item: '1255', budgetMs: 30000 }, async function () {
+    if (!FM.ICON || !FM.drawnIcon) throw new Error('the app has no table of its own drawn icons (FM.ICON, FM.drawnIcon)');
+    const inner = function (svg) { return svg ? svg.innerHTML.replace(/\s+/g, ' ').trim() : ''; };
+    const want = function (name) { const s = FM.drawnIcon(name); if (!s) throw new Error('CONTROL: the icon table has no ' + name); return inner(s); };
+    const tabIcon = function (tab) { return document.querySelector('#home-screen .hm-tab[data-tab="' + tab + '"] svg.hm-tab-ico'); };
+    const fails = [];
+    [['templates', 'template'], ['elements', 'element'], ['tutorials', 'tutorial']].forEach(function (p) {
+      const svg = tabIcon(p[0]);
+      if (!svg) throw new Error('CONTROL: Home has no ' + p[0] + ' tab icon');
+      if (inner(svg) !== want(p[1])) fails.push('Home’s ' + p[0] + ' tab draws a different picture from the app’s ' + p[1] + ' mark (“' + inner(svg).slice(0, 44) + '…”)');
+    });
+    const house = tabIcon('projects');
+    if (!house) throw new Error('CONTROL: Home has no Projects tab icon');
+    if (Object.keys(FM.ICON).some(function (n) { return inner(house) === want(n); })) throw new Error('CONTROL: the Projects tab’s house reads as equal to an entry of the icon table, so this comparison cannot tell two drawings apart');
+    const tpl = (FM.addMenu && FM.addMenu._tabs ? FM.addMenu._tabs() : []).filter(function (t) { return t.key === 'template'; })[0];
+    if (!tpl || !tpl.icon) throw new Error('CONTROL: the Add menu has no Template tab icon to read · ' + fails.join(' · '));
+    const box = document.createElement('div');
+    box.innerHTML = tpl.icon;
+    const am = box.querySelector('svg');
+    if (!am) fails.push('the Add menu’s Template tab icon is not a drawing');
+    else {
+      if (inner(am) !== want('template')) fails.push('the Add menu’s Template tab draws a different picture from Home’s (“' + inner(am).slice(0, 44) + '…”)');
+      if (am.querySelector('[stroke-dasharray], linearGradient') || am.getAttribute('stroke') !== 'currentColor') fails.push('the Add menu’s Template tab is not one colour: it still carries the old stamp’s dashes or gradients');
+    }
+    if (!FM.home || !FM.home._emptyState) throw new Error('setup: Home has no seam to draw an empty state · ' + fails.join(' · '));
+    const es = FM.home._emptyState('template', 'Probe 1255');
+    if (inner(es.querySelector('.hm-empty-mark svg')) !== want('template')) fails.push('Home’s empty Templates tab does not draw the Stacked cards');
+    if (want('template').indexOf('M7.5 7.5V5a2 2 0 0 1 2-2H19') < 0) fails.push('the table’s template drawing is not the Stacked cards he picked (it starts “' + want('template').slice(0, 44) + '…”)');
+    if (fails.length) throw new Error(fails.join(' · '));
   });
 
   /* ═══ #1255, his note of 23 Nov 20:53, clauses 6 and 7, THE FULL EDITOR'S SECOND CUT: THE SWIPE PADS AND THE TOOL BARS ═════════════════

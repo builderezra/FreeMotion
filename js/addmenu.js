@@ -520,78 +520,18 @@ window.FM = window.FM || {};
     } },
     // "Elements" (was "Object / Element" — Ezra). Elements are now a first-class thing with their own
     // section on Home, so the tab is named after them rather than after the odds and ends beside them.
-    { key: 'template', label: 'Template', icon: icoMulti(
-      /* "give the two lines in the middle different colours from the lines on the outside." The frame
-         stays orange and the two dividers go amber — the lighter of the pair inside, so the icon reads
-         frame-first and the layout it is describing sits within it. */
-      /* Ezra: "make the lines in the middle complimentary colours but also very different from the
-         border colour, and also make the sideways line and the downwards line both unique colours, and
-         make sure the border lines go on top of the middle ones, not how it is currently."
-         So: the two dividers are SEPARATE paths with their own hues — cyan across, violet down. Both
-         sit opposite orange on the wheel, which is what makes them read as "not the border", and they
-         are a near-complementary pair to each other. ORDER IS THE FIX for the last part: SVG paints in
-         document order, so the dividers are declared FIRST and the frame LAST, and the frame's rounded
-         corners now cover the divider ends instead of the dividers crossing the frame. */
-      '<defs>'
-      + '<linearGradient id="fm-ic-tpH" x1="4" y1="10" x2="20" y2="10" gradientUnits="userSpaceOnUse">'
-      + '<stop offset="0" stop-color="#7FE9F5"/><stop offset="1" stop-color="#0EA5C6"/></linearGradient>'
-      + '<linearGradient id="fm-ic-tpV" x1="10" y1="10" x2="10" y2="20" gradientUnits="userSpaceOnUse">'
-      + '<stop offset="0" stop-color="#D8B4FE"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient>'
-      + '<linearGradient id="fm-ic-tpB" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse">'
-      + '<stop offset="0" stop-color="#FFC98A"/><stop offset="1" stop-color="#F0790E"/></linearGradient>'
-      + '</defs>'
-      /* NOT [THE REFERENCE APP]'S SHAPE ANY MORE (queue 375). Ezra: "Template icon needs to be a little bit
-         different as it's identical to [the reference app]'s just with colour, should be a simple task just
-         make it look good." He named the SHAPE, not the palette — the colours here are already his, from
-         queue 267 and the two amendments after it — so the frame and both accent hues stay and the
-         division inside changes. What made it identical was the arrangement: a full-width crossbar with
-         an upright dropping from its centre, dividing the frame into a band over two panes, which is
-         exactly AM's glyph. The crossbar stays (it is the thing that reads as "a layout"), the upright
-         goes, and a single rounded content block sits under it instead — a header over a piece of
-         content rather than a header over two panes. Three marks either way, so it carries the same
-         weight beside Shape / Media / Audio / Elements at 24px, and the block is centred so the lower
-         half is not lopsided the way one offset pane would be.
-         Paint order is unchanged and still load-bearing: the block and the crossbar are declared FIRST
-         and the frame LAST, so the frame's rounded corners cover their ends — "make sure the border
-         lines go on top of the middle ones, not how it is currently". */
-      /* ⚠️ REPLACED AGAIN — FOURTH TIME, AND THIS TIME HE CHOSE IT (queue 546/510/432).
-         *"Template button still looks shitty like in the projects and inspector menu"*, and before that
-         simply *"template icon looks shit"*. Queue 432 drew four alternatives and he picked none — the
-         reason is recorded there and is worth remembering: they were "put to him" IN WORDS while the
-         drawings sat in a local file he cannot open from a phone. Asking someone to choose between five
-         icons by description is asking them to imagine one.
-         So this time five were drawn, rendered at their REAL 24px beside the four neighbours, and sent to
-         him as a picture. He picked the STAMP.
-         WHY IT IS THE RIGHT SHAPE, in his terms rather than mine: a template is a thing you make copies
-         from, and that is what this draws — a dashed master behind, a solid copy in front. It is also the
-         only dashed texture in the TAB STRIP it lives in, so it is identifiable at 24px before the shape
-         resolves at all — which is precisely what the old header-over-a-block failed at: at real size the
-         bar and the block crowded into a smudge.
-         ⚠️ Dashes are NOT unique in this menu overall, and that is worth knowing before anyone adds a
-         third: `Controller` and `New group` are both dashed, and there the dashes mean "an EMPTY
-         container". Here they mean "the master you copy from". Two meanings for one texture is a real
-         cost, accepted because those two are CARDS inside the Elements tab while this is a TAB icon, so
-         they never appear beside each other, and because this is the only one pairing a dashed shape with
-         a SOLID one — which is the part that reads as "a copy of that" rather than "an empty box". If a
-         dashed card ever lands in the tab strip, this is the note that says why it would be a problem.
-         The PALETTE is untouched — orange frame, cyan and violet accents are his from queue 267 and the
-         two amendments after it, and he has never complained about the colours, only the arrangement.
-         Paint order is still load-bearing, and still his instruction: the copy is filled with the panel
-         colour so the master reads as BEHIND it rather than crossing through it. */
-      /* ⚠️ THE MASTER IS DRAWN AS AN OPEN PATH, NOT A RECT WITH A MATCHING FILL — and that is the whole
-         difference between this working everywhere and working only where I tested it.
-         The first version hid the master's covered corner by filling the copy with `var(--panel-2)`.
-         It looked perfect, because the page I checked it on happened to have that exact background.
-         On any tile whose background is NOT that colour — an active tab, a hover state, a future theme —
-         the fill shows up as a slightly-wrong box sitting inside the icon. And the alternative, leaving
-         it unfilled, puts the dashed lines straight through the solid copy: the EXACT fault he reported
-         on the Sample clip icon an hour earlier.
-         So the master traces only the part the copy does not cover — right stub, top, left, bottom stub,
-         one continuous path. Nothing is hidden, so nothing has to match, and the icon is correct against
-         any background. */
-      + '<path d="M16.4 8.6V5.8A1.8 1.8 0 0 0 14.6 4H5.8A1.8 1.8 0 0 0 4 5.8v8.8a1.8 1.8 0 0 0 1.8 1.8h2.8" stroke="url(#fm-ic-tpH)" stroke-dasharray="2.6 2.4"/>'
-      + '<rect x="8.6" y="8.6" width="11.4" height="11.4" rx="1.8" stroke="url(#fm-ic-tpB)"/>'
-      + '<path d="M11.4 14.3h5.8" stroke="url(#fm-ic-tpV)"/>'), options: function () {
+    { key: 'template', label: 'Template', icon: ico(
+      /* HIS PICK, AND THE SAME DRAWING EVERYWHERE (#1255, 24 Nov). On the Templates icon: "I just want them to be consistent"; then,
+         shown every Template redesign again: "Yeah, I picked the recommended one. Just go with the recommended one." That is option 1,
+         STACKED CARDS: a card behind, a card in front with a play triangle. It is FM.ICON.template (js/drawn-x.js), the table Home's
+         Templates tab, its empty tab and its cards with no picture draw from too, so the three cannot drift apart again (the
+         '1255 icons · one drawing per thing' test compares them). One colour, the tab's own, as every tab but Media is.
+         The card behind is an OPEN path that traces only what the card in front does not cover, so nothing is filled and the icon is
+         right on any background: the mistake queue 546's test still guards.
+         History, for whoever is asked to change it again: a frame with a crossbar (queues 267, 375); then the STAMP, a dashed master
+         with a solid copy in three gradients, which he chose from five drawn options on 24 Aug (queues 432, 510, 546) after three
+         he rejected, and which this replaces. Every time, he chose from a PICTURE at the real size, never from a description. */
+      (FM.ICON && FM.ICON.template) || ''), options: function () {
       var out = (FM.templates ? FM.templates.list() : []).map(function (t) {
         /* THE TEMPLATE'S OWN PICTURE, not the same little glyph nine times (queue 268, and the last
            open clause of #210 — "it shouldn't even colour it should show the hero image of whatever

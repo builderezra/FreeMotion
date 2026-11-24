@@ -544,6 +544,15 @@ body {
 .mt-trackpad-hint:empty { display: none; }
 .mt-trackpad.snap-x .pad-mark, .mt-trackpad.snap-y .pad-mark { display: none; }
 .mk-pad .pad-mark { width: 20px; height: 20px; color: var(--text-faint); }
+/* #1255: THE APP'S OWN DRAWN ICONS (FM.ICON, js/drawn-x.js), where a typed character stood that a phone draws as a colour emoji (the play
+   triangle, the two-way arrow, the cog). One em square in the text's own colour unless its place sizes it; never a pointer target, so
+   the button it sits on receives the press exactly as it did under a typed character. */
+.fm-ic { width: 1em; height: 1em; flex: none; vertical-align: -.125em; pointer-events: none; }
+.fm-ic-inline { width: 1.2em; height: 1.2em; vertical-align: -.25em; }   /* the cog named inside a sentence: a toast, a question (FM.lineInto) */
+.hm-thumb-empty .fm-ic, .hm-empty-mark .fm-ic { display: block; margin: 0 auto; }   /* Home: a card with no picture yet, an empty tab */
+.cap-grip .fm-ic { width: 16px; height: 16px; }   /* the caption grip's two-way arrow */
+.ai-link .fm-ic { width: 12px; height: 12px; margin-right: 5px; vertical-align: -1.5px; }   /* Watch a demo run */
+.brand .brand-mark { width: .9em; height: .9em; margin-right: .3em; vertical-align: -.08em; }   /* the top bar's play mark: nothing on a phone, where the name is hidden by font-size 0 */
 .mt-trackpad::before, .mt-trackpad::after { content: ''; position: absolute; width: 20px; height: 20px; border: 2px solid #475774; }
 .mt-trackpad::before { left: 12px; top: 12px; border-right: 0; border-bottom: 0; border-radius: 6px 0 0 0; }
 .mt-trackpad::after { right: 12px; bottom: 12px; border-left: 0; border-top: 0; border-radius: 0 0 6px 0; }

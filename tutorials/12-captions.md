@@ -7,7 +7,7 @@ You'll be able to add timed words to your video, one caption at a time.
 3. A caption layer spans the whole project. The text editor opens on the first caption with its words selected. Type yours.
 4. Under the bar at the top is a small strip: **‹**, a count like **Cue 1 / 2**, **›** and **+**. Tap **›** to reach the next caption and type it. Tap **+** to add a new caption after this one.
 5. Tap the tick at the far right of the bar.
-6. To retime, select the caption layer, open **Customise Text**, tap **Aa**, and scroll to the **Captions** list. Each caption shows its words, a **Start (s)** and **End (s)** number you can type, a **↔** grip, and **✕** to remove it. Drag **↔** to make the caption longer or shorter.
+6. To retime, select the caption layer, open **Customise Text**, tap **Aa**, and scroll to the **Captions** list. Each caption shows its words, a **Start (s)** and **End (s)** number you can type, a grip with a two-way arrow, and **✕** to remove it. Drag the grip to make the caption longer or shorter.
 7. **+ Add cue at playhead** adds a caption where the playhead is.
 8. **Caption background** is ticked to start with, which puts a box behind the words. Untick it if you want the words on their own.
 

@@ -1695,14 +1695,14 @@ window.FM = window.FM || {};
   FM.toast = function (msg, ms, onTap) {
     const t = document.getElementById('toast'); if (!t) return;
     const wasHidden = t.classList.contains('hidden'), now = performance.now();
-    t.textContent = msg;
-    const sr = document.getElementById('toast-sr'), text = String(msg);
+    if (FM.lineInto) FM.lineInto(t, msg); else t.textContent = msg;   // #1255: a line may name the cog by its drawing (FM.IC.cog, js/drawn-x.js); any other line is set as text, as before
+    const sr = document.getElementById('toast-sr'), text = FM.lineWords ? FM.lineWords(String(msg)) : String(msg);
     // Only a progress relabel (the same words, new numbers) waits a second; any other line is spoken at once.
     const relabel = text.replace(/\d+/g, '') === toastSpoken.replace(/\d+/g, '');
     if (sr && (wasHidden || !relabel || (text !== toastSpoken && now - toastSpokenAt >= 1000))) {
       toastSpoken = text; toastSpokenAt = now;
       cancelAnimationFrame(toastFrame); sr.textContent = '';
-      toastFrame = requestAnimationFrame(() => { sr.textContent = msg; });
+      toastFrame = requestAnimationFrame(() => { sr.textContent = FM.lineWords ? FM.lineWords(msg) : msg; });   // spoken in words: the cog is read as Settings
     }
     t.onclick = null; t.onkeydown = null; t.classList.remove('toast-tap'); t.removeAttribute('role'); t.removeAttribute('tabindex');
     if (typeof onTap === 'function') {

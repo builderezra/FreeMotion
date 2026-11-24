@@ -924,6 +924,13 @@ window.FM = window.FM || {};
     if (text != null) d.textContent = text;
     return d;
   }
+  /* #1255: a mark that was a typed character (a play triangle is a colour emoji on an iPhone) is one of the app's own drawings,
+     by name: play, tutorial, template, element (FM.ICON, js/drawn-x.js). An unknown name draws nothing. */
+  function drawnMark(tag, cls, name) {
+    const d = el(tag, cls), ic = FM.drawnIcon && FM.drawnIcon(name);
+    if (ic) d.appendChild(ic);
+    return d;
+  }
 
   /* ⋯ AS THREE REAL DOTS (queue 652). Ezra: "for mobile you can just make it so when you click on the
      three dots it does a little animation with the three dots around it".
@@ -1390,7 +1397,7 @@ window.FM = window.FM || {};
     card.setAttribute('aria-label', (p.name || 'Untitled') + ' — open project');
     const th = el('div', 'hm-thumb');
     // Thumbnails now live in IndexedDB (out of the autosave-hot index) — load async, placeholder first.
-    const ph = el('span', 'hm-thumb-empty', '▶'); th.appendChild(ph);
+    const ph = drawnMark('span', 'hm-thumb-empty', 'play'); th.appendChild(ph);
     FM.projects.getThumb(p.id).then(url => { if (url) { const img = document.createElement('img'); img.src = url; img.alt = ''; img.addEventListener('load', () => { if (ph.parentNode) ph.remove(); }); th.insertBefore(img, ph); } });
     th.appendChild(el('span', 'hm-dur', fmtDur(p.duration)));   // AM-style timecode badge on the thumb
     if (isOpen) th.appendChild(el('span', 'hm-open-badge', 'OPEN'));
@@ -1760,7 +1767,7 @@ window.FM = window.FM || {};
      to the sentence that actually says what an element IS. */
   function emptyState(mark, title, line) {
     const box = el('div', 'hm-empty');
-    box.appendChild(el('div', 'hm-empty-mark', mark));
+    box.appendChild(drawnMark('div', 'hm-empty-mark', mark));   // #1255: `mark` is the NAME of a drawing now
     box.appendChild(el('div', 'hm-empty-title', title));
     if (line) {   // queue 936: the Projects one is a title and nothing else — his words, "just say Lets make something"
       const p = document.createElement('p');
@@ -2049,7 +2056,7 @@ window.FM = window.FM || {};
     card.setAttribute('role', 'button'); card.tabIndex = 0;
     const th = el('div', 'hm-thumb');
     if (t.thumb) { const img = document.createElement('img'); img.src = t.thumb; img.alt = ''; th.appendChild(img); }
-    else th.appendChild(el('span', 'hm-thumb-empty', '❖'));
+    else th.appendChild(drawnMark('span', 'hm-thumb-empty', 'template'));
     th.appendChild(el('span', 'hm-dur', fmtDur(t.duration)));
     if (isPinned('templates', t.id)) { th.appendChild(pinBadge()); card.classList.add('is-pinned'); }
     card.appendChild(th);
@@ -2150,7 +2157,7 @@ window.FM = window.FM || {};
     card.setAttribute('role', 'button'); card.tabIndex = 0;
     const th = el('div', 'hm-thumb');
     if (e.thumb) { const img = document.createElement('img'); img.src = e.thumb; img.alt = ''; th.appendChild(img); }
-    else th.appendChild(el('span', 'hm-thumb-empty', '✦'));
+    else th.appendChild(drawnMark('span', 'hm-thumb-empty', 'element'));
     if (isPinned('elements', e.id)) { th.appendChild(pinBadge()); card.classList.add('is-pinned'); }
     card.appendChild(th);
     const body = el('div', 'hm-body');
@@ -2249,17 +2256,17 @@ window.FM = window.FM || {};
        its thumbnail into IndexedDB all along — measured before building this: both drafts on the test
        device had one stored (1631 and 2919 chars of data URL). The card simply never asked. So this is
        the same async lookup `projectCard` does, not a new thumbnail pipeline.
-       The ◇ stays as the placeholder underneath: it shows while the lookup is in flight, and remains
+       The drawn mark stays as the placeholder underneath: it shows while the lookup is in flight, and remains
        for a draft genuinely too new to have been snapshotted yet. */
     const dthumb = el('div', 'hm-thumb hm-thumb-draft');
-    const dph = el('span', 'hm-thumb-empty', '◇');
+    const dph = drawnMark('span', 'hm-thumb-empty', 'element');
     dthumb.appendChild(dph);
     if (FM.projects.getThumb) {
       FM.projects.getThumb(p.id).then(function (url) {
         if (!url) return;
         const img = document.createElement('img');
         img.src = url; img.alt = '';
-        /* Remove the ◇ only once the picture has actually painted — dropping it on assignment leaves
+        /* Remove the mark only once the picture has actually painted — dropping it on assignment leaves
            an empty box for as long as the decode takes, which reads as a broken card. Same order
            projectCard uses. */
         img.addEventListener('load', function () { if (dph.parentNode) dph.remove(); });
@@ -2496,7 +2503,7 @@ window.FM = window.FM || {};
     b.dataset.pid = p.id;
     b.setAttribute('aria-label', (p.name || 'Untitled') + (which === 'templates' ? ' — save it as a template' : ' — save it as an element'));
     const th = el('span', 'hm-ln-th');
-    const ph = el('span', 'hm-thumb-empty', '▶');   // the placeholder projectCard shows until the picture has painted
+    const ph = drawnMark('span', 'hm-thumb-empty', 'play');   // the placeholder projectCard shows until the picture has painted
     th.appendChild(ph);
     if (FM.projects.getThumb) FM.projects.getThumb(p.id).then(url => {
       if (!url) return;
@@ -2888,7 +2895,7 @@ window.FM = window.FM || {};
          best MATCH first, and a pinned project outranking a closer one reads as broken search. */
       const list = projectsInGridOrder();
       if (query) {
-        if (!list.length) { grid.appendChild(emptyState('▶', 'Let’s see what you’re made of')); arrowSoon(); renderSelBar(); return; }
+        if (!list.length) { grid.appendChild(emptyState('play', 'Let’s see what you’re made of')); arrowSoon(); renderSelBar(); return; }
         const range = parseDateQuery(query);
         const scored = list.map(p => { const r = scoreProject(p, query, range); return { p: p, score: r.score, exact: r.exact, why: r.why }; })
           .sort((a, b) => (b.score - a.score) || ((b.p.modified || 0) - (a.p.modified || 0)));
@@ -2902,7 +2909,7 @@ window.FM = window.FM || {};
         renderSelBar();
         return;
       }
-      if (!list.length) { grid.appendChild(emptyState('▶', 'Let’s see what you’re made of')); arrowSoon(); }
+      if (!list.length) { grid.appendChild(emptyState('play', 'Let’s see what you’re made of')); arrowSoon(); }
       // gentle housekeeping nudge on a big library (thumbs are out of the hot path now, so this is
       // informational — never a "you must delete to fix lag" like some other editors)
       /* ⚠️ IT STAYS WHILE SELECTING (queue 690, seventh hunt). It used to be left out with Select on, and Select
@@ -2923,7 +2930,7 @@ window.FM = window.FM || {};
       // #1082: the lessons (js/tutorials.js). The list arrives by fetch, so the cards go in when it lands — and not at
       // all if he has moved to another tab by then (still()). Search filters them by title and group.
       if (FM.tutorials) FM.tutorials.fill(grid, query, { emptyState: emptyState, still: () => tab === 'tutorials' });
-      else grid.appendChild(emptyState('▷', 'Tutorials are coming', 'Short walkthroughs of the editor will live here.'));
+      else grid.appendChild(emptyState('tutorial', 'Tutorials are coming', 'Short walkthroughs of the editor will live here.'));
     } else if (tab === 'templates') {
       let list = pinSort('templates', FM.templates.list(), t => t.id);
       if (query && list.length) {
@@ -2937,7 +2944,7 @@ window.FM = window.FM || {};
         renderSelBar();
         return;
       }
-      if (!list.length) grid.appendChild(emptyState('◱', 'No templates yet', 'Tap + to start one from scratch or from one of your projects.'));   // #948: the + card does both
+      if (!list.length) grid.appendChild(emptyState('template', 'No templates yet', 'Tap + to start one from scratch or from one of your projects.'));   // #948: the + card does both
       list.forEach(t => { shownIds.push(t.id); grid.appendChild(templateCard(t)); });
       /* ⚠️ queue 828: THE TICK LIST MUST ONLY EVER HOLD WHAT IS ON SCREEN. pruneSelection exists for this
          and its own comment describes the surprise — the PROJECTS tab called it on both its paths, and the
@@ -2975,7 +2982,7 @@ window.FM = window.FM || {};
          the truth about what it holds. Tapping one reopens it to keep building; it becomes a real
          element when you save it from the project's ⋯ menu, and the draft goes with it. */
       const drafts = (FM.projects.list() || []).filter(p => p.elementDraft);
-      if (!list.length && !drafts.length) grid.appendChild(emptyState('◇', 'No elements yet', 'An element is a saved piece — a watermark, a logo, a lower-third — that you drop into any edit.'));
+      if (!list.length && !drafts.length) grid.appendChild(emptyState('element', 'No elements yet', 'An element is a saved piece — a watermark, a logo, a lower-third — that you drop into any edit.'));
       drafts.forEach(p => { shownIds.push(p.id); grid.appendChild(elementDraftCard(p)); });
       list.forEach(e => { shownIds.push(e.id); grid.appendChild(elementCard(e)); });
       pruneSelection();   // queue 828: the elements list too — see the note on the templates branch
@@ -3811,6 +3818,7 @@ window.FM = window.FM || {};
 
   FM.home = {
     _draftCard: elementDraftCard,   // suite seam (queue 771): the card renderer itself, so a test can render one without owning a draft
+    _emptyState: emptyState,        // suite seam (#1255): an empty state's renderer, so a test can read its drawn mark without emptying a tab
     init() {
       root = document.getElementById('home-screen');
       if (!root) return;

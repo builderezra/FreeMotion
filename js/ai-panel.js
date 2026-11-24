@@ -77,7 +77,8 @@ window.FM = window.FM || {};
     saveBtn.addEventListener('click', openKeySettings);
     keyForm.appendChild(saveBtn);
     var orRow = el('div', 'ai-or');
-    var demoLink = el('button', 'ai-link', '▶ Watch a demo run (no key, no spend)');
+    var demoLink = el('button', 'ai-link');   // #1255: a drawn play mark and the words (a typed triangle is a colour emoji on an iPhone)
+    (function () { var m = FM.drawnIcon && FM.drawnIcon('play'); if (m) demoLink.appendChild(m); demoLink.appendChild(document.createTextNode('Watch a demo run (no key, no spend)')); })();
     demoLink.addEventListener('click', function () { runDemo(); });
     var tmplLink = el('button', 'ai-link', 'Build a scene without a key');
     tmplLink.addEventListener('click', function () { buildTemplate(); });
