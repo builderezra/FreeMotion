@@ -209065,6 +209065,71 @@
     });
   });
 
+  /* ═══ #1255, his note of 23 Nov 20:53, clauses 6 and 7, THE FULL EDITOR'S FIRST CUT ═══════════════════════════════════════════════
+     His words: "I'm also noticing a pop-up that says tap a clip to split or change its speed. There shouldn't be any explanations like
+     that. We have tutorials for a reason, and there could be a tutorial when the first time you load into the app is, but not, you
+     know, constantly there." The Simple editor's own lines went in Simple release 13; these are Full's that need no drawing: the crop
+     bar's "Drag to crop" and the pop-up each start raised, the touch-up bar's line, the sound effects sheet's line, and "tap to
+     type" on an empty caption cue. (Still to come, listed in the entry: the trackpads' words, the mask tool's lines, the paragraphs
+     under the camera's controls.) CONTROLS: each surface is really open and still works. */
+  test('1255 hints · in the Full editor the crop bar and the touch-up bar hold only their buttons with no gesture line beside them, starting a crop raises no pop-up, the sound effects sheet opens with no line of explanation, and an empty caption cue reads Empty in the list (CONTROL: Done on the crop bar still writes a crop, the touch-up bar still has Cancel and Done, and the sheet still lists sounds)', { item: '1255', budgetMs: 60000 }, async function () {
+    const _isoK = isoKeep(); try {
+    const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId, keepT = FM.time, fails = [];
+    const wasCrop = FM.cropTool.isActive(), wasTouch = FM.touchupTool.isOpen(), wasSfx = !!document.querySelector('.sfx-card');
+    const toastOwn = Object.getOwnPropertyDescriptor(FM, 'toast'), said = [];
+    const words = bar => [].filter.call(bar.childNodes, n => n.nodeType === 3 || (n.nodeType === 1 && n.tagName !== 'BUTTON')).map(n => (n.textContent || '').trim()).filter(Boolean);
+    try {
+      const L = FM.makeLayer('image', { x: 270, y: 480 });
+      FM.media.set(L.id, { el: offscreen(64, 48), width: 64, height: 48 });
+      S.layers = [L]; FM.selectLayer(L.id); FM.time = 0;
+      /* the crop bar, and what starting the tool says */
+      FM.toast = function (m) { said.push(String(m)); };
+      FM.cropTool.start(L.id);
+      if (toastOwn) Object.defineProperty(FM, 'toast', toastOwn); else delete FM.toast;
+      const cb = document.getElementById('crop-bar');
+      if (!FM.cropTool.isActive() || !cb) throw new Error('CONTROL: the crop tool did not open, so its bar says nothing');
+      const cbtn = [].map.call(cb.querySelectorAll('button'), b => b.textContent.trim()).join(', ');
+      if (cbtn !== 'Reset, Cancel, Done') throw new Error('CONTROL: the crop bar’s buttons are ' + cbtn + ', want Reset, Cancel, Done');
+      if (words(cb).length) fails.push('the crop bar says “' + words(cb).join(' ') + '” beside its buttons');
+      if (said.length) fails.push('starting the crop tool raised a pop-up: “' + said.join(' | ') + '”');
+      cb.querySelector('.cb-done').click();
+      if (!L.crop || typeof L.crop.w !== 'number') throw new Error('CONTROL: Done on the crop bar wrote no crop (' + JSON.stringify(L.crop) + '), so the bar that was read is not a working one · ' + fails.join(' · '));
+      /* the touch-up bar */
+      const fx = { type: 'touchup', params: { x: 35, y: 35, w: 30, h: 30 } };
+      L.effects = [fx];
+      FM.touchupTool.open(L.id, fx);
+      const tb = document.getElementById('touchup-bar');
+      if (!FM.touchupTool.isOpen() || !tb) throw new Error('CONTROL: the touch-up tool did not open, so its bar says nothing · ' + fails.join(' · '));
+      const tbtn = [].map.call(tb.querySelectorAll('button'), b => b.textContent.trim()).join(', ');
+      if (tbtn !== 'Cancel, Done') throw new Error('CONTROL: the touch-up bar’s buttons are ' + tbtn + ', want Cancel, Done · ' + fails.join(' · '));
+      if (words(tb).length) fails.push('the touch-up bar says “' + words(tb).join(' ') + '” beside its buttons');
+      FM.touchupTool.close();
+      /* the sound effects sheet */
+      if (!wasSfx) FM.sfx.open();
+      await sleep(260);
+      const card = document.querySelector('.sfx-card');
+      if (!card || !card.querySelectorAll('.sfx-name').length) throw new Error('CONTROL: the sound effects sheet did not open with its sounds listed · ' + fails.join(' · '));
+      const hint = card.querySelector('.sfx-hint'), txt = card.textContent || '';
+      if (hint || /Tap a name to hear it/i.test(txt) || /cost nothing to download/i.test(txt)) fails.push('the sound effects sheet still opens with a line of explanation (“' + ((hint && hint.textContent) || 'Tap a name to hear it…') + '”)');
+      if (!wasSfx) { FM.sfx.close(); await sleep(120); }
+      /* an empty caption cue: the words both lists draw, read from the two files' own source (the typing sheet needs a real caption track) */
+      for (const f of ['js/captions.js', 'js/text-edit.js']) {
+        const src = await (await fetch('/' + f + '?hints1255=' + Date.now())).text();
+        if (src.length < 2000) throw new Error('CONTROL: ' + f + ' could not be read (' + src.length + ' characters)');
+        if (/tap to type/i.test(src.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ''))) fails.push(f + ' still writes “tap to type” on an empty caption cue');
+        if (f === 'js/captions.js' && !/\|\| 'Empty'/.test(src)) fails.push(f + ' no longer names an empty cue Empty');
+      }
+    } finally {
+      if (toastOwn) Object.defineProperty(FM, 'toast', toastOwn); else delete FM.toast;
+      try { if (FM.cropTool.isActive() && !wasCrop) FM.cropTool.stop(); } catch (e) {}
+      try { if (FM.touchupTool.isOpen() && !wasTouch) FM.touchupTool.close(); } catch (e) {}
+      try { if (!wasSfx && document.querySelector('.sfx-card')) FM.sfx.close(); } catch (e) {}
+      S.layers = keep; S.selectedId = keepSel; FM.time = keepT;
+    }
+    if (fails.length) throw new Error(fails.join(' · ') + ' — his words: “There shouldn’t be any explanations like that… not, you know, constantly there”');
+    } finally { _isoK.put(); }
+  });
+
   /* #1243 G9 — his words: "you have the friends button with like a plus. In the top left in there, get rid of that. We do not
      need that. All right, and make sure it's gone in everything, like not a single trace of it found." */
   test('1243 G9 · no friends person+ anywhere — at 380 and 1280, in Full and in Simple, the feature off and on, and in a live session with nobody in, there is no #btn-share, no person+ look and no person+ drawing in the page (CONTROLS: with a friend in the faces chip shows, and the people door still opens Friends)', { item: '1243', budgetMs: 120000 }, async function () {

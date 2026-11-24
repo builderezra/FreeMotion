@@ -2493,7 +2493,7 @@ window.FM = window.FM || {};
     const head = el('div', 'sfx-head');
     head.appendChild(el('div', 'sfx-title', 'Sound effects'));
     card.appendChild(head);
-    card.appendChild(el('div', 'sfx-hint', 'Tap a name to hear it. These are generated in the app, so they cost nothing to download.'));
+    /* (the line "Tap a name to hear it. These are generated in the app…" stood here on every opening: gone, #1255, his 23 Nov words) */
     /* #482 9.1: the list has outgrown one scroll, so it can be searched, and the chips jump to a section. Neither takes focus on
        open: on a phone that would bring the keyboard up over the list. */
     const search = el('input', 'sfx-q');

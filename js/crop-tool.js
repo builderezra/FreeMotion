@@ -223,14 +223,15 @@ window.FM = window.FM || {};
       window.addEventListener('pointercancel', onUp, true);   // OS-cancelled crop-box drag ends the drag cleanly
       window.addEventListener('resize', onResize);
       bar = document.createElement('div'); bar.id = 'crop-bar';
-      bar.innerHTML = '<span class="cb-hint">Drag to crop</span><button class="cb-reset" type="button">Reset</button><button class="cb-cancel" type="button">Cancel</button><button class="cb-done" type="button">Done</button>';
+      /* its three buttons and nothing else (his words, 23 Nov: "There shouldn't be any explanations like that. We have tutorials for a
+         reason"): the bar said "Drag to crop" all the while the tool was open, and every start raised "Drag a crop box on the video" */
+      bar.innerHTML = '<button class="cb-reset" type="button">Reset</button><button class="cb-cancel" type="button">Cancel</button><button class="cb-done" type="button">Done</button>';
       document.body.appendChild(bar);
       bar.querySelector('.cb-reset').addEventListener('click', () => { rect = { x: 0, y: 0, w: MW, h: MH }; redraw(); });
       bar.querySelector('.cb-cancel').addEventListener('click', cancel);
       bar.querySelector('.cb-done').addEventListener('click', commit);
       document.body.classList.add('cropping');
       draw();
-      if (FM.toast) FM.toast('Drag a crop box on the video', 2400);
     },
     stop() { if (active) cancel(); },
     redraw() { if (active) redraw(); },

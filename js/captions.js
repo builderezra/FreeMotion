@@ -407,7 +407,7 @@ window.FM = window.FM || {};
         // not a second bespoke one that quietly behaves differently.
         const t = el('button', 'cap-text' + ((c.text || '').trim() ? '' : ' cap-empty'));
         t.type = 'button';
-        t.textContent = (c.text || '').trim() || 'Empty — tap to type';   // textContent: cue text is user data, never innerHTML
+        t.textContent = (c.text || '').trim() || 'Empty';   // textContent: cue text is user data, never innerHTML
         t.title = 'Edit this cue’s text';
         t.addEventListener('click', () => {
           if (FM.scrubTime) FM.scrubTime((layer.start || 0) + c.start + Math.min(0.05, (c.end - c.start) / 2));

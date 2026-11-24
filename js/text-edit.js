@@ -170,7 +170,7 @@ window.FM = window.FM || {};
       if (drawn.cues[i] !== cues[i]) return true;   // the same words in a replaced caption are still the wrong row
       const t = rows[i].querySelectorAll('.cap-time'), tx = rows[i].querySelector('.cap-text');
       if (t.length < 2 || +t[0].value !== +cues[i].start || +t[1].value !== +cues[i].end) return true;
-      if (!tx || tx.textContent !== ((cues[i].text || '').trim() || 'Empty — tap to type')) return true;
+      if (!tx || tx.textContent !== ((cues[i].text || '').trim() || 'Empty')) return true;
     }
     return false;
   }
@@ -192,7 +192,7 @@ window.FM = window.FM || {};
     const t = row && row.querySelector('.cap-text');
     if (!t) return;
     const s = (c.text || '').trim();
-    t.textContent = s || 'Empty — tap to type';   // textContent: caption text is his data, never innerHTML
+    t.textContent = s || 'Empty';   // textContent: caption text is his data, never innerHTML
     t.classList.toggle('cap-empty', !s);
   }
   function updateCueNav() {

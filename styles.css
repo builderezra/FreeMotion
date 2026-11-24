@@ -1303,8 +1303,7 @@ body.fm-moving .am-glint i, body.fm-playing .am-glint i, body.fm-moving .addmenu
 .eyedrop-btn { flex: none; width: 34px; height: 34px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
 .eyedrop-btn svg { width: 18px; height: 18px; }
 .eyedrop-btn:hover { color: var(--accent); border-color: rgba(41,217,187,.5); }
-#crop-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px 8px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.5); max-width: 94vw; }
-#crop-bar .cb-hint { font-size: 12px; color: var(--text-faint); margin-right: 4px; }
+#crop-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px; box-shadow: 0 6px 24px rgba(0,0,0,.5); max-width: 94vw; }   /* even padding: the bar holds its buttons only (the "Drag to crop" line went, #1255) */
 #crop-bar button { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 999px; padding: 6px 14px; font-size: 12.5px; cursor: pointer; }
 #crop-bar .cb-done { background: var(--accent); border-color: var(--accent); color: #06231d; font-weight: 700; }
 #crop-bar .cb-cancel { color: var(--text-dim); }
