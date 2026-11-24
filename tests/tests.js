@@ -209133,7 +209133,7 @@
   /* ═══ #1255, his note of 23 Nov 20:53, clauses 1 and 2: NO EMOJI AS AN ICON ════════════════════════════════════════════════════════
      His words: "The Detect speech button has an emoji on it … no emojis on text or buttons anywhere in the app. Design our own icons
      instead." A sweep found five places with a real emoji on screen; each now wears the drawing from the design board (Detect speech:
-     DS2, "Sound to lines", the recommended one of four, which he can correct) or plain words. The typed symbols that are not emoji
+     DS3, "Speech bubble", his pick of the four on 24 Nov) or plain words. The typed symbols that are not emoji
      (★ ✓ ✕ ◆ …) change with the redesign's icon set, not here. CONTROLS: the button really starts a detection; the badges are real. */
   test('1255 emoji · the Detect speech button wears a drawing and no emoji, keeps its drawing while its words say Listening, and reads Detect speech again afterwards; a clip with a speed ramp wears a drawn mark and the word ramp on its badge while a 2× clip still reads 2×; and the backup message, the device report and a broken preset row carry no emoji sign (CONTROL: the press started one detection, and both badges are on their clips)', { item: '1255', budgetMs: 45000 }, async function () {
     const _isoK = isoKeep(); try {
@@ -209156,6 +209156,7 @@
       const pic = () => btn.querySelector('svg path'), words = () => (btn.textContent || '').trim();
       if (EMOJI.test(btn.textContent || '')) fails.push('the Detect speech button still carries an emoji (“' + words() + '”) — his words: “Replace it with an icon we design, not an emoji”');
       if (!pic()) fails.push('the Detect speech button has no drawing of its own');
+      else if ((pic().getAttribute('d') || '').indexOf('19.8V16') < 0) fails.push('the Detect speech button’s drawing is not the speech bubble he picked (DS3): its first path is “' + (pic().getAttribute('d') || '').slice(0, 40) + '…”');
       if (words() !== 'Detect speech') fails.push('the button reads “' + words() + '”, want Detect speech');
       btn.click(); await sleep(60);
       if (entered !== 1 || !go) throw new Error('CONTROL: the press did not start one detection (' + entered + ' calls), so the button that was read is not the working one · ' + fails.join(' · '));

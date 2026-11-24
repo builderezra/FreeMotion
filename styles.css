@@ -3454,7 +3454,7 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
 .cap-src, .cap-scope { flex: 1 1 auto; min-width: 0; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 6px 8px; font-size: 12px; }
 .cap-src.hidden { display: none; }
 .cap-detect-btn { flex: 1 1 auto; justify-content: center; }
-/* #1255: its drawing (DS2, sound bars turning into lines), where the microphone emoji was */
+/* #1255: its drawing (DS3, a speech bubble holding a short waveform: his pick), where the microphone emoji was */
 .cap-detect-btn .cap-detect-ic { width: 18px; height: 18px; flex: none; margin-right: 7px; vertical-align: -4px; }
 .cap-detect-btn[disabled] { opacity: .5; cursor: default; }
 @media (max-width: 420px) { .cap-detect { flex-direction: column; align-items: stretch; } }

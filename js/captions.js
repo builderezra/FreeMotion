@@ -553,11 +553,11 @@ window.FM = window.FM || {};
       scope.addEventListener('change', syncScope);
       syncScope();
       /* #1255 (his words, 23 Nov: "The Detect speech button has an emoji on it… no emojis on text or buttons anywhere in the app. Design our
-         own icons instead"): the microphone emoji is now the drawn DS2, "Sound to lines" (the recommended one of the four drawn; he
-         can correct it): sound bars turning into lines of writing. A fixed string. The button's words live in a span of their own, so
+         own icons instead"): the microphone emoji is now the drawn DS3, "Speech bubble": a speech bubble holding a short waveform.
+         HIS PICK of the four drawn (24 Nov: "DS3."), over the recommended DS2. A fixed string. The button's words live in a span of their own, so
          "Decoding…" and "Listening… 40%" change the words and leave the drawing. */
       const btn = el('button', 'btn cap-detect-btn');
-      btn.innerHTML = '<svg class="cap-detect-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 10.5v3M6.5 7v10M9.5 9.2v5.6"/><path d="M13.5 8.5h7M13.5 12h7M13.5 15.5h4.5"/></svg>';
+      btn.innerHTML = '<svg class="cap-detect-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 4h11A2.5 2.5 0 0 1 20 6.5v7a2.5 2.5 0 0 1-2.5 2.5h-6L7 19.8V16h-.5A2.5 2.5 0 0 1 4 13.5v-7A2.5 2.5 0 0 1 6.5 4z"/><path d="M8.5 9v2M11 7.5v5M13.5 8.5v3M16 9.3v1.4"/></svg>';
       const lab = el('span', 'cap-detect-l', 'Detect speech'); btn.appendChild(lab);
       btn.title = 'Find where someone is talking and lay down empty cues at those times — all on this device';
       if (!sources.length) { btn.disabled = true; btn.title = 'Import a video or audio clip first — detection reads that clip’s audio'; }
