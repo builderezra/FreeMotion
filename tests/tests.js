@@ -208438,7 +208438,7 @@
      enough. Like, it should stay simple like that, but it should still have more options." Smoothness offers every rate Full's Export
      offers (its own list, #exp-fps), in the same row of buttons, the project's own marked, and the rate picked is the one the exporter is
      handed. FM.exporter.run is stubbed to record what it is given (r12Mem puts his last pick aside and back). */
-  test('1261 · at 380 Simple’s Smoothness is 30 · 60 · 120 and Custom, each pressable and a finger wide: a 30 fps project opens on 30, marked as its own, with the fourth button reading Custom; Custom asks for a number on the phone’s number pad, takes 48, shows it and Save video hands 48 to the export; 0 and 500 are refused with a line and change nothing; a 24 fps project opens with 24 on the fourth button, picked and marked as its own, and one press on 60 and one on the 24 button go there and back with no question (CONTROL: each of the three rates picked reaches the export call)', { item: '980', budgetMs: 150000 }, async function () {
+  test('1261 · at 380 Simple’s Smoothness is 30 · 60 · 120 and Custom, each pressable and a finger wide: a 30 fps project opens on 30, marked as its own, with the fourth button reading Custom; Custom asks for a number on the phone’s number pad, takes 48, shows it and Save video hands 48 to the export; 0 and 500 are refused with a line and change nothing; a 24 fps project opens with 24 on the fourth button, picked and marked as its own, one press on 60 and one on the 24 button go there and back with no question, and its own 24 is not kept as his pick for the next project (CONTROL: each of the three rates picked reaches the export call)', { item: '980', budgetMs: 180000 }, async function () {
     smNeedP2();
     const ex = FM.exporter, run0 = ex.run, put = r12Mem(), fails = [];
     let got = null;
@@ -208525,6 +208525,27 @@
           await askNo();
           FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
         }, { W: 1920, H: 1080, fps: 24 });
+        /* a rate that was the PROJECT's, not his press, is not kept as his last pick: a 24 fps project saved at its own 24, then a
+           30 fps project, which must open on 30 with the fourth button reading Custom */
+        await smP2((W, H) => smClips3(W, H), async function (v) {
+          try { localStorage.removeItem('fm.sm.export'); } catch (e) {}
+          r12Btn().click(); await r4Settle(300);
+          if (!r12Box() || r12On('fps') !== '24 fps') throw new Error('setup: the 24 fps project’s Export did not open on its own 24 (“' + r12On('fps') + '”)');
+          got = null;
+          r12Box().querySelector('.sm-exp-go').click();
+          for (let k = 0; k < 60 && !got; k++) await v.sleep(20);
+          if (!got || got.fps !== 24) throw new Error('CONTROL: Save video on the 24 fps project ' + (got ? 'exported at ' + got.fps + ' fps' : 'started no export') + ', want its own 24');
+          await r4Settle(150);
+          let mem = null; try { mem = JSON.parse(localStorage.getItem('fm.sm.export') || 'null'); } catch (e) {}
+          if (mem && mem.fps) fails.push('a Save at the project’s own 24 was kept as his pick (' + JSON.stringify(mem) + '): the next project would open on 24');
+          FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
+        }, { W: 1920, H: 1080, fps: 24 });
+        await smP2((W, H) => smClips3(W, H), async function (v) {
+          r12Btn().click(); await r4Settle(300);
+          if (!r12Box()) throw new Error('setup: Export opened no panel on the 30 fps project that followed');
+          if (r12On('fps') !== '30 fps' || !custom() || custom().textContent !== 'Custom') fails.push('after a 24 fps project saved at its own rate, a 30 fps project opens with “' + r12On('fps') + '” picked and the fourth button reading “' + (custom() ? custom().textContent : 'nothing') + '”, want 30 fps and Custom');
+          FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
+        }, { W: 1920, H: 1080 });
       });
     } finally { ex.run = run0; put(); try { if (FM.ask.isOpen()) document.querySelector('#fm-ask .fm-ask-cancel').click(); } catch (e) {} }
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
