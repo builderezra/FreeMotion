@@ -508,7 +508,9 @@ window.FM = window.FM || {};
     inputEl = document.createElement('textarea');
     inputEl.className = 'aic-input';
     inputEl.rows = 1;
-    inputEl.placeholder = 'Ask for a change, or a whole new video…';   // #1243 F2: it does both now
+    /* #1243 F2: it does both now. Short enough for ONE line in the PC column and on a 380 px phone (24 Nov: the longer hint wrapped
+       in the 376 px column and its second line was cut by the one-row box) */
+    inputEl.placeholder = 'Ask for a change or a new video…';
     inputEl.setAttribute('aria-label', 'Tell Ask & edit what to change or make');
     inputEl.addEventListener('input', autosize);
     inputEl.addEventListener('focus', function () { if (isOpen()) place(); });   // F3 review: a pan while in the box is typing (place)
@@ -544,9 +546,11 @@ window.FM = window.FM || {};
   }
 
   function greet() {
-    note('Tell me what to change and I will do it — "make the title bigger", "give it a soft glow", ' +
-         '"start it half a second later" — or ask for a whole new video: "make a 6 second product reel". ' +
-         'Tap a layer first and "this" means that one.');   // #1243 F2: it builds scenes too
+    /* #1243 F2: it builds scenes too. Three plain sentences and no long dash (his words of 24 Nov on a line with one: "it just
+       looks written by AI") */
+    note('Tell me what to change and I will do it: "make the title bigger", "give it a soft glow", ' +
+         '"start it half a second later". Or ask for a whole new video: "make a 6 second product reel". ' +
+         'Tap a layer first and "this" means that one.');
   }
 
   /* THE CHAT BOX TAKES THE FOCUS ONLY WHEN NOTHING ELSE HAS IT (queue 930 review, round 2). "Only when open" was not enough:

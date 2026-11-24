@@ -211358,6 +211358,34 @@
     if (fails.length) throw new Error(fails.join(' · '));
   });
 
+  /* #1255, HIS WORDS OF 24 NOV 12:29 ON A LINE WITH A LONG DASH: "it just looks written by AI". The Full editor's assistant greeted with
+     two of them, and on a PC its box's hint wrapped and lost its second line (seen in the pictures of 24 Nov). CONTROL: the greeting
+     still names an edit and a whole new video, so the test reads the real greeting and not an empty panel. */
+  test('1255 words · the assistant’s greeting and the hint in its box hold no long dash, and the hint fits the box on one line in the PC column and on a 380 px phone (CONTROL: the greeting still offers an edit and a whole new video)', { item: '1255', budgetMs: 60000 }, async function () {
+    if (!FM.aiChat || !FM.aiChat.show || !FM.aiChat.hide || !FM.aiChat.reset) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
+    const fails = [], DASH = /[‒-―]/;
+    const read = async where => {
+      FM.aiChat.reset(); FM.aiChat.show(); await new Promise(r => setTimeout(r, 400));
+      try {
+        const c = document.getElementById('ai-chat'), inp = c && c.querySelector('.aic-input'), said = c ? Array.from(c.querySelectorAll('.aic-list > *')).map(n => n.textContent).join(' ') : '';
+        if (!inp || !said) throw new Error('setup ' + where + ': the assistant did not open with its greeting and its box');
+        if (!/make the title bigger/.test(said) || !/whole new video/.test(said)) throw new Error('CONTROL ' + where + ': the greeting no longer offers an edit and a whole new video (“' + said.slice(0, 80) + '…”)');
+        if (DASH.test(said)) fails.push(where + ': the greeting holds a long dash (“' + said.slice(Math.max(0, said.search(DASH) - 24), said.search(DASH) + 24) + '”)');
+        const hint = inp.placeholder || '';
+        if (!hint) fails.push(where + ': the box has no hint');
+        if (DASH.test(hint)) fails.push(where + ': the hint holds a long dash (“' + hint + '”)');
+        const cs = getComputedStyle(inp), cv = document.createElement('canvas').getContext('2d');
+        cv.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+        const words = cv.measureText(hint).width, room = inp.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        if (!(room > 120)) throw new Error('setup ' + where + ': the box is ' + Math.round(room) + ' px wide inside, so nothing here measures a real box');
+        if (words > room - 2) fails.push(where + ': the hint is ' + Math.round(words) + ' px of words in a box with ' + Math.round(room) + ' px of room: it wraps, and the one-row box cuts its second line');
+      } finally { FM.aiChat.hide(); await new Promise(r => setTimeout(r, 300)); }
+    };
+    await atWideWidth(async function () { await read('PC'); }, 1280);
+    await atPhoneWidth(async function () { await read('380'); }, 380);
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
   /* #1243 F7 — his words: "the outlines and shadows menu… big buttons… opens up below… scroll deep… when you actually press on one
      it opens up that menu and then has a back button… Or… put all of the logos on like the right side layered up… press on one it
      switches to that menu… top… say what menu you're in… thumb can easily reach… like… the position and scale menu."
