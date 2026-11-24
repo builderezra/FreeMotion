@@ -12849,7 +12849,7 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
 .sm-libtile-img { display: block; width: 64px; height: 40px; margin: 0 auto 3px; border-radius: 5px; object-fit: cover; background: #22262e; pointer-events: none; }
 .sm-libtile .sm-tool-l { display: block; max-width: 74px; margin: 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #sm-tools { display: flex; align-items: stretch; }
-/* #1243 S15 (his words: "don't just keep condensing it, like make it like CapCut where you can scroll it"): the project tools spread
+/* #1243 S15 (his words: "don't just keep condensing it, like make it like [another editor] where you can scroll it"): the project tools spread
    when they all fit and never shrink below 64 px; past that the row scrolls in its strip, the cut-off last tool and the end fade the
    only "more" cue (6 × 64 = 384 at 380, so Effects is just cut; the PC band's 371 px overflows by about 13 and 420 spreads them) */
 #sm-tools .sm-tool { flex: 1 0 64px; min-width: 64px; box-sizing: border-box; }
@@ -12880,7 +12880,7 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
 @media (max-width: 700px) { body.ed-simple #ai-chat.open { box-shadow: none; } }
 /* ═══ #1243 S3 · S9 · S15 · rule 3 (release 4): ONE BAR, FOUR MODES, ONE STRIP, ONE SHEET LINE ═════════════════════════════════════
    His words (8 Nov): "when you actually tap on a layer, that first row goes away", "I don't want two menus at once", "make it like
-   CapCut where you can scroll it". #sm-bar is ONE 56 px row (and its 1 px edge and the safe area) whose contents swap by
+   [another editor] where you can scroll it". #sm-bar is ONE 56 px row (and its 1 px edge and the safe area) whose contents swap by
    [data-mode] (js/simple-tools.js sync): the project tools only in project mode, the tray (the selection's tools, or a sub-row) only in
    item and sub mode, and nothing in panel mode, where the bar is 0 px tall and the panel has the room. The row's height never changes,
    so nothing above it moves. Simple's spoken lines and the first-run hint FLOAT as a 44 px strip just above the bar (absolute, so they
