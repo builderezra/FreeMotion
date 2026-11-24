@@ -210394,10 +210394,11 @@
     const total = Object.keys(texts).reduce(function (a, f) { return a + texts[f].length; }, 0);
     if (total < 3e6) throw new Error('CONTROL: only ' + total + ' characters of the app were read');
 
-    /* STILL OWED their drawn cog (FM.IC.cog is ready for them), by how many lines of each file type it: the Simple editor's first-time note and the
-       lesson that quotes it, and the four lines that send him to the cog (storage full, twice; a big import; the device report). Each was last
-       written by a Simple release, so a Simple release changes it, and this list with it: one line more OR fewer than the count fails. */
-    const COG = '\u2699', OWED = { 'js/editor-mode.js': 1, 'js/spine-words.js': 1, 'tutorials/simple/01-switch-to-simple-and-back.md': 1, 'js/app.js': 1, 'js/storage.js': 2, 'js/perf-probe.js': 1 };
+    /* STILL OWED their drawn cog (FM.IC.cog is ready for them), by how many lines of each file type it: the four lines that send him to the cog
+       (storage full, twice; a big import; the device report). Each was last written by a Simple release, so a Simple release changes it, and
+       this list with it: one line more OR fewer than the count fails. (It was seven: the Simple editor's first-time note, its copy in the
+       words file and the lesson that quoted it went out with v18.52, his rule of 23 Nov that nothing explains itself unasked.) */
+    const COG = '\u2699', OWED = { 'js/app.js': 1, 'js/storage.js': 2, 'js/perf-probe.js': 1 };
     const bad = [], owedSeen = {};
     Object.keys(texts).forEach(function (f) {
       const kind = /\.css$/.test(f) ? 'css' : /\.(md|json)$/.test(f) ? 'md' : /\.html$/.test(f) ? 'html' : 'js';
