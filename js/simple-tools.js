@@ -1133,13 +1133,18 @@ window.FM = window.FM || {};
      frames. That's not enough. Like, it should stay simple like that, but it should still have more options." It offered 30 and 60 (and
      the project's own rate when neither). It now offers every rate Full's Export offers — read from Full's own list (index.html #exp-fps,
      the numbered rungs: 15 · 25 · 30 · 50 · 60 · 120), so the two can never drift apart — and the project's own rate when it is none of
-     them (24, 48, …): every one a rate the exporter already takes. Same row, same buttons; the project's own is marked (exportSeg). */
+     them (48, …), or in the place of a listed rate one frame away (24 for 25): every one a rate the exporter already takes. Same row,
+     same buttons; the project's own is marked (exportSeg). */
   const FULL_RATES = [15, 25, 30, 50, 60, 120];   // what #exp-fps lists today, if it cannot be read
   function exportRates() {
     const pf = +(FM.scene.project || {}).fps || 30;
     let out = Array.from(document.querySelectorAll('#exp-fps option')).map(o => +o.value).filter(f => f > 0 && isFinite(f));
     if (!out.length) out = FULL_RATES.slice();
-    if (!out.some(f => Math.abs(f - pf) < 1e-6)) out.push(pf);
+    /* HIS WORDS, 24 Nov, on the Export drawings: "why would you be able to choose between 24 and 25? Like, that's just one difference."
+       (and #118, of Full's own list: "Just make 25 only"). So a project's own rate that is not on the list TAKES THE PLACE of a listed
+       rate within one frame of it (a 24 fps project gets 24 where 25 stood, a 29.97 one where 30 stood) and is only ADDED when no listed
+       rate is that near (48 fps). No two buttons are ever one frame apart, and his project's own rate is always there. */
+    if (!out.some(f => Math.abs(f - pf) < 1e-6)) { out = out.filter(f => Math.abs(f - pf) > 1 + 1e-6); out.push(pf); }
     return out.sort((a, b) => a - b);
   }
   /* 0 to the end of the last clip (and an end card after them: #1243 S37 review, it is content and his timeline says it is kept), so the

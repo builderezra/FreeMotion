@@ -208361,7 +208361,7 @@
      enough. Like, it should stay simple like that, but it should still have more options." Smoothness offers every rate Full's Export
      offers (its own list, #exp-fps), in the same row of buttons, the project's own marked, and the rate picked is the one the exporter is
      handed. FM.exporter.run is stubbed to record what it is given (r12Mem puts his last pick aside and back). */
-  test('1261 · at 380 Simple’s Export offers every rate Full’s Export offers in its one Smoothness row, each pressable and at least 44 px wide (seven on a 24 fps project too), the project’s own marked and named, and every rate picked reaches the export call (CONTROL: a 30 fps project opens on 30, the rate marked as its own)', { item: '980', budgetMs: 150000 }, async function () {
+  test('1261 · at 380 Simple’s Export offers every rate Full’s Export offers in its one Smoothness row, each pressable and at least 44 px wide (on a 24 fps project its own 24 stands where 25 did, so no two rates are one frame apart), the project’s own marked and named, and every rate picked reaches the export call (CONTROL: a 30 fps project opens on 30, the rate marked as its own)', { item: '980', budgetMs: 150000 }, async function () {
     smNeedP2();
     const ex = FM.exporter, run0 = ex.run, put = r12Mem(), fails = [];
     let got = null;
@@ -208397,14 +208397,20 @@
           }
           FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
         }, { W: 1920, H: 1080 });
-        /* review R13-5: a 24 fps project adds its own rate, seven buttons; beside the row's name they were 31 px wide at 380 */
+        /* review R13-5: a 24 fps project's own rate; beside the row's name the buttons were 31 px wide at 380.
+           24 Nov, his words on the Export drawings: "why would you be able to choose between 24 and 25? Like, that's just one difference."
+           Its own 24 takes 25's place: six buttons, none one frame from its neighbour (it used to be ADDED beside 25: seven). */
         await smP2((W, H) => smClips3(W, H), async function () {
           try { localStorage.removeItem('fm.sm.export'); } catch (e) {}
           r12Btn().click(); await r4Settle(300);
           if (!r12Box()) throw new Error('setup: Export opened no panel on the 24 fps project');
           const row = r12Row('fps');
           if (!row.length) throw new Error('CONTROL: a 24 fps project’s Export has no Smoothness buttons at all');
-          if (row.length !== 7) fails.push('a 24 fps project’s Smoothness offers ' + r12Words('fps') + ', want Full’s six and its own 24');
+          const rates24 = row.map(b => +b.textContent), own24 = row.filter(b => b.classList.contains('sm-exp-own'));
+          if (rates24.join() !== '15,24,30,50,60,120') fails.push('a 24 fps project’s Smoothness offers ' + r12Words('fps') + ', want 15, 24, 30, 50, 60 and 120: its own 24 where 25 stood — his words: “why would you be able to choose between 24 and 25?”');
+          if (rates24.some((f, i) => i > 0 && f - rates24[i - 1] <= 1)) fails.push('two of a 24 fps project’s rates are one frame apart: ' + rates24.join(', '));
+          if (own24.length !== 1 || own24[0].textContent !== '24') fails.push('on a 24 fps project the rate marked as its own is ' + (own24.map(b => b.textContent).join(', ') || 'none') + ', want 24 alone');
+          if (r12On('fps') !== '24 fps') fails.push('a 24 fps project’s Smoothness opens on ' + r12On('fps') + ', want its own 24');
           row.forEach(b => {
             const w = b.getBoundingClientRect().width;
             if (w < 44 || !r4Hits(b)) fails.push('24 fps project: ' + r12Face('fps', b) + ' is ' + Math.round(w) + ' px wide' + (r4Hits(b) ? '' : ' and not pressable') + ', under a finger’s 44');
