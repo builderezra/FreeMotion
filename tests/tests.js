@@ -127286,7 +127286,13 @@
      the press, and Home is exactly as it was — open, on the same project, not in Select, the card not opened again.
      On the phone the card covers the first projects, so when Home is too short to reach under the dim below it, copies of
      the open project are added (and deleted after). The frame slides left for the PC presses so both are inside the
-     380-wide window of the phone pass. */
+     380-wide window of the phone pass.
+     v18.53 (#1243 ST7): THE CARD IS TALLER NOW (each shape chip wears the marks of the apps that use it), and on a phone as
+     short as this frame (760 px) it leaves no strip of Home's projects between itself and the tab bar: a finger cannot
+     reach a project under the dim there at all, however many copies are added, and this test stopped in its setup. What a
+     finger CAN still reach under the dim is the tab bar. So when no project shows clear of the card, the press aims at the
+     dim over a tab that is not the open one. Going through there would switch Home's tab, and that is checked for every
+     press now, with the rest of "Home is exactly as it was". A taller phone still shows a project, and gets the project. */
   test('947 review: a real press in the middle of the ripple - on the dim over a Home project, on Cancel, on the turned + - takes the card away at once and never reaches Home', { item: '947', budgetMs: 90000 }, async function () {
     const fe = window.frameElement;
     if (!fe) throw new Error('this test needs run.html’s iframe to bring the app on screen for real input');
@@ -127299,6 +127305,7 @@
     const nm = e => !e ? 'nothing' : (e.id || (typeof e.className === 'string' && e.className.split(' ')[0]) || e.tagName);
     const selecting = () => document.body.classList.contains('hm-selecting') || !!document.getElementById('hm-selbar');
     const ripples = () => document.getAnimations().filter(a => /^np947-/.test(a.id || '') && a.playState === 'running');
+    const tabOn = () => { const a = document.querySelector('#home-screen .hm-tab.active'); return a ? (a.dataset.tab || '') : ''; };
     const made = [];
     try {
       // the PC FIRST (6 Oct, the port audit): a browser that cannot emulate a finger stops this test at its first touch (realInput924)
@@ -127348,7 +127355,23 @@
               found = spot();
             }
             if (!orbFree()) throw new Error(where + ': setup: the + is covered by ' + nm(document.elementFromPoint(X.x, X.y)) + ' even with Home scrolled to its end - a real press cannot reach it');
-            if (!found) throw new Error(where + ': setup: no point on the dim lies over a Home project clear of the card [' + [C.left, C.top, C.right, C.bottom].map(Math.round) + '] - ' + document.querySelectorAll('#home-screen .hm-card').length + ' project cards on Home');
+            /* No project shows clear of the card (a short phone, since v18.53's taller card): the dim over a tab of Home's bar that
+               is not the open one, as far below the card as the tab goes (the card is still rising when the press lands). */
+            let tabUnder = null;
+            if (!found) {
+              if (tabOn() !== 'projects') throw new Error(where + ': setup: Home is on its ' + (tabOn() || 'unknown') + ' tab, not Projects');
+              for (const tb of document.querySelectorAll('#home-screen .hm-tab:not(.active)')) {
+                const r = R(tb), x = r.left + r.width / 2;
+                for (let y = Math.min(r.bottom - 6, innerHeight - 12); y >= r.top + 6 && !found; y -= 4) {
+                  const p = { x: x, y: y };
+                  if (inside(p, C, 16) || inside(p, O, 16) || x < 10 || x > innerWidth - 10) continue;
+                  const hit = document.elementFromPoint(x, y);
+                  if (hit && tb.contains(hit)) { found = { p: p, hc: tb }; tabUnder = tb; }
+                }
+                if (found) break;
+              }
+            }
+            if (!found) throw new Error(where + ': setup: no point on the dim lies over a Home project, or over a tab of Home’s bar, clear of the card [' + [C.left, C.top, C.right, C.bottom].map(Math.round) + '] - ' + document.querySelectorAll('#home-screen .hm-card').length + ' project cards on Home, a ' + innerWidth + ' × ' + innerHeight + ' window');
             const bd = found.p, under = found.hc;
             const touch = where === 'phone';
             const press = (p, after) => touch ? [{ t: 'touchStart', x: p.x, y: p.y, ms: 40 }, { t: 'touchEnd', x: p.x, y: p.y, ms: after }]
@@ -127359,7 +127382,7 @@
                Cancel's resting centre plus 5 px. A press the machine made LATE (the ripple already over) proves nothing
                either way, so that one case is tried again, up to three times; nothing else is retried. */
             const cases = [
-              { what: 'the dim over the Home project ' + (under.dataset.pid || ''), p: bd, want: dlg, gap: 250 },
+              { what: tabUnder ? 'the dim over Home’s ' + (tabUnder.dataset.tab || 'other') + ' tab (no project shows clear of the card on a window this short)' : 'the dim over the Home project ' + (under.dataset.pid || ''), p: bd, want: dlg, gap: 250 },
               { what: 'Cancel', p: { x: K.x, y: K.y + 5 }, want: cancelBtn, gap: 380 },
               { what: 'the + turned into an ×', p: X, want: dlg, gap: 250 }
             ];
@@ -127425,6 +127448,7 @@
                 if (!FM.home.isOpen()) bad.push('Home CLOSED and project ' + FM.storage.openProjectId() + ' opened');
                 else if (FM.storage.openProjectId() !== here) bad.push('project ' + FM.storage.openProjectId() + ' is open instead of ' + here);
                 if (selecting()) bad.push('Home went into Select');
+                if (tabOn() !== 'projects') bad.push('Home switched to its ' + (tabOn() || 'unknown') + ' tab');
                 if (!dlg.classList.contains('hidden')) bad.push('700 ms later the New project card is still open' + (ripples().length ? ' - it OPENED AGAIN' : ''));
                 if (bad.length) throw new Error(at + ', ' + ms + ' ms into the ripple: ' + bad.join('; ') + ' - the card should just have gone');
                 if (document.querySelector('.np-fx') || ripples().length) throw new Error(at + ': the card went but the ripple (' + (ripples().map(a => a.id).join(', ') || 'its ring or scrim') + ') is still there');
