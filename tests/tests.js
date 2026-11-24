@@ -209307,7 +209307,7 @@
     if (stale.length) throw new Error('a line that was owed its drawn cog has changed and this test’s owed list has not: ' + stale.join(' · '));
   });
 
-  test('1255 emoji · the marks that were typed characters are the app’s own drawings where they show: a card with no picture and an empty tab of Home wear a drawn mark and no character, every mark Home, the Tutorials tab, the caption list and the scene panel ask for by name is in the icon table, each caption grip is a drawn two-way arrow that keeps its name, Watch a demo run wears a drawn play mark beside its words, and the top bar’s play mark and the Generate button’s spark are drawings (CONTROLS: each drawing has ink; a name that is not in the table draws nothing; the files that name the marks were read; the scene panel showed its no-key screen)', { item: '1255', budgetMs: 60000 }, async function () {
+  test('1255 emoji · the marks that were typed characters are the app’s own drawings where they show: a card with no picture and an empty tab of Home wear a drawn mark and no character, every mark Home, the Tutorials tab, the caption list and the scene panel ask for by name is in the icon table, each caption grip is a drawn two-way arrow that keeps its name, Watch a demo run wears a drawn play mark beside its words, and the top bar’s play mark is a drawing (CONTROLS: each drawing has ink; a name that is not in the table draws nothing; the files that name the marks were read; the scene panel showed its no-key screen)', { item: '1255', budgetMs: 60000 }, async function () {
     const fails = [], TYPED = /(?![#*0-9])\p{Emoji}|[\u25B7\u25C7\u25F1\u2756\u2726]/u;
     const host = document.createElement('div');
     host.style.cssText = 'position:fixed;left:0;top:0;width:340px;opacity:0;pointer-events:none;z-index:-1';
@@ -209368,11 +209368,10 @@
         drawn(demo, 'Watch a demo run');
         if ((demo.textContent || '').trim() !== 'Watch a demo run (no key, no spend)') fails.push('the demo link reads “' + (demo.textContent || '').trim() + '”');
       } finally { FM.aiKey.has = hadKey; try { FM.aiPanel.hide(); } catch (e) {} await sleep(60); }
-      /* the two in the page's own markup */
-      const brand = document.querySelector('#topbar .brand'), gen = document.getElementById('btn-ai');
+      /* the one in the page's own markup (the Generate button that carried a sparkle went with AI Scene in v18.51, #1243 F2) */
+      const brand = document.querySelector('#topbar .brand');
       drawn(brand && brand.querySelector('.brand-name'), 'the top bar’s name');
       if (brand && !/FreeMotion/.test(brand.textContent || '')) fails.push('the top bar no longer says FreeMotion');
-      drawn(gen && gen.querySelector('.ai-spark'), 'the Generate button’s spark');
     } finally { host.remove(); }
     if (fails.length) throw new Error(fails.join(' · '));
   });
