@@ -545,10 +545,10 @@ window.FM = window.FM || {};
         /* templateId: WHICH template, a read-only fact for Simple's Clips › Extras (queue 980), which inserts it its own way; Full's tap
            is the add below, unchanged */
         return { label: t.name, thumb: t.thumb || null, templateId: t.id,
-          // the SAME shape queue 375 replaced on the tab — it lives here too, as the fallback for a
-          // template saved before thumbs existed, and changing only one of the two would have left [the reference app]'s
-          // glyph on screen while the entry claimed it was gone.
-          icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 8.6h16"/><rect x="7.2" y="11.7" width="9.6" height="5.6" rx="1.4"/>'),
+          // #1255: the tab's own drawing, his Stacked cards (FM.ICON.template), for a template with no picture (saved before
+          // thumbs existed, a capture that failed, an imported file whose picture was refused). It was the old frame with a
+          // crossbar, a third Templates icon beside the tab's and Home's ("I just want them to be consistent").
+          icon: ico((FM.ICON && FM.ICON.template) || ''),
           add: async function () { const ok = await FM.templates.insertInto(t.id); if (FM.toast) FM.toast(ok === false ? 'Template data missing \u2014 re-save it from a project' : 'Inserted \u201c' + t.name + '\u201d'); } };   // await the result \u2014 insertInto returns false when the IDB pack was evicted; the toast used to lie
       });
       /* AN EMPTY PANEL THAT EXPLAINS ITSELF, NOT A BUTTON THAT POPS A TOAST (queue 651). Ezra, with a
@@ -561,7 +561,7 @@ window.FM = window.FM || {};
          which is what the entry says. Same shape, more words, because this is the surface where you
          would be asking WHAT a template is rather than where they went. */
       if (!out.length) out.push({ emptyPanel: {
-        mark: '\u25F1',
+        icon: 'template',   // #1255: the Stacked cards, drawn, as Home's empty Templates tab draws them (was a typed mark)
         title: 'No templates yet',
         lines: ['A template is a whole project saved as a starting point \u2014 its layers, effects and timing, ready to drop into whatever you are working on.',
                 'To make one: go to the home screen, open a project\u2019s \u22ef menu and choose Save as template.'] } });
@@ -912,7 +912,26 @@ window.FM = window.FM || {};
   FM._tabLabels = function () { return TABS.map(function (t) { return t.label; }); };
   FM._tileTints = function () { return Object.keys(BY_LABEL); };
 
+  /* Deliberately built with textContent and appendChild rather than innerHTML: the only reason this
+     panel exists is to carry WORDS, and words are the thing that must never be able to become
+     markup. Nothing here is user data today; the template NAME is one edit away from being.
+     #1255: `spec.icon` names one of the app's own drawings (FM.ICON), drawn where a typed mark stood; a spec with
+     only `mark` (or a missing table) still types it. Out here, not inside render(), so the suite can draw one. */
+  function emptyPanel(spec) {
+    var box = document.createElement('div'); box.className = 'am-empty';
+    var m = document.createElement('div'); m.className = 'am-empty-mark';
+    var d = spec.icon && FM.drawnIcon ? FM.drawnIcon(spec.icon) : null;
+    if (d) m.appendChild(d); else m.textContent = spec.mark || '\u25F1';
+    var t = document.createElement('div'); t.className = 'am-empty-title'; t.textContent = spec.title || '';
+    box.appendChild(m); box.appendChild(t);
+    (spec.lines || []).forEach(function (line) {
+      var p = document.createElement('p'); p.textContent = line; box.appendChild(p);
+    });
+    return box;
+  }
+
   FM.addMenu = {
+    _emptyPanel: emptyPanel,   // for the suite: the empty tab's panel, drawn from a spec ('1255 icons')
     /* Exposed for the suite (queue 340). The Elements browser's empty state tells you how to MAKE an
        element, and for a long time it named a route through this menu that had been deleted — so the
        one instruction in the room pointed at a door that is not there. A test can only catch that if it
@@ -1017,20 +1036,6 @@ window.FM = window.FM || {};
         /* queue 963: the ONE writer both panels share — `data-rung` (the tile's shape) and the --tf-* sizes, including
            --tf-box, the whole measured box the pager takes and the grid centres itself in (what --am-pager was). */
         FM.tileFit.apply(root, plan, box);
-      }
-
-      /* Deliberately built with textContent and appendChild rather than innerHTML: the only reason this
-         panel exists is to carry WORDS, and words are the thing that must never be able to become
-         markup. Nothing here is user data today; the template NAME is one edit away from being. */
-      function emptyPanel(spec) {
-        var box = document.createElement('div'); box.className = 'am-empty';
-        var m = document.createElement('div'); m.className = 'am-empty-mark'; m.textContent = spec.mark || '\u25F1';
-        var t = document.createElement('div'); t.className = 'am-empty-title'; t.textContent = spec.title || '';
-        box.appendChild(m); box.appendChild(t);
-        (spec.lines || []).forEach(function (line) {
-          var p = document.createElement('p'); p.textContent = line; box.appendChild(p);
-        });
-        return box;
       }
 
       function drawBody() {

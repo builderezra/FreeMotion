@@ -70215,6 +70215,9 @@
         var BRACKET = parseFloat(getComputedStyle(pad, '::before').left) || 12;
         var mr = mark.getBoundingClientRect();
         if (!(mr.width >= 16) || mr.left - pr.left < BRACKET || pr.right - mr.right < BRACKET) throw new Error('at rest the pad’s mark is ' + mr.width.toFixed(1) + ' px wide, ' + (mr.left - pr.left).toFixed(1) + ' px from the pad’s left edge and ' + (pr.right - mr.right).toFixed(1) + ' from its right — not drawn, or outside the ' + BRACKET + 'px the corner brackets are inset');
+        /* the pad's empty line takes no room at rest, so the mark sits in the middle (shown, its 32 px of padding put the mark 16 px right) */
+        var off = (mr.left + mr.right) / 2 - (pr.left + pr.right) / 2;
+        if (Math.abs(off) > 2) throw new Error('at rest the pad’s mark sits ' + off.toFixed(1) + ' px off the pad’s centre: the empty line is taking room');
         pad.classList.add('snap-x', 'snap-y');
         hint.textContent = 'Snapped to right edge + bottom edge, and Snapped to right edge + bottom edge once more';
         try {
@@ -92493,7 +92496,8 @@
       FM.refreshAll(); FM.inspector.refresh(); FM.inspector.openCategory('transform');
       /* #1255: the pad's sentence is its name for a screen reader now (aria-label); a drawn mark is on the pad */
       const apad = document.querySelector('.mt-trackpad'), aname = apad ? (apad.getAttribute('aria-label') || '') : '';
-      if (!apad || !/anchor/i.test(aname)) throw new Error('setup: the anchor pad is not in the DOM in anchor mode (the first pad is named "' + aname + '") — the assertion would be vacuous');
+      if (!apad) throw new Error('setup: no swipe pad in the DOM in anchor mode, so the assertion would be vacuous');
+      if (!/anchor/i.test(aname)) throw new Error('the anchor pad is not named for placing the anchor: “' + aname + '”');
       if (/nine|centre, edges and corners/i.test(aname)) throw new Error('the anchor pad’s name still describes nine points; the grid snaps to 25');
       if (!/quarter/i.test(aname)) throw new Error('the anchor pad’s name does not describe the quarter-point grid it snaps to: "' + aname + '"');
       FM.scene.layers.splice(FM.scene.layers.indexOf(A), 1);
@@ -94231,7 +94235,7 @@
     }
     /* Built with textContent, never innerHTML: the only reason this panel exists is to carry words, and
        a template NAME is one edit away from being user data in the same box. */
-    const src = String(FM.addMenu.render || '') + String(FM.addMenu.openTab || '');
+    const src = String(FM.addMenu.render || '') + String(FM.addMenu.openTab || '') + String(FM.addMenu._emptyPanel || '');   /* #1255: the builder lives beside render now */
     if (/am-empty[\s\S]{0,200}innerHTML/.test(src))
       throw new Error('the empty panel is being built with innerHTML — it carries prose that will one day carry a user-supplied name');
   });
@@ -111314,7 +111318,8 @@
           });
           /* 2. ON ITS POINT PAD (Swipe here to move point, gain project width / 300): it steps from the LAST event, so a takeover reads the gap as travel. */
           const padNow = () => { const p = document.querySelector('.mt-trackpad'); return p && /move the point/i.test(p.getAttribute('aria-label') || '') ? p : null; };   /* #1255: told by its name; its sentence is no longer on it */
-          if (!padNow()) throw new Error('setup: the Customise Points panel has no Swipe here to move point pad');
+          if (!document.querySelector('.mt-trackpad')) throw new Error('setup: the Customise Points panel has no swipe pad');
+          if (!padNow()) throw new Error('the Customise Points pad is not named for moving the point: “' + (document.querySelector('.mt-trackpad').getAttribute('aria-label') || '') + '”');
           const sens = (FM.scene.project.width || 1080) / 300;
           let g0;
           /* (F2) the second finger's own move has a y part: x alone is blind at one pad width (where its mutated travel equals
@@ -210410,7 +210415,7 @@
      instead." A sweep found five places with a real emoji on screen; each now wears the drawing from the design board (Detect speech:
      DS3, "Speech bubble", his pick of the four on 24 Nov) or plain words. The typed symbols that are not emoji
      (★ ✓ ✕ ◆ …) change with the redesign's icon set, not here. CONTROLS: the button really starts a detection; the badges are real. */
-  test('1255 emoji · the Detect speech button wears a drawing and no emoji, keeps its drawing while its words say Listening, and reads Detect speech again afterwards; a clip with a speed ramp wears a drawn mark and the word ramp on its badge while a 2× clip still reads 2×; and the backup message, the device report and a broken preset row carry no emoji sign (CONTROL: the press started one detection, and both badges are on their clips)', { item: '1255', budgetMs: 45000 }, async function () {
+  test('1255 emoji · the Detect speech button wears a drawing and no emoji, the button’s own gap from its words, keeps its drawing while its words say Listening, and reads Detect speech again afterwards; a clip with a speed ramp wears a drawn mark and the word ramp on its badge while a 2× clip still reads 2×; and the backup message, the device report and a broken preset row carry no emoji sign (CONTROL: the press started one detection, and both badges are on their clips)', { item: '1255', budgetMs: 45000 }, async function () {
     const _isoK = isoKeep(); try {
     const C = FM.captions, B = { id: 'voice-1255', name: 'Talking clip', type: 'video' }, T = { id: 'caption-1255', captions: [] };
     const saved = { sources: C.audioSources, detect: C.detect, audio: FM.hasAudioTrack, toast: FM.toast, scope: FM._capScope, src: FM._capSrcId, report: FM.reportError,
@@ -210433,6 +210438,17 @@
       if (!pic()) fails.push('the Detect speech button has no drawing of its own');
       else if ((pic().getAttribute('d') || '').indexOf('19.8V16') < 0) fails.push('the Detect speech button’s drawing is not the speech bubble he picked (DS3): its first path is “' + (pic().getAttribute('d') || '').slice(0, 40) + '…”');
       if (words() !== 'Detect speech') fails.push('the button reads “' + words() + '”, want Detect speech');
+      /* the drawing stands the button's own gap from its words, not that gap twice (it had a margin of its own on top of the gap) */
+      const gapHost = document.createElement('div');
+      gapHost.style.cssText = 'position:fixed;left:0;top:0;width:360px;opacity:0;pointer-events:none;z-index:-1';
+      gapHost.appendChild(row); document.body.appendChild(gapHost);
+      try {
+        const ic = btn.querySelector('svg.cap-detect-ic'), lab = btn.querySelector('.cap-detect-l');
+        if (!ic || !lab || ic.getBoundingClientRect().width < 10) throw new Error('CONTROL: the Detect speech button has no drawing and words on screen to measure between · ' + fails.join(' · '));
+        const want = parseFloat(getComputedStyle(btn).columnGap) || 0, gap = lab.getBoundingClientRect().left - ic.getBoundingClientRect().right;
+        if (!(want > 0)) throw new Error('CONTROL: the Detect speech button has no gap of its own (' + getComputedStyle(btn).columnGap + ') · ' + fails.join(' · '));
+        if (Math.abs(gap - want) > 1.5) fails.push('the Detect speech drawing stands ' + gap.toFixed(1) + ' px from its words, want the button’s own ' + want + ' px');
+      } finally { gapHost.remove(); }
       btn.click(); await sleep(60);
       if (entered !== 1 || !go) throw new Error('CONTROL: the press did not start one detection (' + entered + ' calls), so the button that was read is not the working one · ' + fails.join(' · '));
       if (!/^Listening/.test(words())) fails.push('while it listens the button reads “' + words() + '”, want Listening… and how far');
@@ -210479,11 +210495,11 @@
      A play triangle, a two-way arrow, a cog and a warning sign are ordinary characters on a PC and COLOUR EMOJI on an iPhone, so a typed
      one is an emoji in practice, and the first sweep (two code ranges) never saw them. Three tests. (1) Nothing of the kind is typed in
      the app's own code or its lessons: every script the page loads, its markup, the style sheets and every lesson, comments blanked,
-     escapes read too; the reader is proven on a planted line first. SEVEN LINES STILL TYPE THE COG and are on an owed list, counted per
-     file, that must shrink when they change: each was last written by a Simple release (the Simple editor's first-time note and the
-     lesson that quotes it; the four lines that send him to the cog, v18.18), so their turn is a Simple release. (2) The marks that were
+     escapes read too; the reader is proven on a planted line first. FOUR LINES STILL TYPE THE COG and are on an owed list, counted per
+     file, that must shrink when they change: each was last written by a Simple release (the four lines that send him to the cog,
+     v18.18), so their turn is a Simple release. (2) The marks that were
      typed are drawings where they show, and every mark asked for by name is in the table. (3) A line that names the cog draws it. */
-  test('1255 emoji · no character a phone draws as a colour emoji is typed in the app’s own code or its lessons: every script the page loads, its markup, the style sheets and every lesson are read with their comments blanked, escapes included, and a line still owed its drawing is counted on a list that must shrink with it (CONTROLS: the reader finds a planted play triangle in a string and as an escape and skips the two in comments; a star, a tick, a digit and the copyright sign are not emoji; the app was really read)', { item: '1255', budgetMs: 90000 }, async function () {
+  test('1255 emoji · no character a phone draws as a colour emoji is typed in the app’s own code or its lessons: every script the page loads, the effect pictures’ code, its markup, the style sheets and every lesson are read with their comments blanked, escapes included, and a line still owed its drawing is counted on a list that must shrink with it (CONTROLS: the reader finds a planted play triangle in a string and as an escape and skips the two in comments; a star, a tick, a digit and the copyright sign are not emoji; a clapper board as two escaped halves or built from its number, a keycap, a style sheet escape in a script and an escape after a hyphen are found, and a range of escapes is not; the app was really read)', { item: '1255', budgetMs: 90000 }, async function () {
     const CAP = /(?![#*0-9\u00A9\u00AE\u2122])\p{Emoji}/u;   /* the keycap bases are plain digits, and the copyright signs are text on every phone */
     const read = async function (p, json) { const r = await fetch('/' + p + '?em1255=' + Date.now(), { cache: 'no-store' }); if (!r.ok) throw new Error('CONTROL: ' + p + ' could not be read (' + r.status + ')'); return json ? r.json() : r.text(); };
     /* comments become spaces (line numbers kept); strings, markup and template text stay */
@@ -210514,29 +210530,44 @@
       return out.join('');
     };
     const ESC = /\\u\{([0-9a-fA-F]{1,6})\}|\\u([0-9a-fA-F]{4})|&#x([0-9a-fA-F]{1,6});|&#([0-9]{1,7});/g, CSSESC = /\\([0-9a-fA-F]{4,6})/g;
+    /* the two escaped halves of one character (a clapper board is \uD83C\uDFAC), and a character built from its number in the code */
+    const PAIR = /\\u([dD][89abAB][0-9a-fA-F]{2})\\u([dD][c-fC-F][0-9a-fA-F]{2})/g;
+    const FROMCP = /String\.fromC(?:odePoint|harCode)\(\s*((?:0[xX][0-9a-fA-F]+|[0-9]+)(?:\s*,\s*(?:0[xX][0-9a-fA-F]+|[0-9]+))*)\s*\)/g;
+    /* an end of a RANGE in a pattern of code points (the one that cuts a line of text into characters) names nothing that is drawn: an
+       escape with a hyphen and ANOTHER ESCAPE beside it is left as written; an escape beside a hyphen alone is read */
+    const ESC_BEFORE = /(?:\\u\{[0-9a-fA-F]{1,6}\}|\\u[0-9a-fA-F]{4}|&#x?[0-9a-fA-F]+;|\\[0-9a-fA-F]{4,6})$/;
+    const ESC_AFTER = /^(?:\\u\{[0-9a-fA-F]{1,6}\}|\\u[0-9a-fA-F]{4}|&#x?[0-9a-fA-F]+;|\\[0-9a-fA-F]{4,6})/;
+    /* a keycap (a digit, # or * with the picture selector and the keycap mark) and a copyright sign asked to be a picture are colour emoji too */
+    const KEYCAP = /[#*0-9\u00A9\u00AE\u2122]\uFE0F\u20E3?|\u20E3/g;
     const hitsIn = function (text, kind) {
       const found = [];
-      text.split('\n').forEach(function (line, k) {
+      text.split('\n').forEach(function (raw, k) {
         const seen = new Set();
-        if (CAP.test(line)) for (const ch of line) if (CAP.test(ch)) seen.add(ch);
-        const esc = function (re) {
+        /* every escape is read IN its line, so what two of them spell together is seen together */
+        const dec = function (line, re, cpsOf) {
           re.lastIndex = 0;
-          let m;
-          while ((m = re.exec(line))) {
-            /* an end of a RANGE in a pattern of code points (the one that cuts a line of text into characters) names nothing that is drawn */
-            if (line[m.index - 1] === '-' || line[m.index + m[0].length] === '-') continue;
-            const hex = m[1] || m[2] || m[3], cp = hex ? parseInt(hex, 16) : parseInt(m[4], 10);
-            if (cp > 0 && cp <= 0x10FFFF) { const ch = String.fromCodePoint(cp); if (CAP.test(ch)) seen.add(ch); }
-          }
+          return line.replace(re, function () {
+            const a = arguments, m = a[0], at = a[a.length - 2], src = a[a.length - 1], end = at + m.length;
+            if ((src[at - 1] === '-' && ESC_BEFORE.test(src.slice(0, at - 1))) || (src[end] === '-' && ESC_AFTER.test(src.slice(end + 1)))) return m;
+            const cps = cpsOf(a);
+            return cps.length && cps.every(function (cp) { return cp >= 0 && cp <= 0x10FFFF; }) ? String.fromCodePoint.apply(null, cps) : m;
+          });
         };
-        esc(ESC); if (kind === 'css') esc(CSSESC);
+        let line = dec(raw, PAIR, function (a) { return [((parseInt(a[1], 16) - 0xD800) * 0x400) + (parseInt(a[2], 16) - 0xDC00) + 0x10000]; });
+        line = dec(line, FROMCP, function (a) { return a[1].split(',').map(function (s) { return Number(s.trim()); }); });
+        line = dec(line, ESC, function (a) { const hex = a[1] || a[2] || a[3]; return [hex ? parseInt(hex, 16) : parseInt(a[4], 10)]; });
+        if (kind !== 'md') line = dec(line, CSSESC, function (a) { return [parseInt(a[1], 16)]; });
+        if (CAP.test(line)) for (const ch of line) if (CAP.test(ch)) seen.add(ch);
+        for (const m of line.matchAll(KEYCAP)) seen.add(m[0]);
         seen.forEach(function (ch) { found.push([k + 1, ch]); });
       });
       return found;
     };
-    const PLANT = 'const a = \'▶ play\'; // ▶ in a comment\n/* ▶ */ const b = \'\\u25B6\';\nconst c = \'★ ✓ 7 # ©\';';
-    const ctl = hitsIn(blank(PLANT, 'js'), 'js').map(function (h) { return h[0] + ':' + h[1].codePointAt(0).toString(16); }).join(' ');
-    if (ctl !== '1:25b6 2:25b6') throw new Error('CONTROL: the reader should find the planted play triangle in a string (line 1) and as an escape (line 2), skip the two in comments, and pass a star, a tick, a digit and the copyright sign; it found “' + ctl + '”');
+    const PLANT = 'const a = \'▶ play\'; // ▶ in a comment\n/* ▶ */ const b = \'\\u25B6\';\nconst c = \'★ ✓ 7 # ©\';\n' +
+      'const d = \'\\uD83C\\uDFAC\';\nconst e = String.fromCodePoint(0x1F3AC);\nconst f = \'#\\uFE0F\\u20E3\';\n' +
+      'el.style.setProperty(\'content\', \'"\\\\25B6"\');\nconst g = \'-\\u25B6 play\';\nconst h = /[\\u2600-\\u27BF]/;';
+    const ctl = hitsIn(blank(PLANT, 'js'), 'js').map(function (h) { return h[0] + ':' + Array.from(h[1]).map(function (c) { return c.codePointAt(0).toString(16); }).join('+'); }).join(' ');
+    if (ctl !== '1:25b6 2:25b6 4:1f3ac 5:1f3ac 6:23+fe0f+20e3 7:25b6 8:25b6') throw new Error('CONTROL: the reader should find the planted play triangle in a string (line 1) and as an escape (line 2), skip the two in comments, pass a star, a tick, a digit and the copyright sign, find a clapper board as two escaped halves (4) and built from its number (5), a keycap (6), a style sheet escape in a script (7) and an escape after a hyphen (8), and pass a range of escapes (9); it found “' + ctl + '”');
 
     const html = await read('index.html'), texts = { 'index.html': html };
     const scripts = Array.from(new Set(Array.from(html.matchAll(/<script src="(js\/[^"?]+)/g)).map(function (m) { return m[1]; })));
@@ -210546,6 +210577,10 @@
     const later = new Set();
     Object.keys(texts).forEach(function (f) { for (const m of texts[f].matchAll(/['"`](js\/[\w.-]+\.js)/g)) if (!texts[m[1]]) later.add(m[1]); });
     for (const f of later) { try { texts[f] = await read(f); } catch (e) { /* a name in a message, not a file of the app */ } }
+    /* the effect pictures' drawing code, loaded at run time from fx-pics/ (kit.js, then its manifest's files) and never named as js/ */
+    const fxm = await read('fx-pics/manifest.json', true), fxFiles = ['kit.js'].concat((fxm && Array.isArray(fxm.files)) ? fxm.files : []);
+    if (fxFiles.length < 10) throw new Error('CONTROL: the effect pictures’ manifest lists ' + (fxFiles.length - 1) + ' files, so their drawing code was not read');
+    for (const f of fxFiles) texts['fx-pics/' + f] = await read('fx-pics/' + f);
     const sheets = Array.from(new Set(['styles.css', 'theme-glass.css'].concat(Array.from(html.matchAll(/<link[^>]+href="([^"?:]+\.css)/g)).map(function (m) { return m[1]; }))));
     for (const f of sheets) texts[f] = await read(f);
     const lessons = await read('tutorials/index.json', true);
@@ -210555,8 +210590,10 @@
     const total = Object.keys(texts).reduce(function (a, f) { return a + texts[f].length; }, 0);
     if (total < 3e6) throw new Error('CONTROL: only ' + total + ' characters of the app were read');
 
-    /* STILL OWED their drawn cog (FM.IC.cog is ready for them), by how many lines of each file type it: the four lines that send him to the cog
-       (storage full, twice; a big import; the device report). Each was last written by a Simple release, so a Simple release changes it, and
+    /* STILL OWED their drawn cog, by how many lines of each file type it: the four lines that send him to the cog (storage full, twice; a big
+       import; the device report). FM.IC.cog is ready for the three shown as a toast or a question (app.js, storage.js), which draw it. The
+       device report's line (perf-probe.js) is plain text that is copied and shown as text, where FM.IC.cog would be a box: its turn is
+       WORDS, see Settings, Canvas. Each was last written by a Simple release, so a Simple release changes it, and
        this list with it: one line more OR fewer than the count fails. (It was seven: the Simple editor's first-time note, its copy in the
        words file and the lesson that quoted it went out with v18.52, his rule of 23 Nov that nothing explains itself unasked.) */
     const COG = '\u2699', OWED = { 'js/app.js': 1, 'js/storage.js': 2, 'js/perf-probe.js': 1 };
@@ -210573,7 +210610,7 @@
     if (stale.length) throw new Error('a line that was owed its drawn cog has changed and this test’s owed list has not: ' + stale.join(' · '));
   });
 
-  test('1255 emoji · the marks that were typed characters are the app’s own drawings where they show: a card with no picture and an empty tab of Home wear a drawn mark and no character, every mark Home, the Tutorials tab, the caption list and the scene panel ask for by name is in the icon table, each caption grip is a drawn two-way arrow that keeps its name, Watch a demo run wears a drawn play mark beside its words, and the top bar’s play mark is a drawing (CONTROLS: each drawing has ink; a name that is not in the table draws nothing; the files that name the marks were read; the scene panel showed its no-key screen)', { item: '1255', budgetMs: 60000 }, async function () {
+  test('1255 emoji · the marks that were typed characters are the app’s own drawings where they show: a card with no picture and an empty tab of Home wear a drawn mark and no character, every mark Home, the Tutorials tab, the caption list and the scene panel ask for by name is in the icon table, each caption grip is a drawn two-way arrow that keeps its name, Watch a demo run wears a drawn play mark beside its words, the scene panel’s spark stands the title’s own gap from its name, and the top bar’s play mark is a drawing (CONTROLS: each drawing has ink; a name that is not in the table draws nothing; the files that name the marks were read; the scene panel showed its no-key screen)', { item: '1255', budgetMs: 60000 }, async function () {
     const fails = [], TYPED = /(?![#*0-9])\p{Emoji}|[\u25B7\u25C7\u25F1\u2756\u2726]/u;
     const host = document.createElement('div');
     host.style.cssText = 'position:fixed;left:0;top:0;width:340px;opacity:0;pointer-events:none;z-index:-1';
@@ -210633,6 +210670,12 @@
         if (!demo) throw new Error('CONTROL: the scene panel did not show Watch a demo run · ' + fails.join(' · '));
         drawn(demo, 'Watch a demo run');
         if ((demo.textContent || '').trim() !== 'Watch a demo run (no key, no spend)') fails.push('the demo link reads “' + (demo.textContent || '').trim() + '”');
+        /* the title's spark stands the title's own gap from Director, not that gap and a margin of its own */
+        const tw = document.querySelector('#ai-panel .ai-title'), spark = tw && tw.querySelector('.ai-spark-ic'), named = tw && tw.lastElementChild;
+        if (!spark || !named || named.contains(spark) || spark.getBoundingClientRect().width < 10) throw new Error('CONTROL: the scene panel’s title has no spark and name on screen to measure between · ' + fails.join(' · '));
+        const twant = parseFloat(getComputedStyle(tw).columnGap) || 0, tgap = named.getBoundingClientRect().left - spark.getBoundingClientRect().right;
+        if (!(twant > 0)) throw new Error('CONTROL: the scene panel’s title has no gap of its own · ' + fails.join(' · '));
+        if (Math.abs(tgap - twant) > 1.5) fails.push('the scene panel’s spark stands ' + tgap.toFixed(1) + ' px from ' + (named.textContent || '').trim() + ', want the title’s own ' + twant + ' px');
       } finally { FM.aiKey.has = hadKey; try { FM.aiPanel.hide(); } catch (e) {} await sleep(60); }
       /* the one in the page's own markup (the Generate button that carried a sparkle went with AI Scene in v18.51, #1243 F2) */
       const brand = document.querySelector('#topbar .brand');
@@ -210691,7 +210734,7 @@
      three. Now the Stacked cards are in the app's one icon table and every Templates spot draws them; Home's Elements and Tutorials marks
      are their own tabs' drawings, so an empty tab shows its tab's picture. CONTROL: the Projects tab's house is in no table entry, so the
      comparison is seen to tell two drawings apart. */
-  test('1255 icons · one drawing per thing: the Templates icon is his Stacked cards on Home’s Templates tab, on the Add menu’s Template tab and on Home’s empty Templates tab alike, and Home’s Elements and Tutorials tabs carry the same drawings as their empty-tab marks, each read against the app’s one icon table (CONTROLS: the tabs and the Add menu’s tab were found; the Projects tab’s house matches no entry of the table)', { item: '1255', budgetMs: 30000 }, async function () {
+  test('1255 icons · one drawing per thing: the Templates icon is his Stacked cards on Home’s Templates tab, on the Add menu’s Template tab, on a template there with no picture, on the Add menu’s empty Template tab and on Home’s empty Templates tab alike, and Home’s Elements and Tutorials tabs carry the same drawings as their empty-tab marks, each read against the app’s one icon table (CONTROLS: the tabs and the Add menu’s tab were found; the Projects tab’s house matches no entry of the table; the stand-in template was listed with no picture, and the empty panel is the Template tab’s)', { item: '1255', budgetMs: 30000 }, async function () {
     if (!FM.ICON || !FM.drawnIcon) throw new Error('the app has no table of its own drawn icons (FM.ICON, FM.drawnIcon)');
     const inner = function (svg) { return svg ? svg.innerHTML.replace(/\s+/g, ' ').trim() : ''; };
     const want = function (name) { const s = FM.drawnIcon(name); if (!s) throw new Error('CONTROL: the icon table has no ' + name); return inner(s); };
@@ -210718,6 +210761,34 @@
     if (!FM.home || !FM.home._emptyState) throw new Error('setup: Home has no seam to draw an empty state · ' + fails.join(' · '));
     const es = FM.home._emptyState('template', 'Probe 1255');
     if (inner(es.querySelector('.hm-empty-mark svg')) !== want('template')) fails.push('Home’s empty Templates tab does not draw the Stacked cards');
+    /* INSIDE the Add menu's Template tab: a template with no picture wears the tab's drawing (it wore the old frame with a crossbar), and
+       with no templates the empty panel's mark is that drawing too (it was a typed mark). The template list is stood in for, then put back. */
+    if (!FM.templates || typeof FM.templates.list !== 'function') throw new Error('setup: there is no template list to stand in for · ' + fails.join(' · '));
+    const realList = FM.templates.list;
+    try {
+      FM.templates.list = function () { return [{ id: 'tpl-1255-probe', name: 'No picture 1255', thumb: null }]; };
+      const opt = (tpl.options() || [])[0];
+      if (!opt || opt.label !== 'No picture 1255') throw new Error('CONTROL: the Template tab did not list the stand-in template · ' + fails.join(' · '));
+      if (opt.thumb) throw new Error('CONTROL: the stand-in template has a picture, so its drawing is never seen · ' + fails.join(' · '));
+      const ob = document.createElement('div');
+      ob.innerHTML = opt.icon || '';
+      const os = ob.querySelector('svg');
+      if (!os) fails.push('a template with no picture has no drawing on the Add menu’s Template tab');
+      else if (inner(os) !== want('template')) fails.push('a template with no picture draws a different picture on the Add menu’s Template tab from the tab’s own (“' + inner(os).slice(0, 44) + '…”)');
+      FM.templates.list = function () { return []; };
+      const none = tpl.options() || [], spec = none.length === 1 ? none[0].emptyPanel : null;
+      if (!spec) throw new Error('CONTROL: with no templates the Template tab is not its one empty panel (' + none.length + ' options) · ' + fails.join(' · '));
+      if (!FM.addMenu._emptyPanel) fails.push('the Add menu’s empty Template tab cannot be drawn to be read (no FM.addMenu._emptyPanel), so its mark is not the tab’s drawing as far as anything can tell');
+      else {
+        const ep = FM.addMenu._emptyPanel(spec), mark = ep.querySelector('.am-empty-mark');
+        if (!/No templates yet/.test(ep.textContent || '')) throw new Error('CONTROL: the empty panel drawn is not the Template tab’s (it reads “' + (ep.textContent || '').slice(0, 40) + '”) · ' + fails.join(' · '));
+        if (!mark) fails.push('the Add menu’s empty Template tab has no mark');
+        else {
+          if (inner(mark.querySelector('svg')) !== want('template')) fails.push('the Add menu’s empty Template tab does not draw the Stacked cards');
+          if ((mark.textContent || '').trim()) fails.push('the Add menu’s empty Template tab still types its mark (“' + mark.textContent.trim() + '”)');
+        }
+      }
+    } finally { FM.templates.list = realList; }
     if (want('template').indexOf('M7.5 7.5V5a2 2 0 0 1 2-2H19') < 0) fails.push('the table’s template drawing is not the Stacked cards he picked (it starts “' + want('template').slice(0, 44) + '…”)');
     if (fails.length) throw new Error(fails.join(' · '));
   });

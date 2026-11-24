@@ -505,7 +505,6 @@ body {
 /* Z sub-mode: a vertical-only pad. The chevrons ARE the affordance — they say which way the gesture
    runs, which a bare panel with a line of text does not. */
 .mt-zpad { flex-direction: column; gap: 10px; cursor: ns-resize; }
-.mt-zpad .mt-trackpad-hint { color: var(--accent); font-weight: 600; }
 .mt-zpad-arrow { width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; opacity: .5; }
 .mt-zpad-arrow.up { border-bottom: 9px solid #7d8ca5; }
 .mt-zpad-arrow.down { border-top: 9px solid #7d8ca5; }
@@ -550,6 +549,7 @@ body {
 .fm-ic { width: 1em; height: 1em; flex: none; vertical-align: -.125em; pointer-events: none; }
 .fm-ic-inline { width: 1.2em; height: 1.2em; vertical-align: -.25em; }   /* the cog named inside a sentence: a toast, a question (FM.lineInto) */
 .hm-thumb-empty .fm-ic, .hm-empty-mark .fm-ic { display: block; margin: 0 auto; }   /* Home: a card with no picture yet, an empty tab */
+.am-empty-mark .fm-ic { display: block; margin: 0 auto; }   /* the Add menu's empty Template tab: the tab's own drawing, as Home's empty tab */
 .cap-grip .fm-ic { width: 16px; height: 16px; }   /* the caption grip's two-way arrow */
 .ai-link .fm-ic { width: 12px; height: 12px; margin-right: 5px; vertical-align: -1.5px; }   /* Watch a demo run */
 .brand .brand-mark { width: .9em; height: .9em; margin-right: .3em; vertical-align: -.08em; }   /* the top bar's play mark: nothing on a phone, where the name is hidden by font-size 0 */
@@ -3471,7 +3471,7 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
 .cap-src.hidden { display: none; }
 .cap-detect-btn { flex: 1 1 auto; justify-content: center; }
 /* #1255: its drawing (DS3, a speech bubble holding a short waveform: his pick), where the microphone emoji was */
-.cap-detect-btn .cap-detect-ic { width: 18px; height: 18px; flex: none; margin-right: 7px; vertical-align: -4px; }
+.cap-detect-btn .cap-detect-ic { width: 18px; height: 18px; flex: none; }   /* the button's own 7 px gap is the space to its words */
 .cap-detect-btn[disabled] { opacity: .5; cursor: default; }
 @media (max-width: 420px) { .cap-detect { flex-direction: column; align-items: stretch; } }
 
@@ -4726,6 +4726,7 @@ body.home-open #toast { z-index: 205; }
 }
 .ai-title { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; flex: 1; }
 .ai-title .ai-spark { font-size: 15px; }
+.ai-title .ai-spark-ic { margin-right: 0; }   /* #1255: the title's own 8 px gap is the space to Director; the buttons keep their 5 px */
 .ai-close { background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim); width: 28px; height: 28px; border-radius: 7px; cursor: pointer; font-size: 13px; }
 .ai-close:hover { background: var(--panel-3); color: var(--text); }
 
@@ -8446,7 +8447,6 @@ body.fm-pushing #toast { z-index: 213; }
 .sfx-title { color: #ffd9b3; }
 .sfx-head { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
 .sfx-title { font-weight: 800; font-size: 16px; }
-.sfx-hint { font-size: 12px; color: var(--text-dim); padding: 10px 16px 4px; }
 .sfx-list { flex: 1 1 auto; overflow-y: auto; min-height: 0; padding: 4px 10px 8px; }
 .sfx-cat { font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-faint);
   padding: 12px 6px 5px; }
@@ -10497,7 +10497,6 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
 .tfill-stage { flex: 1 1 auto; min-height: 120px; display: flex; align-items: center; justify-content: center; padding: 12px; }
 .tfill-cv { display: block; border-radius: 10px; background: #000; max-width: 100%; max-height: 100%; }
 .tfill-scrub { width: calc(100% - 28px); margin: 0 14px; accent-color: var(--accent, #4ea8ff); }
-.tfill-lead { text-align: center; font-size: 13px; color: var(--text-dim, #9aa7b8); padding: 12px 14px 8px; }
 /* A horizontal rail, not a grid: one slot per clip and templates can have a lot of them, and a row you
    swipe keeps the preview above it on screen. overflow-x AND overflow-y are both declared, because CSS
    will not let one axis be visible while the other scrolls and leaving it implicit is how three other
@@ -10537,7 +10536,7 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
    would be a wall of letterbox, and the rail would run half a metre. */
 @media (min-width: 701px) {
   #tpl-fill { align-items: center; }
-  .tfill-top, .tfill-scrub, .tfill-lead, .tfill-slots, .tfill-replace, .tfill-stage { width: min(680px, 94vw); }
+  .tfill-top, .tfill-scrub, .tfill-slots, .tfill-replace, .tfill-stage { width: min(680px, 94vw); }
   .tfill-top { align-self: center; }
 }
 
