@@ -208490,7 +208490,15 @@
         if (!r12Box()) throw new Error('setup: Export opened no panel');
         if (r12On('q') !== '4K' || r12On('fps') !== '24 fps') throw new Error('CONTROL: on the 3840×2160 24 fps frame the panel has “' + r12On('q') + '” and “' + r12On('fps') + '” pressed, want 4K and 24 fps');
         const P = FM.scene.project;
-        P.width = 1920; P.height = 1080; P.fps = 30;
+        /* ONE THING AT A TIME, so each rule is seen on its own. Changed together (as this test did until 24 Nov), either rule alone
+           started the panel over, and a mutation that took one of them out passed. First the rate: a rate that was the project's own
+           follows the project, and the size, which is still the frame's, stays. */
+        P.fps = 30;
+        FM.refreshAll(); await r4Settle(200);
+        if (!r12Box()) throw new Error('setup: the panel went when the frame’s rate changed');
+        if (r12On('fps') !== '30 fps' || r12On('q') !== '4K') fails.push('after only the rate changed to 30 fps, Smoothness has “' + r12On('fps') + '” pressed (of ' + r12Words('fps') + ') and Quality “' + r12On('q') + '”, want 30 fps, the project’s own, and 4K still');
+        /* …then the size: 4K was this frame's own size, never an enlargement he pressed, so over a 1080p frame it starts over */
+        P.width = 1920; P.height = 1080;
         FM.refreshAll(); await r4Settle(200);
         if (!r12Box()) throw new Error('setup: the panel went when the frame changed');
         if (r12On('q') !== '1080p' || r12On('fps') !== '30 fps') fails.push('after the frame changed to 1920×1080 at 30 fps, Quality has “' + r12On('q') + '” pressed (of ' + r12Words('q') + ') and Smoothness “' + r12On('fps') + '” (of ' + r12Words('fps') + '), want 1080p and 30 fps');
