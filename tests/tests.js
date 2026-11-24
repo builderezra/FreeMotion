@@ -211691,18 +211691,41 @@
   });
 
   /* #1255, HIS WORDS OF 24 NOV 12:29 ON A LINE WITH A LONG DASH: "it just looks written by AI". The Full editor's assistant greeted with
-     two of them, and on a PC its box's hint wrapped and lost its second line (seen in the pictures of 24 Nov). CONTROL: the greeting
-     still names an edit and a whole new video, so the test reads the real greeting and not an empty panel. */
-  test('1255 words · the assistant’s greeting and the hint in its box hold no long dash, and the hint fits the box on one line in the PC column and on a 380 px phone (CONTROL: the greeting still offers an edit and a whole new video)', { item: '1255', budgetMs: 60000 }, async function () {
-    if (!FM.aiChat || !FM.aiChat.show || !FM.aiChat.hide || !FM.aiChat.reset) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
-    const fails = [], DASH = /[‒-―]/;
+     two of them, and on a PC its box's hint wrapped and lost its second line (seen in the pictures of 24 Nov).
+     v18.53 review MERGE-5: the greeting was not the only one. The build's Stop button, its three endings, the no-key note, the pasted-key
+     note, the busy note, the moved-project note, the starter scene's note and the key button's tip all carried one. So this reads every
+     word the panel can show, each flow driven with stand-ins that reach no network and change no project.
+     MERGE-4: the assistant opens from the Simple editor too, which never says layer, so its greeting names no layer.
+     CONTROL: every read first finds its own words (the greeting's edit and new video, each note's opening), so a read with no dash is a
+     read of the real line and not of an empty panel. FAILS BEFORE the review's fix by its own sentence: the key button's tip and the
+     no-key note each hold a long dash, and the greeting says Tap a layer first. */
+  test('1255 words · the assistant puts no long dash on screen anywhere (its greeting, the hint in its box, its key button, the no-key and pasted-key notes, a build’s Stop button and its three endings, the busy note, the moved-project note, the starter scene) and its greeting names no layer, and the hint fits the box on one line in the PC column and on a 380 px phone (CONTROL: each read finds its own words first)', { item: '1255', budgetMs: 60000 }, async function () {
+    if (!FM.aiChat || !FM.aiChat.show || !FM.aiChat.hide || !FM.aiChat.reset || !FM.aiChat.send) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
+    if (!FM.ai || !FM.aiKey || !FM.aiMock || !FM.aiTemplates || !FM.storage) throw new Error('setup: FM.ai, FM.aiKey, FM.aiMock, FM.aiTemplates or FM.storage is missing, so the flows cannot be driven');
+    const fails = [], DASH = /[‒-―]/, pause = ms => new Promise(r => setTimeout(r, ms));
+    const panel = () => attached(document.getElementById('ai-chat'), 'the Ask & edit panel');
+    const list = () => attached(panel().querySelector('.aic-list'), 'the Ask & edit transcript');
+    /* every word the panel shows: its text, and the tip, label and hint of everything in it */
+    const shown = () => {
+      const c = panel(), out = [c.textContent];
+      c.querySelectorAll('*').forEach(n => ['title', 'aria-label', 'placeholder'].forEach(a => { const v = n.getAttribute(a); if (v) out.push(v); }));
+      return out.join(' | ');
+    };
+    const noDash = (where, s) => { const i = s.search(DASH); if (i >= 0) fails.push(where + ': a long dash on screen (“' + s.slice(Math.max(0, i - 30), i + 30) + '”)'); };
+    const check = (where, words, s) => {
+      if (!words.test(s)) throw new Error('CONTROL ' + where + ': the panel does not show its own words (' + words + '), it shows “' + s.slice(-160) + '”');
+      noDash(where, s);
+    };
     const read = async where => {
-      FM.aiChat.reset(); FM.aiChat.show(); await new Promise(r => setTimeout(r, 400));
+      FM.aiChat.reset(); FM.aiChat.show(); await pause(400);
       try {
         const c = document.getElementById('ai-chat'), inp = c && c.querySelector('.aic-input'), said = c ? Array.from(c.querySelectorAll('.aic-list > *')).map(n => n.textContent).join(' ') : '';
         if (!inp || !said) throw new Error('setup ' + where + ': the assistant did not open with its greeting and its box');
         if (!/make the title bigger/.test(said) || !/whole new video/.test(said)) throw new Error('CONTROL ' + where + ': the greeting no longer offers an edit and a whole new video (“' + said.slice(0, 80) + '…”)');
         if (DASH.test(said)) fails.push(where + ': the greeting holds a long dash (“' + said.slice(Math.max(0, said.search(DASH) - 24), said.search(DASH) + 24) + '”)');
+        if (/\blayers?\b/i.test(said)) fails.push(where + ': the greeting names a layer (“' + said.slice(Math.max(0, said.search(/\blayers?\b/i) - 30), said.search(/\blayers?\b/i) + 30) + '”), a word the Simple editor never uses, and the assistant opens there too');
+        check(where + ', the key button’s tip', /Anthropic key/, (c.querySelector('.aic-keybtn') || {}).title || '');
+        noDash(where + ', the panel’s own words, tips and labels', shown());
         const hint = inp.placeholder || '';
         if (!hint) fails.push(where + ': the box has no hint');
         if (DASH.test(hint)) fails.push(where + ': the hint holds a long dash (“' + hint + '”)');
@@ -211715,6 +211738,68 @@
     };
     await atWideWidth(async function () { await read('PC'); }, 1280);
     await atPhoneWidth(async function () { await read('380'); }, 380);
+
+    /* the lines that only show in a flow: each driven here, its stand-ins put back by descriptor in finally */
+    const dry0 = FM.ai.DRY_RUN;
+    const kept = [[FM.aiKey, 'has'], [FM.aiMock, 'chat'], [FM.ai, 'generateScene'], [FM.ai, 'isRunning'], [FM.storage, 'openProjectId'], [FM.aiTemplates, 'build']]
+      .map(p => [p[0], p[1], Object.getOwnPropertyDescriptor(p[0], p[1])]);
+    const stub = (o, k, fn) => Object.defineProperty(o, k, { configurable: true, writable: true, value: fn });
+    const unstub = (o, k) => { const d = kept.filter(p => p[0] === o && p[1] === k)[0][2]; if (d) Object.defineProperty(o, k, d); else delete o[k]; };
+    try {
+      FM.aiChat.reset(); FM.aiChat.show(); await pause(200);
+      const input = attached(panel().querySelector('.aic-input'), 'the Ask & edit box');
+      const say = async text => { input.value = text; await FM.aiChat.send(); await pause(60); };
+
+      /* his key pasted into the chat by mistake */
+      FM.aiChat.reset(); await say('sk-ant-' + 'x'.repeat(24));
+      check('a key pasted into the chat', /looks like your API key/, shown());
+
+      /* no key: a change, then a whole new video, then its starter scene (the template builder stood in, so no project changes) */
+      FM.ai.DRY_RUN = false; stub(FM.aiKey, 'has', () => false);
+      FM.aiChat.reset(); await say('make the title bigger');
+      check('no key, asked for a change', /Connect your Anthropic key first/, shown());
+      FM.aiChat.reset(); await say('make a 6 second product reel');
+      check('no key, asked for a new video', /Build a scene without a key/, shown());
+      stub(FM.aiTemplates, 'build', () => ({ applied: 4 }));
+      attached(list().querySelector('.aic-tmpl'), 'the Build a scene without a key button').click(); await pause(60);
+      check('the starter scene', /Built a starter scene/, shown());
+      unstub(FM.aiTemplates, 'build'); unstub(FM.aiKey, 'has');
+
+      /* a build asked for in the chat (the dry run's reply stood in): its Stop button, then each of its three endings */
+      FM.ai.DRY_RUN = true;
+      stub(FM.aiMock, 'chat', t => ({ content: [{ type: 'text', text: 'Building that.' }, { type: 'tool_use', id: 'w1255_' + Math.random().toString(36).slice(2), name: 'build_scene', input: { prompt: String(t) } }], stop: 'mock', out: null }));
+      const atStop = [], endings = [{ left: 'Another project' }, { cancelled: true }, { layersAdded: 3 }];
+      let end = null;
+      stub(FM.ai, 'generateScene', async function (prompt, chips, opts) {
+        const sink = opts && opts.sink;
+        if (!sink) return { error: 'no sink' };
+        sink.reset(); atStop.push(shown()); sink.done(end); return {};
+      });
+      for (const e of endings) {
+        end = e; FM.aiChat.reset(); await say('make a 6 second product reel');
+        check('a build ended ' + JSON.stringify(e), e.left ? /Stopped/ : e.cancelled ? /Stopped/ : /Built it/, shown());
+      }
+      if (atStop.length !== 3) throw new Error('CONTROL: the stand-in build ran ' + atStop.length + ' time(s), want three, so the Stop button was not read');
+      check('a build’s Stop button', /keep what/, atStop[0]);
+
+      /* a build asked for while another is still running */
+      stub(FM.ai, 'isRunning', () => true);
+      FM.aiChat.reset(); await say('make a 6 second product reel');
+      unstub(FM.ai, 'isRunning');
+      check('a build asked for while one runs', /already being built/, shown());
+
+      /* he opened another project while it was answering */
+      let pid = 0;
+      stub(FM.storage, 'openProjectId', () => 'w1255-project-' + (pid++));
+      FM.aiChat.reset(); await say('make a 6 second product reel');
+      unstub(FM.storage, 'openProjectId');
+      check('another project opened mid-answer', /Not applied/, shown());
+    } finally {
+      FM.ai.DRY_RUN = dry0;
+      kept.forEach(p => { if (p[2]) Object.defineProperty(p[0], p[1], p[2]); else delete p[0][p[1]]; });
+      try { FM.aiChat.hide(); FM.aiChat.reset(); } catch (e) {}
+      await pause(300);
+    }
     if (fails.length) throw new Error(fails.join(' · '));
   });
 
