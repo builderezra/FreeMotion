@@ -1365,8 +1365,10 @@ window.FM = window.FM || {};
        while the app is on screen. SAID ONCE, in the card's head, on the opening sharing starts in (#1255, 24 Nov, his words on this
        card: "as little as possible… no explanations at all"). It was a standing line of the panel since #967 J1-13, and before that
        a toast that rose over the short code as he read it out. Not a one-shot note either: the panel redraws when the link comes
-       up a second later, and the note would be gone before he had read it. The block's close lets go of it (U.friendsClosed). */
-    keepNote = isPhoneNow();
+       up a second later, and the note would be gone before he had read it. The block's close lets go of it (U.friendsClosed).
+       Only when the block is open on a phone as sharing starts (review: a resume after a reload, or the stand-alone card, set it with
+       nobody looking, and it showed at some later opening). */
+    keepNote = isPhoneNow() && fhostLive();
     U.syncBanner();
   }
 
@@ -1393,11 +1395,14 @@ window.FM = window.FM || {};
   /* ═══ #1243 ST8 — his words: "in the friends menu… It does have a lot of clutter. Like instead of having a section that's like how to use
      it, it because it shouldn't show you how to use it every single time. So all of the tutorial, like it should be bare bones simple
      just so it works, and then have a question mark button… that'll take you to another menu that gives you a tutorial like it will just
-     show you the steps." So the block is bare (not shared yet: the title, Start sharing, Join and the switch; off: the title, one line,
-     Join and the switch), and how it works — the steps and what gets sent — is one tap away behind the "?" in its head, with ‹ back.
-     The steps are lesson 17's own (tutorials/17-work-with-friends.md through FM.tutorials), so the block and the Tutorials tab never
-     disagree; the three short steps show at once and stay if the lesson cannot load (offline). Name and colour are still asked for at
-     Start sharing (U.profile, armShare), and "New people join as" is in the live view's ⚙ Sharing settings. */
+     show you the steps." So the block is bare (not shared yet: the title, Start sharing, Join, the switch and Done; off: the title, one
+     line, Join, the switch and Done), and how it works — the steps and what gets sent — is one tap away behind the "?" in its head, with
+     ‹ back. The steps are lesson 17's own (tutorials/17-work-with-friends.md through FM.tutorials), so the block and the Tutorials tab
+     never disagree. Not shared yet, the three short steps show at once and the lesson takes their place once it has loaded; off and
+     live, the short steps for where he is stay on top and the lesson goes under them (review: live, the lesson alone told someone
+     already sharing to tap Start sharing); a friend gets the lesson only (the short steps are the owner's). Offline, what was drawn at
+     once stays. Name and colour are still asked for at Start sharing (U.profile, armShare), and "New people join as" is in the live
+     view's ⚙ Sharing settings. */
   let frHelp = false;
   let keepNote = false;          // #1255: "Keep FreeMotion open while you share" in the live card's head, from afterArm() until the block closes
   function helpButton(host) {
@@ -1406,6 +1411,10 @@ window.FM = window.FM || {};
     return q;
   }
   function drawFriendsHelp(host) {
+    const state = !U.labsOn() ? 'off' : (C.session && !C.session.isOwner) ? 'guest' : C.session ? 'live' : 'idle';
+    /* A redraw for the same state (somebody joins, a role changes) keeps the page as it is: its scroll, the lesson and his focus. */
+    const kept = host.querySelector('.cs-helpbody');
+    if (kept && kept._state === state) return host;
     const c = mountHost(host);
     const head = el('div', 'cs-head');
     const bk = el('div', 'cs-backrow');
@@ -1416,8 +1425,9 @@ window.FM = window.FM || {};
     head.appendChild(bk);
     c.appendChild(head);
     const body = el('div', 'cs-body cs-helpbody');
+    body._state = state;
     const art = el('div', 'cs-lesson');
-    art.appendChild(howItWorks(!U.labsOn() ? 'off' : C.session ? 'live' : 'idle'));   // at once, and the offline answer
+    if (state !== 'guest') art.appendChild(howItWorks(state));   // at once, and the offline answer
     body.appendChild(art);
     body.appendChild(privacyBlock());
     c.appendChild(body);
@@ -1426,7 +1436,9 @@ window.FM = window.FM || {};
         if (!frHelp || fhost !== host || !art.isConnected) return;
         const box = el('div', 'cs-lesson-full');
         FM.tutorials.render(src, box);           // createElement + textContent only (js/tutorials.js)
-        if (box.querySelector('.tut-steps li')) { art.textContent = ''; art.appendChild(box); }
+        if (!box.querySelector('.tut-steps li')) return;
+        if (state === 'idle') art.textContent = '';   // the lesson's steps are the not-shared steps; off and live keep theirs on top
+        art.appendChild(box);
       }, function () {});
     }
     try { back.focus({ preventScroll: true }); } catch (e) {}
@@ -1461,7 +1473,10 @@ window.FM = window.FM || {};
     /* #967 B5 (J4-5): the project's comments outlive the sharing — after Stop sharing this was the one place they had gone. */
     if (hasComments()) body.appendChild(commentsRow());
     c.appendChild(offRow(host));
-    /* (#1243 ST9: no foot of its own — this only ever draws into the cog, whose universal Done is under every block) */
+    /* (#1243 ST9: this Done goes when the cog has its one Done for every block; that is not built yet) */
+    const foot = el('div', 'cs-foot');
+    foot.appendChild(btn('cs-done', 'Done', function () { closeAny(); }));
+    c.appendChild(foot);
     return c;
   }
   /* With Labs off the bar still shows (his pick) — and opened, it says what live sharing is and offers the one switch.
@@ -1486,7 +1501,9 @@ window.FM = window.FM || {};
     /* The privacy line stays HERE, beside the switch it is about (turning it on here is turning on exactly that); the ? repeats it. */
     body.appendChild(privacyBlock());
     c.appendChild(offRow(host));
-    /* (#1243 ST9: no foot of its own — the cog's universal Done) */
+    const foot = el('div', 'cs-foot');   // (#1243 ST9: kept until the cog's one Done is built)
+    foot.appendChild(btn('cs-done', 'Done', function () { closeAny(); }));
+    c.appendChild(foot);
     return c;
   }
 
@@ -1502,7 +1519,7 @@ window.FM = window.FM || {};
      behind the ‹), and in a live session he is already sharing — so off names where the switch is, and live starts at the link. */
   function howItWorks(state) {
     const ol = el('ol', 'cs-how');
-    const steps = ['Send your friend the link', 'They tap it — you’re both editing'];
+    const steps = ['Send your friend the link', 'Start editing together'];   // #1255, his words of 24 Nov: the dash "just looks written by AI… let's go with start editing together"
     if (state !== 'live') steps.unshift(state === 'off' ? 'Go back (‹) and turn on Work with friends at the foot of the block, then tap Start sharing' : 'Tap Start sharing');
     steps.map(function (t, i) { return [String(i + 1), t]; }).forEach(function (x) {
       const li = el('li');
@@ -1643,7 +1660,7 @@ window.FM = window.FM || {};
     } else {
       head.appendChild(el('h2', 'fm-ask-title', 'Share “' + projectName() + '” live'));
       head.appendChild(el('div', 'cs-state', stateLine(s)));
-      if (keepNote && shareStep === 'main') head.appendChild(el('div', 'cs-note cs-keepnote', 'Keep FreeMotion open while you share'));   // #1255: once, on the opening sharing starts in
+      if (keepNote && shareStep === 'main') head.appendChild(el('div', 'cs-keepnote', 'Keep FreeMotion open while you share'));   // #1255: once, on the opening sharing starts in (never .cs-note: that is the one-shot line)
       if (host && shareStep === 'main') { head.classList.add('cs-head-q'); head.appendChild(helpButton(host)); }   // #1243 ST8
     }
     /* Rendered once and consumed: it says what happened to the code that is no longer on screen. */
@@ -1720,9 +1737,9 @@ window.FM = window.FM || {};
     /* #967: while the five letters are being checked, "They match" is the ONE blue button — Done sat blue right under it
        on a phone (measured at 390×844: [They match, Done], the foot starting at the check's bottom edge), and Done is the
        natural "I've checked" word, which turned the friend away. It stays a way out, just not the one lit up. */
-    /* #1243 ST9, his words: "get rid of the done button in the friends section and maybe just have instead have like a universal done
-       button". In the cog the block has none (the cog's own Done is under every block); the stand-alone Share card keeps its own. */
-    if (!host) foot.appendChild(btn('cs-done' + (sasPending ? '' : ' accent'), 'Done', function () { closeCard(); }));
+    /* (#1243 ST9 asks for this Done to go AND for one Done for the whole cog. The cog's one Done is not built yet, so the block keeps
+       its own until it is.) */
+    foot.appendChild(btn('cs-done' + (sasPending ? '' : ' accent'), 'Done', function () { if (host) closeAny(); else closeCard(); }));
     c.appendChild(foot);
     return c;
   }
@@ -2222,7 +2239,8 @@ window.FM = window.FM || {};
     if (C.signal.codesOnly()) {
       box.classList.add('cs-invite-off');
       box.appendChild(el('div', 'cs-rowlabel', 'Swap codes only is on'));
-      box.appendChild(el('div', 'collab-sub', 'Links and short codes need the online helpers, which this device is set not to use. People join by swapping codes with you instead.'));
+      /* (#1255, 24 Nov: "Links and short codes need the online helpers, which this device is set not to use. People join by swapping
+         codes with you instead." stood under it on every opening; lesson 17, behind the card's ?, says it.) */
       return box;
     }
     const link = hostRoom ? C.signal.inviteLink(hostRoom) : null;
@@ -3344,7 +3362,7 @@ window.FM = window.FM || {};
           return leaveKeeping(s);
         });
     }));
-    if (!host) foot.appendChild(btn('cs-done accent', 'Done', function () { closeCard(); }));   // #1243 ST9: in the cog, its universal Done
+    foot.appendChild(btn('cs-done accent', 'Done', function () { if (host) closeAny(); else closeCard(); }));
     c.appendChild(foot);
     return c;
   }
@@ -3495,7 +3513,7 @@ window.FM = window.FM || {};
       if (C.watchOnly && C.watchOnly(pid)) { leaveWatching(pid, host); return; }   // #1091: nothing to keep — Leave deletes it
       U.leaveKeep(pid, function () { if (host) closeAny(); else closeCard(); });
     }));
-    if (!host) foot.appendChild(btn('cs-done accent', 'Done', function () { closeCard(); }));   // #1243 ST9: in the cog, its universal Done
+    foot.appendChild(btn('cs-done accent', 'Done', function () { if (host) closeAny(); else closeCard(); }));
     c.appendChild(foot);
     return c;
   }
@@ -4918,6 +4936,7 @@ window.FM = window.FM || {};
     if (recon && (!s || recon.gpid === s.gpid || recon.mode === 'live')) stopRecon();
     if (wakeLock && !wantWake()) dropWake();   // S8 review: a guest's download lock goes with its session too
     versionNote = null;
+    keepNote = false;                          // #1255: the keep-open line belongs to the sharing that just ended
     unwatchDocIfIdle();
     /* #967: a guest who opens another project has left the live session — said, like Leave and the Labs switch say it.
        (Leave and the switch say it themselves, once the copy has been made; a session the owner had already ended has

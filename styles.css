@@ -11741,6 +11741,9 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 .cs-status { font-size: 12.5px; color: var(--text-dim); margin-top: 8px; min-height: 17px; overflow-wrap: anywhere; }
 /* The one-shot line under the title that says what happened to a code that is no longer on screen. */
 .cs-note { font-size: 12.5px; line-height: 1.45; color: #ffd08a; margin: -6px 0 12px; overflow-wrap: anywhere; }
+/* #1255: "Keep FreeMotion open while you share", said once in the live card's head. It looks like the note and is not one: the
+   one-shot note is the first .cs-note in the head, and this line must never stand in for it. */
+.cs-keepnote { font-size: 12.5px; line-height: 1.45; color: #ffd08a; margin: -6px 0 12px; overflow-wrap: anywhere; }
 /* §14.6's short authentication string: five characters, big enough to read down a phone line. */
 .cs-sas {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 28px; font-weight: 700;
@@ -12290,9 +12293,10 @@ body.text-editing .collab-cmt, #stage:has(> #collab-people.cp-hidden) > .collab-
 /* ═══ #1243 ST8 (BUG) — his words: "in the friends menu, for some reason on mobile, you have to like scroll this one really weird small
    spot instead of it like allowing you to scroll the whole thing." The spot was .cs-body: the head (title, state, the three-line how-to),
    the switch row and Done were pinned around it, and at 390×844 that left it about 146 px. ON A PHONE THE WHOLE BLOCK SCROLLS NOW, at
-   every height: #cv-fr-body is the one scroller under the block's bar, and the head, the body, the switch and the live view's foot
-   (⚙ · Stop sharing) all move with it. Nothing is pinned (the block's own Done went: his "get rid of the done button in the friends
-   section"). A PC keeps its layout. */
+   every height: #cv-fr-body is the one scroller under the block's bar, and the head, the body, the switch and the foot (Done; live,
+   ⚙ · Stop sharing · Done) all move with it. Nothing is pinned. (His "get rid of the done button in the friends section" comes with
+   the cog's one Done for every block, which is not built yet; until then the block keeps its own, at its foot.) A PC keeps its
+   layout. */
 @media (max-width: 700px) {
   #canvas-dialog.cv-bars.cv-fr-big > #cv-friends > #cv-fr-body { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scroll-padding-bottom: 0; }
   #canvas-dialog.cv-bars.cv-fr-big.cv-flying > #cv-friends > #cv-fr-body { overflow-y: hidden; }   /* no scrollbar coming and going mid-air */

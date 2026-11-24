@@ -121571,7 +121571,8 @@
     /* R5 / J5-2, J1-8, J5-4 (owner half); J1-6, J1-12, J1-13 (order half), J5-8 — his pick A. Measured at v17.06: nothing
        said it in steps, Comments sat between the people and the invite, and the keep-open toast landed over the short code. */
     const C = need921S7('how it works');
-    const STEPS = [/^1\s*Tap Start sharing$/, /^2\s*Send your friend the link$/, /^3\s*They tap it — you’re both editing$/];
+    /* step 3 in his words of 24 Nov (the dash in “They tap it — you’re both editing” “just looks written by AI”) */
+    const STEPS = [/^1\s*Tap Start sharing$/, /^2\s*Send your friend the link$/, /^3\s*Start editing together$/];
     /* Review fix: off, there is no Start sharing to tap — step 1 names the switch that IS there, then Start sharing. (#1243 ST8 review
        E1-R7: on the ? page the switch is not below the steps, so it says where it is.) */
     const STEP1_OFF = /^1\s*Go back \(‹\) and turn on Work with friends at the foot of the block, then tap Start sharing$/;
@@ -121595,7 +121596,7 @@
                 if (!step1 || !step1.getClientRects().length) throw new Error((on ? 'turned on' : 'turned off') + ', the block has no ' + (on ? 'Start sharing button' : '“Work with friends” switch') + ' on show for step 1 to name');
                 const q = fr.querySelector('.cs-help');
                 if (!q || !q.getClientRects().length) throw new Error((on ? 'turned on' : 'turned off') + ', the block has no ? to open the steps behind');
-                q.click();   // read in the same task: the lesson, once loaded, takes the three steps' place
+                q.click();   // read in the same task: not shared, the lesson takes the three steps' place once it has loaded
                 const ol = fr.querySelector('.cs-how');
                 const li = ol ? Array.prototype.map.call(ol.children, function (x) { return x.textContent.replace(/\s+/g, ' ').trim(); }) : [];
                 /* the three short steps are drawn at once (the lesson replaces them once it has loaded): read them before it does */
@@ -121616,6 +121617,9 @@
               if (fr.querySelector('.cs-keepopen')) throw new Error('“Keep FreeMotion open” still stands in the panel on every opening (#1255)');
               const keep = fr.querySelector('.cs-head .cs-keepnote');
               if (!keep || keep.textContent !== 'Keep FreeMotion open while you share' || !keep.getClientRects().length) throw new Error('on the opening sharing starts in, the card’s head does not say to keep FreeMotion open (“' + (keep && keep.textContent) + '”)');
+              /* …and it is not a .cs-note: the first .cs-note in the head is the one-shot line (a knock that gave up, a code that
+                 lapsed), and the 921 S6 tests read it at 380; this line stood in front of it and was read instead (review, 25 Nov). */
+              if (keep.classList.contains('cs-note') || fr.querySelector('.cs-head .cs-note') === keep) throw new Error('the keep-open line in the card’s head is a .cs-note, so it is read as the one-shot note in front of the real one');
               const people = fr.querySelector('.cs-people'), invite = fr.querySelector('.cs-invite'), comments = fr.querySelector('.cs-comments');
               if (!people || people.nextElementSibling !== invite) throw new Error('the invite is not straight under the people — the job comes first (J1-6)');
               if (!comments) throw new Error('setup: no Comments row to place');
@@ -121635,6 +121639,54 @@
             }, 390);
           } finally {
             got.restore();
+            try { C.end(); } catch (e) {}
+            try { localStorage.removeItem('fm.collab.host.' + made[0]); } catch (e) {}
+            ui.close();
+            await q915aCleanup(made, orig, wasHome, [], [], []);
+          }
+        });
+      });
+    });
+  });
+
+  /* #1255 review (25 Nov): “Keep FreeMotion open while you share” is for the opening sharing starts in. It was also set when sharing
+     started with nobody looking at the block (the stand-alone Share card the tests use, and the quiet resume after a reload), and then
+     showed at whatever later opening of the block came next. CONTROL: in that same opening, Stop sharing and Start sharing in the block
+     itself bring the line up, so the reading can see it. */
+  test('967 B2 8b on a phone, sharing that started with the Friends block closed puts no Keep FreeMotion open in the head of the next opening of the block (CONTROL: that opening is the live Share panel, and Start sharing in the block itself does show the line)', { item: '967', budgetMs: 90000 }, async function () {
+    const C = need921S7('the keep-open line after a start nobody saw');
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        await with945(async function () {
+          const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+          if (wasHome) FM.home.close();
+          const made = [await FM.projects.create({ name: 'B2 967 keep open unseen', width: 320, height: 240 })];
+          try {
+            await atPhoneWidth(async function () {
+              const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+              if (!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone())) throw new Error('setup: at 390 the app does not read as a phone, and the line is a phone’s only');
+              if (!dlg.classList.contains('hidden')) { FM.closeCanvasDialog(); await settle921(80); }
+              await ui.share(); ui.close(); await settle921(80);
+              if (!C.session || !C.session.isOwner) throw new Error('setup: the Share card did not start sharing');
+              FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+              if (!fr.querySelector('.cs-stop') || !fr.querySelector('.cs-head .cs-state')) throw new Error('CONTROL: the opening is not the live Share panel');
+              const stale = fr.querySelector('.cs-keepnote');
+              if (stale) throw new Error('sharing started with the block closed, and the next opening of the block says “' + stale.textContent + '” (#1255: once, on the opening sharing starts in)');
+              /* CONTROL: Stop sharing, then Start sharing in the open block: now the line is said */
+              fr.querySelector('.cs-stop').click();
+              const q = await until921S6('Stop sharing?', ask967b3, 3000);
+              q.ok.click();
+              await until921S6('the block, not shared', function () { return !C.session && fr.querySelector('.cs-start') ? 1 : 0; }, 5000)
+                .catch(function () { throw new Error('setup: Stop sharing did not bring back the not-shared block'); });
+              fr.querySelector('.cs-start').click();
+              await until921S6('the Share panel again', function () { return C.session && fr.querySelector('.cs-invite') ? 1 : 0; }, 8000)
+                .catch(function () { throw new Error('setup: Start sharing in the block did not bring up the Share panel'); });
+              await settle921(120);
+              if (!fr.querySelector('.cs-head .cs-keepnote')) throw new Error('CONTROL: Start sharing in the open block did not say Keep FreeMotion open either, so the reading above saw nothing');
+              FM.closeCanvasDialog(); await settle921(80);
+            }, 390);
+          } finally {
+            const a = ask967b3(); if (a && a.cancel) a.cancel.click();
             try { C.end(); } catch (e) {}
             try { localStorage.removeItem('fm.collab.host.' + made[0]); } catch (e) {}
             ui.close();
@@ -200738,13 +200790,14 @@
   /* #1243 ST8 REWROTE THIS — it was '1132 with Friends open on a short phone the Work with friends switch and Done stay in reach — its
      body scrolls under a pinned Done — at 380×667, 320×568 and 375×553, Labs on and off; at 390×760 and 390×700 nothing takes a scroll;
      CONTROL at 390×844'. His #1243 words: "you have to like scroll this one really weird small spot instead of it like allowing you to
-     scroll the whole thing" and "get rid of the done button in the friends section". On a phone the whole block is the one scroller now
-     at every height, nothing is pinned, and the block has no Done of its own. */
-  test('1132 with Friends open on a phone the Work with friends switch and Start sharing are in reach by scrolling the one block — no Done of its own — at 390×844, 390×760, 390×700, 380×667, 320×568 and 375×553, Labs on and off (CONTROL: at a short size the switch starts below the block’s window, so the scroll really happened)', { item: '1132', budgetMs: 210000 }, async function () {
+     scroll the whole thing". On a phone the whole block is the one scroller now at every height and nothing is pinned. Its Done stays
+     at its foot, scrolling with it: his "get rid of the done button in the friends section" (ST9) comes with the cog's one Done for
+     every block, which is not built yet (review, 25 Nov). */
+  test('1132 with Friends open on a phone the Work with friends switch, Start sharing and the block’s Done are in reach by scrolling the one block at 390×844, 390×760, 390×700, 380×667, 320×568 and 375×553, Labs on and off (CONTROL: at a short size the switch starts below the block’s window, so the scroll really happened)', { item: '1132', budgetMs: 210000 }, async function () {
     const C = need921S7('the open Friends block on a phone');
     const was = FM.settings.get('collabLabs');
     let needed = 0;   // sizes where the switch began below the block's window: the reach reading's CONTROL
-    await race1132('1132 with Friends open on a phone the Work with friends switch and Start sharing are in reach', 205000, async function () {
+    await race1132('1132 with Friends open on a phone the Work with friends switch, Start sharing and the block’s Done are in reach', 205000, async function () {
     await withFakeNet921(async function () {
       await editorWithShape(async function () {
         await with945(async function () {
@@ -200770,9 +200823,10 @@
               if (!dlg.classList.contains('cv-none')) throw new Error(where + ': setup: the cog did not open all closed');
               document.getElementById('cv-fr-exp').click(); await land945();
               if (!dlg.classList.contains('cv-fr-big') || !body.children.length) throw new Error(where + ': setup: the Friends ⤢ did not open the block with its content');
-              if (body.querySelector('.cs-done')) throw new Error(where + ': the Friends block still has a Done of its own');
               reach(where, body.querySelector('.cs-offrow [role=switch]'), 'the Work with friends switch');
               reach(where, body.querySelector(labs ? '.cs-start' : '.cs-joinlink'), labs ? 'Start sharing' : 'Got an invite?');
+              /* the block's own Done, until the cog's one Done is built (ST9): the way out a first-timer looks for */
+              reach(where, body.querySelector('.cs-foot .cs-done'), 'the block’s Done');
             } finally { FM.closeCanvasDialog(); await sleep(60); }
           };
           try {
@@ -210049,7 +210103,7 @@
      of it like allowing you to scroll the whole thing. Or you just fitting it in properly. It does have a lot of clutter. Like instead of
      having a section that's like how to use it… it shouldn't show you how to use it every single time… bare bones simple just so it works,
      and then have a question mark button… that'll take you to another menu that gives you a tutorial like it will just show you the steps." */
-  test('1243 ST8 · on a phone the open Friends block scrolls as ONE whole under its bar — its head moves with it, nothing pinned — shows no how-to, no hint line and no Done of its own, and its ? opens the steps with a back arrow, live and not shared, at 380×800, 390×844 and 375×553 (CONTROLS: live, there is more than a screen to scroll, and ‹ brings Start sharing back)', { item: '1243', budgetMs: 150000 }, async function () {
+  test('1243 ST8 · on a phone the open Friends block scrolls as ONE whole under its bar — its head moves with it, nothing pinned — shows no how-to and no hint line, keeps its own Done until the cog has one for every block, and its ? opens the steps with a back arrow, live and not shared; live, the steps for someone already sharing stay on top once the lesson has loaded under them, and a redraw while he reads keeps the page where he scrolled it, at 380×800, 390×844 and 375×553 (CONTROLS: live, there is more than a screen to scroll, the lesson drew its steps, the page was scrolled before the redraw, and ‹ brings Start sharing back)', { item: '1243', budgetMs: 150000 }, async function () {
     const C = need921S7('the Friends block, bare');
     const was = FM.settings.get('collabLabs');
     await withFakeNet921(async function () {
@@ -210073,7 +210127,9 @@
             try {
               if (!body.querySelector('.cs-start')) throw new Error(label + ': setup: the not-shared block has no Start sharing');
               oneScroller(label + ', not shared');
-              ['.cs-how', '.cs-fr-hint', '.cs-done'].forEach(function (sel) { const n = body.querySelector(sel); if (n && n.getClientRects().length) throw new Error(label + ': the bare block still shows ' + sel + ' — his words: “it shouldn’t show you how to use it every single time”'); });
+              ['.cs-how', '.cs-fr-hint'].forEach(function (sel) { const n = body.querySelector(sel); if (n && n.getClientRects().length) throw new Error(label + ': the bare block still shows ' + sel + ' — his words: “it shouldn’t show you how to use it every single time”'); });
+              /* ST9 takes this Done away only together with the cog's one Done for every block, which is not built yet */
+              if (!body.querySelector('.cs-foot .cs-done')) throw new Error(label + ': the not-shared block has no Done, and the cog has no Done of its own yet: no plain way out');
               const q = body.querySelector('.cs-help');
               if (!q || !/How Work with friends works/.test(q.getAttribute('aria-label') || '')) throw new Error(label + ': the block has no ? button (his words: “have a question mark button”)');
               const qr = q.getBoundingClientRect(), at = document.elementFromPoint(qr.left + qr.width / 2, qr.top + qr.height / 2);
@@ -210098,21 +210154,36 @@
                   FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
                   try {
                     if (!body.querySelector('.cs-stop')) throw new Error('setup: the block is not the live Share panel');
-                    if (body.querySelector('.cs-done')) throw new Error('live, the Friends block still has its own Done');
+                    if (!body.querySelector('.cs-foot .cs-done')) throw new Error('live, the Friends block has no Done, and the cog has no Done of its own yet: no plain way out');
                     const s = oneScroller('390×844, live');
                     if (!(s.scrollHeight > s.clientHeight + 40)) throw new Error('CONTROL: live, the block has nothing to scroll (' + s.scrollHeight + ' in ' + s.clientHeight + '), so this reads nothing');
                     const head = body.querySelector('.cs-head'), t0 = head.getBoundingClientRect().top;
                     s.scrollTop = 120; await sleep(30);
                     if (!(head.getBoundingClientRect().top < t0 - 60)) throw new Error('live, scrolling the block left its head pinned (' + Math.round(t0) + ' → ' + Math.round(head.getBoundingClientRect().top) + ') — the whole block should move');
-                    /* review E1-R7: live, the ? page's steps start at the link — he is already sharing. Read in the same task as the
-                       tap: the lesson, once loaded, takes the short steps' place. */
+                    /* review E1-R7: live, the ? page's steps start at the link — he is already sharing. Read as the page opens, and
+                       again once lesson 17 has loaded: the lesson goes UNDER them, it does not take their place (review, 25 Nov: it
+                       did, and the page then told someone already sharing to open the gear and tap Start sharing). */
                     s.scrollTop = 0;
                     const lq = body.querySelector('.cs-help');
                     if (!lq) throw new Error('live, the Share panel has no ? to open the steps behind');
                     lq.click();
-                    const lli = [].map.call(body.querySelectorAll('.cs-how li'), function (x) { return x.textContent.replace(/\s+/g, ' ').trim(); });
-                    if (!lli.length) throw new Error('live, the ? page drew no steps');
-                    if (lli.some(function (t) { return /Start sharing/.test(t); }) || !/^1\s*Send your friend the link$/.test(lli[0])) throw new Error('live, the ? page says ' + JSON.stringify(lli) + ' to someone who is already sharing — its first step should be Send your friend the link');
+                    const liveSteps = function (when) {
+                      const lli = [].map.call(body.querySelectorAll('.cs-how li'), function (x) { return x.textContent.replace(/\s+/g, ' ').trim(); });
+                      if (!lli.length) throw new Error('live, ' + when + ', the ? page shows no steps for someone already sharing');
+                      if (lli.some(function (t) { return /Start sharing/.test(t); }) || !/^1\s*Send your friend the link$/.test(lli[0])) throw new Error('live, ' + when + ', the ? page says ' + JSON.stringify(lli) + ' to someone who is already sharing — its first step should be Send your friend the link');
+                    };
+                    liveSteps('as it opens');
+                    await until921S6('lesson 17 behind the live ?', function () { return body.querySelector('.cs-helpbody .tut-steps li') ? 1 : 0; }, 5000)
+                      .catch(function () { throw new Error('CONTROL: live, lesson 17 did not draw its steps behind the ?, so the reading after it proves nothing'); });
+                    liveSteps('once the lesson has loaded');
+                    /* a redraw while he reads (someone joins, a role changes: redrawShare → renderFriends with keepStep) keeps the page */
+                    const page = body.querySelector('.cs-helpbody');
+                    s.scrollTop = 200; await sleep(30);
+                    const top0 = s.scrollTop;
+                    if (!(top0 > 20)) throw new Error('CONTROL: live, the ? page did not scroll (' + top0 + '), so a jump back to the top could not be seen');
+                    C.ui.renderFriends(body, { keepStep: true }); await settle921(40);
+                    if (body.querySelector('.cs-helpbody') !== page) throw new Error('live, a redraw while he reads the ? page drew it again from the start: the lesson flashes back to the short steps and his place is lost');
+                    if (Math.abs(s.scrollTop - top0) > 2) throw new Error('live, a redraw while he reads the ? page moved it from ' + Math.round(top0) + ' to ' + Math.round(s.scrollTop) + ' px');
                     const lb = body.querySelector('.cs-backbtn'); if (lb) { lb.click(); await settle921(60); }
                   } finally { FM.closeCanvasDialog(); await settle921(60); }
                 });
@@ -211372,7 +211443,7 @@
      says what they said, with "What gets sent?" at its foot.
      ONE LINE IS KEPT ON PURPOSE and checked here: under New people join as, that everyone who joins, Viewers too, sees his notes and
      reminders. It is the fix of a privacy finding (#1090), a warning about his own project where he picks a role, not a how-to. */
-  test('1255 hints · the edit-together card holds no small lines of explanation: nothing under the short code, the link’s switch or the swap door on the Share panel and no standing Keep FreeMotion open, nothing under his name, under Most people at once or under any switch in Sharing settings, whose head has a ? too, and the privacy sentence on neither; the one ? in the card’s head shows the lesson, which says what those lines said, with What gets sent? at its foot, and back gives the Share panel again; the warning that everyone who joins sees his notes stays under New people join as; and a friend’s panel has the one ? too, with no line under its people (CONTROLS: the block is the live Share panel with its invite; the gear opened Sharing settings; the lesson’s steps were drawn; the friend’s block is the friend’s panel)', { item: '1255', budgetMs: 120000 }, async function () {
+  test('1255 hints · the edit-together card holds no small lines of explanation: nothing under the short code, the link’s switch or the swap door on the Share panel and no standing Keep FreeMotion open, nothing under his name, under Most people at once or under any switch in Sharing settings, whose head has a ? too, and the privacy sentence on neither; the one ? in the card’s head shows the lesson, which says what those lines said, with What gets sent? at its foot, and back gives the Share panel again; the warning that everyone who joins sees his notes stays under New people join as; and a friend’s panel has the one ? too, with no line under its people, and its page never opens on the owner’s steps; with Swap codes only on, nothing stands under the invite’s label (CONTROLS: the block is the live Share panel with its invite; the gear opened Sharing settings; the lesson’s steps were drawn; the friend’s block is the friend’s panel and its ? opened the page; with Swap codes only the invite says so)', { item: '1255', budgetMs: 150000 }, async function () {
     const C = need921S7('the bare edit-together card');
     const fails = [];
     await withFakeNet921(async function () {
@@ -211433,6 +211504,10 @@
               if (gq.length !== 1) fails.push('a friend’s panel has ' + gq.length + ' ? buttons in its head, want one');
               else {
                 gq[0].click();
+                /* read as the page opens, before the lesson loads: the short steps are the OWNER's (send the link), not a friend's */
+                if (!fr.querySelector('.cs-helpbody')) fails.push('CONTROL: a friend’s ? did not open the page behind it');
+                const owner = fr.querySelector('.cs-helpbody .cs-how');
+                if (owner) fails.push('the page behind a friend’s ? opens on the owner’s steps (“' + owner.textContent.replace(/\s+/g, ' ').trim().slice(0, 60) + '”)');
                 await until921S6('the lesson behind a friend’s ?', function () { return fr.querySelector('.tut-steps li') ? 1 : 0; }, 5000)
                   .catch(function () { fails.push('a friend’s ? did not show the lesson'); });
                 if (!/Watch along/.test(fr.textContent)) fails.push('the page behind a friend’s ? does not say what Watch along does');
@@ -211443,6 +211518,23 @@
               FM.closeCanvasDialog(); await settle921(80);
             }, 390);
           } finally { await dropFixture967(C, [fx.gpid]); if (wasHome1 && !FM.home.isOpen()) FM.home.open(); }
+          /* Swap codes only on: the invite says so in its label, and no line explains it under that (lesson 17 says it) */
+          const wasCO = FM.settings.get('collabCodesOnly');
+          try {
+            FM.settings.set('collabCodesOnly', true);
+            await withCollab921([layer921('A')], async function () {
+              await atPhoneWidth(async function () {
+                const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+                FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                try {
+                  const inv = fr.querySelector('.cs-invite');
+                  if (!fr.querySelector('.cs-stop') || !inv || !/Swap codes only is on/.test(inv.textContent)) throw new Error('CONTROL: with Swap codes only on, the block is not the live Share panel with its invite saying so (“' + (inv ? inv.textContent.trim().slice(0, 60) : 'no invite') + '”) · ' + fails.join(' · '));
+                  const sub = inv.querySelector('.collab-sub');
+                  if (sub) fails.push('with Swap codes only on, a line of explanation still stands under the invite: “' + sub.textContent.slice(0, 60) + '…”');
+                } finally { FM.closeCanvasDialog(); await settle921(80); }
+              }, 390);
+            });
+          } finally { FM.settings.set('collabCodesOnly', !!wasCO); }
         });
       });
     });
