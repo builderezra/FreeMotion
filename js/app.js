@@ -8332,7 +8332,7 @@ window.FM = window.FM || {};
          sentence you say WITH a layer selected, so without an entry here the feature is unreachable in
          the exact situation it was built for. Opening from a layer also means "this" already has a
          referent, which is what stops the first thing he types being answered with "which one?". */
-      items.push({ label: 'Ask the Assistant…', action: () => FM.aiChat && FM.aiChat.askAbout(sel.id) });
+      items.push({ label: 'Ask & edit…', action: () => FM.aiChat && FM.aiChat.askAbout(sel.id) });   // #1243 F2: its new name
       items.push({ sep: true });
       items.push({ label: (sel.flipH ? '✓ ' : '') + 'Flip Horizontally', action: () => FM.flipLayer(sel, 'h') });
       items.push({ label: (sel.flipV ? '✓ ' : '') + 'Flip Vertically', action: () => FM.flipLayer(sel, 'v') });

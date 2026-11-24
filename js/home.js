@@ -2407,7 +2407,8 @@ window.FM = window.FM || {};
      menu instead of like a proper thought out one … I do want elements and templates to be their own things, not
      just reskinned projects". Three menus were drawn over the real Home and sent (tools/design/948-options.html); on
      11 Oct the PM picked A under his standing rule (#1130). A is ONE CARD, the New project card's look:
-       · a tile to start from scratch, the shape picked on the tile itself (1:1 · 9:16 · 16:9 · 4:5);
+       · a tile to start from scratch, the shape picked on the tile itself (1:1 · 9:16 · 16:9 · 4:5) — since #1243 H3 (below)
+         four shape buttons under a Blank heading instead, one tap each, and no description;
        · under it, his projects in a sideways row with their real pictures. One tap makes that project a template
          (or an element), named after it, and he stays on Home to see it arrive;
        · Cancel.
@@ -2418,14 +2419,22 @@ window.FM = window.FM || {};
      Starting from scratch makes a workspace (FM.templates / FM.elements .startNew in storage.js); nothing here
      writes a library entry by hand. Every name is user text and goes in through el(), i.e. textContent; the pictures
      are the same IndexedDB thumbnails the Projects grid shows (FM.projects.getThumb). */
+  /* ═══ #1243 H3 — THE CARD, REWORKED, AND NO EXPLANATIONS ═══════════════════════════════════════════════════════════════
+     His words, 8 Nov: "I think you've kind of half-assed the menu to like create a new element or a new template. I think you
+     should work on that. I don't think you need an explanation in each one what those are. Like if people don't know what
+     something is, they can go to like tutorials and stuff. You don't need to put an explanation on literally everything. Like
+     everything you add always has an explanation. Like you don't need that."
+     Plan 1243-E H3, option A (RECOMMENDED; B was two big halves, Blank and From a project, each its own step; C was today's
+     layout minus the words): the sub-line under the title, the tile's description and the toast after the build are gone;
+     the four shapes ARE the buttons, each drawn at its true proportion, and ONE tap builds that shape (the old tile took two:
+     a chip, then the tile); his projects sit in a bigger row with their names under the pictures, headed From a project; and
+     Cancel is a quiet text button. The section heads (Blank, From a project) are labels, not explanations. */
   const LN_SHAPES = [['1:1', 1080, 1080], ['9:16', 1080, 1920], ['16:9', 1920, 1080], ['4:5', 1080, 1350]];
   const LN_WORDS = {
-    elements: { kind: 'element', title: 'New element', sub: 'A piece you drop into any edit: a logo, a watermark, a lower-third.',
-      blankT: 'Build from scratch', blankD: 'A clear canvas to draw it on', fromT: 'From one of your projects' },
-    templates: { kind: 'template', title: 'New template', sub: 'A starting point: open it, swap in your own media, and it’s a new project.',
-      blankT: 'Start from a blank template', blankD: 'Pick its shape, then build it', fromT: 'From one of your projects' },
+    elements: { kind: 'element', title: 'New element', blankT: 'Blank', fromT: 'From a project' },
+    templates: { kind: 'template', title: 'New template', blankT: 'Blank', fromT: 'From a project' },
   };
-  const lnShape = { elements: '1:1', templates: '1:1' };   // the drawing's pick, remembered per tab for the session
+  const LN_FRAME = { w: 44, h: 50 };   // the box each shape is drawn inside, in CSS px: the tallest (9:16) fills its height
   let lnBusy = false, lnBack = null;
   function lnIsOpen() { const d = document.getElementById('hm-libnew'); return !!d && !d.classList.contains('hidden'); }
   function lnRoot() {
@@ -2450,14 +2459,25 @@ window.FM = window.FM || {};
     const back = lnBack; lnBack = null;
     if (!leaving && back && back.isConnected && back.focus) { try { back.focus({ preventScroll: true }); } catch (e) {} }   // not when Home itself is going
   }
-  function lnSyncChips(tile, which) {
+  /* #1243 H3: one shape button — its outline drawn at the shape's own proportion inside a fixed box, the ratio under it.
+     One tap builds a blank one of that shape (lnBuild). */
+  function lnShapeTile(which, s) {
     const W = LN_WORDS[which];
-    tile.querySelectorAll('.hm-ln-chip').forEach(c => {
-      const on = c.dataset.shape === lnShape[which];
-      c.classList.toggle('on', on);
-      c.setAttribute('aria-pressed', on ? 'true' : 'false');
-    });
-    tile.setAttribute('aria-label', W.blankT + ', ' + lnShape[which]);
+    const b = el('button', 'hm-ln-shape');
+    b.type = 'button';
+    b.dataset.shape = s[0];
+    b.setAttribute('aria-label', 'Blank ' + W.kind + ', ' + s[0]);
+    const box = el('span', 'hm-ln-box');
+    box.setAttribute('aria-hidden', 'true');
+    const fit = Math.min(LN_FRAME.w / s[1], LN_FRAME.h / s[2]);
+    const fr = el('span', 'hm-ln-frame');
+    fr.style.width = (s[1] * fit).toFixed(2) + 'px';
+    fr.style.height = (s[2] * fit).toFixed(2) + 'px';
+    box.appendChild(fr);
+    b.appendChild(box);
+    b.appendChild(el('span', 'hm-ln-sl', s[0]));
+    b.addEventListener('click', () => lnBuild(which, s[0]));
+    return b;
   }
   // A plain mouse wheel moves the row sideways (his #976: "on pc without trackpad there seems to be no way to slide").
   function lnWheel(e) {
@@ -2502,46 +2522,17 @@ window.FM = window.FM || {};
     const title = el('div', 'hm-dlg-title', W.title);
     title.id = 'hm-libnew-title';
     card.appendChild(title);
-    card.appendChild(el('div', 'hm-ln-sub', W.sub));
     const body = el('div', 'hm-dlg-scroll hm-ln-body');
-    // the from-scratch tile: picture · words + shape chips · chevron. A div with role=button because the chips are
-    // buttons inside it — the nested-button rule projectCard follows.
-    const tile = el('div', 'hm-ln-blank');
-    tile.setAttribute('role', 'button');
-    tile.tabIndex = 0;
-    const art = el('span', 'hm-ln-art');
-    art.setAttribute('aria-hidden', 'true');
-    tile.appendChild(art);
-    const tx = el('div', 'hm-ln-txt');
-    tx.appendChild(el('div', 'hm-ln-tt', W.blankT));
-    tx.appendChild(el('div', 'hm-ln-td', W.blankD));
-    const chips = el('div', 'hm-ln-chips');
-    chips.setAttribute('role', 'group');
-    chips.setAttribute('aria-label', 'Shape');
-    LN_SHAPES.forEach(s => {
-      const c = el('button', 'hm-ln-chip', s[0]);
-      c.type = 'button';
-      c.dataset.shape = s[0];
-      c.addEventListener('click', ev => { ev.stopPropagation(); lnShape[which] = s[0]; lnSyncChips(tile, which); });
-      c.addEventListener('keydown', ev => ev.stopPropagation());   // Enter on a chip picks that shape; it does not start the build
-      chips.appendChild(c);
-    });
-    tx.appendChild(chips);
-    tile.appendChild(tx);
-    const chev = el('span', 'hm-ln-chev', '›');
-    chev.setAttribute('aria-hidden', 'true');
-    tile.appendChild(chev);
-    tile.addEventListener('click', () => lnBuild(which));
-    tile.addEventListener('keydown', e => {
-      if (e.target !== tile || (e.key !== 'Enter' && e.key !== ' ')) return;
-      e.preventDefault();
-      if (!e.repeat) lnBuild(which);
-    });
-    lnSyncChips(tile, which);
-    body.appendChild(tile);
+    // #1243 H3: Blank — the four shapes are the buttons, one tap each (no sub-line, no description: his words above)
+    body.appendChild(el('div', 'hm-fld-label hm-ln-lbl', W.blankT));
+    const shapes = el('div', 'hm-ln-shapes');
+    shapes.setAttribute('role', 'group');
+    shapes.setAttribute('aria-label', W.blankT);
+    LN_SHAPES.forEach(s => shapes.appendChild(lnShapeTile(which, s)));
+    body.appendChild(shapes);
     body.appendChild(el('div', 'hm-fld-label hm-ln-lbl', W.fromT));
     const list = projectsInGridOrder();   // the Projects grid's own list and order — no hidden workspaces (queue 834 u15)
-    if (!list.length) body.appendChild(el('div', 'hm-ln-none', 'No projects yet. Make one in Projects and it shows up here.'));
+    if (!list.length) body.appendChild(el('div', 'hm-ln-none', 'No projects yet'));   // #1243 H3: a fact, not a how-to
     else {
       const strip = el('div', 'hm-ln-strip');
       list.forEach(p => strip.appendChild(lnProjectTile(p, which)));
@@ -2560,9 +2551,10 @@ window.FM = window.FM || {};
     card.appendChild(act);
     d.appendChild(card);
     d.classList.remove('hidden');
-    // a keyboard lands on the tile, so Enter starts one; a phone gets no focus ring it did not ask for
+    // a keyboard lands on the first shape, so Enter starts one; a phone gets no focus ring it did not ask for
+    const first = shapes.firstChild;
     const hasKeyboard = !window.matchMedia || matchMedia('(hover: hover) and (pointer: fine)').matches;
-    if (hasKeyboard) setTimeout(() => { if (tile.isConnected) { try { tile.focus({ preventScroll: true }); } catch (e) {} } }, 30);
+    if (hasKeyboard) setTimeout(() => { if (first && first.isConnected) { try { first.focus({ preventScroll: true }); } catch (e) {} } }, 30);
   }
   function lnFreeName(which) {
     const noun = which === 'templates' ? 'Template' : 'Element';
@@ -2573,9 +2565,9 @@ window.FM = window.FM || {};
     while (taken.has((noun + ' ' + n).toLowerCase())) n++;
     return noun + ' ' + n;
   }
-  async function lnBuild(which) {
+  async function lnBuild(which, shape) {
     if (lnBusy) return;
-    const s = LN_SHAPES.filter(x => x[0] === lnShape[which])[0] || LN_SHAPES[0];
+    const s = LN_SHAPES.filter(x => x[0] === shape)[0] || LN_SHAPES[0];
     lnBusy = true;
     try {
       lnClose(true);
@@ -2583,8 +2575,7 @@ window.FM = window.FM || {};
       const store = which === 'templates' ? FM.templates : FM.elements;
       const pid = await store.startNew(lnFreeName(which), { width: s[1], height: s[2] });
       if (!pid) { if (pid !== false && FM.toast) FM.toast('Could not start that — the device may be full', 4200); return; }   // false = he chose to stay (queue 690)
-      FM.home.close({ push: true });
-      if (FM.toast) FM.toast(which === 'templates' ? 'Build your template — it saves itself when you go back Home' : 'Build your element — it saves itself when you go back Home', 4200);   // #948 fix 2
+      FM.home.close({ push: true });   // #1243 H3: no toast — the bar at the top already says New element: / New template:
     } finally { lnBusy = false; }
   }
   /* #948 fix 2: is THIS tab's open project a workspace the + card started (storage.js commitLibDraft)? Its kind, or null.
@@ -2876,9 +2867,15 @@ window.FM = window.FM || {};
     if (selBtn) { selBtn.textContent = selectMode ? 'Done' : 'Select'; selBtn.classList.toggle('on', selectMode); }
     // the + means something different on each tab — say which, so it isn't a mystery button
     const newBtn = document.getElementById('hm-new');
-    // Nothing to create on the Tutorials tab, so the + hides rather than making a project from a
-    // screen that has no projects on it.
-    if (newBtn) { newBtn.style.display = (tab === 'tutorials') ? 'none' : ''; newBtn.setAttribute('aria-label', tab === 'templates' ? 'New template' : tab === 'elements' ? 'New element' : 'New project'); }
+    /* #1243 H4 — his words, 8 Nov: "when you go to the tutorials menu, it gets rid of like the massive plus button to like create
+       stuff, which I guess makes sense. But also I think you should just make it, if you're in the tutorials menu and you press
+       the plus to create button, it should just like open up the create new project menu. And if you do anything, then it will
+       just create a new project and put you in the projects menu, just so it doesn't get rid of the plus button and look ugly."
+       So the + stays on Tutorials (it used to hide there) and is New project: newFromTab sends every tab but Templates and
+       Elements to the New project card, Create opens the project the way it does from Projects, and Home always comes back on
+       Projects (open() sets the tab), where the new card is first. Plan option A (RECOMMENDED); B, staying on Home and showing
+       the card arrive without opening it, was not built. An open lesson still covers the + (the reader sits above it). */
+    if (newBtn) { newBtn.style.display = ''; newBtn.setAttribute('aria-label', tab === 'templates' ? 'New template' : tab === 'elements' ? 'New element' : 'New project'); }
     if (tab === 'projects') {
       /* Order follows Settings → Project sorting: most recently EDITED first (so the project you just
          worked on is the front card), or plain A–Z by name; then pinned cards are lifted to the front,
@@ -3168,6 +3165,12 @@ window.FM = window.FM || {};
   // A Home portrait is a small local image, separate from fm.profile. The latter is shared with
   // collaborators; putting a photo there would send it to peers and inflate every signalling message.
   const HOME_PHOTO_DB = 'fm-home-profile-photo';
+  /* #1243 G5: three keys in this one local database. 'avatar' is the round crop the button shows (as before); 'avatar-src' is the
+     photo he picked, shrunk to at most 1600 px; 'avatar-frame' is where the circle sat on it ({cx, cy, s}: its centre as a fraction
+     of the photo's width and height, and the zoom over the cover scale), so Reframe photo… opens where he left it. All three stay
+     on this device: none goes near fm.profile or a peer. 'put' writes all three in one transaction; 'delete' removes all three;
+     'getAll' reads them. */
+  const HOME_PHOTO_KEYS = ['avatar', 'avatar-src', 'avatar-frame'];
   let homePhotoURL = null, homePhotoInput = null, homePhotoReadVersion = 0, homePhotoActionVersion = 0;
   let homePhotoWrite = Promise.resolve();
   function homePhotoStore(mode, value) {
@@ -3180,11 +3183,21 @@ window.FM = window.FM || {};
         const db = open.result;
         let result = null;
         try {
-          const tx = db.transaction('photos', mode === 'get' ? 'readonly' : 'readwrite');
-          const req = mode === 'get' ? tx.objectStore('photos').get('avatar')
-            : mode === 'put' ? tx.objectStore('photos').put(value, 'avatar')
-              : tx.objectStore('photos').delete('avatar');
-          req.onsuccess = () => { result = req.result; };
+          const read = mode === 'get' || mode === 'getAll';
+          const tx = db.transaction('photos', read ? 'readonly' : 'readwrite');
+          const os = tx.objectStore('photos');
+          let req = null;
+          if (mode === 'get') req = os.get('avatar');
+          else if (mode === 'getAll') {
+            result = {};
+            HOME_PHOTO_KEYS.forEach(k => { const r = os.get(k); r.onsuccess = () => { result[k] = r.result; }; });
+          } else if (mode === 'put') {
+            const v = value instanceof Blob ? { avatar: value } : (value || {});
+            os.put(v.avatar, 'avatar');
+            if (v.src instanceof Blob) os.put(v.src, 'avatar-src'); else os.delete('avatar-src');
+            if (v.frame) os.put({ cx: v.frame.cx, cy: v.frame.cy, s: v.frame.s }, 'avatar-frame'); else os.delete('avatar-frame');
+          } else HOME_PHOTO_KEYS.forEach(k => os.delete(k));
+          if (req) req.onsuccess = () => { result = req.result; };
           tx.oncomplete = () => { db.close(); resolve(result); };
           tx.onerror = () => { db.close(); reject(tx.error || new Error('Could not save local photo')); };
           tx.onabort = () => { db.close(); reject(tx.error || new Error('Could not save local photo')); };
@@ -3217,23 +3230,266 @@ window.FM = window.FM || {};
     const actionVersion = homePhotoActionVersion;
     return homePhotoStore('get').then(blob => { if (version === homePhotoReadVersion && actionVersion === homePhotoActionVersion) showHomePhoto(blob); }).catch(() => {});
   }
-  function cropHomePhoto(file) {
+  /* ═══ #1243 G5 — REFRAME THE PROFILE PICTURE WHEN ADDING IT ═══════════════════════════════════════════════════════════
+     His words, 8 Nov: "And also, when you add a profile picture to your custom profile, you should be able to reframe it to
+     decide where the picture lands, like what most apps have."
+     It used to centre-crop the moment the file was picked. Now the pick opens a sheet (#hm-reframe): the photo under a circle,
+     first scaled to cover it and centred; a drag moves it (pointer capture), a pinch, the slider, the wheel on a PC or + / −
+     zoom it from 1× to 5× of the cover scale; the arrow keys move it; it is held so the circle is always covered. Nothing is
+     saved until Use photo, which draws the circle into a 256 px JPEG and keeps the shrunk photo and the frame beside it (the
+     keys above), so Reframe photo… in the profile menu reopens it where he left it. Cancel saves nothing.
+     THE PHOTO IS HIS AND NEVER LEAVES THE DEVICE: it is decoded from his file into an app-made blob URL set as a property, drawn
+     into canvases, and stored only in this IndexedDB database. No markup is ever built from it. */
+  const RF_MAX = 5, RF_OUT = 256, RF_SRC_MAX = 1600, RF_KEY_STEP = 10;
+  let rf = null, rfPick = 0, rfResize = null;
+  function rfIsOpen() { return !!rf; }
+  // The photo he picked, shrunk to at most RF_SRC_MAX on its long side, as a JPEG blob (what Reframe… reopens from).
+  function rfShrink(file) {
     return new Promise((resolve, reject) => {
-      const source = URL.createObjectURL(file), img = new Image();
-      img.onerror = () => { URL.revokeObjectURL(source); reject(new Error('Could not read that photo')); };
+      const url = URL.createObjectURL(file), img = new Image();
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read that photo')); };
       img.onload = () => {
-        URL.revokeObjectURL(source);
+        URL.revokeObjectURL(url);
         try {
-          const side = Math.min(img.naturalWidth, img.naturalHeight);
-          if (!side) throw new Error('That photo has no pixels');
-          const canvas = document.createElement('canvas'); canvas.width = canvas.height = 192;
-          canvas.getContext('2d').drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2,
-            side, side, 0, 0, 192, 192);
-          canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('Could not prepare that photo')), 'image/jpeg', .8);
+          const W = img.naturalWidth, H = img.naturalHeight;
+          if (!W || !H) throw new Error('That photo has no pixels');
+          const f = Math.min(1, RF_SRC_MAX / Math.max(W, H));
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, Math.round(W * f)); c.height = Math.max(1, Math.round(H * f));
+          const g = c.getContext('2d');
+          g.imageSmoothingQuality = 'high';
+          g.drawImage(img, 0, 0, c.width, c.height);
+          c.toBlob(b => b ? resolve(b) : reject(new Error('Could not prepare that photo')), 'image/jpeg', .9);
         } catch (e) { reject(e); }
       };
-      img.src = source;
+      img.src = url;
     });
+  }
+  function rfDecode(blob) {
+    return new Promise((resolve, reject) => {
+      const url = URL.createObjectURL(blob), img = new Image();
+      img.onload = () => (img.naturalWidth && img.naturalHeight) ? resolve({ img: img, url: url }) : (URL.revokeObjectURL(url), reject(new Error('That photo has no pixels')));
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Could not read that photo')); };
+      img.src = url;
+    });
+  }
+  // keep the zoom in 1..RF_MAX and the circle covered: the window it shows is min(W, H) / s source px across
+  function rfClamp(f, W, H) {
+    const s = Math.max(1, Math.min(RF_MAX, isFinite(f.s) ? f.s : 1));
+    const side = Math.min(W, H) / s;
+    const hx = side / 2 / W, hy = side / 2 / H;
+    const cx = Math.max(hx, Math.min(1 - hx, isFinite(f.cx) ? f.cx : 0.5));
+    const cy = Math.max(hy, Math.min(1 - hy, isFinite(f.cy) ? f.cy : 0.5));
+    return { cx: cx, cy: cy, s: s };
+  }
+  // the circle's region of the photo, drawn into a RF_OUT px square canvas (synchronous; the JPEG is made by the caller)
+  function rfCrop(img, frame) {
+    const W = img.naturalWidth, H = img.naturalHeight, side = Math.min(W, H) / frame.s;
+    const sx = frame.cx * W - side / 2, sy = frame.cy * H - side / 2;
+    const c = document.createElement('canvas');
+    c.width = c.height = RF_OUT;
+    const g = c.getContext('2d');
+    g.imageSmoothingQuality = 'high';
+    g.drawImage(img, sx, sy, side, side, 0, 0, RF_OUT, RF_OUT);
+    return c;
+  }
+  /* the stage's size and the circle's diameter, in CSS px, as laid out — offset/client sizes, NOT boxes: the card pops in with
+     a scale animation, and a box read during it would size the photo for a circle that is still growing */
+  function rfGeom() {
+    const st = rf;
+    return { D: st.ring.offsetWidth || 1, sw: st.stage.clientWidth, sh: st.stage.clientHeight };
+  }
+  function rfK(s) {   // CSS px per photo px at zoom s
+    return rfGeom().D / Math.min(rf.W, rf.H) * s;
+  }
+  function rfDraw() {
+    const st = rf;
+    if (!st) return;
+    const g = rfGeom(), k = rfK(st.f.s);
+    st.img.style.width = (st.W * k).toFixed(2) + 'px';
+    st.img.style.height = (st.H * k).toFixed(2) + 'px';
+    st.img.style.transform = 'translate(' + (g.sw / 2 - st.f.cx * st.W * k).toFixed(2) + 'px, ' + (g.sh / 2 - st.f.cy * st.H * k).toFixed(2) + 'px)';
+    st.slider.value = String(st.f.s);
+  }
+  function rfPan(dx, dy) {   // move the photo by (dx, dy) CSS px
+    const st = rf, k = rfK(st.f.s);
+    st.f = rfClamp({ cx: st.f.cx - dx / (k * st.W), cy: st.f.cy - dy / (k * st.H), s: st.f.s }, st.W, st.H);
+    rfDraw();
+  }
+  function rfZoomAt(px, py, s2) {   // zoom to s2 keeping the photo point under (px, py) — CSS px from the stage centre — still
+    const st = rf, k = rfK(st.f.s);
+    const z = Math.max(1, Math.min(RF_MAX, s2)), k2 = rfK(z);
+    const X = st.f.cx * st.W + px / k, Y = st.f.cy * st.H + py / k;
+    st.f = rfClamp({ cx: (X - px / k2) / st.W, cy: (Y - py / k2) / st.H, s: z }, st.W, st.H);
+    rfDraw();
+  }
+  function rfFromCentre(e) {
+    const s = rf.stage.getBoundingClientRect();
+    return { x: e.clientX - s.left - s.width / 2, y: e.clientY - s.top - s.height / 2 };
+  }
+  function rfClose() {
+    const st = rf;
+    if (!st) return;
+    rf = null;
+    if (rfResize) { window.removeEventListener('resize', rfResize); rfResize = null; }
+    st.sheet.classList.add('hidden');
+    try { FM.modalFocus(st.sheet, null); } catch (e) {}
+    st.sheet.textContent = '';
+    URL.revokeObjectURL(st.url);
+    if (st.back && st.back.isConnected && st.back.focus) { try { st.back.focus({ preventScroll: true }); } catch (e) {} }
+  }
+  function rfUse() {
+    const st = rf;
+    if (!st) return;
+    homePhotoReadVersion++;   // a slow initial read must not replace the photo he has just framed
+    const version = ++homePhotoActionVersion;
+    const frame = { cx: st.f.cx, cy: st.f.cy, s: st.f.s }, src = st.src;
+    let canvas = null;
+    try { canvas = rfCrop(st.img, frame); } catch (e) { canvas = null; }
+    rfClose();
+    if (!canvas) { if (FM.toast) FM.toast('Could not prepare that photo', 3500); return; }
+    canvas.toBlob(async blob => {
+      try {
+        if (!blob) throw new Error('Could not prepare that photo');
+        if (version !== homePhotoActionVersion) return;
+        if (await queueHomePhotoWrite('put', { avatar: blob, src: src, frame: frame }, version)) showHomePhoto(blob);   // keep the old photo on a failed write
+      } catch (e) { if (version === homePhotoActionVersion && FM.toast) FM.toast(e.message || 'Could not save that photo', 3500); }
+    }, 'image/jpeg', .85);
+  }
+  function rfSheet() {
+    let d = document.getElementById('hm-reframe');
+    if (d) return d;
+    d = el('div', 'hidden');
+    d.id = 'hm-reframe';
+    d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-labelledby', 'hm-reframe-title');
+    (root || document.body).appendChild(d);
+    return d;
+  }
+  // open the sheet on `src` (a Blob he picked, or the one kept from last time) at `frame` (null = cover and centre)
+  async function openReframe(src, frame) {
+    const got = await rfDecode(src);
+    /* Home may have closed while the photo was being read (review E2-3): close() ran rfClose() when nothing was open yet, so a
+       sheet opened now would sit over the editor with the editor made inert behind it. Leaving Home is a Cancel, late or not. */
+    if (!FM.home || !FM.home.isOpen()) { URL.revokeObjectURL(got.url); return; }
+    if (rf) rfClose();
+    const sheet = rfSheet();
+    sheet.textContent = '';
+    const st = { sheet: sheet, src: src, url: got.url, img: got.img, W: got.img.naturalWidth, H: got.img.naturalHeight, back: document.activeElement, ptr: new Map() };
+    st.f = rfClamp(frame || { cx: 0.5, cy: 0.5, s: 1 }, st.W, st.H);
+    const card = el('div', 'hm-dlg-card hm-rf-card');
+    const title = el('div', 'hm-dlg-title', 'Move and scale');
+    title.id = 'hm-reframe-title';
+    card.appendChild(title);
+    const stage = el('div', 'hm-rf-stage');
+    stage.tabIndex = 0;
+    stage.setAttribute('role', 'group');
+    stage.setAttribute('aria-label', 'Photo position');
+    st.img.className = 'hm-rf-img';
+    st.img.alt = '';
+    st.img.draggable = false;
+    stage.appendChild(st.img);
+    const ring = el('div', 'hm-rf-ring');
+    ring.setAttribute('aria-hidden', 'true');
+    stage.appendChild(ring);
+    card.appendChild(stage);
+    const zoom = el('div', 'hm-rf-zoom');
+    // the small and big squares at the slider's ends are real 44 px buttons: they look like zoom out / zoom in, so they are (review E2-6)
+    const less = el('button', 'hm-rf-less');
+    less.type = 'button'; less.setAttribute('aria-label', 'Zoom out');
+    const more = el('button', 'hm-rf-more');
+    more.type = 'button'; more.setAttribute('aria-label', 'Zoom in');
+    const slider = document.createElement('input');
+    slider.type = 'range'; slider.className = 'hm-rf-slider';
+    slider.min = '1'; slider.max = String(RF_MAX); slider.step = '0.01';
+    slider.setAttribute('aria-label', 'Zoom');
+    zoom.appendChild(less); zoom.appendChild(slider); zoom.appendChild(more);
+    card.appendChild(zoom);
+    const act = el('div', 'hm-dlg-actions');
+    const cancel = el('button', 'hm-rf-cancel', 'Cancel');
+    cancel.type = 'button';
+    const use = el('button', 'accent hm-rf-use', 'Use photo');
+    use.type = 'button';
+    act.appendChild(cancel); act.appendChild(use);
+    card.appendChild(act);
+    sheet.appendChild(card);
+    Object.assign(st, { stage: stage, ring: ring, slider: slider });
+    rf = st;
+    cancel.addEventListener('click', () => rfClose());
+    use.addEventListener('click', () => rfUse());
+    slider.addEventListener('input', () => { if (rf === st) rfZoomAt(0, 0, parseFloat(slider.value) || 1); });
+    less.addEventListener('click', () => { if (rf === st) rfZoomAt(0, 0, st.f.s / 1.25); });
+    more.addEventListener('click', () => { if (rf === st) rfZoomAt(0, 0, st.f.s * 1.25); });
+    /* The dimmed backdrop is deliberately NOT a Cancel, unlike #hm-libnew's and #hm-dialog's: a stray tap beside the card would
+       throw away the framing he has just dragged into place. Cancel, Escape and leaving Home are the ways out (review E2-6). */
+    /* a drag moves the photo; two fingers pinch. Captured so a finger that leaves the circle keeps moving it — the capture is
+       asked for politely, because a pointer the browser does not know (a synthetic one) cannot be captured and must not throw */
+    stage.addEventListener('pointerdown', e => {
+      if (rf !== st) return;
+      e.preventDefault();
+      try { stage.setPointerCapture(e.pointerId); } catch (err) {}
+      st.ptr.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    });
+    stage.addEventListener('pointermove', e => {
+      if (rf !== st || !st.ptr.has(e.pointerId)) return;
+      const prev = st.ptr.get(e.pointerId);
+      if (st.ptr.size === 1) {
+        st.ptr.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        rfPan(e.clientX - prev.x, e.clientY - prev.y);
+        return;
+      }
+      const pts = Array.from(st.ptr.values());
+      const other = pts.filter(p => p !== prev)[0];
+      st.ptr.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const d0 = Math.hypot(prev.x - other.x, prev.y - other.y), d1 = Math.hypot(e.clientX - other.x, e.clientY - other.y);
+      if (d0 > 4 && d1 > 0) {
+        const mid = rfFromCentre({ clientX: (other.x + e.clientX) / 2, clientY: (other.y + e.clientY) / 2 });
+        rfZoomAt(mid.x, mid.y, st.f.s * d1 / d0);
+        rfPan((e.clientX - prev.x) / 2, (e.clientY - prev.y) / 2);
+      }
+    });
+    const lift = e => { st.ptr.delete(e.pointerId); };
+    stage.addEventListener('pointerup', lift);
+    stage.addEventListener('pointercancel', lift);
+    stage.addEventListener('lostpointercapture', lift);
+    // the wheel on a PC zooms at the cursor
+    stage.addEventListener('wheel', e => {
+      if (rf !== st || !e.deltaY) return;
+      e.preventDefault();
+      const p = rfFromCentre(e);
+      rfZoomAt(p.x, p.y, st.f.s * Math.exp(-e.deltaY * 0.002));
+    }, { passive: false });
+    // the keys: arrows move it (Shift for bigger steps), + and − zoom it, Enter uses it, Escape is the document's (below)
+    stage.addEventListener('keydown', e => {
+      if (rf !== st) return;
+      const step = e.shiftKey ? RF_KEY_STEP * 4 : RF_KEY_STEP;
+      const k = e.key;
+      if (k === 'ArrowLeft') rfPan(-step, 0);
+      else if (k === 'ArrowRight') rfPan(step, 0);
+      else if (k === 'ArrowUp') rfPan(0, -step);
+      else if (k === 'ArrowDown') rfPan(0, step);
+      else if (k === '+' || k === '=') rfZoomAt(0, 0, st.f.s * 1.1);
+      else if (k === '-' || k === '_') rfZoomAt(0, 0, st.f.s / 1.1);
+      else if (k === 'Enter') { if (!e.repeat) rfUse(); }
+      else return;
+      e.preventDefault();
+    });
+    sheet.classList.remove('hidden');
+    rfDraw();
+    rfResize = () => { if (rf === st) rfDraw(); };
+    window.addEventListener('resize', rfResize);
+    try { FM.modalFocus(sheet, st.back); } catch (e) {}
+    const hasKeyboard = !window.matchMedia || matchMedia('(hover: hover) and (pointer: fine)').matches;
+    if (hasKeyboard) { try { stage.focus({ preventScroll: true }); } catch (e) {} }
+  }
+  // Reframe photo…: the kept photo at the kept frame (a photo saved before #1243 G5 kept only its crop, so that is reframed)
+  async function reframeHomePhoto() {
+    try {
+      const all = await homePhotoStore('getAll');
+      const src = (all && all['avatar-src'] instanceof Blob) ? all['avatar-src'] : (all && all.avatar instanceof Blob ? all.avatar : null);
+      if (!src) throw new Error('There is no photo to reframe');
+      const f = all['avatar-src'] instanceof Blob ? all['avatar-frame'] : null;
+      await openReframe(src, f && typeof f === 'object' ? { cx: +f.cx, cy: +f.cy, s: +f.s } : null);
+    } catch (e) { if (FM.toast) FM.toast(e.message || 'Could not open that photo', 3500); }
   }
   function chooseHomePhoto() {
     if (!homePhotoInput) return;
@@ -3249,17 +3505,20 @@ window.FM = window.FM || {};
     homePhotoInput.addEventListener('change', async () => {
       const file = homePhotoInput.files && homePhotoInput.files[0];
       if (!file) return;
-      homePhotoReadVersion++;  // a slow initial read must not replace the user's new choice
-      const version = ++homePhotoActionVersion;
+      /* #1243 G5: a pick opens the reframe sheet and saves NOTHING; Use photo is the action (rfUse takes the write versions, so a
+         pick he cancels cannot void a Remove still in flight). A newer pick wins over a slower decode of an older one. */
+      const pick = ++rfPick;
       try {
         if (file.size > 15 * 1024 * 1024 ||
             (!/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type) && !/\.(jpe?g|png|webp|heic|heif)$/i.test(file.name)))
           throw new Error('Choose a JPEG, PNG, WebP or HEIC photo under 15 MB');
-        const blob = await cropHomePhoto(file);
-        if (version !== homePhotoActionVersion) return;
-        if (await queueHomePhotoWrite('put', blob, version)) showHomePhoto(blob);  // keep the old photo on a failed decode or write
-      } catch (e) { if (version === homePhotoActionVersion && FM.toast) FM.toast(e.message || 'Could not save that photo', 3500); }
+        const src = await rfShrink(file);
+        if (pick !== rfPick) return;
+        await openReframe(src, null);
+      } catch (e) { if (pick === rfPick && FM.toast) FM.toast(e.message || 'Could not open that photo', 3500); }
     });
+    // Escape cancels the sheet (and is answered, so the editor behind never sees it)
+    document.addEventListener('keydown', e => { if ((e.key === 'Escape' || e.key === 'Esc') && rfIsOpen()) { e.preventDefault(); rfClose(); } });
     loadHomePhoto();
     window.addEventListener('pagehide', () => showHomePhoto(null));
     window.addEventListener('pageshow', e => { if (e.persisted) loadHomePhoto(); });
@@ -3274,6 +3533,7 @@ window.FM = window.FM || {};
     FM.contextMenu.show(r.left, r.bottom + 4, [
       { label: p ? 'Edit local profile…' : 'Set up local profile…', action: () => ui.profile({ force: true }).then(refreshHomeProfile) },
       { label: 'Choose profile photo…', action: chooseHomePhoto },
+      ...(b.classList.contains('has-photo') ? [{ label: 'Reframe photo…', action: reframeHomePhoto }] : []),   // #1243 G5
       ...(b.classList.contains('has-photo') ? [{ label: 'Remove profile photo', action: () => {
         homePhotoReadVersion++;
         const version = ++homePhotoActionVersion;
@@ -3807,6 +4067,7 @@ window.FM = window.FM || {};
       document.getElementById('hm-dialog').classList.add('hidden');
       FM.modalFocus(document.getElementById('hm-dialog'), null);
       lnClose(true);   // #948: the + card is Home's too — it must not ride into the editor
+      rfClose();       // #1243 G5: so is the reframe sheet — leaving Home is a Cancel
       document.body.classList.remove('home-open');
       if (push) {
         // `closing` makes isOpen() report false for the length of the push, so nothing downstream can
@@ -3881,6 +4142,8 @@ window.FM = window.FM || {};
     render();
   };
   FM.home.refreshProfilePhoto = loadHomePhoto;
+  // #1243 G5 suite seam: the open reframe sheet's frame and the circle's diameter, or null when it is shut
+  FM.home._reframe = function () { return rf ? { cx: rf.f.cx, cy: rf.f.cy, s: rf.f.s, D: rfGeom().D, W: rf.W, H: rf.H } : null; };
   FM.home.templateFileMessage = templateFileMessage;
   FM.home._selectionState = selectionState;   // queue 828
   FM.home._setSelection = setSelectionForTest;   // queue 828

@@ -4044,7 +4044,14 @@ window.FM = window.FM || {};
     const P = FM.effectPresets;
     let mine = [];
     try { mine = (P && P.custom) ? (P.custom() || []) : []; } catch (e) { mine = []; }
-    mine.concat(FM.EFFECT_PRESETS || []).forEach(p => {
+    /* #1259, his words (23 Nov): "the effects is just all the same image and they don't really actually show you what it is that is
+       happening". A tile shows its effect's drawn picture, and a preset its base effect's, so the five shipped presets on Shake (Beat Slam,
+       Earthquake, Handheld Cam, Hype Shake X, Rumble Build), which came first, filled a phone's first screen with one picture five times.
+       The shipped presets now come one per base effect first (in their own order), then the rest: the first screen shows five different
+       pictures. His own presets keep their place, first and in his order. Presets still come before the stock effects. */
+    const firstOf = {}, lead = [], rest = [];
+    (FM.EFFECT_PRESETS || []).forEach(p => { const k = p && p.fx; if (k && !firstOf[k]) { firstOf[k] = 1; lead.push(p); } else rest.push(p); });
+    mine.concat(lead, rest).forEach(p => {
       if (p && typeof p.id === 'string' && p.id && typeof p.fx === 'string' && p.fx !== FM.FX_CONTAINER && ok(p.fx)) add({ key: 'p:' + p.id, type: p.fx, name: String(p.name || p.fx), preset: p });
     });
     (X.categories() || []).forEach(c => {

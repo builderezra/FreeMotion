@@ -40,7 +40,8 @@ window.FM = window.FM || {};
      New project from template (home.js use() → templates.useAsNew) — which hand it to projects.create as the new card's
      `editor`, so the open() that create ends with reaches syncProject with the card already saying Simple and the project
      arrives in Simple with no Full in between. 'full' for no key and for anything but 'simple': a device that never switched
-     to Simple makes exactly today's card. fm.editor.last is written only by a deliberate switch (set(), from request()); a
+     to Simple makes exactly today's card. fm.editor.last is written only by a deliberate switch (set(), from request()), or by
+     Create when he picked an editor in New project's switch (#1258 clause 2, npEdCommit below; never by a pick he cancelled); a
      hop writes none, so one look at an item in Full never decides where the next project opens. Opening an EXISTING project
      never reads this: its own card decides (homeFor). */
   function forNew() {
@@ -262,11 +263,9 @@ window.FM = window.FM || {};
     let live = document.getElementById('ed-live');
     if (!live) { live = document.createElement('div'); live.id = 'ed-live'; live.className = 'sm-vh'; live.setAttribute('role', 'status'); live.setAttribute('aria-live', 'polite'); document.body.appendChild(live); }
     if (live) live.textContent = mode === 'simple' ? (w.liveSimple || 'Simple editor') : (w.liveFull || 'Full editor');
-    /* First arrival in SIMPLE only, once per device (§6.1). Arriving in Full shows nothing (§0.4 V4). */
-    if (mode === 'simple') {
-      let seen = null; try { seen = localStorage.getItem('fm.editor.hint'); } catch (e) {}
-      if (!seen && FM.toast) { FM.toast(w.firstSimple || 'Simple editor. Switch back any time from the ⚙ cog.', 2600); try { localStorage.setItem('fm.editor.hint', '1'); } catch (e) {} }
-    }
+    /* (The first arrival in Simple raised a toast, once per device: "Simple editor. Switch back any time from the ⚙ cog." It went
+       with #1255's 20:53 follow-up, his words: "There shouldn't be any explanations like that. We have tutorials for a reason". The
+       cog it named is where he switched from, so nothing becomes harder to find. Arriving in Full still shows nothing, §0.4 V4.) */
   }
 
   /* THE ONE DOOR (§6.1, §6.4). Resolves true when the editor changed (or already was `to`). */
@@ -391,7 +390,7 @@ window.FM = window.FM || {};
      every item's tools, FM.editor.splitHere): a selected item that is not a main clip is split
      itself ("split the item"); a main clip is split when the playhead is inside it; otherwise the main clip under the playhead is
      selected and split. The ✂ used to hand the selection straight to split, so with clip A selected and the playhead over B it
-     refused "Move the playhead onto the clip to split" while S split B — a beginner taps the ✂, and CapCut splits what is under
+     refused "Move the playhead onto the clip to split" while S split B — a beginner taps the ✂, and expects it to split what is under
      the line. */
   function splitHere() {
     const S = FM.spine;
@@ -411,7 +410,96 @@ window.FM = window.FM || {};
     S.cmd.split(id);
   }
 
+  /* ═══ #1258 CLAUSE 2: THE EDITOR CHOICE ON NEW PROJECT (the plan's K3, recommended: a switch beside Create). ═══
+     His words (23 Nov): "there should be an option when you press create, like when you're in the create menu and creating a new
+     project, there should be an option to, you know, decide whether you're going to use simple editor or not."
+     Home's New project dialog (index.html #hm-dialog, js/home.js) gets a two-way switch, Editor: Simple | Full, in a row of its own
+     just above Cancel and Create, laid out as the dialog's other rows are (.hm-fld: the name on the left, the control on the right; in
+     the button row itself it pushed Create onto a line of its own at 380). It is put there by THIS file each time the dialog opens (an
+     observer on the dialog's class; home.js is not touched),
+     and it starts at what a new project would get today (forNew(): this device's fm.editor.last). Create already hands forNew() to
+     the new project's card (home.js newEditor), so the switch only has to write what forNew() reads: a deliberate pick is written
+     to fm.editor.last when Create makes the project (as the cog's switch writes it), a pick he cancelled writes nothing, and an
+     untouched Create writes nothing. Its words are the cog's own (Editor, Simple, Full),
+     its buttons carry no data he typed, and it is built with createElement / textContent. Under D22 B with Simple switched off it is
+     not drawn (forNew() is always Full then). */
+  const NP_CLS = 'sm-np-ed';
+  /* review R13-2: a tap only CHOOSES (npPick); fm.editor.last is written when he makes the project (Create, or Enter in the name
+     field: npEdCommit, heard on the dialog in the capture phase, so it lands before home.js's own handler reads forNew()). A tap
+     on Simple and then Cancel used to leave fm.editor.last on Simple, so the next New project and a template's New project from
+     template opened in Simple although he had cancelled. The pick starts over at forNew() each time the dialog opens. */
+  let npPick = null, npTouched = false, npOpen = false;
+  function npEdPick(ed) {
+    npPick = ed; npTouched = true;
+    npEdSync();
+  }
+  function npEdCommit(e) {
+    if (!npTouched || !npPick) return;
+    const t = e.target;
+    const create = e.type === 'click' ? !!(t && t.closest && t.closest('#hm-create'))
+      : (e.key === 'Enter' && !!(t && t.id === 'hm-new-name'));
+    if (!create) return;
+    try { localStorage.setItem('fm.editor.last', npPick); } catch (x) {}
+    npTouched = false;
+  }
+  function npEdSync() {
+    const g = document.querySelector('#hm-dialog .' + NP_CLS);
+    if (!g) return;
+    const now = npPick || forNew();
+    g.querySelectorAll('button[data-ed]').forEach(b => {
+      const on = b.dataset.ed === now;
+      b.setAttribute('aria-checked', on ? 'true' : 'false');
+      b.tabIndex = on ? 0 : -1;
+    });
+  }
+  function npEdMount() {
+    const dlg = document.getElementById('hm-dialog');
+    if (!dlg || dlg.classList.contains('hidden')) { npOpen = false; return; }
+    if (!npOpen) { npOpen = true; npPick = forNew(); npTouched = false; }   /* a fresh opening starts on what a new project gets */
+    const acts = dlg.querySelector('.hm-dlg-actions');
+    let g = dlg.querySelector('.' + NP_CLS);
+    if (!enabled()) { if (g) g.remove(); return; }
+    if (!acts || !acts.parentNode) return;
+    if (!g) {
+      const w = W();
+      g = document.createElement('div');
+      g.className = 'hm-fld ' + NP_CLS;   // the dialog's own row look (name left, control right)
+      const l = document.createElement('span'); l.className = 'sm-np-l'; l.textContent = w.title || 'Editor'; l.setAttribute('aria-hidden', 'true');
+      const seg = document.createElement('div');
+      seg.className = 'sm-np-seg';
+      seg.setAttribute('role', 'radiogroup');
+      seg.setAttribute('aria-label', w.title || 'Editor');
+      [['simple', w.simple || 'Simple'], ['full', w.full || 'Full']].forEach(p => {
+        const b = document.createElement('button');
+        b.type = 'button'; b.className = 'sm-np-b'; b.dataset.ed = p[0]; b.textContent = p[1];
+        b.setAttribute('role', 'radio');
+        b.addEventListener('click', e => { e.preventDefault(); npEdPick(p[0]); });
+        seg.appendChild(b);
+      });
+      /* a radiogroup's arrows move the choice, as the cog's own switch does with a tap */
+      seg.addEventListener('keydown', e => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight' && e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+        e.preventDefault(); e.stopPropagation();
+        const next = (npPick || forNew()) === 'simple' ? 'full' : 'simple';
+        npEdPick(next);
+        const b = seg.querySelector('button[data-ed="' + next + '"]'); if (b) b.focus();
+      });
+      g.append(l, seg);
+      acts.parentNode.insertBefore(g, acts);
+    }
+    npEdSync();
+  }
+  function npEdWatch() {
+    const dlg = document.getElementById('hm-dialog');
+    if (!dlg || typeof MutationObserver !== 'function') return;
+    new MutationObserver(npEdMount).observe(dlg, { attributes: true, attributeFilter: ['class'] });
+    dlg.addEventListener('click', npEdCommit, true);
+    dlg.addEventListener('keydown', npEdCommit, true);
+    npEdMount();
+  }
+
   function wire() {
+    npEdWatch();
     if (GATED) body().classList.toggle('sm-on', enabled());
     if (GATED && FM.settings && FM.settings.onChange) FM.settings.onChange(() => { if (!!enabled() !== body().classList.contains('sm-on')) FM.editor.onPreviewFlip(); });
   }

@@ -4664,11 +4664,7 @@ body.home-open #toast { z-index: 205; }
 /* ============================================================
    AI "Director" panel
    ============================================================ */
-.btn-ai {
-  background: linear-gradient(180deg, rgba(41,217,187,.18), rgba(41,217,187,.08));
-  border-color: rgba(41,217,187,.5); color: var(--accent); font-weight: 600;
-}
-.btn-ai:hover { background: linear-gradient(180deg, rgba(41,217,187,.28), rgba(41,217,187,.12)); border-color: var(--accent); }
+/* (#1243 F2: the hidden ✨ Generate button, .btn-ai, is gone with AI Scene — a scene is asked for in Ask & edit.) */
 .ai-spark { font-size: 13px; line-height: 1; filter: drop-shadow(0 0 4px rgba(41,217,187,.5)); }
 
 /* ⚠️ IT STOPS WHERE THE TIMELINE BEGINS (queue 511 clause 3). Ezra: "the AI menu that pops up the
@@ -4847,8 +4843,6 @@ body.home-open #toast { z-index: 205; }
   .ai-grab .grab-bar { width: 40px; height: 4px; border-radius: 999px; background: var(--line); }
   .ai-fields { grid-template-columns: 1fr 1fr; }
   .ai-row { min-height: 46px; }
-  /* the ✨ topbar button stays compact in the scrolling strip */
-  .btn-ai { flex: 0 0 auto; }
   /* the inspector float button hides while the AI sheet is up (no overlap) */
   body.ai-open #insp-toggle { display: none; }
 }
@@ -6104,31 +6098,33 @@ body.hm-selecting #hm-new { visibility: hidden; pointer-events: none; }
 .hm-dlg-actions button.accent, .fm-ask-actions button.accent { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
 /* ---- #948: the + on Templates and Elements — ONE CARD (option A, tools/design/948-options.html) ----------------------
    The card, its title, its scroll and Cancel are #hm-dialog's own classes, so the dark Home, the glass look and the light
-   Home all reach it through rules that already exist; what follows is only what the drawing adds — the from-scratch tile
-   with its shape chips, and the sideways row of his projects — at the drawing's sizes, with phone-sized targets. */
+   Home all reach it through rules that already exist; what follows is only what the drawing adds — the shape buttons (they were a
+   from-scratch tile with shape chips until #1243 H3), and the sideways row of his projects — with phone-sized targets. */
 #hm-libnew { position: fixed; inset: 0; z-index: 210; background: rgba(4, 6, 10, .7); display: flex; align-items: center; justify-content: center; padding: 20px; animation: hm-bloom .24s ease backwards; }
 #hm-libnew.hidden { display: none; }
-.hm-ln-card .hm-dlg-title { margin-bottom: 3px; }
-.hm-ln-sub { flex: none; font-size: 13px; line-height: 1.4; color: var(--text-dim); margin: 0 0 14px; }
-.hm-ln-blank { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 28px 12px 12px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, .1); background: rgba(255, 255, 255, .04); color: var(--text); cursor: pointer; }
-.hm-ln-blank:focus { outline: none; }
-.hm-ln-blank:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-/* the + is drawn, not typed — a glyph sits wherever the font puts its ink (the #hm-new note in index.html) */
-.hm-ln-art { position: relative; flex: none; width: 58px; height: 58px; box-sizing: border-box; border-radius: 13px; border: 2px dashed var(--accent); background: repeating-conic-gradient(rgba(127, 140, 160, .22) 0 25%, transparent 0 50%) 0 0 / 12px 12px; }
-.hm-ln-art::before, .hm-ln-art::after { content: ''; position: absolute; left: 50%; top: 50%; border-radius: 1px; background: var(--accent); transform: translate(-50%, -50%); }
-.hm-ln-art::before { width: 20px; height: 2px; }
-.hm-ln-art::after { width: 2px; height: 20px; }
-.hm-ln-txt { flex: 1; min-width: 0; }
-.hm-ln-tt { font-size: 15px; font-weight: 750; }
-.hm-ln-td { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
-.hm-ln-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
-.hm-ln-chip { min-height: 32px; padding: 0 10px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .14); background: transparent; color: var(--text); font-size: 12.5px; font-weight: 700; cursor: pointer; }
-.hm-ln-chip.on { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
-.hm-ln-chev { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); font-size: 20px; line-height: 1; color: var(--text-dim); pointer-events: none; }
+/* #1243 H3: the from-scratch tile, its description and its chips are gone; the four shapes are the buttons (home.js lnShapeTile),
+   each outline drawn at its true proportion in a 44x50 box, the ratio under it, one tap each. */
+.hm-ln-card .hm-dlg-title { margin-bottom: 14px; }
+.hm-ln-shapes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.hm-ln-shape { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; min-width: 0; min-height: 88px; padding: 10px 4px 8px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, .1); background: rgba(255, 255, 255, .04); color: var(--text); font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color .15s ease, border-color .15s ease, transform .12s ease; }
+.hm-ln-shape:active { transform: scale(.96); }
+@media (hover: hover) and (pointer: fine) { .hm-ln-shape:hover { border-color: var(--accent); background: rgba(255, 255, 255, .07); } }
+.hm-ln-shape:focus { outline: none; }
+.hm-ln-shape:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hm-ln-box { display: flex; align-items: center; justify-content: center; width: 44px; height: 50px; pointer-events: none; }
+.hm-ln-frame { position: relative; display: block; box-sizing: border-box; border-radius: 6px; border: 2px dashed var(--accent); background: repeating-conic-gradient(rgba(127, 140, 160, .2) 0 25%, transparent 0 50%) 0 0 / 10px 10px; }
+.hm-ln-frame::before, .hm-ln-frame::after { content: ''; position: absolute; left: 50%; top: 50%; border-radius: 1px; background: var(--accent); transform: translate(-50%, -50%); }
+.hm-ln-frame::before { width: 12px; height: 2px; }
+.hm-ln-frame::after { width: 2px; height: 12px; }
+.hm-ln-sl { font-size: 12.5px; font-weight: 750; line-height: 1; pointer-events: none; }
+.hm-dlg-actions button.hm-ln-cancel { min-height: 44px; background: transparent; border-color: transparent; color: var(--text-dim); font-weight: 650; }
+@media (hover: hover) and (pointer: fine) { .hm-dlg-actions button.hm-ln-cancel:hover { color: var(--text); } }
 .hm-ln-lbl { margin: 16px 2px 8px; }
+.hm-dlg-scroll > .hm-ln-lbl:first-child { margin-top: 0; }
+/* #1243 H3: the row of his projects is bigger — 110 px pictures (they were 92), the name under each */
 .hm-ln-strip { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; padding: 2px 2px 6px; margin: 0 -2px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
-.hm-ln-pc { flex: none; width: 92px; padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; scroll-snap-align: start; }
-.hm-ln-th { position: relative; display: flex; align-items: center; justify-content: center; height: 122px; border-radius: 12px; overflow: hidden; background: #05070b; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); }
+.hm-ln-pc { flex: none; width: 110px; padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; scroll-snap-align: start; }
+.hm-ln-th { position: relative; display: flex; align-items: center; justify-content: center; height: 140px; border-radius: 12px; overflow: hidden; background: #05070b; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); }
 .hm-ln-th img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .hm-ln-nm { display: block; margin-top: 5px; font-size: 12.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hm-ln-mt { display: block; font-size: 11px; color: var(--text-dim); }
@@ -6137,15 +6133,43 @@ body.hm-selecting #hm-new { visibility: hidden; pointer-events: none; }
 .hm-ln-none { font-size: 13px; color: var(--text-dim); padding: 2px 2px 8px; }
 /* the light Home: the paper, hairlines and blues its other dialogs use (theme-glass.css, the #864 block) */
 html[data-home="light"] #hm-libnew { background: rgba(20, 38, 56, .34); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
-html[data-home="light"] .hm-ln-sub, html[data-home="light"] .hm-ln-td, html[data-home="light"] .hm-ln-mt,
-html[data-home="light"] .hm-ln-none, html[data-home="light"] .hm-ln-chev { color: #5f6b7d; }
-html[data-home="light"] .hm-ln-blank { background-color: rgba(16, 30, 52, .035); border-color: rgba(16, 30, 52, .12); color: #10151f; }
-html[data-home="light"] .hm-ln-chip { border-color: rgba(16, 30, 52, .16); color: #10151f; }
-html[data-home="light"] .hm-ln-chip.on { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }
-html[data-home="light"] .hm-ln-art { border-color: rgba(23, 128, 180, .75); }
-html[data-home="light"] .hm-ln-art::before, html[data-home="light"] .hm-ln-art::after { background: #1780b4; }
+html[data-home="light"] .hm-ln-mt, html[data-home="light"] .hm-ln-none { color: #5f6b7d; }
+html[data-home="light"] .hm-ln-shape { background-color: rgba(16, 30, 52, .035); border-color: rgba(16, 30, 52, .12); color: #10151f; }
+html[data-home="light"] .hm-ln-frame { border-color: rgba(23, 128, 180, .75); }
+html[data-home="light"] .hm-ln-frame::before, html[data-home="light"] .hm-ln-frame::after { background: #1780b4; }
+html[data-home="light"] .hm-dlg-actions button.hm-ln-cancel { background-color: transparent; border-color: transparent; color: #5f6b7d; }
 html[data-home="light"] .hm-ln-pc { color: #10151f; }
 @media (prefers-reduced-motion: reduce) { #hm-libnew { animation: none; } }
+/* ---- #1243 G5: reframe the profile picture (js/home.js openReframe) -------------------------------------------------------
+   His words: "when you add a profile picture … you should be able to reframe it to decide where the picture lands, like what most
+   apps have." The card is #hm-dialog's own (so every Home look dresses it); inside it a square stage shows the photo, dimmed
+   outside a circle of min(72vw, 320px) — the shape the button shows it in. The photo is positioned by home.js (width, height
+   and a translate); a finger on the stage is the app's, never the page's scroll. */
+#hm-reframe { position: fixed; inset: 0; z-index: 215; background: rgba(4, 6, 10, .78); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#hm-reframe.hidden { display: none; }
+/* A PHONE HELD SIDEWAYS (review E2-1): every row of the card is flex:none, so a stage sized from 56vh alone pushed Use photo off a
+   360 px tall screen. The stage now takes only what the card's other rows leave (title 32 + slider 56 + buttons 56 + padding 38 =
+   182, 190 with room), never under 96 px; the card scrolls as the last resort. A portrait phone and a PC are unchanged (56vh wins). */
+.hm-rf-card { width: min(400px, 94vw); overflow-y: auto; overscroll-behavior: contain; }
+.hm-rf-stage { position: relative; flex: none; width: min(100%, 56vh, 56dvh, max(96px, calc(min(88vh, 88dvh) - 190px))); aspect-ratio: 1 / 1; margin: 0 auto; overflow: hidden; border-radius: 14px; background: #05070b; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+.hm-rf-stage:active { cursor: grabbing; }
+.hm-rf-stage:focus { outline: none; }
+.hm-rf-stage:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hm-rf-img { position: absolute; left: 0; top: 0; max-width: none; max-height: none; transform-origin: 0 0; pointer-events: none; -webkit-user-drag: none; }
+.hm-rf-ring { position: absolute; left: 50%; top: 50%; width: min(72vw, 320px, calc(100% - 16px)); aspect-ratio: 1 / 1; transform: translate(-50%, -50%); border-radius: 50%; box-shadow: 0 0 0 2px rgba(255, 255, 255, .9), 0 0 0 999px rgba(4, 6, 10, .58); pointer-events: none; }
+.hm-rf-zoom { flex: none; display: flex; align-items: center; gap: 12px; min-height: 44px; margin-top: 12px; }
+.hm-rf-slider { flex: 1; min-width: 0; height: 44px; margin: 0; accent-color: var(--accent); }
+/* zoom out / zoom in: 44 px buttons (review E2-6), each drawing its small or big square */
+.hm-rf-less, .hm-rf-more { position: relative; flex: none; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: 0; padding: 0; border: 0; border-radius: 10px; background: none; color: var(--text-dim); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.hm-rf-less::before, .hm-rf-more::before { content: ''; display: block; box-sizing: border-box; width: 14px; height: 14px; border-radius: 3px; border: 2px solid currentColor; }
+.hm-rf-more::before { width: 22px; height: 22px; border-radius: 4px; }
+.hm-rf-less:active, .hm-rf-more:active { transform: scale(.92); }
+.hm-rf-less:focus, .hm-rf-more:focus { outline: none; }
+.hm-rf-less:focus-visible, .hm-rf-more:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (hover: hover) and (pointer: fine) { .hm-rf-less:hover, .hm-rf-more:hover { color: var(--text); } }
+#hm-reframe .hm-dlg-actions button { min-height: 44px; }
+html[data-home="light"] #hm-reframe { background: rgba(20, 38, 56, .5); }
+html[data-home="light"] .hm-rf-less, html[data-home="light"] .hm-rf-more { color: #5f6b7d; }
 /* #948 fix 3: editing a template or an element says so — "a slim bar saying “Editing element: Logo sting · Done”, and no
    Export button while you're in it". A pill at the top of the stage (js/home.js libEditSync), on only under body.lib-edit,
    which is set only while a template or element workspace is the open project — an ordinary project never has it. The
@@ -11549,6 +11573,14 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
   align-self: flex-start; background: var(--panel-2); border: 1px solid var(--accent); color: var(--accent);
   border-radius: 8px; padding: 7px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer;
 }
+/* #1243 F2: Ask & edit does what AI Scene did — the key-less doors in one wrapping row, the build's agent rows as quiet notes
+   that update in place, and the spend on his key beside API key */
+.aic-btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.aic-row { font-variant-numeric: tabular-nums; }
+.aic-row-done { color: var(--text-dim); }
+.aic-row-active, .aic-row-streaming { color: var(--text); }
+.aic-linkbtn:disabled { opacity: .55; cursor: default; }
+.aic-spend { flex: 0 0 auto; font-size: 11.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 
 .aic-compose {
   flex: 0 0 auto; display: flex; gap: 8px; align-items: flex-end;
@@ -11572,13 +11604,31 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 .aic-send:disabled { opacity: .45; cursor: default; }
 
 @media (max-width: 700px) {
+  /* #1243 F3 — "condense it so it only covers up like the same amount of area that the add menu comes up to", "when you start
+     actually typing… that goes up even more". It was `height: 74svh` from the bottom. Now the top is the Add menu's own line (the
+     stage's bottom, set as --aic-top by js/ai-chat.js place()) and the bottom sits on the keyboard (--aic-kb), so typing shrinks
+     the transcript and never lifts the top. 26svh is only the fallback for a page with no stage to measure (the old top). */
   #ai-chat {
-    top: auto; left: 0; right: 0; bottom: 0; width: auto;
-    height: 74svh; max-height: 74svh; border-left: none; border-top: 1px solid var(--line);
+    top: var(--aic-top, 26svh); left: 0; right: 0; bottom: var(--aic-kb, 0px); width: auto;
+    height: auto; max-height: none; border-left: none; border-top: 1px solid var(--line);
     border-radius: 16px 16px 0 0; box-shadow: 0 -12px 40px rgba(0,0,0,.55);
-    transform: translateY(100%);
+    transform: translateY(calc(100% + var(--aic-kb, 0px)));
   }
   #ai-chat.open { transform: translateY(0); }
+  /* the bottom is lifted by the keyboard now, so the compose row no longer pads itself by it */
+  #ai-chat .aic-compose { padding-bottom: 10px; }
+  /* while typing (1243-D F3's recommended A): the header folds to one slim row, the box keeps to three lines, the transcript scrolls */
+  /* Measured: with a 300 px keyboard on an 800 px phone about 104 px is left under the line, so the typing rows are compact, and
+     what cannot fit leaves from the TOP (flex-end, clipped) — the box is never pushed under the keyboard. */
+  #ai-chat.aic-typing { justify-content: flex-end; overflow: hidden; }
+  #ai-chat.aic-typing .aic-grab { display: none; }
+  #ai-chat.aic-typing .aic-head { padding: 2px 8px 2px 12px; flex-shrink: 0; }
+  #ai-chat.aic-typing .aic-close { width: 28px; height: 28px; }
+  #ai-chat.aic-typing .aic-keybtn, #ai-chat.aic-typing .aic-spend { display: none; }
+  #ai-chat.aic-typing .aic-list { padding-top: 4px; padding-bottom: 4px; }
+  #ai-chat.aic-typing .aic-compose { padding-top: 6px; padding-bottom: 6px; flex-shrink: 0; }
+  #ai-chat.aic-typing .aic-input { max-height: 72px; padding-top: 7px; padding-bottom: 7px; }
+  #ai-chat.aic-typing .aic-send { width: 38px; height: 38px; }
   #ai-chat:not(.open) { box-shadow: none; }
   /* A phone sheet needs something to pull down on, and a 44px target rather than the ✕ alone. */
   .aic-grab {
@@ -12765,6 +12815,8 @@ body.ed-simple #sm-timeline { display: flex; }
 }
 .sm-chip-gap { background: #2a1f14; color: #ffb454; border: 1.5px solid #ffb454; }
 .sm-chip-overlap { background: #2a1418; color: #ff6b6b; border: 1.5px solid #ff6b6b; }
+/* #1255: the overlap chip's drawn warning sign (the design board's "warn"), where a typed sign stood: beside the chip's 10 px figures */
+.sm-chip-ic { width: 13px; height: 13px; vertical-align: -3px; margin-right: 2px; }
 /* 2.7 THE TRANSITION MARKER (#1122 clause 2, his pick A: a marker at each cut, the Transition row in the tray). #1243 S1 OPTION A (his
    words: "that blue thing clips with whatever is on the above layer, like if you have text… a pretty shitty spot to put your… transition
    thing"): it sits ON ITS CUT INSIDE THE CLIP ROW (#sm-main, js/simple-timeline.js), centred both ways, never in the lanes above, so a
@@ -12866,13 +12918,38 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
 .sm-libtile-img { display: block; width: 64px; height: 40px; margin: 0 auto 3px; border-radius: 5px; object-fit: cover; background: #22262e; pointer-events: none; }
 .sm-libtile .sm-tool-l { display: block; max-width: 74px; margin: 0 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #sm-tools { display: flex; align-items: stretch; }
-/* #1243 S15 (his words: "don't just keep condensing it, like make it like CapCut where you can scroll it"): the project tools spread
+/* #1243 S15 (his words: "don't just keep condensing it, like make it like [another editor] where you can scroll it"): the project tools spread
    when they all fit and never shrink below 64 px; past that the row scrolls in its strip, the cut-off last tool and the end fade the
    only "more" cue (6 × 64 = 384 at 380, so Effects is just cut; the PC band's 371 px overflows by about 13 and 420 spreads them) */
 #sm-tools .sm-tool { flex: 1 0 64px; min-width: 64px; box-sizing: border-box; }
+/* ═══ #1243 S14: ASK & EDIT FROM SIMPLE'S BAR (js/simple-tools.js openAi, aiDock) ════════════════════════════════════════════════════
+   His words (8 Nov): "There's also no way to use the AI… a button in that bottom row at the start that has like the AI option."
+   On a phone the assistant is already a sheet from the sheet line (js/ai-chat.js place(), #1243 F3), which is where every Simple panel
+   stands, so nothing is added for a phone. On a PC a Simple tool's panel opens in the left band (D20 A, his pick; R decision 9), so
+   while it is OPEN in Simple it lies over the band's own box (--sm-ai-l / t / w / b, measured by aiDock) and it does not slide: a
+   Simple panel is simply there, and a slide in from the screen's right edge would cross the picture. Closed, and in Full, it is
+   exactly Full's (parked off the right edge): both rules ask for body.ed-simple, and only the open one moves it. */
+@media (min-width: 701px) {
+  body.ed-simple #ai-chat { transition: none; }
+  body.ed-simple #ai-chat.open { left: var(--sm-ai-l, 0px); right: auto; top: var(--sm-ai-t, 0px); bottom: var(--sm-ai-b, 0px); width: var(--sm-ai-w, 376px);
+    border-left: 0; border-right: 1px solid var(--line); border-top: 1px solid var(--line); box-shadow: none; }
+  /* (its top edge is the band's own 1 px line, which it lies over: without it the line between the picture and the bottom row
+     stopped where the assistant began; the 24 Nov review, SEE-4) */
+  /* …its compose row keeps the bottom safe area, as the band it lies over does: a landscape phone takes this layout, and the box
+     and Send would sit under the home indicator (the same review). 0 on a desktop. */
+  body.ed-simple #ai-chat.open .aic-compose { padding-bottom: calc(10px + var(--aic-kb, 0px) + env(safe-area-inset-bottom, 0px)); }
+  /* WHAT SIMPLE SAYS WHILE THE ASSISTANT IS OVER THE BAND (the 24 Nov review, SEE-2): the floating line's place is the bar's top,
+     which is under the assistant, so a line with a button ("Locked… Do it anyway", from a chip on the timeline beside it) could be
+     neither read nor pressed. It floats just above the assistant's top edge (--sm-say-l / w / b, written on the bar by aiDock). */
+  body.ed-simple.aic-open #sm-bar > #sm-say { position: fixed; left: var(--sm-say-l, 0px); right: auto; width: var(--sm-say-w, 376px); bottom: var(--sm-say-b, 0px); }
+}
+/* On a phone it is Full's sheet as it stands, less its upward shadow: that lay over the bottom 40 px of the picture he is judging
+   the edit on, and Simple's own sheet at the same line has none for that reason (below, the 9 Nov review; here the 24 Nov one,
+   SEE-1). Its own top edge is the line between them. */
+@media (max-width: 700px) { body.ed-simple #ai-chat.open { box-shadow: none; } }
 /* ═══ #1243 S3 · S9 · S15 · rule 3 (release 4): ONE BAR, FOUR MODES, ONE STRIP, ONE SHEET LINE ═════════════════════════════════════
    His words (8 Nov): "when you actually tap on a layer, that first row goes away", "I don't want two menus at once", "make it like
-   CapCut where you can scroll it". #sm-bar is ONE 56 px row (and its 1 px edge and the safe area) whose contents swap by
+   [another editor] where you can scroll it". #sm-bar is ONE 56 px row (and its 1 px edge and the safe area) whose contents swap by
    [data-mode] (js/simple-tools.js sync): the project tools only in project mode, the tray (the selection's tools, or a sub-row) only in
    item and sub mode, and nothing in panel mode, where the bar is 0 px tall and the panel has the room. The row's height never changes,
    so nothing above it moves. Simple's spoken lines and the first-run hint FLOAT as a 44 px strip just above the bar (absolute, so they
@@ -12906,12 +12983,9 @@ body.ed-simple #sm-bar > #sm-say { position: absolute; left: 0; right: 0; bottom
 body.ed-simple #sm-bar > #sm-say.sm-saying { display: flex; }
 @media (max-width: 700px) { body.ed-simple #sm-bar[data-mode="panel"] > #sm-say { position: fixed; bottom: var(--sm-sheet-b, 0px); } }
 /* the playhead line stops at the floating strip's top (222 − 44) while a line or the hint is up */
-@media (max-width: 700px) { body.ed-simple:has(#sm-say.sm-saying) #tl-centerline, body.ed-simple:has(#sm-bar > .sm-hint) #tl-centerline { height: 178px; } }
-/* THE FIRST-RUN HINT floats the same way, under a line if one comes, and takes no pointer events: the first tap reaches what is under it */
-body.ed-simple #sm-bar > .sm-hint { position: absolute; left: 0; right: 0; bottom: 100%; z-index: 24; pointer-events: none; min-height: 44px; box-sizing: border-box;
-  display: flex; align-items: center; padding: 4px 12px; background: var(--panel-2); border-top: 1px solid var(--line);
-  font: 600 12.5px/1.3 system-ui, sans-serif; color: var(--text-dim); }
-body.ed-simple #sm-bar:has(> #sm-say.sm-saying) > .sm-hint { display: none; }
+@media (max-width: 700px) { body.ed-simple:has(#sm-say.sm-saying) #tl-centerline { height: 178px; } }
+/* (THE FIRST-RUN HINT, .sm-hint, floated here the same way. It went with #1255's 20:53 follow-up, his words: "There shouldn't be any
+   explanations like that. We have tutorials for a reason": js/simple-tools.js hintSync. Its rules went with it.) */
 /* #1243 S37: the end of the video is a line across every row (only when something runs past it), and the part of an item past it is hatched in
    that item's own row. It replaces the black band, whose label was cut to "Black C" and whose tap could do nothing. */
 #sm-timeline .sm-endline { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #aeb8c8; opacity: .75; z-index: 4; pointer-events: none; }
@@ -12919,6 +12993,9 @@ body.ed-simple #sm-bar:has(> #sm-say.sm-saying) > .sm-hint { display: none; }
 #sm-timeline .sm-more.sm-more-past::before { content: ''; position: absolute; inset: -10px -6px; }   /* the chip is 24 px tall: the finger's target is 44 */
 #sm-timeline .sm-item .sm-past { position: absolute; top: 0; bottom: 0; right: 0; pointer-events: none; background: repeating-linear-gradient(135deg, rgba(8,11,16,.62) 0 5px, rgba(8,11,16,.2) 5px 10px); }
 .sm-band-hint { padding: 16px; color: var(--text-dim); font: 600 13px/1.4 system-ui, sans-serif; }
+/* #1255 20:53: the band's how-to words went (js/simple-tools.js bandWords), so the line is empty unless it states a fact ("Moves with
+   ‘Hello’"): empty, it takes no room. Simple only: .sm-band-hint is drawn only while Simple is on screen. */
+.sm-band-hint:empty { display: none; }
 /* (§3.12 rule 5's 56 px kept free of buttons over 🗑, finding 23, went with #1243 S3: the line floats above the bar now, so it never
    lies where a tool was pressed, and a second click where 🗑 was meets the bar's own row, which tool()'s double-click guard holds.) */
 @media (min-width: 701px) {
@@ -13027,6 +13104,21 @@ body.ed-simple .sm-exp-seg { flex: 1 1 auto; min-width: 0; display: flex; gap: 2
 body.ed-simple .sm-exp-b { flex: 1 1 0; min-width: 0; min-height: 38px; padding: 0 4px; border: 0; border-radius: 9px; background: transparent; color: var(--text-dim);
   font: 600 14px/1 system-ui, sans-serif; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 body.ed-simple .sm-exp-b[aria-pressed="true"] { background: var(--text); color: var(--panel); }
+/* #1261: Smoothness holds every rate Full's Export offers (six or seven), as bare numbers, so its row fits a phone: the unit sits once,
+   small, under the row's name, and the project's own rate wears a dot under its number (in the button's own ink, so it reads pressed or not) */
+body.ed-simple .sm-exp-unit { display: block; margin-top: 2px; font: 600 11px/1 system-ui, sans-serif; opacity: .75; }
+body.ed-simple .sm-exp-b.sm-exp-own { position: relative; }
+body.ed-simple .sm-exp-b.sm-exp-own::after { content: ''; position: absolute; left: 50%; bottom: 5px; width: 4px; height: 4px; margin-left: -2px; border-radius: 50%; background: currentColor; }
+/* review R13-5: on a narrow phone seven rates beside the row's name were 31 px each (a thumb aimed at 25 landed on 24 or 30), so there
+   Smoothness's name goes on a line of its own ("Smoothness fps") and the buttons take the panel's whole width: about 46 px for seven.
+   Part of the line it adds is paid for by a 6 px gap between the card's rows: at 380 x 760 the card grows 9 px (455-727 to 455-736)
+   and Save video stays in the phone's 307 px sheet without scrolling (measured, review R13-5) */
+@media (max-width: 480px) {
+  body.ed-simple .sm-exp { gap: 6px; }
+  body.ed-simple .sm-exp-row[data-row="fps"] { flex-wrap: wrap; gap: 2px 10px; }
+  body.ed-simple .sm-exp-row[data-row="fps"] > .sm-exp-l { flex: 1 0 100%; line-height: 1; }
+  body.ed-simple .sm-exp-row[data-row="fps"] .sm-exp-unit { display: inline; margin: 0 0 0 4px; }
+}
 body.ed-simple .sm-exp-foot { display: flex; flex-direction: column; gap: 8px; }
 body.ed-simple .sm-exp-size { text-align: center; color: var(--text-dim); font: 600 13px/1.2 system-ui, sans-serif; font-variant-numeric: tabular-nums; }
 body.ed-simple .sm-exp-go { min-height: 48px; padding: 0 16px; border: 0; border-radius: 12px; background: var(--accent, #29d9bb); color: #04140f;
@@ -13044,6 +13136,21 @@ body.ed-simple .sm-exp-b:focus-visible, body.ed-simple .sm-exp-go:focus-visible 
   body.ed-simple .sm-exp-foot > .sm-exp-size { flex: none; text-align: left; }
   body.ed-simple .sm-exp-foot > .sm-exp-go { flex: 1 1 auto; min-height: 40px; }
 }
+
+/* ═══ #1258 CLAUSE 2 (his words: "there should be an option when you press create… to, you know, decide whether you're going to use
+   simple editor or not"): the Editor switch, Simple | Full (K3, recommended: beside Create), in a row of its own just above Cancel and
+   Create, put there by js/editor-mode.js when the dialog opens. The row is the dialog's own .hm-fld (its name on the left in the
+   fields' grey, the control on the right); the control is a two-way segmented switch whose frame and pressed side are a grey that
+   reads on the dark Home and the light one. It fades in with the card's own fields (their entrance, js/home.js npFxStagger, is drawn
+   before it is there). Every rule hangs on .sm-np-ed, which only js/editor-mode.js makes. ═══ */
+#hm-dialog .hm-dlg-card > .sm-np-ed { flex: none; margin: 10px 0 0; animation: sm-np-in .64s cubic-bezier(.3, 0, .3, 1) both; }
+@keyframes sm-np-in { 0%, 55% { opacity: 0; transform: translateY(12px); } 90%, 100% { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { #hm-dialog .hm-dlg-card > .sm-np-ed { animation: none; } }
+#hm-dialog .sm-np-ed > .sm-np-seg { display: flex; align-items: center; gap: 2px; padding: 3px; border-radius: 11px; box-shadow: inset 0 0 0 1px rgba(127, 135, 150, .38); }
+#hm-dialog .sm-np-seg > button.sm-np-b { min-height: 32px; min-width: 60px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; background-image: none;
+  color: inherit; font: 600 13px/1 system-ui, sans-serif; opacity: .72; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+#hm-dialog .sm-np-seg > button.sm-np-b[aria-checked="true"] { background: rgba(127, 135, 150, .3); opacity: 1; }
+#hm-dialog .sm-np-seg > button.sm-np-b:focus-visible { outline: 2px solid var(--accent, #4da3ff); outline-offset: 1px; }
 
 /* ═══ Simple mode Phase 3 · CAPTIONS (queue 980; DESIGN §8.5 the caption-track tray's Edit lines, D20 A): the lines panel, drawn in
    #inspector where More's and Look's panels dock. One 44 px row per line — its time, its words (one line, cut with an ellipsis), and
@@ -13070,8 +13177,12 @@ body.ed-simple .sm-exp-b:focus-visible, body.ed-simple .sm-exp-go:focus-visible 
    cut with an ellipsis so a long one never widens its tile (the whole name is its title and accessible name). The Strength row
    reuses Volume's slider rules (.sm-vol-r / .sm-vol-v). Every rule hangs on a class or attribute only js/simple-tools.js makes,
    so Full matches none of them. ═══ */
-#sm-tray[data-row="effects"] .sm-fx-tile { min-width: 56px; padding: 0 4px; }
-.sm-fx-th { display: block; flex: none; width: 40px; height: 24px; border-radius: 5px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); }
+/* #1259, his words (23 Nov): "the effects is just all the same image and they don't really actually show you what it is that is happening".
+   Each tile shows its effect's own drawn picture (js/simple-tools.js), and that picture is SQUARE (192 x 192): the 40 x 24 box it had
+   squashed it to 5:3. The largest square the fixed 56 px row holds with the name under it: 40 + 3 gap + 11 name = 54. The row's height is
+   unchanged, so nothing above it moves (the row itself is the panel, #1243 S9). Simple only: classes only js/simple-tools.js makes. */
+#sm-tray[data-row="effects"] .sm-fx-tile { min-width: 58px; padding: 0 4px; gap: 3px; }
+.sm-fx-th { display: block; flex: none; width: 40px; height: 40px; border-radius: 6px; background: var(--panel-2); box-shadow: inset 0 0 0 1px var(--line); }
 .sm-fx-tile .sm-tool-l { max-width: 60px; overflow: hidden; text-overflow: ellipsis; }
 .sm-fx-tile[aria-pressed="true"] .sm-fx-th { box-shadow: 0 0 0 2px var(--accent, #4da3ff); }
 

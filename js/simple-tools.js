@@ -7,7 +7,7 @@
  *   sub     — a row that replaces the bar (#sm-tray again): a ‹ back one level, then that row's choices (Clips, Sound,
  *             Captions, the effects pickers, Speed, Volume, Opacity, Transform, Fade, Strength, Transition — the SUBS table);
  *   panel   — a panel is up (a text's Style, Edit lines, Extras, and Look, the project's since #1243 S12; Export, from the Export button, since #1243 S6): the bar hides, the panel has the room.
- * Every row is one strip that scrolls sideways with fades at the edge that hides tools (S15: "make it like CapCut where you
+ * Every row is one strip that scrolls sideways with fades at the edge that hides tools (S15: "make it like [another editor] where you
  * can scroll it"), never squeezed. Simple's spoken lines float as a 44 px strip just above the bar (#sm-say), so nothing moves.
  * #1243 R release 8 (THE TRAYS): one tray order with section lines between its groups and Delete last, scrolling with the rest (S31);
  * no More (S4); a PC shows the same single strip (R decision 6: the two-row grid and its › cue are gone).
@@ -66,6 +66,11 @@ window.FM = window.FM || {};
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
     /* Phase 3 · Effect segments: the D16 A set's Effects, Change effect and Strength (tools/design/plans/simple-mode/vis/kit.js) */
     effects: '<path d="M11 3.5l1.9 5.1 5.1 1.9-5.1 1.9L11 17.5l-1.9-5.1L4 10.5l5.1-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
+    /* #1243 S14: Ask & edit — a speech bubble with two lines of writing and one small spark, our own drawing in the D16 A stroke.
+       Not the assistant's four-point star: beside Effects in this row a second sparkle would read as the same tool (plan 1243-A S14).
+       The bubble is 12.5 units wide, not 13.5 (the 24 Nov review, SEE-3): at the 22 px the row draws it the spark's left tip came
+       within a fifth of a pixel of the bubble's corner and the two ran together; there is a whole unit between them now */
+    ai: '<path d="M5 5.5h7.5a2.5 2.5 0 0 1 2.5 2.5v6a2.5 2.5 0 0 1-2.5 2.5H10L6 20v-3.5H5A2.5 2.5 0 0 1 2.5 14V8A2.5 2.5 0 0 1 5 5.5z"/><path d="M6.5 9.5h6M6.5 12.5h3.5"/><path d="M19.5 2.4l.75 1.85 1.85.75-1.85.75-.75 1.85-.75-1.85-1.85-.75 1.85-.75z"/>',
     change: '<path d="M4 9h13l-3.5-3.5M20 15H7l3.5 3.5"/>',
     strength: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
     /* #1243 R release 8: Opacity, Transform and Transform's row (our own drawings, the D16 A stroke) */
@@ -96,7 +101,6 @@ window.FM = window.FM || {};
   const ROW_KEYS = new Set(['speed', 'volume', 'opacity', 'transform', 'fade', 'transition', 'strength', 'soundstyles', 'slide']);   // the item rows rowFor() still names (#1243 S28: Audio's went; 8b: Sound styles; 10: Slide)
   let fills = 0, lastPress = null;   // how many times the tray was refilled; the tool a pointer's last single click pressed
   let rowN = 0;                      // how many times the bar has shown another row (_fill): tool()'s double-tap hold (HW5)
-  let hintUp = false;              // 2.7: the first-run hint floats above the bar now (hintSync)
   /* Phase 3 · Look: which panel panelFor's band / sheet shows ('more' = Full's own panel for the item — More opened it until #1243 S4; a
      text's Style and a caption track's Style open it now — 'look' = Look's own), Look's open tab, a
      slider's live preview to take back ({id, pre}), and where the panel was (its strip's scroll, its own scroll, the control with
@@ -143,6 +147,7 @@ window.FM = window.FM || {};
        phone width with it up gives the Clips row back, or the bar sat in panel mode with no panel and no way back (the 9 Nov review, MODE-2) */
     if (phone.addEventListener) phone.addEventListener('change', () => {
       if (phone.matches && extrasOpen) { extrasOpen = false; extrasMark(); if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh(); }
+      aiDock();   // #1243 S14: across the phone / PC line the assistant is the phone's sheet or lies over the PC band
       lastSig = ''; FM.simpleTools.sync();
     });
     if (FM.editor && FM.editor.onChange) FM.editor.onChange(m => {
@@ -171,8 +176,41 @@ window.FM = window.FM || {};
        so the sheet's insp-open only re-syncs the bar: a grab-bar or swipe close of the phone sheet puts it back in item mode. Opening
        Home closes a sub-row and Extras. Leaving Simple calls nothing here, so Full is today's. */
     let wasSimple = document.body.classList.contains('ed-simple'), wasSheet = document.body.classList.contains('insp-open'), wasHome = document.body.classList.contains('home-open');
+    let wasAi = document.body.classList.contains('aic-open');   // #1243 S14: Ask & edit up (js/ai-chat.js show / hide)
+    let wasRo = document.body.classList.contains('collab-ro');   // …and whether he may only look (js/collab-ui.js)
+    window.addEventListener('resize', () => { if (wasAi) aiDock(); });
     if (window.MutationObserver) new MutationObserver(() => {
-      const b = document.body.classList, s = b.contains('ed-simple'), sh = b.contains('insp-open'), hm = b.contains('home-open');
+      const b = document.body.classList, s = b.contains('ed-simple'), sh = b.contains('insp-open'), hm = b.contains('home-open'), ai = b.contains('aic-open');
+      /* #1243 S14: the assistant opened or closed, or the editor changed with it up: its place over the PC band is set or taken back
+         (aiDock; in Full it only takes Simple's four properties off), and in Simple the bar's mode follows (the sync below) */
+      if (ai !== wasAi || (ai && s !== wasSimple)) aiDock();
+      if (s && ai !== wasAi) {
+        lastSig = ''; FM.simpleTools.sync();
+        /* …and on a PC the focus goes back to the tool that opened it once it closes (its ✕, or Escape, which js/ai-chat.js answers
+           itself): only when the focus is on nothing, or still inside the panel that has just gone, and never while Settings is up:
+           its API key button closes it and opens Settings in one press, and the focus must not go behind Settings (which hands
+           the assistant back when it closes) */
+        if (!ai && !phone.matches && !(FM.settings && FM.settings.isOpen && FM.settings.isOpen())) {
+          /* …to Ask & edit when the project row is back; with an item selected meanwhile ("Tap a layer first and this means that
+             one") the project row is hidden, so to that item's first tool (the 24 Nov review, AI-SM4: the focus fell to the page) */
+          const a = document.activeElement, c = document.getElementById('ai-chat'), n = bar.dataset.mode === 'project' ? tools.querySelector('[data-tool="ai"]') : tray.querySelector('button, input');
+          if (n && (!a || a === document.body || (c && c.contains(a)))) n.focus({ preventScroll: true });
+        }
+      }
+      /* THE ASSISTANT'S SHEET GOING AWAY UNCOVERS THE PLAY ROW TOO (the 24 Nov review, AI-SM3): on a phone its grab bar lies over Link,
+         as the layer sheet's does (MODE-4, below), so a double tap closed it and switched linking for the whole project. The same
+         hold, armed the same way: only when a real press on the assistant came within the last second (noted in mount). */
+      if (s && wasAi && !ai && performance.now() - sheetPressAt < 1000) armShut();
+      /* …and somebody whose role drops to view-only while it is up loses it (the same review): the assistant writes edits, and its
+         door already refuses them (openAi). Simple's line says why. */
+      const ro = b.contains('collab-ro');
+      if (s && ai && ro && !wasRo && FM.aiChat && FM.aiChat.hide) {
+        FM.aiChat.hide();
+        const why = FM.spine && FM.spine.roReason ? FM.spine.roReason() : '';
+        if (why) { if (FM.spine.explain) FM.spine.explain(why); else if (FM.spine.say) FM.spine.say(why); }
+      }
+      wasRo = ro;
+      wasAi = ai;
       if (s && !wasSimple) requestAnimationFrame(() => { if (FM.refreshPreviewScale) FM.refreshPreviewScale(); if (FM.canvasEdit && FM.canvasEdit.stageResized) FM.canvasEdit.stageResized(); });
       /* …and Extras as closeExtras closes it, its band drawn again and Clips no longer pressed: the band kept Extras' menu and title under
          the project row after Home (the 9 Nov review, HW2) */
@@ -214,8 +252,6 @@ window.FM = window.FM || {};
        and Loop and preview speed stays Full's. #1243 S34 A: LINK takes the play row's first place, one switch for the whole project. */
     const lk = document.getElementById('btn-sm-link');
     if (lk) lk.addEventListener('click', () => { if (isSimple() && FM.spine && FM.spine.cmd && FM.spine.linkMode) FM.spine.cmd.link(!FM.spine.linkMode()); });
-    /* 2.7 (SU1 #13): the first-run hint goes on the first tap anywhere, and only then is it remembered (hintSync) */
-    window.addEventListener('pointerdown', () => { if (hintUp && isSimple()) dismissHint(); }, true);
     /* 2.7 (SU1 #20, his "2A" 14 Oct): SIMPLE'S EXPORT IS ITS OWN, not Full's dialog (120 fps, Custom, "Export just this layer", the loop
        region). Capture phase on the button both editors share (the phone's ⬆ clicks it), only while Simple is on screen (as Simple's ⋯
        did until #1243 S5 took it off the play row). #1243 S6 (his words: "Just make an export menu, but make it simple and easy to
@@ -249,6 +285,9 @@ window.FM = window.FM || {};
     /* when a real press last came down on the phone's sheet (armShut asks): passive, and it notes nothing in Full */
     const ipanel = document.getElementById('inspector-panel');
     if (ipanel) ipanel.addEventListener('pointerdown', e => { if (e.isTrusted && isSimple()) sheetPressAt = performance.now(); }, { capture: true, passive: true });
+    /* …and on the assistant's sheet (#1243 S14; the 24 Nov review, AI-SM3), which stands at the same sheet line. It is built when it
+       is first opened, so the press is noted on the document. */
+    document.addEventListener('pointerdown', e => { if (!e.isTrusted || !isSimple()) return; const c = document.getElementById('ai-chat'); if (c && e.target && c.contains(e.target)) sheetPressAt = performance.now(); }, { capture: true, passive: true });
     const insp = document.getElementById('inspector');
     if (insp) {
       insp.addEventListener('focusin', e => { if (!isSimple()) return; const t = e.target; lookFocus = (t && t.dataset && t.dataset.look) || ''; });
@@ -463,14 +502,18 @@ window.FM = window.FM || {};
     });
   }
   /* THE PROJECT ROW (§8.5) is one strip that scrolls sideways (#1243 S15, his words: "don't just keep condensing it, like make it like
-     CapCut where you can scroll it"): every tool at least 64 px, spreading when they all fit, a fade on the edge that hides more. Built
+     [another editor] where you can scroll it"): every tool at least 64 px, spreading when they all fit, a fade on the edge that hides more. Built
      once, so its scroll is kept across the trips to the other modes. */
   function buildTools() {
     const w = W();
     tools.textContent = '';
     const run = strip(tools);
-    /* Phase 3 · Clips › Extras: Clips opens its row, Add clips (what Clips did until Phase 3) and Extras (DESIGN §8.5, D21 A) */
-    [{ id: 'clips', label: w.clips || 'Clips', icon: 'clips', title: w.clipsTitle, run: () => FM.simpleTools.openSub('clips') },
+    /* #1243 S14 (his words, 8 Nov: "There's also no way to use the AI… a button in that bottom row at the start that has like the AI
+       option"): Ask & edit is the FIRST tool, so the strip shows it at every width without a scroll. It opens Full's own assistant
+       (openAi below); the name is the one #1243 F2 gave it. */
+    [{ id: 'ai', label: w.ai || 'Ask & edit', icon: 'ai', title: w.aiTitle, run: () => FM.simpleTools.openAi() },
+     /* Phase 3 · Clips › Extras: Clips opens its row, Add clips (what Clips did until Phase 3) and Extras (DESIGN §8.5, D21 A) */
+     { id: 'clips', label: w.clips || 'Clips', icon: 'clips', title: w.clipsTitle, run: () => FM.simpleTools.openSub('clips') },
      /* #1243 S8 (R (a) "Text | sub | Add text · Title looks · Draw"): Text opens its own row, as Clips, Captions and Sound do */
      { id: 'text', label: w.text || 'Text', icon: 'text', title: w.textTitle, run: () => FM.simpleTools.openSub('text') },
      /* Phase 3 · Captions, in the design's order (§8.5) */
@@ -741,15 +784,25 @@ window.FM = window.FM || {};
     if (!t) return;
     const now = (() => { const v = t.volume == null ? 1 : FM.evalProp(t.volume, FM.time); return isFinite(v) ? v : 1; })();
     const val = el('span', 'sm-vol-v', pct(now) + '%');
-    const rng = el('input', 'sm-vol-r'); rng.type = 'range'; rng.min = '0'; rng.max = '200'; rng.step = '1'; rng.value = String(Math.min(200, pct(now)));
+    /* HIS WORDS, 24 Nov: "I feel like volume should be able to go up to like 10 times." Full's Volume has gone to 1000 % since queue 195
+       (a boost goes through the limiter in the preview and in the export) and Simple's command never clamped below that (S.planVolume);
+       only this row stopped at 200 %. A plain slider over 0–1000 would squeeze every ordinary level into its first tenth (the reason
+       Full's is a ruler), so the slider is in TWO HALVES: positions 0–100 are 0–100 % exactly as before, positions 100–200 run from
+       100 % to the top in equal steps of loudness (the same ratio each step: half way up is about 316 %). What it shows is what it
+       writes: whole per cent. */
+    const VOL_TOP = Math.max(1, +((FM.LIMITS && FM.LIMITS.volume) || [])[1] || 10), TOP_LOG = Math.log10(VOL_TOP);
+    const posOf = v => v <= 1 ? Math.max(0, v) * 100 : Math.min(200, 100 + 100 * Math.log10(Math.min(VOL_TOP, v)) / TOP_LOG);
+    const volOf = p => p <= 100 ? Math.max(0, p) / 100 : Math.round(100 * Math.pow(VOL_TOP, (Math.min(200, p) - 100) / 100)) / 100;
+    const rng = el('input', 'sm-vol-r'); rng.type = 'range'; rng.min = '0'; rng.max = '200'; rng.step = '1'; rng.value = String(Math.round(posOf(now)));
     rng.setAttribute('aria-label', w.volumeLabel || 'Volume in percent');
-    /* #1243 S28 polish (B S28 step 4: "0-200% with a soft stop at 100% and a Mute pill"): the slider rests on 100% within 4 of it, so the
-       clip's own level is easy to find again */
-    const soft = () => { let p = parseFloat(rng.value); if (Math.abs(p - 100) <= 4 && Math.abs(now * 100 - p) > 0.5) { p = 100; rng.value = '100'; } return p / 100; };
-    rng.addEventListener('input', () => { const v = soft(); val.textContent = pct(v) + '%'; const m = FM.media && FM.media.get(t.id); if (m && m.el) { try { m.el.volume = Math.min(1, v); } catch (e) {} } });
+    rng.setAttribute('aria-valuetext', pct(now) + '%');   // the slider's own number is a position since the two halves: a screen reader hears the level
+    /* #1243 S28 polish (B S28 step 4: "a soft stop at 100% and a Mute pill"): the slider rests on 100% within 4 of it, so the clip's own
+       level is easy to find again */
+    const soft = () => { let p = parseFloat(rng.value); if (Math.abs(p - 100) <= 4 && Math.abs(posOf(now) - p) > 0.5) { p = 100; rng.value = '100'; } return volOf(p); };
+    rng.addEventListener('input', () => { const v = soft(); val.textContent = pct(v) + '%'; rng.setAttribute('aria-valuetext', pct(v) + '%'); const m = FM.media && FM.media.get(t.id); if (m && m.el) { try { m.el.volume = Math.min(1, v); } catch (e) {} } });
     rng.addEventListener('change', () => { const v = soft(); if (Math.abs(v - now) > 0.004) S.cmd.volume(id, v); });
     run.append(rng, val);
-    put(run, { id: 'mute', label: w.mute || 'Mute', icon: 'mute', pressed: !!t.muted, run: () => S.cmd.mute(id, !t.muted) });   // R (a) "Volume: ‹ · 0–200 % · Mute"
+    put(run, { id: 'mute', label: w.mute || 'Mute', icon: 'mute', pressed: !!t.muted, run: () => S.cmd.mute(id, !t.muted) });   // R (a) "Volume: ‹ · 0–200 % · Mute" (to 1000 % since 24 Nov)
   }
   /* #1243 R release 8 (R (a) "Opacity: ‹ · slider"; his S33 words: "they've got opacity"): 0–100 %, the picture changes while the slider
      moves (the preview is taken back to the byte before the one step lands, as Strength's is), one step on release */
@@ -1036,22 +1089,16 @@ window.FM = window.FM || {};
     else if (!want && b) b.remove();
   }
 
-  /* 2.7 (SU1 #13, DESIGN §7.3 step 4, §8.9): THE FIRST-RUN HINT, while nothing is selected, only with a main clip on the track and at
-     most once per device: the first tap anywhere takes it away and writes fm.sm.hint = '1' (the listener in mount). Phone or PC words
-     by the phone test Full uses (max-width 700 px). (Its outline on the play bar's ✂ went with the ✂: #1243 S5 put Split on the clip's
-     own tools, which the hint's first words send him to.) #1243 S3: it FLOATS just above the bar like a spoken line (the project
-     row is just the tools), and takes no pointer events, so the first tap also reaches the clip under it. (The quiet line, "3 clips ·
-     0:06", is retired: the pill shows the length and the timeline the clips.) */
-  const HINT_KEY = 'fm.sm.hint';
-  function hintSeen() { try { return localStorage.getItem(HINT_KEY) === '1'; } catch (e) { return true; } }   // unreadable storage could never remember it: no hint
-  function hintSync(mode, R) {
-    hintUp = mode === 'project' && !!R && R.main.some(e => !e.slot) && !hintSeen();
-    let h = bar && bar.querySelector(':scope > .sm-hint');
-    if (hintUp) {
-      if (!h) { h = el('div', 'sm-hint'); bar.insertBefore(h, tray); }
-      const t = phone.matches ? (W().firstHint || '') : (W().firstHintPc || '');
-      if (h.textContent !== t) h.textContent = t;
-    } else if (h) h.remove();
+  /* THE FIRST-RUN HINT WENT (#1255's 20:53 follow-up). His words: "I'm also noticing a pop-up that says tap a clip to split or change
+     its speed. There shouldn't be any explanations like that. We have tutorials for a reason, and there could be a tutorial when the
+     first time you load into the app is, but not, you know, constantly there." It was SU1 #13's line ("Tap a clip to split it or change
+     its speed", on a PC "Click a clip… · S splits at the line"), floating just above the bar in the project row until the first tap. It
+     floated (absolute), so nothing moves where it sat. What it pointed at is found where it always was: a clip's tap opens its tools,
+     Split first, Speed among them. fm.sm.hint is no longer read or written. hintSync stays as the one place that takes a hint left in
+     the bar by an earlier version's page away. */
+  function hintSync() {
+    const h = bar && bar.querySelector(':scope > .sm-hint');
+    if (h) h.remove();
   }
   /* 2.7 (2A row 16): A PANEL THAT OPENS UNDER THE FINGER IGNORES THAT FINGER. More's panel rises over the place More was pressed (until
      #1243 it moved the tray and More up 134 px at 380x800; since #1243 rule 3 the sheet runs from the stage's bottom edge over the whole
@@ -1106,11 +1153,6 @@ window.FM = window.FM || {};
     if (b.title !== t) b.title = t;
     if (b.getAttribute('aria-label') !== name) b.setAttribute('aria-label', name);
   }
-  function dismissHint() {
-    hintUp = false;
-    try { localStorage.setItem(HINT_KEY, '1'); } catch (e) {}
-    lastSig = ''; FM.simpleTools.sync();   // the hint goes (hintSync)
-  }
 
   /* ═══ #1243 S6 A: SIMPLE'S EXPORT MENU (1243-B "S6", 1243-R (c) row 12). ═══
      His words (8 Nov): "the export on simple mode is really bad… it literally just says, do you want 1080p export or 720p export? And then
@@ -1124,7 +1166,7 @@ window.FM = window.FM || {};
      MP4, never saved as the dialog's defaults) — js/exporter.js and js/app.js are not touched, so Full's Export is exactly today's. */
   const EXPORT_Q = 0.18;                 // Full's High quality, the one Simple has always used (2.7, SU1 #20)
   const EXPORT_KEY = 'fm.sm.export';     // his last pick on this device ({p, fps}); never the dialog's own memory (fm.exportPrefs)
-  let expP = 0, expFps = 0, posterAt = NaN, posterCv = null;
+  let expP = 0, expFps = 0, expUp = false, expFpsOwn = true, expCustom = 0, posterAt = NaN, posterCv = null;   // expUp: the size picked is ABOVE the frame because he pressed it (an enlargement he asked for); expFpsOwn: the rate is the project's, not his press; expCustom: the rate the Custom button holds (0: none)
   const exportUp = () => {
     if (panelFor !== PROJECT || panelKind !== 'export' || (FM.selectionIds ? FM.selectionIds() : []).length) return false;
     if (!phone.matches) return true;
@@ -1134,21 +1176,32 @@ window.FM = window.FM || {};
   /* the Export button on screen (the phone's ⬆ or the PC's), where focus goes back to when the panel closes */
   const exportBtn = () => ['m-export', 'btn-export'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length) || null;
   const expShort = () => { const P = FM.scene.project || {}; return Math.min(+P.width || 0, +P.height || 0); };
-  /* Quality's rungs, by the frame's short side, NEVER an upscale (today's rule, 2.7): 720p and 1080p when the frame is that big, 4K only
-     when its short side is 2160 or more (1243-B S6 change 2), and a frame below 4K that is not a rung also offers its own size, so the
-     file can always be the frame's own size (a 900 px frame: 720p · 900p; a 240 px one: 240p alone; a 1440 px one: 720p · 1080p · 1440p;
-     review R12-5: an own size only under 1080 left a 1440p project no way to export at its size) */
+  /* Quality's rungs, by the frame's short side: ALWAYS 720p · 1080p · 4K, and the frame's own size when it is none of those, so the file
+     can always be the frame's own size (a 900 px frame: 720p · 900p · 1080p · 4K; a 240 px one: 240p · 720p · 1080p · 4K; a 1440 px
+     one: 720p · 1080p · 1440p · 4K; review R12-5).
+     HIS WORDS, 24 Nov, asked whether Simple should offer 4K on a smaller project: "Yeah, just put the option there because lots of noobs
+     will not understand and think, oh, why the hell can't I export in 4K? This is shit." Until then a rung above the frame was never
+     offered (2.7's rule, never an upscale; 1243-B S6 change 2). A rung above the frame is an ENLARGEMENT: the exporter draws the frame at
+     its own size and scales it into the bigger file (js/exporter.js blit), and asks the device's encoder for that size before it starts
+     (a size it cannot take is refused at once, with one that works). The panel still OPENS on the frame's own size (exportInit), so an
+     enlargement is only ever his own pick. */
   function exportRungs() {
-    const short = expShort(), out = [720, 1080, 2160].filter(p => p <= short);
-    if (short > 0 && short < 2160 && out.indexOf(short) < 0) out.push(short);
+    const short = expShort(), out = [720, 1080, 2160];
+    if (short > 0 && out.indexOf(short) < 0) out.push(short);
     return out.sort((a, b) => a - b);
   }
-  /* Smoothness: 30 and 60, and the project's own rate when it is neither (24, 25, …) */
-  function exportRates() {
-    const pf = +(FM.scene.project || {}).fps || 30, out = [30, 60];
-    if (!out.some(f => Math.abs(f - pf) < 1e-6)) out.push(pf);
-    return out.sort((a, b) => a - b);
-  }
+  /* Smoothness. #1261, his words (23 Nov): "The simple export panel is honestly probably too simple. Like, you only have two choices for
+     frames. That's not enough. Like, it should stay simple like that, but it should still have more options." And, asked on 24 Nov
+     whether the row should hold all six of the Full editor's rates or fewer: "Just do 30, 60, 120 or custom."
+     So the row is THREE RATES AND CUSTOM (exportFpsRow). The fourth button holds any other rate from 1 to 120, the exporter's own range
+     (js/app.js, #exp-fps-num): it SHOWS the rate it holds (the project's own when that is none of the three, or the one he typed) and
+     reads "Custom" when it holds none. The project's own rate is marked wherever it stands. (An hour before this the row read the
+     Full editor's own list of six and put a 24 fps project's rate in 25's place: 4127ef31, never shipped.) */
+  const EXP_RATES = [30, 60, 120], EXP_FPS_LO = 1, EXP_FPS_HI = 120;
+  const expRound = f => Math.round(f * 100) / 100;
+  const expIsRate = f => EXP_RATES.some(r => Math.abs(r - f) < 1e-6);
+  const expFpsOk = f => typeof f === 'number' && isFinite(f) && f >= EXP_FPS_LO && f <= EXP_FPS_HI;
+  const expPf = () => { const f = expRound(+(FM.scene.project || {}).fps || 30); return expFpsOk(f) ? f : 30; };   // the project's own rate, as the row can hold it
   /* 0 to the end of the last clip (and an end card after them: #1243 S37 review, it is content and his timeline says it is kept), so the
      black a song or a title runs on into is never in the file — what Simple's export has always covered (2.7) */
   function exportEnd() {
@@ -1165,21 +1218,33 @@ window.FM = window.FM || {};
     const snd = (FM.projectHasAudio && FM.projectHasAudio()) ? 160e3 : 0;
     return (br + snd) * Math.max(0, len) / 8;
   }
-  /* what the panel starts on: his last pick on this device when this project offers it, else the top rung and the project's own rate */
+  /* what the panel starts on: his last pick on this device when this project offers it, else the frame's own size (the biggest rung
+     that is not above the frame) and the project's own rate (on one of the three buttons, or on Custom). A remembered size ABOVE the frame is taken only if he picked it as an
+     enlargement (mem.up): "4K" pressed on a 4K project means its own size, and must not enlarge the next, smaller project unasked. */
   function exportInit() {
     let mem = null;
     try { mem = JSON.parse(localStorage.getItem(EXPORT_KEY) || 'null'); } catch (e) { mem = null; }
-    const rungs = exportRungs(), rates = exportRates(), pf = +(FM.scene.project || {}).fps || 30;
-    expP = (mem && rungs.indexOf(+mem.p) >= 0) ? +mem.p : rungs[rungs.length - 1];
-    expFps = (mem && rates.some(f => Math.abs(f - +mem.fps) < 1e-6)) ? +mem.fps : pf;
+    const rungs = exportRungs(), pf = expPf(), short = expShort();
+    const own = Math.max.apply(null, rungs.filter(p => p <= short));
+    expP = (mem && rungs.indexOf(+mem.p) >= 0 && (+mem.p <= short || mem.up === true)) ? +mem.p : own;
+    expUp = expP > short;
+    /* the rate: his last PRESS on this device (exportKeep keeps a rate only when he pressed it), else the project's own; the Custom button
+       holds the rate in use when it is none of the three, else the project's own when that is none of the three, else nothing */
+    const mf = mem ? expRound(+mem.fps) : NaN;
+    expFpsOwn = !expFpsOk(mf);
+    expFps = expFpsOwn ? pf : mf;
+    expCustom = !expIsRate(expFps) ? expFps : (!expIsRate(pf) ? pf : 0);
   }
   /* review R12-1 / R12-C1: the pick is checked against the project as it is NOW wherever it is used (the panel drawn again, Save video):
      a panel left up while the frame size or rate changed under it (Canvas from the cog, an undo, Home and another project) kept the old
      pick, showed nothing pressed, and Save video exported 2160 / 1080 = an upscale. A pick this project no longer offers starts over. */
+  /* (24 Nov) …and so does a size above the frame that he did not pick as an enlargement: with 4K always on offer, the 4K pressed on a
+     4K frame would otherwise stay pressed over a frame that turned 1080p under the panel, and Save video would enlarge it twice over. */
   function exportCheck() {
-    if (exportRungs().indexOf(expP) < 0 || !exportRates().some(f => Math.abs(f - expFps) < 1e-6)) exportInit();
+    /* …and a rate that was the project's own (not his press) follows the project: a 24 fps frame that turned 30 fps under the open panel */
+    if (exportRungs().indexOf(expP) < 0 || !expFpsOk(expFps) || (expFpsOwn && Math.abs(expFps - expPf()) > 1e-6) || (expP > expShort() && !expUp)) exportInit();
   }
-  function exportKeep() { try { localStorage.setItem(EXPORT_KEY, JSON.stringify({ p: expP, fps: expFps })); } catch (e) {} }
+  function exportKeep() { try { localStorage.setItem(EXPORT_KEY, JSON.stringify({ p: expP, fps: expFpsOwn ? 0 : expFps, up: expP > expShort() })); } catch (e) {} }
   /* THE PICTURE: the frame at the playhead as the FILE will hold it, rendered (never copied off #preview, which carries guides and the
      isolate) the way Full's Export card draws its own (js/export-card.js drawThumb): the isolate, the crop tool's whole-frame view and the
      effects sheet's preview held aside for the one render and put back. Drawn again only when the playhead has moved (or the project or
@@ -1213,12 +1278,20 @@ window.FM = window.FM || {};
   }
   /* one segmented row: its name, then a button per choice (aria-pressed: the one picked). A press picks it, keeps it for next time and
      puts the size right, in place, so focus stays on the button pressed */
-  function exportSeg(box, key, label, list, cur, name, pick) {
+  /* o (#1261, Smoothness): unit, a small word under the row's name (the buttons are then bare numbers, so six or seven fit the phone's
+     row); own, the value to mark as the project's own (a dot under it, and said in its name); spoken, a choice's full name */
+  function exportSeg(box, key, label, list, cur, name, pick, o) {
+    o = o || {};
     const row = el('div', 'sm-exp-row'); row.dataset.row = key;
-    row.appendChild(el('span', 'sm-exp-l', label));
+    const lab = el('span', 'sm-exp-l', label);
+    if (o.unit) lab.appendChild(el('span', 'sm-exp-unit', o.unit));
+    row.appendChild(lab);
     const seg = el('div', 'sm-exp-seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', label);
     list.forEach(v => {
       const b = el('button', 'sm-exp-b', name(v)); b.type = 'button'; b.dataset.exp = key + '-' + v;
+      const own = o.own != null && Math.abs(v - o.own) < 1e-6;
+      if (own) b.classList.add('sm-exp-own');
+      if (o.spoken) { const s = o.spoken(v, own); b.setAttribute('aria-label', s); b.title = s; }
       b.setAttribute('aria-pressed', Math.abs(v - cur) < 1e-6 ? 'true' : 'false');
       b.addEventListener('click', e => {
         e.stopPropagation();
@@ -1231,6 +1304,59 @@ window.FM = window.FM || {};
     row.appendChild(seg);
     box.appendChild(row);
   }
+  /* Smoothness's row (#1261, his words: "Just do 30, 60, 120 or custom"): three rates and the Custom button, in the row's own look
+     (exportSeg's classes, so the panel's keys and the suite find them). The Custom button shows the rate it holds. A press on it picks
+     that rate; a press when it is already the pick, or holds none, asks for a number from 1 to 120 in the app's own question box
+     (FM.ask, on the phone's digits pad; whole numbers). A number that is one of the three presses that button instead. A press keeps focus on the
+     button pressed (the row is drawn again in place). */
+  function exportFpsRow(box) {
+    const w = W(), fpsName = f => typeof w.exportFps === 'function' ? w.exportFps(f) : expRound(f) + ' fps';
+    const row = el('div', 'sm-exp-row'); row.dataset.row = 'fps';
+    const lab = el('span', 'sm-exp-l', w.exportSmooth || 'Smoothness');
+    lab.appendChild(el('span', 'sm-exp-unit', w.exportFpsUnit || 'fps'));
+    row.appendChild(lab);
+    const seg = el('div', 'sm-exp-seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', w.exportSmooth || 'Smoothness');
+    const pick = (f, focus) => {
+      expFps = f; expFpsOwn = false; exportKeep(); paint(focus);
+      const sz = box.querySelector('.sm-exp-size'); if (sz) sz.textContent = exportSizeText();
+    };
+    const ask = () => {
+      if (!FM.ask) return;
+      FM.ask({ title: w.exportFpsAsk || 'Frames a second', message: w.exportFpsHint || 'From 1 to 120', ok: w.exportFpsSet || 'Set',
+        input: { value: String(expRound(expCustom || expFps)), inputmode: 'numeric' } }).then(ans => {
+        if (ans == null) return;
+        const n = Math.round(parseFloat(String(ans)));   // whole frames a second, as the Full editor's Exact fps box takes them and as a project's rate is stored
+        if (!expFpsOk(n)) { if (FM.spine && FM.spine.say) FM.spine.say(w.exportFpsBad || 'Type a number from 1 to 120'); return; }
+        if (!expIsRate(n)) expCustom = n;
+        pick(n, expIsRate(n) ? 'fps-' + n : 'fps-custom');
+      });
+    };
+    function paint(focus) {
+      const pf = expPf(), a = document.activeElement, keep = focus || (a && seg.contains(a) ? a.dataset.exp : '');
+      seg.textContent = '';
+      EXP_RATES.forEach(f => {
+        const b = el('button', 'sm-exp-b', String(f)); b.type = 'button'; b.dataset.exp = 'fps-' + f;
+        const own = Math.abs(f - pf) < 1e-6, said = fpsName(f) + (own ? ', ' + (w.exportFpsOwn || 'the project’s own') : '');
+        if (own) b.classList.add('sm-exp-own');
+        b.setAttribute('aria-label', said); b.title = said;
+        b.setAttribute('aria-pressed', Math.abs(f - expFps) < 1e-6 ? 'true' : 'false');
+        b.addEventListener('click', e => { e.stopPropagation(); pick(f); });
+        seg.appendChild(b);
+      });
+      const on = !expIsRate(expFps), own = expCustom > 0 && Math.abs(expCustom - pf) < 1e-6;
+      const c = el('button', 'sm-exp-b sm-exp-custom', expCustom ? String(expRound(expCustom)) : (w.exportCustom || 'Custom')); c.type = 'button'; c.dataset.exp = 'fps-custom';
+      if (own) c.classList.add('sm-exp-own');
+      const said = expCustom ? fpsName(expCustom) + ', ' + (own ? (w.exportFpsOwn || 'the project’s own') : (w.exportCustomSaid || 'your own rate')) : (w.exportCustomTitle || 'Custom: type a rate');
+      c.setAttribute('aria-label', said); c.title = said;
+      c.setAttribute('aria-pressed', on ? 'true' : 'false');
+      c.addEventListener('click', e => { e.stopPropagation(); if (expCustom && !on) pick(expCustom); else ask(); });
+      seg.appendChild(c);
+      if (keep) { const k = seg.querySelector('.sm-exp-b[data-exp="' + keep + '"]'); if (k) k.focus({ preventScroll: true }); }
+    }
+    paint('');
+    row.appendChild(seg);
+    box.appendChild(row);
+  }
   /* Save video: the panel goes, focus goes back to the Export button, and the export runs through FM.exportSimple — the dialog's gates
      (pause, the owner's export switch, the notepad, clips still arriving), then an MP4 at this size and smoothness. With nothing to export
      it says so in Simple's line instead (runExport's own refusal is a browser alert). */
@@ -1238,7 +1364,7 @@ window.FM = window.FM || {};
     const w = W(), short = expShort(), to = exportEnd();
     if (!(FM.scene.layers || []).length || !(to > 0)) { if (FM.spine && FM.spine.say) FM.spine.say(w.exportEmpty || 'Add a clip first, then export it'); return; }
     if (!(short > 0) || !FM.exportSimple) return;
-    exportCheck();   // review R12-1: never a pick this frame no longer offers (an upscale)
+    exportCheck();   // review R12-1: never a pick this frame no longer offers, nor an enlargement he did not press
     const o ={ scale: expP / short, fps: expFps, quality: EXPORT_Q, from: 0, to: to };
     exportKeep();
     FM.simpleTools.closePanel();
@@ -1255,8 +1381,8 @@ window.FM = window.FM || {};
     what.append(el('span', 'sm-exp-h', w.exportHead || 'Export'), el('span', 'sm-exp-len', typeof w.exportLen === 'function' ? w.exportLen(exportEnd()) : String(Math.round(exportEnd())) + ' s'));
     top.append(panelBack(), exportPoster(), what);
     box.appendChild(top);
-    exportSeg(box, 'q', w.exportQuality || 'Quality', exportRungs(), expP, p => typeof w.exportRung === 'function' ? w.exportRung(p) : p + 'p', v => { expP = v; });
-    exportSeg(box, 'fps', w.exportSmooth || 'Smoothness', exportRates(), expFps, f => typeof w.exportFps === 'function' ? w.exportFps(f) : f + ' fps', v => { expFps = v; });
+    exportSeg(box, 'q', w.exportQuality || 'Quality', exportRungs(), expP, p => typeof w.exportRung === 'function' ? w.exportRung(p) : p + 'p', v => { expP = v; expUp = v > expShort(); });
+    exportFpsRow(box);   // #1261: 30 · 60 · 120 and Custom, bare numbers under "Smoothness · fps", the project's own marked
     /* the size, then Save video: stacked on a phone, side by side in the PC band (styles.css), so the whole card fits its ~206 px at 1280 × 800 */
     const foot = el('div', 'sm-exp-foot');
     const go = el('button', 'sm-exp-go', w.exportGo || 'Save video'); go.type = 'button'; go.dataset.exp = 'go';
@@ -1313,7 +1439,7 @@ window.FM = window.FM || {};
       edges(run);
       return;
     }
-    /* ONE STRIP, ON A PHONE AND A PC ALIKE (#1243 R decision 6, S15's "make it like CapCut where you can scroll it"): the tools scroll in their
+    /* ONE STRIP, ON A PHONE AND A PC ALIKE (#1243 R decision 6, S15's "make it like [another editor] where you can scroll it"): the tools scroll in their
        strip with a fade on the edge that hides tools (SU1 #15) and a wheel moves it; Delete is the strip's last tool, after a line (S31), and
        scrolls with the rest. (Until release 8 a PC laid six or more on two rows, his pick B of 6 Oct, and More and 🗑 were a pinned end
        beside the strip; S4 took More away, S31 unpinned 🗑, and S33's lines do not read in a grid.) */
@@ -1346,16 +1472,16 @@ window.FM = window.FM || {};
     if (runSeen) runSeen.observe(run);
     return run;
   }
-  /* THE BAND'S WORDS for a selected item (js/inspector.js draws them, bandWords, and may do so before the tray is refilled for a new
-     selection, so every refill puts them right). #1243 S4 step 4: "Its tools are below" — no "· More opens the rest", More went. */
+  /* THE BAND'S WORDS (js/inspector.js draws them, bandWords, and may do so before the tray is refilled for a new selection, so every
+     refill puts them right). #1255's 20:53 follow-up, his words: "There shouldn't be any explanations like that. We have tutorials for a
+     reason". The PC band said "Tap a clip to see its tools" with nothing selected and "Its tools are below" with something selected,
+     every time: both went, and the band is empty (styles.css hides the empty line, so it takes no room). What stays is a fact about the
+     item, not a how-to: a layer of an element moving with the rest says so (Phase 3 · Clips › Extras, "Moves with ‘Hello’"). */
   function bandWords(layer) {
-    const w = W();
-    if (!layer) return w.bandHint || 'Tap a clip to see its tools';
-    const base = w.bandHintSel || 'Its tools are below';
-    /* Phase 3 · Clips › Extras: a layer of an element moving with the rest says so first */
+    if (!layer) return '';
     const id = (layer && layer.id) || ((FM.selectionIds ? FM.selectionIds() : [])[0] || null);
-    const R = FM.simpleTimeline && FM.simpleTimeline.read ? FM.simpleTimeline.read() : null, wl = id ? withWords(R, id) : '';
-    return wl ? wl + ' · ' + base : base;
+    const R = FM.simpleTimeline && FM.simpleTimeline.read ? FM.simpleTimeline.read() : null;
+    return id ? withWords(R, id) : '';
   }
   function hintFollows() {
     const h = document.querySelector('#inspector > .sm-band-hint[data-sel]');
@@ -1550,8 +1676,9 @@ window.FM = window.FM || {};
   }
   function lookAdjust(box, L) {
     const w = W(), S = FM.spine;
-    /* R9 review: with no look yet a slider has no layer to show the picture on, so it changes on release; the panel says so plainly */
-    if (!L) { const n = el('div', 'sm-look-note sm-look-letgo'); n.appendChild(el('span', 'sm-look-note-t', w.lookLetGo || 'Let go to see it')); box.appendChild(n); }
+    /* (With no look yet a slider has no layer to show the picture on, so it changes when let go. The R9 review's line saying so, "Let go
+       to see it", stood over the sliders every time; it went with #1255's 20:53 follow-up, his words: "There shouldn't be any explanations
+       like that". Letting go shows it, and from then on the sliders show the picture as they move.) */
     (S.LOOK_ADJ || []).forEach(d => box.appendChild(lookSlider(L, d.key, w[d.word] || d.key, d.lo)));
     const rs = el('button', 'sm-look-reset', w.lookReset || 'Reset'); rs.type = 'button'; rs.dataset.look = 'reset';
     if (!S.lookOf(L).adjust) rs.setAttribute('aria-disabled', 'true');
@@ -1621,7 +1748,7 @@ window.FM = window.FM || {};
       const at = capTime((+L.start || 0) + (+c.start || 0)), words = String(c.text == null ? '' : c.text).trim();
       const b = el('button', 'sm-cap-t'); b.type = 'button'; b.dataset.cap = 'line-' + i;
       b.appendChild(el('span', 'sm-cap-time', at));
-      b.appendChild(el('span', 'sm-cap-w' + (words ? '' : ' sm-cap-empty'), words || (w.capEmpty || 'Empty · tap to type')));
+      b.appendChild(el('span', 'sm-cap-w' + (words ? '' : ' sm-cap-empty'), words || (w.capEmpty || 'Empty')));
       b.setAttribute('aria-label', at + ', ' + (words || w.capEmpty || ''));
       b.addEventListener('click', e => { e.stopPropagation(); typeLine(L.id, c); });
       const x = el('button', 'sm-cap-x'); x.type = 'button'; x.dataset.cap = 'x-' + i;
@@ -1785,8 +1912,12 @@ window.FM = window.FM || {};
       b.insertBefore(cv, b.firstChild);
       run.appendChild(b); cvs.push([cv, p]);
     });
+    /* #1259, his words (23 Nov): "in the simple editor, the effects is just all the same image and they don't really actually show you what
+       it is that is happening". A preset used to be drawn live on the one sample photo (mountPreset), and the presets come first in this
+       row, so the first screen was a dozen near-identical photos. Every tile now shows the drawn picture of the effect it puts on the
+       item: a preset shows its base effect's picture (S.itemEffects gives a preset's `type` as its fx), a stock effect its own. */
     const T = FM.fxThumbs;
-    if (T) lazyTiles(run, cvs, q => { if (q[1].preset && T.mountPreset) T.mountPreset(q[0], q[1].preset, null); else if (T.mount) T.mount(q[0], q[1].type); });   // #1243 S11: as they come into view
+    if (T && T.mount) lazyTiles(run, cvs, q => T.mount(q[0], q[1].type));   // #1243 S11: as they come into view
   }
 
   /* ═══ PHASE 3 · CLIPS › EXTRAS (queue 980; DESIGN §8.5 the Clips row "Add clips … · Extras (D21, from Phase 3): saved elements, shapes
@@ -1936,7 +2067,46 @@ window.FM = window.FM || {};
      sheet), or More's / Look's / Edit lines' panel is open for the one selected item: on a phone only while its sheet is really up (a
      grab-bar close leaves panelFor set, finding 20: the mode is item then, and More raises it again as today). ═══ */
   const extrasUp = () => extrasOpen || !!document.querySelector('#add-sheet.open > #add-grid > .addmenu[data-sm="extras"]');
+  /* ═══ #1243 S14 — ASK & EDIT FROM SIMPLE'S BAR. The first tool of the project row opens Full's own assistant (FM.aiChat: HIS key,
+     never a built-in one; with no key it sends him to Settings, exactly as in Full). In Simple's terms it is a PANEL (R decision 9):
+       · on a phone it runs from the sheet line down — js/ai-chat.js place() already reads FM.mobile.sheetLine(), the line every
+         Simple panel uses, so nothing is added there;
+       · on a PC it lies over the left band (aiDock: the band's own box, measured and handed to styles.css as four custom
+         properties that only a rule under body.ed-simple reads, and only while the chat is open — Full never sees them);
+       · the bar hides while it is up (panelUp) and is back when it closes (the body-class observer in mount()).
+     One menu at a time: opening it closes a sub-row, Extras and Look's panel. The assistant writes Full-style edits, which Simple reads
+     back like any other edit (a move can leave a gap chip): an op set that speaks Simple's commands is #1243 AI1's job. ═══ */
+  const aiUp = () => document.body.classList.contains('aic-open');
+  /* ONE MENU AT A TIME, FROM OUTSIDE THE BAR TOO (the 24 Nov review, AI-SM1 and AI-SM2): the Export button, and on a PC a cut's ◇ on
+     the timeline beside it, can be pressed while the assistant is up. What they open takes its place, as the assistant takes
+     theirs (openAi). Before this Export's panel opened UNDER the assistant, and a second press closed it again unseen. */
+  const aiOff = () => { if (aiUp() && FM.aiChat && FM.aiChat.hide) FM.aiChat.hide(); };
+  /* where Simple's spoken line floats while the assistant is over the PC band (aiDock writes them on the bar; styles.css reads them) */
+  const SAY_VARS = ['--sm-say-l', '--sm-say-w', '--sm-say-b'];
+  const AI_VARS = ['--sm-ai-l', '--sm-ai-t', '--sm-ai-w', '--sm-ai-b'];
+  let aiSeen = null;   // the band's ResizeObserver while the chat is docked over it
+  function aiDock() {
+    const c = document.getElementById('ai-chat'), band = document.getElementById('inspector-panel');
+    if (!c) return;
+    const on = isSimple() && !phone.matches && aiUp() && !!band;
+    if (!on) {
+      if (bar) SAY_VARS.forEach(p => bar.style.removeProperty(p));
+      AI_VARS.forEach(p => c.style.removeProperty(p));
+      if (aiSeen) { aiSeen.disconnect(); aiSeen = null; }
+      return;
+    }
+    const r = band.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0)) return;
+    const v = [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.max(0, Math.round(innerHeight - r.bottom))];
+    AI_VARS.forEach((p, i) => { if (c.style.getPropertyValue(p) !== v[i] + 'px') c.style.setProperty(p, v[i] + 'px'); });
+    /* …and the line Simple says (the 24 Nov review, SEE-2): its place is the bar's top, which is under the assistant here, so a
+       refusal from the timeline beside it ("Locked… Do it anyway") could be neither read nor pressed. It floats just above the
+       assistant's top edge, over the foot of the picture, as a phone panel's line floats above the sheet line. */
+    if (bar) [v[0], v[2], Math.max(0, Math.round(innerHeight - r.top))].forEach((x, i) => { if (bar.style.getPropertyValue(SAY_VARS[i]) !== x + 'px') bar.style.setProperty(SAY_VARS[i], x + 'px'); });
+    if (!aiSeen && window.ResizeObserver) { aiSeen = new ResizeObserver(() => aiDock()); aiSeen.observe(band); }
+  }
   function panelUp(ids) {
+    if (aiUp()) return true;   // #1243 S14: the assistant is a panel, whatever is selected under it
     if (extrasUp()) return true;
     if (!panelFor) return false;
     if (panelFor === PROJECT ? ids.length > 0 : (ids.length !== 1 || ids[0] !== panelFor)) return false;   // #1243 S12: Look's is open for no item
@@ -2045,7 +2215,9 @@ window.FM = window.FM || {};
       else if (hadFocus) {
         const row = mode === 'project' ? tools : tray;
         const want = /^(rowBack|fxBack|itemBack|pback)$/.test(focusKey) ? backTo : focusKey;
-        const n = (want && row.querySelector('[data-tool="' + CSS.escape(want) + '"]')) || row.querySelector('button, input');
+        /* with no tool to go back to, the project row's Clips, as before #1243 S14 put Ask & edit first: a stray Enter there must not
+           open the assistant */
+        const n = (want && row.querySelector('[data-tool="' + CSS.escape(want) + '"]')) || (mode === 'project' && row.querySelector('[data-tool="clips"]')) || row.querySelector('button, input');
         if (n) n.focus({ preventScroll: true });
       }
       backTo = '';
@@ -2110,7 +2282,7 @@ window.FM = window.FM || {};
     },
     /* #1243 S6 A: Simple's Export panel (exportPanel), from the Export button: a project panel like Look's — nothing selected (a selection
        is let go first, a row or Extras closes: one menu at a time), the whole left band on a PC, on a phone the sheet from the sheet line.
-       It starts on his last pick on this device, else the top rung and the project's rate. Only while Simple is on screen and the frame
+       It starts on his last pick on this device, else the frame's own size and the project's rate. Only while Simple is on screen and the frame
        has a size; false when it opened nothing. */
     openExport() {
       if (!isSimple() || !mount() || !(expShort() > 0) || !FM.exportSimple) return false;
@@ -2121,6 +2293,7 @@ window.FM = window.FM || {};
       if (subFor) { subFor = null; segUndrag(); }
       if (extrasOpen) { extrasOpen = false; extrasMark(); }
       extrasSheetOff();
+      aiOff();   // the 24 Nov review, AI-SM1: Export takes the assistant's place
       if (FM.selectionIds && FM.selectionIds().length && FM.selectLayer) FM.selectLayer(null);
       panelFor = PROJECT; panelKind = 'export'; exportInit(); posterCv = null; posterAt = NaN; lastSig = '';
       if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch();
@@ -2181,6 +2354,7 @@ window.FM = window.FM || {};
          over the cut before a clip whose More or Look is open set the Transition row under that panel, where the bar is hidden: the press
          showed nothing until the panel's ‹ was pressed. */
       if (panelFor) dropPanel();
+      aiOff();   // …and the assistant, which on a PC lies over the bar this row is drawn on (the 24 Nov review, AI-SM2)
       /* `of`: the selected item the row belongs to when it acts on another (#1243 S1 A: the first clip's Transition, for the cut after it) */
       subFor = { key: key, id: id || null, from: from || null, of: of || null, sel: (FM.selectionIds ? FM.selectionIds() : []).join(',') };
       lastSig = ''; this.sync();
@@ -2210,6 +2384,13 @@ window.FM = window.FM || {};
       if (!mount() || !isSimple()) return;
       const ids = FM.selectionIds ? FM.selectionIds() : [];
       if (modeOf(ids) === 'panel') {
+        /* #1243 S14: the assistant goes first (it lies over whatever else is open), and focus goes back to its tool */
+        if (aiUp()) {
+          if (FM.aiChat && FM.aiChat.hide) FM.aiChat.hide();
+          backTo = ''; lastSig = ''; this.sync();
+          const n = bar.dataset.mode === 'project' ? tools.querySelector('[data-tool="ai"]') : tray.querySelector('button, input'); if (n) n.focus({ preventScroll: true });   // AI-SM4: with an item selected, its first tool
+          return;
+        }
         if (extrasUp()) { backTo = 'extras'; this.closeExtras(); return; }
         /* #1243 S6: Export's panel was opened from the Export button, which is not on the bar: focus goes back there */
         if (panelKind === 'export') { backTo = ''; this.closePanel(); const x = exportBtn(); if (x) x.focus({ preventScroll: true }); return; }
@@ -2242,6 +2423,31 @@ window.FM = window.FM || {};
     /* the bar's mode and its sub-row, for the suite */
     mode: () => (bar && bar.dataset.mode) || '',
     subFor: () => subFor && { key: subFor.key, id: subFor.id, from: subFor.from, of: subFor.of || null },
+    /* #1243 S14: Ask & edit, the project row's first tool. Only while Simple is on screen (in Full this opens nothing: Full has its own
+       door in the Add menu). One menu at a time: a sub-row, Extras and Look's panel close first. A BUTTON that holds the focus lets it
+       go, so the assistant's own box may take it (js/ai-chat.js canTakeFocus: only when the focus is on nothing): the pressed tool, and
+       also the cog, which holds the focus after a switch of editor (js/editor-mode.js: it never falls to the page) and kept it under
+       a press that does not move the focus (a mouse click in Safari; the suite's first run of S14, which is how this was found). A
+       field he is typing in keeps the focus. True when the assistant is up; false, with Simple's line said, for somebody who cannot
+       edit. */
+    openAi() {
+      if (!isSimple() || !mount() || !FM.aiChat || !FM.aiChat.show) return false;
+      /* A VIEWER OR A COMMENTER CHANGES NOTHING, and the assistant writes edits: it does not open for them (nor while a full offline
+         outbox takes nothing more). Simple's own line says why, as every Simple command does (FM.spine.roReason, the runner's first
+         gate). In Full their two doors to it, the + and the layer's menu, are hidden (styles.css body.collab-ro): this was a third. */
+      const ro = FM.spine && FM.spine.roReason ? FM.spine.roReason() : '';
+      if (ro) { if (FM.spine.explain) FM.spine.explain(ro); else if (FM.spine.say) FM.spine.say(ro); return false; }
+      if (subFor) { subFor = null; segUndrag(); }
+      if (extrasUp()) this.closeExtras();
+      if (panelFor) dropPanel();
+      const a = document.activeElement;
+      if (a && a !== document.body && a.blur && (bar.contains(a) || a.tagName === 'BUTTON')) a.blur();
+      FM.aiChat.show();
+      aiDock();
+      lastSig = ''; this.sync();
+      return aiUp();
+    },
+    aiUp: () => aiUp(),
     /* Phase 3 · Clips › Extras: open (nothing selected; a selection is let go first), close, and whether it is up. Only while Simple
        is on screen: in Full openExtras opens nothing. A panel: the Clips row it was opened from stays under it. */
     openExtras() {

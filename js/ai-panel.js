@@ -34,11 +34,11 @@ window.FM = window.FM || {};
     window.addEventListener('resize', function () { if (!isPhone()) {} });
   }
 
-  // ✨ Generate button already exists in the topbar markup; wire it. Plus a phone bottom-sheet handle.
-  function buildEntry() {
-    var btn = document.getElementById('btn-ai');
-    if (btn) btn.addEventListener('click', show);
-  }
+  /* #1243 F2 — "we don't really need the AI scene button… the AI assistant button should be able to do everything". The Director
+     has no door of its own any more: the AI Scene tile and the hidden #btn-ai are gone, and a whole scene is asked for in Ask & edit
+     (js/ai-chat.js build_scene), which runs the same engine with its own progress rows. This panel stays as the engine's fallback
+     sink (js/ai.js panel()) and as the home of the demo prompt; nothing in the app opens it. */
+  function buildEntry() {}
 
   function buildPanel() {
     panelEl = el('div'); panelEl.id = 'ai-panel';
@@ -314,7 +314,8 @@ window.FM = window.FM || {};
   function hide() { panelEl.classList.remove('open'); panelEl.inert = true; document.body.classList.remove('ai-open'); }   // closed = unreachable (queue 930 review)
   function toggle() { panelEl.classList.contains('open') ? hide() : show(); }
 
-  FM.aiPanel = { show: show, hide: hide, toggle: toggle, refreshKey: refreshKey, isOpen: function () { return !!(panelEl && panelEl.classList.contains('open')); }, reset: reset, row: row, note: note, criticThumbs: criticThumbs, done: done, error: error };
+  FM.aiPanel = { show: show, hide: hide, toggle: toggle, refreshKey: refreshKey, isOpen: function () { return !!(panelEl && panelEl.classList.contains('open')); }, reset: reset, row: row, note: note, criticThumbs: criticThumbs, done: done, error: error,
+    demoPrompt: EXAMPLES[0] };   // #1243 F2: Ask & edit's "Watch a demo" runs the same first example the Director's demo always ran
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();

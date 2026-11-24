@@ -732,7 +732,7 @@ window.FM = window.FM || {};
       const txt = el('div', 'set-rowtext');
       txt.appendChild(el('div', 'set-label', 'AI — your Anthropic key'));
       const state = el('div', 'set-hint');
-      const paint = () => { state.textContent = FM.aiKey.has() ? ('Connected: ' + FM.aiKey.masked() + (FM.aiKey.remembered() ? ' · remembered on this device' : ' · for this session only')) : 'No key yet — the Director and the Assistant use it. Used only on this device, sent only to api.anthropic.com, never logged or uploaded; spend is on your own account.'; };
+      const paint = () => { state.textContent = FM.aiKey.has() ? ('Connected: ' + FM.aiKey.masked() + (FM.aiKey.remembered() ? ' · remembered on this device' : ' · for this session only')) : 'No key yet — Ask & edit uses it. Used only on this device, sent only to api.anthropic.com, never logged or uploaded; spend is on your own account.'; };
       paint();
       txt.appendChild(state);
       ak.appendChild(txt);
@@ -764,13 +764,13 @@ window.FM = window.FM || {};
         FM.aiKey.set(v, rem.checked);
         input.value = ''; input.classList.remove('bad'); input.placeholder = 'sk-ant-…';
         sync();
-        if (FM.toast) FM.toast('Key saved — the Director and the Assistant will use it', 2200);
+        if (FM.toast) FM.toast('Key saved — Ask & edit will use it', 2200);   // #1243 F2: one AI door now
       });
       input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save.click(); } });
       forget.addEventListener('click', async () => {
         // one tap from Save, so it asks (queue 930 review) — and a Director build running on the key is stopped, not left to fail stage by stage
         const running = !!(FM.ai && FM.ai.isRunning && FM.ai.isRunning());
-        const ok = FM.ask ? await FM.ask({ title: 'Forget your key?', message: 'The Director and the Assistant stop working until you add it again.' + (running ? ' The scene being built now is stopped.' : ''), ok: 'Forget', cancel: 'Keep it', danger: true }) : true;
+        const ok = FM.ask ? await FM.ask({ title: 'Forget your key?', message: 'Ask & edit stops working until you add it again.' + (running ? ' The scene being built now is stopped.' : ''), ok: 'Forget', cancel: 'Keep it', danger: true }) : true;
         if (!ok) return;
         if (running && FM.ai.cancel) FM.ai.cancel();
         FM.aiKey.forget(); rem.checked = false; sync();
