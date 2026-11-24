@@ -181,7 +181,7 @@ window.FM = window.FM || {};
        (js/gl-color.js) when ctx.filter is missing, and #675 corrected `FM.cssFxUnavailable` to ask
        ctx.filter THEN the shader (js/compositor.js:1552). This banner never got that correction, so on
        a phone with WebGL and no ctx.filter — REQUESTS.md names that as exactly his device — the one
-       report he actually runs and pastes opened with a 🚨 telling him nine of his effects do nothing,
+       report he actually runs and pastes opened with an alarm sign telling him nine of his effects do nothing,
        above a screen where they had been working for eight releases.
        #661 existed because the app told him these were fine when they were dead. Leaving this would
        have been the same defect wearing the opposite sign, and #675 already wrote the rule down:
