@@ -125807,7 +125807,11 @@
         await sleep(80);
         await (width === 'phone' ? atPhoneWidth : atWideWidth)(async function () {
           dlg.classList.add('hidden'); await sleep(40);
-          const O = orb.getBoundingClientRect();
+          /* the + AT REST (24 Nov, a hunt finding): run by itself this test meets Home's first-open entrance still playing on
+             the +, and a + caught mid-rise read [172, 694, 47, 47] against the [171, 690, 48, 48] it has at rest: red, and the
+             measurement's fault. So it is measured once its box has stopped changing (50 ms apart, at most 2 s). */
+          let O = orb.getBoundingClientRect();
+          for (let i = 0; i < 40; i++) { await sleep(50); const q = orb.getBoundingClientRect(); const still = near(q, O, 0.05); O = q; if (still) break; }
           if (!(O.width > 20)) throw new Error(width + ': the + is not on screen (' + box(O) + ') before it is pressed');
           orb.click();
           if (dlg.classList.contains('hidden')) throw new Error(width + ': tapping + did not open the New project card');
