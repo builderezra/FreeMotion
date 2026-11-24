@@ -1110,7 +1110,7 @@ window.FM = window.FM || {};
      MP4, never saved as the dialog's defaults) — js/exporter.js and js/app.js are not touched, so Full's Export is exactly today's. */
   const EXPORT_Q = 0.18;                 // Full's High quality, the one Simple has always used (2.7, SU1 #20)
   const EXPORT_KEY = 'fm.sm.export';     // his last pick on this device ({p, fps}); never the dialog's own memory (fm.exportPrefs)
-  let expP = 0, expFps = 0, posterAt = NaN, posterCv = null;
+  let expP = 0, expFps = 0, expUp = false, posterAt = NaN, posterCv = null;   // expUp: the size picked is ABOVE the frame because he pressed it (an enlargement he asked for)
   const exportUp = () => {
     if (panelFor !== PROJECT || panelKind !== 'export' || (FM.selectionIds ? FM.selectionIds() : []).length) return false;
     if (!phone.matches) return true;
@@ -1120,13 +1120,18 @@ window.FM = window.FM || {};
   /* the Export button on screen (the phone's ⬆ or the PC's), where focus goes back to when the panel closes */
   const exportBtn = () => ['m-export', 'btn-export'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length) || null;
   const expShort = () => { const P = FM.scene.project || {}; return Math.min(+P.width || 0, +P.height || 0); };
-  /* Quality's rungs, by the frame's short side, NEVER an upscale (today's rule, 2.7): 720p and 1080p when the frame is that big, 4K only
-     when its short side is 2160 or more (1243-B S6 change 2), and a frame below 4K that is not a rung also offers its own size, so the
-     file can always be the frame's own size (a 900 px frame: 720p · 900p; a 240 px one: 240p alone; a 1440 px one: 720p · 1080p · 1440p;
-     review R12-5: an own size only under 1080 left a 1440p project no way to export at its size) */
+  /* Quality's rungs, by the frame's short side: ALWAYS 720p · 1080p · 4K, and the frame's own size when it is none of those, so the file
+     can always be the frame's own size (a 900 px frame: 720p · 900p · 1080p · 4K; a 240 px one: 240p · 720p · 1080p · 4K; a 1440 px
+     one: 720p · 1080p · 1440p · 4K; review R12-5).
+     HIS WORDS, 24 Nov, asked whether Simple should offer 4K on a smaller project: "Yeah, just put the option there because lots of noobs
+     will not understand and think, oh, why the hell can't I export in 4K? This is shit." Until then a rung above the frame was never
+     offered (2.7's rule, never an upscale; 1243-B S6 change 2). A rung above the frame is an ENLARGEMENT: the exporter draws the frame at
+     its own size and scales it into the bigger file (js/exporter.js blit), and asks the device's encoder for that size before it starts
+     (a size it cannot take is refused at once, with one that works). The panel still OPENS on the frame's own size (exportInit), so an
+     enlargement is only ever his own pick. */
   function exportRungs() {
-    const short = expShort(), out = [720, 1080, 2160].filter(p => p <= short);
-    if (short > 0 && short < 2160 && out.indexOf(short) < 0) out.push(short);
+    const short = expShort(), out = [720, 1080, 2160];
+    if (short > 0 && out.indexOf(short) < 0) out.push(short);
     return out.sort((a, b) => a - b);
   }
   /* Smoothness. #1261, his words (23 Nov): "The simple export panel is honestly probably too simple. Like, you only have two choices for
@@ -1163,21 +1168,27 @@ window.FM = window.FM || {};
     const snd = (FM.projectHasAudio && FM.projectHasAudio()) ? 160e3 : 0;
     return (br + snd) * Math.max(0, len) / 8;
   }
-  /* what the panel starts on: his last pick on this device when this project offers it, else the top rung and the project's own rate */
+  /* what the panel starts on: his last pick on this device when this project offers it, else the frame's own size (the biggest rung
+     that is not above the frame) and the project's own rate. A remembered size ABOVE the frame is taken only if he picked it as an
+     enlargement (mem.up): "4K" pressed on a 4K project means its own size, and must not enlarge the next, smaller project unasked. */
   function exportInit() {
     let mem = null;
     try { mem = JSON.parse(localStorage.getItem(EXPORT_KEY) || 'null'); } catch (e) { mem = null; }
-    const rungs = exportRungs(), rates = exportRates(), pf = +(FM.scene.project || {}).fps || 30;
-    expP = (mem && rungs.indexOf(+mem.p) >= 0) ? +mem.p : rungs[rungs.length - 1];
+    const rungs = exportRungs(), rates = exportRates(), pf = +(FM.scene.project || {}).fps || 30, short = expShort();
+    const own = Math.max.apply(null, rungs.filter(p => p <= short));
+    expP = (mem && rungs.indexOf(+mem.p) >= 0 && (+mem.p <= short || mem.up === true)) ? +mem.p : own;
+    expUp = expP > short;
     expFps = (mem && rates.some(f => Math.abs(f - +mem.fps) < 1e-6)) ? +mem.fps : pf;
   }
   /* review R12-1 / R12-C1: the pick is checked against the project as it is NOW wherever it is used (the panel drawn again, Save video):
      a panel left up while the frame size or rate changed under it (Canvas from the cog, an undo, Home and another project) kept the old
      pick, showed nothing pressed, and Save video exported 2160 / 1080 = an upscale. A pick this project no longer offers starts over. */
+  /* (24 Nov) …and so does a size above the frame that he did not pick as an enlargement: with 4K always on offer, the 4K pressed on a
+     4K frame would otherwise stay pressed over a frame that turned 1080p under the panel, and Save video would enlarge it twice over. */
   function exportCheck() {
-    if (exportRungs().indexOf(expP) < 0 || !exportRates().some(f => Math.abs(f - expFps) < 1e-6)) exportInit();
+    if (exportRungs().indexOf(expP) < 0 || !exportRates().some(f => Math.abs(f - expFps) < 1e-6) || (expP > expShort() && !expUp)) exportInit();
   }
-  function exportKeep() { try { localStorage.setItem(EXPORT_KEY, JSON.stringify({ p: expP, fps: expFps })); } catch (e) {} }
+  function exportKeep() { try { localStorage.setItem(EXPORT_KEY, JSON.stringify({ p: expP, fps: expFps, up: expP > expShort() })); } catch (e) {} }
   /* THE PICTURE: the frame at the playhead as the FILE will hold it, rendered (never copied off #preview, which carries guides and the
      isolate) the way Full's Export card draws its own (js/export-card.js drawThumb): the isolate, the crop tool's whole-frame view and the
      effects sheet's preview held aside for the one render and put back. Drawn again only when the playhead has moved (or the project or
@@ -1244,7 +1255,7 @@ window.FM = window.FM || {};
     const w = W(), short = expShort(), to = exportEnd();
     if (!(FM.scene.layers || []).length || !(to > 0)) { if (FM.spine && FM.spine.say) FM.spine.say(w.exportEmpty || 'Add a clip first, then export it'); return; }
     if (!(short > 0) || !FM.exportSimple) return;
-    exportCheck();   // review R12-1: never a pick this frame no longer offers (an upscale)
+    exportCheck();   // review R12-1: never a pick this frame no longer offers, nor an enlargement he did not press
     const o ={ scale: expP / short, fps: expFps, quality: EXPORT_Q, from: 0, to: to };
     exportKeep();
     FM.simpleTools.closePanel();
@@ -1261,7 +1272,7 @@ window.FM = window.FM || {};
     what.append(el('span', 'sm-exp-h', w.exportHead || 'Export'), el('span', 'sm-exp-len', typeof w.exportLen === 'function' ? w.exportLen(exportEnd()) : String(Math.round(exportEnd())) + ' s'));
     top.append(panelBack(), exportPoster(), what);
     box.appendChild(top);
-    exportSeg(box, 'q', w.exportQuality || 'Quality', exportRungs(), expP, p => typeof w.exportRung === 'function' ? w.exportRung(p) : p + 'p', v => { expP = v; });
+    exportSeg(box, 'q', w.exportQuality || 'Quality', exportRungs(), expP, p => typeof w.exportRung === 'function' ? w.exportRung(p) : p + 'p', v => { expP = v; expUp = v > expShort(); });
     /* #1261: every rate Full's Export offers, as bare numbers under "Smoothness · fps", the project's own marked */
     const pf = +(FM.scene.project || {}).fps || 30, fpsName = f => typeof w.exportFps === 'function' ? w.exportFps(f) : (Math.round(f * 100) / 100) + ' fps';
     exportSeg(box, 'fps', w.exportSmooth || 'Smoothness', exportRates(), expFps, f => String(Math.round(f * 100) / 100), v => { expFps = v; },
@@ -2124,7 +2135,7 @@ window.FM = window.FM || {};
     },
     /* #1243 S6 A: Simple's Export panel (exportPanel), from the Export button: a project panel like Look's — nothing selected (a selection
        is let go first, a row or Extras closes: one menu at a time), the whole left band on a PC, on a phone the sheet from the sheet line.
-       It starts on his last pick on this device, else the top rung and the project's rate. Only while Simple is on screen and the frame
+       It starts on his last pick on this device, else the frame's own size and the project's rate. Only while Simple is on screen and the frame
        has a size; false when it opened nothing. */
     openExport() {
       if (!isSimple() || !mount() || !(expShort() > 0) || !FM.exportSimple) return false;

@@ -207788,7 +207788,7 @@
   /* Full's Export card's rounding (js/export-card.js mb): KB under 1 MB, one decimal under 10 MB */
   const r12Mb = bytes => { const n = bytes / 1e6; return !(n > 0) ? '0 KB' : n < 1 ? Math.max(1, Math.round(n * 1000)) + ' KB' : (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10) + ' MB'; };
 
-  test('1243 R12 · S6 Export at 380 and 1280 opens a panel (the sheet from the stage’s bottom edge on a phone, the left band on a PC) with the frame, the length, Quality 720p · 1080p and Smoothness 15 · 25 · 30 · 50 · 60 · 120 fps, its size and Save video all on screen, and starts nothing until Save video; picking 60 fps changes the size to what the exporter is then given, Save video exports the clips only at 1080p and 60 fps and closes the panel, the pick is there next time, and Export pressed again closes it (CONTROL: before the press no panel is up and the bar is the project row)', { item: '980', budgetMs: 150000 }, async function () {
+  test('1243 R12 · S6 Export at 380 and 1280 opens a panel (the sheet from the stage’s bottom edge on a phone, the left band on a PC) with the frame, the length, Quality 720p · 1080p · 4K and Smoothness 15 · 25 · 30 · 50 · 60 · 120 fps, its size and Save video all on screen, and starts nothing until Save video; picking 60 fps changes the size to what the exporter is then given, Save video exports the clips only at 1080p and 60 fps and closes the panel, the pick is there next time, and Export pressed again closes it (CONTROL: before the press no panel is up and the bar is the project row)', { item: '980', budgetMs: 150000 }, async function () {
     smNeedP2();
     const ex = FM.exporter, run0 = ex.run, dlg = document.getElementById('export-dialog'), fails = [], put = r12Mem();
     let got = null;
@@ -207827,7 +207827,7 @@
               else if (e.tagName === 'BUTTON' && !r4Hits(e)) fails.push(at + p[0] + ' is covered at its centre');
             });
             /* what it says, simply */
-            if (r12Words('q') !== '720p, 1080p' || r12On('q') !== '1080p') fails.push(at + 'Quality reads “' + r12Words('q') + '” with “' + r12On('q') + '” picked, want 720p, 1080p with 1080p picked (a 1920×1080 frame: no 4K)');
+            if (r12Words('q') !== '720p, 1080p, 4K' || r12On('q') !== '1080p') fails.push(at + 'Quality reads “' + r12Words('q') + '” with “' + r12On('q') + '” picked, want 720p, 1080p, 4K with 1080p picked (a 1920×1080 frame opens on its own size, 4K is there to press: his words, 24 Nov, “just put the option there”)');
             if (r12Words('fps') !== '15 fps, 25 fps, 30 fps, 50 fps, 60 fps, 120 fps' || r12On('fps') !== '30 fps') fails.push(at + 'Smoothness reads “' + r12Words('fps') + '” with “' + r12On('fps') + '” picked, want Full’s 15, 25, 30, 50, 60 and 120 with the project’s 30 picked (#1261)');
             const len = box.querySelector('.sm-exp-len');
             if (!len || len.textContent !== '0:06') fails.push(at + 'the length reads “' + (len && len.textContent) + '”, want 0:06 (the clips, not the song’s 9 s)');
@@ -207867,18 +207867,20 @@
     if (fails.length) throw new Error(fails.join(' · '));
   });
 
-  test('1243 R12 · S6 Export never offers more than the frame: a 3840×2160 frame offers 720p · 1080p · 4K and opens on 4K, a 2560×1440 one offers 720p · 1080p and its own 1440p and opens on it, a 1920×1080 one stops at 1080p, a 1600×900 one offers 720p and its own 900p, a 320×240 one only its own 240p; Smoothness adds a 24 fps project’s own rate to Full’s six and opens on it, and Save video on 4K exports the frame at its own size at 24 fps (CONTROL: a 30 fps project offers just Full’s six)', { item: '980', budgetMs: 120000 }, async function () {
+  test('1243 R12 · S6 Export always offers 720p · 1080p · 4K and the frame’s own size, and opens on the frame’s own: a 3840×2160 frame opens on 4K, a 2560×1440 one on its own 1440p with 4K above it, a 1920×1080 one on 1080p, a 1600×900 one on its own 900p, a 320×240 one on its own 240p; a 24 fps project’s own rate stands where 25 did and is picked; Save video on a 4K frame exports it at its own size at 24 fps, and 4K pressed on a 1920×1080 frame exports it enlarged twice over and is remembered as an enlargement (CONTROLS: a 30 fps project offers just Full’s six; the 1080p frame opens on 1080p before 4K is pressed)', { item: '980', budgetMs: 150000 }, async function () {
     smNeedP2();
     const ex = FM.exporter, run0 = ex.run, fails = [], put = r12Mem();
     let got = null;
     ex.run = async o => { got = o; };
     const cases = [
-      /* #1261: Full's six rates (15, 25, 30, 50, 60, 120); a 24 fps project's own rate is added among them */
-      { W: 3840, H: 2160, fps: 24, q: '720p, 1080p, 4K', on: '4K', f: '15 fps, 24 fps, 25 fps, 30 fps, 50 fps, 60 fps, 120 fps', fon: '24 fps', save: true },
-      { W: 2560, H: 1440, fps: 30, q: '720p, 1080p, 1440p', on: '1440p' },
-      { W: 1920, H: 1080, fps: 30, q: '720p, 1080p', on: '1080p', f: '15 fps, 25 fps, 30 fps, 50 fps, 60 fps, 120 fps', fon: '30 fps', control: true },
-      { W: 1600, H: 900, fps: 30, q: '720p, 900p', on: '900p' },
-      { W: 320, H: 240, fps: 30, q: '240p', on: '240p' }
+      /* #1261: Full's six rates (15, 25, 30, 50, 60, 120); a 24 fps project's own rate stands where 25 did (24 Nov: "why would you be able
+         to choose between 24 and 25?"). Quality (24 Nov: "just put the option there"): 720p · 1080p · 4K always, the frame's own size
+         when it is none of them, opening on the frame's own. */
+      { W: 3840, H: 2160, fps: 24, q: '720p, 1080p, 4K', on: '4K', f: '15 fps, 24 fps, 30 fps, 50 fps, 60 fps, 120 fps', fon: '24 fps', save: true },
+      { W: 2560, H: 1440, fps: 30, q: '720p, 1080p, 1440p, 4K', on: '1440p' },
+      { W: 1920, H: 1080, fps: 30, q: '720p, 1080p, 4K', on: '1080p', f: '15 fps, 25 fps, 30 fps, 50 fps, 60 fps, 120 fps', fon: '30 fps', control: true, up: true },
+      { W: 1600, H: 900, fps: 30, q: '720p, 900p, 1080p, 4K', on: '900p' },
+      { W: 320, H: 240, fps: 30, q: '240p, 720p, 1080p, 4K', on: '240p' }
     ];
     try {
       for (const c of cases) {
@@ -207896,6 +207898,30 @@
             for (let i = 0; i < 60 && !got; i++) await v.sleep(20);
             if (!got) fails.push(at + 'Save video did not start an export');
             else if (got.scale !== 1 || got.fps !== 24) fails.push(at + 'Save video exported scale ' + got.scale + ' at ' + got.fps + ' fps, want the frame’s own size (scale 1) at 24 fps');
+          }
+          if (c.up) {
+            /* 4K pressed on the 1080p frame: the size line grows, Save video hands the exporter scale 2, and the pick is remembered AS an
+               enlargement (so it is offered pressed next time here, and never turns a later 4K project's own-size pick into one) */
+            const sz0 = (document.querySelector('#inspector .sm-exp .sm-exp-size') || {}).textContent || '';
+            const b4k = r12Row('q').filter(b => b.textContent === '4K')[0];
+            if (!b4k || !r4Hits(b4k)) { fails.push(at + 'the 4K button is not there to press'); }
+            else {
+              b4k.click(); await r4Settle(80);
+              const sz1 = (document.querySelector('#inspector .sm-exp .sm-exp-size') || {}).textContent || '';
+              if (r12On('q') !== '4K') fails.push(at + 'pressing 4K leaves “' + r12On('q') + '” picked');
+              if (sz1 === sz0) fails.push(at + 'pressing 4K left the size line at “' + sz1 + '”: an enlarged file is bigger');
+              got = null;
+              const go = document.querySelector('#inspector .sm-exp .sm-exp-go');
+              if (go) go.click();
+              for (let i = 0; i < 60 && !got; i++) await v.sleep(20);
+              if (!got) fails.push(at + 'Save video on 4K did not start an export');
+              else if (Math.abs(got.scale - 2) > 1e-9 || got.fps !== 30) fails.push(at + 'Save video on 4K exported scale ' + got.scale + ' at ' + got.fps + ' fps, want the 1080p frame enlarged twice over (scale 2) at 30 fps');
+              let mem = null; try { mem = JSON.parse(localStorage.getItem('fm.sm.export') || 'null'); } catch (e) {}
+              if (!mem || mem.p !== 2160 || mem.up !== true) fails.push(at + 'the 4K pick was kept as ' + JSON.stringify(mem) + ', want p 2160 marked as an enlargement (up)');
+              await r4Settle(150);
+              document.getElementById('btn-export').click(); await r4Settle(300);
+              if (r12On('q') !== '4K') fails.push(at + 'opened again, Quality has “' + r12On('q') + '” picked, not the 4K he pressed last time');
+            }
           }
           FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(100);
         }, { W: c.W, H: c.H, fps: c.fps });
