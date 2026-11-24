@@ -166128,11 +166128,24 @@
   const PRINTS1264 = { any: new Set(['078cfb1098ee5430', '0939f08a65c2c7ae', '1c1c55da9f094fff', '1d2baf1531666794', '1e4ff5ab070ea33f', '277162b329f1e348', '30eb8ca0387d3020', '31ddabcf25c42eb0', '33f24e12641923d4', '35fbc5d1c4b060a6', '39dff82147463ac5', '426c6e96e4e92980', '46a77d51416394ab', '49c4c15aabfd7387', '4d583d580c3b0ab4', '4f1f399a723efdb1', '4f465ccea60a1699', '546d573320336348', '6044e9bcd476d940', '641332ece18de0ac', '656d185e37a09157', '6585bf15f2d294c4', '66532efe687d81ad', '6d471ba77179114a', '7306545244fe4f15', '75ca3ee0eeb5f12c', '799734b394760b60', '7f3657fb82f8fcb8', '8140b61ea1aa3057', '8298cfe7b879cf42', '8860645adf164236', '8df14558c2b4541a', '8e96409e125e51b1', '8ef161fd8fd9765d', '8f290fcdb7291708', '9a63d948c4cf8a94', '9ce55424a28b8516', '9f0247b5d9aebe62', 'a136c79dc8c830f4', 'a252d38b0f578111', 'a5329da8a225454f', 'a564c98c649c50d0', 'a5c70ef3e564f6b9', 'a8921113ed7ac214', 'b0661a386d50a107', 'b07ee30241e3f5a7', 'bc08455af43a6365', 'bc8ecff4e9b14b49', 'be973f53bad570e1', 'c3513b499d2fe4f9', 'c56d72099477241e', 'cb4d00c93e9cfab0', 'cbaccaec15dfb4e7', 'd114c7af9ec2bfb5', 'd6acd5665e2ff208', 'd882c09037a156ad', 'd9b2cfb340782937', 'e0d2c12a7bfdeb0a', 'e434ba06913dab15', 'e4d4464444e26c08', 'e53a0d32d2cce7b3', 'e7ca52421d3f050a', 'e95abfe49ac45eb0', 'eb93d51b570a3d92', 'edf67fb6f726566e', 'f3a30c2812cb7e27', 'f4a0741221a4f26c', 'f4ff8fd2c82103ee', 'f577310bc54447fa', 'f7222bbb90bd8333', 'f7da66bba5562976', 'fdb792363426b0ff', 'ff9c6347d64a8a04']), exact: new Set(['040db706dce35a02', '08aa190133b16c53', '0ff12770541115db', '107d16e2a7d7d46e', '12168b1d2ccc7418', '142570d16d6703fc', '22cd2611ccf2b82a', '2bd9df41609a8b1e', '3c391de065e12b8d', '4a8122d875b62ed7', '4e7247dd60cb02a4', '4fb4ced957027279', '5092a0c1f42f2fd9', '67b80e39394d7aaa', '685e51ceab4dc1a4', '6cb63a3ccef568ee', '85f6fdfa68a89d5f', '882288b21a811928', '8de9443f2a1e6305', '8ee27c3a9aed95b5', '94c753024e8b48c2', '9f71e6781a54b697', 'a19ad83c79c58fcd', 'a5f5bf4e2ddadd28', 'bf797841c0acfe56', 'c38191c8f0ad1ca9', 'c75cdd030b1ac1da', 'ee5a75d967f1ba0e', 'f20b94294ad077ff', 'f2f36498a15bdede', 'ffb53d1c5779de04']), lead: new Set(['078cfb1098ee5430', '159ac2b790bef70d', '1e4ff5ab070ea33f', '2f3e125b7af1225e', '30eb8ca0387d3020', '31ddabcf25c42eb0', '34375e0efa74e551', '35fbc5d1c4b060a6', '426c6e96e4e92980', '4349c6e5cfa8bd0e', '46a77d51416394ab', '49c4c15aabfd7387', '4d583d580c3b0ab4', '4f1f399a723efdb1', '4f465ccea60a1699', '546d573320336348', '6044e9bcd476d940', '6122e6af4ba41f49', '641332ece18de0ac', '6585bf15f2d294c4', '66532efe687d81ad', '71e70b9af50f56b9', '7306545244fe4f15', '75ca3ee0eeb5f12c', '799734b394760b60', '8140b61ea1aa3057', '8298cfe7b879cf42', '8dc32e5982d4ec7b', '8df14558c2b4541a', '8e96409e125e51b1', '8ef161fd8fd9765d', '8f290fcdb7291708', '9a63d948c4cf8a94', '9cb0274c2aa6c7e0', '9ce55424a28b8516', '9f0247b5d9aebe62', 'a136c79dc8c830f4', 'a252d38b0f578111', 'a5329da8a225454f', 'a5c70ef3e564f6b9', 'a8921113ed7ac214', 'b0661a386d50a107', 'b77876810dcd167c', 'bc8ecff4e9b14b49', 'be973f53bad570e1', 'c3513b499d2fe4f9', 'c56d72099477241e', 'cb4d00c93e9cfab0', 'cbaccaec15dfb4e7', 'd114c7af9ec2bfb5', 'd6acd5665e2ff208', 'd882c09037a156ad', 'd9b2cfb340782937', 'debf798c121cc800', 'e40c292c2eb4bea1', 'e434ba06913dab15', 'e4d4464444e26c08', 'e53a0d32d2cce7b3', 'edf67fb6f726566e', 'f3a30c2812cb7e27', 'f4a0741221a4f26c', 'f577310bc54447fa', 'f75d512646734fd6', 'f7da66bba5562976', 'fbe6d55088a212ad', 'fc9adf039a9b01b9', 'fdb792363426b0ff', 'ff9c6347d64a8a04']), leadExact: new Set(['002a89fe5ef5d69c', '0b2c214f2313e3df', '0efd073e47f97bd8', '2aad742ec15e040c', '2fbb5e61801e804c', '3468032d2b6b6dcb', '3ef50ad0d3a4fbc0', '41fa4f704bd65065', '454e6cdbd898741d', '51470710581c2cc1', '57cea976d3408e57', '5aedf3b13f5a12f3', '64feed5b4cbaf586', '7537bf3cee8468de', '7d37669771be451b', '82487900c3ff1609', '8e3b4bb8454626fb', '904a17b837b73c14', 'a37f187cf3c04c5d', 'a5309da95818ba6f', 'a7dd3a6930141afc', 'a91b328f43794a12', 'aad076474bd12540', 'b57fc1f87e237aaf', 'b960112c23865556', 'bb56345720efe917', 'be046417ad464e49', 'c749a5e6530075e9', 'd371d44e6cdb7b42']) };
   // END PRINTS 1264
   const print1264 = function (s) { let a = 0x811c9dc5, b = 0x9747b28c; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); a = Math.imul(a ^ c, 0x01000193); b = Math.imul(b ^ c, 0x85ebca6b); b ^= b >>> 13; } return ('0000000' + (a >>> 0).toString(16)).slice(-8) + ('0000000' + (b >>> 0).toString(16)).slice(-8); };
+  /* A made-up name that counts only with its capitals (the one tools/names-gate.py's self-test uses), so the 1254 control can
+   * plant one and prove the capitals-only half of the lookup is read (#1264 review, 25 Nov). Made here by the same sum, so it
+   * proves the code path; the keeper's own capitals-only prints are not re-made by it. */
+  PRINTS1264.leadExact.add(print1264('Quiet')); PRINTS1264.exact.add(print1264('cs:Quiet Cutter'));
+  PRINTS1264.leadExact.add(print1264('Zzqlight')); PRINTS1264.exact.add(print1264('cs:Zzqlight'));   // and one of a single word
   const names1264 = function (text) {
     const s = String(text).replace(/[A-Za-z0-9+\/=]{120,}/g, function (m) { return ' '.repeat(m.length); }), re = /[A-Za-z0-9]+/g, w = [], at = [];   // an embedded picture (base64) is not prose
     let m; while ((m = re.exec(s))) { w.push(m[0]); at.push(m.index); }
+    /* #1264 review, the same two rules as tools/names-gate.py: a word that ends in s and is longer than three letters is also read
+     * without that s (a plural, or a possessive with no apostrophe), and a capitals-only name is found in ALL CAPITALS too. Neither
+     * applies to a capitals-only name of one word: its plural, or the word in capitals, is the plain word again */
+    const forms = function (x, last) { return last.length > 3 && /s$/i.test(last) ? [x, x.slice(0, -1)] : [x]; };
+    const loud = function (x) { return /[A-Z]/.test(x) && !/[a-z]/.test(x); };
+    const title = function (x) { return x.split(' ').map(function (y) { return y.charAt(0).toUpperCase() + y.slice(1).toLowerCase(); }).join(' '); };
+    const exactHas = function (set, x, pre) { return set.has(print1264(pre + x)) || (loud(x) && set.has(print1264(pre + title(x)))); };
     for (let i = 0; i < w.length; i++) {
-      const L = PRINTS1264.lead.has(print1264(w[i].toLowerCase())), X = PRINTS1264.leadExact.has(print1264(w[i]));
+      const L = forms(w[i], w[i]).some(function (x) { return PRINTS1264.lead.has(print1264(x.toLowerCase())); });
+      const X = forms(w[i], w[i]).some(function (x) { return exactHas(PRINTS1264.leadExact, x, ''); });
       if (!L && !X) continue;
       let g = w[i];
       for (let n = 1; n <= 3; n++) {
@@ -166140,7 +166153,9 @@
           if (i + n > w.length || !/^[\s*\/#>|_\-]{1,14}$/.test(s.slice(at[i + n - 2] + w[i + n - 2].length, at[i + n - 1]))) break;
           g += ' ' + w[i + n - 1];
         }
-        if ((L && PRINTS1264.any.has(print1264(g.toLowerCase()))) || (X && PRINTS1264.exact.has(print1264('cs:' + g)))) return s.slice(at[i], at[i + n - 1] + w[i + n - 1].length);
+        const hit = forms(g, w[i + n - 1]).some(function (x) { return L && PRINTS1264.any.has(print1264(x.toLowerCase())); }) ||
+          (X && (n === 1 ? PRINTS1264.exact.has(print1264('cs:' + g)) : forms(g, w[i + n - 1]).some(function (x) { return exactHas(PRINTS1264.exact, x, 'cs:'); })));
+        if (hit) return s.slice(at[i], at[i + n - 1] + w[i + n - 1].length);
       }
     }
     return '';
@@ -166149,6 +166164,14 @@
   test('1254 · no file the live site serves names another editing app: the page, every script and stylesheet it loads, the worker, the lessons and the drawn effect pictures (CONTROL: the files are really read, and the check finds a planted name)', { item: '1254', budgetMs: 120000 }, async function () {
     const get = async function (u) { const r = await fetch(u + (u.indexOf('?') < 0 ? '?t=' : '&t=') + Date.now()); if (!r.ok) throw new Error('setup: ' + u + ' answered ' + r.status); return r.text(); };
     if (!names1264('// the [x] look, like Zzq-Studio does') || !names1264('ZZQCONTROLAPP’s') || names1264('a light touch of motion blur, after effects are applied to the final cut')) throw new Error('CONTROL: the name check does not tell a planted line from plain words');
+    /* CONTROL (#1264 review): the forms the first version missed. A plural and a possessive with no apostrophe are the name; a
+     * capitals-only name (Quiet Cutter, made up) is found as written and in ALL CAPITALS, never in lower case or half in capitals;
+     * one of a single word (Zzqlight) only as written; a plain word that ends in s is not read as a name without it */
+    const c1264 = [['two zzq studios', 'zzq studios'], ['the ZzqControlApps panel', 'ZzqControlApps'], ['like Quiet Cutter does', 'Quiet Cutter'],
+      ['/* LIKE QUIET CUTTER’S TIMELINE */', 'QUIET CUTTER'], ['two Quiet Cutters', 'Quiet Cutters'], ['a quiet cutter of film', ''],
+      ['a Quiet cutter and a quiet CUTTER', ''], ['a zzq studious look', ''], ['like Zzqlight does', 'Zzqlight'], ['the Zzqlights, a ZZQLIGHT headline', '']];
+    const off1264 = c1264.filter(function (c) { return names1264(c[0]) !== c[1]; });
+    if (off1264.length) throw new Error('CONTROL: the name check reads ' + off1264.map(function (c) { return '[' + c[0] + '] as [' + names1264(c[0]) + '], not [' + c[1] + ']'; }).join(' · '));
     const html = await get('index.html');
     const refs = [];
     html.replace(/<(?:script|link)\b[^>]*?\b(?:src|href)="([^"#:]+)"/g, function (_, u) { if (/\.(js|css|json)(\?|$)/.test(u)) refs.push(u); return _; });

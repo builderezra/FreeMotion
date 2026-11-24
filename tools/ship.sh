@@ -922,6 +922,11 @@ if [ "${#_DP[@]}" -gt 0 ] && python3 tools/_docsonly.py paths "${_DP[@]}" >/dev/
     echo "   no test names any of them — the gates above are the whole check"
   fi
   ship_phase push
+  # #1264 again, on the tree as it is now (25 Nov review): a note written while the slice ran rides in this commit too
+  if ! python3 tools/names-gate.py check --msg .claude/ship/names-msg.txt; then
+    echo "❌ A FILE WRITTEN WHILE THIS SHIP RAN NAMES ANOTHER EDITING APP: not committing, not pushing."
+    _WHY="a file written during the ship names another editing app"; exit 1
+  fi
   git add -A -- "${_DP[@]}"
   # EXACTLY those paths: anything else already staged (an app file someone added by hand) is not riding out on a fast path
   _EXTRA="$(git diff --cached --name-only | grep -vxF -f <(printf '%s\n' "${_DP[@]}"))"
@@ -1262,6 +1267,17 @@ if grep -qE '^(styles\.css|index\.html|js/)' <<<"$PHONE_RELEVANT"; then
   python3 tools/perf_report.py .claude/ship/suite-phone.out "phone pass"   # #1098 clause 2: PC speed beside phone speed (reported only)
 else
   echo "· no shipped source changed — skipping the phone pass"
+fi
+
+# ─── THE NAMES GATE AGAIN, ON THE TREE ABOUT TO BE COMMITTED (#1264 review, 25 Nov) ────────────────────────────────────
+# The first check ran in the gates phase, hours ago on the laptop, and `git add -A` below commits whatever the tree holds
+# NOW. The app and its tests are held still by the tree hash below; his notes are not, by design, so a request the logging
+# chat appends to INBOX.md during the passes rides in this commit, in his words verbatim. So the gate reads the tree again
+# here, a few seconds before the commit, with only instant checks between the two.
+if ! python3 tools/names-gate.py check --msg .claude/ship/names-msg.txt; then
+  echo "❌ A FILE WRITTEN WHILE THIS SHIP RAN NAMES ANOTHER EDITING APP: not committing, not pushing."
+  _WHY="a file written during the ship names another editing app"
+  exit 1
 fi
 
 # ⚠️ A RELEASE THAT CHANGES WHAT A NOT-RUN TEST PROVES REFUSES (6 Oct, #1071 — his answer: the recommended plan). Elsewhere

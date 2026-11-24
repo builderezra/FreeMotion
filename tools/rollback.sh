@@ -103,6 +103,25 @@ if [ "$_BRANCH" != main ]; then
   exit 1
 fi
 
+# ── AN OLDER RELEASE MAY STILL NAME ANOTHER EDITING APP (#1264 review, 25 Nov) ────────────────────────────────────
+# His words, 24 Nov: "absolutely zero trace anywhere in any of our files". ship.sh's names gate refuses a release that names
+# one, but a rollback publishes an OLD release's files, and every release before the sweep has them. So it is said here,
+# BEFORE the question, with the places. A warning and not a refusal: a failsafe that refuses at the moment he needs it is
+# worse, and the next release takes them out again. The files kept at today below are not read (they do not go back), and
+# the commit does not copy the old release's subject (some named one).
+if [ -f tools/names-gate.py ]; then
+  _NAMES="$(python3 tools/names-gate.py rev "$HASH" REQUESTS.md POLISH-LOG.md INBOX.md tools CLAUDE.md README.md 2>&1)"; _NRC=$?
+  if [ "$_NRC" = 1 ]; then
+    echo
+    echo "⚠️  $WHO STILL NAMES ANOTHER EDITING APP in its files. Publishing it puts those lines back on GitHub and on the"
+    echo "   live site, until the next release takes them out again:"
+    printf '%s\n' "$_NAMES" | grep -v '^names-gate self-test' | sed 's/^/   /' | head -15
+    echo
+  elif [ "$_NRC" != 0 ]; then
+    echo "⚠️  could not check whether $WHO names another editing app: $(printf '%s\n' "$_NAMES" | tail -1 | cut -c1-140)"
+  fi
+fi
+
 # ── ASK BEFORE PUBLISHING, BECAUSE THE NEXT STEP IS PUBLIC ───────────────────────────────────────
 # One argument and this commits AND pushes to the URL his installed app updates from. A mistyped version
 # silently republishes the wrong build. One keystroke is not a tutorial, and it is the difference between
@@ -262,7 +281,8 @@ if [ -n "$VERLABEL" ]; then
 fi
 
 git add -A
-git commit -q -m "ROLLBACK to $SUBJ
+# the subject names the version and the commit, never the old release's own subject: some of those named another app (#1264)
+git commit -q -m "ROLLBACK to ${target_label:+v$target_label, }commit ${HASH:0:9}
 
 Put the app's files back to $HASH. Nothing was deleted from the history — this is a new
 commit that restores the old content, so the rollback itself can be rolled back.

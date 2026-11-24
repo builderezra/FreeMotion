@@ -8,6 +8,7 @@ it gone without wrecking anything."
     python3 tools/names-gate.py check [--msg <commit message file>]   # what ship.sh runs: self-test, then every file
     python3 tools/names-gate.py list  [paths…]                        # the same findings, exit 0 (for a clean-up)
     python3 tools/names-gate.py allow <file>:<line>                   # the two initials on this line are not a name: remember it
+    python3 tools/names-gate.py rev <commit> [kept path…]             # an OLD commit's files (tools/rollback.sh asks it): exit 1 = one names
     python3 tools/names-gate.py --self-test
 
 WHAT IT READS: every text file a commit would hold — tracked files and new files git does not ignore — as it stands in the
@@ -17,8 +18,9 @@ THE NAMES ARE NOT IN THIS FILE. A list of the names here would be the very thing
 the repo would find it. Each name is kept as a FINGERPRINT: sixteen hex digits of a salted SHA-256 of its words. The gate
 takes every word, pair and triple of words in a file, fingerprints the ones that could begin a name, and compares. So a
 name is found however it is spelt in capitals, across a hyphen or an underscore, and across the line break of a wrapped
-comment; and nothing here can be read back into a name. Some names are also ordinary words ("the final cut", "after
-effects are applied"): those are matched only as a proper name is written, with its capitals.
+comment, and with an s on the end (a plural, or a possessive written without its apostrophe); and nothing here can be read
+back into a name. Some names are also ordinary words ("the final cut", "after effects are applied"): those are matched only
+as a proper name is written, with its capitals, or in ALL CAPITALS as a headline writes it.
 
 TWO-LETTER INITIALS (the pair of capitals below) are different: no fingerprint can tell a name from a variable called the
 same, a radio band or a clock time. A line that carries them as a word of their own is refused unless that exact line is
@@ -184,6 +186,20 @@ def _index(prints):
     return lead
 
 
+# TWO FORMS A SWEEP MISSED (#1264 review, 25 Nov). A plural, or a possessive written without its apostrophe, is the name too:
+# a word that ends in s and is longer than three letters is also looked up without that s (a word of three letters is not, so
+# a short name never turns up inside a plain word). And a name that only counts with its capitals is found in ALL CAPITALS too,
+# which is how this repo writes its comment headlines: each word is read again with only its first letter a capital.
+# Neither applies to a capitals-only name of ONE word: that is a plain word with a capital, and its plural, or the word in a
+# headline, is the plain word again (measured 25 Nov: over a thousand false alarms in the notes from two such names).
+def _bare(w):
+    return [w, w[:-1]] if len(w) > 3 and w[-1] in 'sS' else [w]
+
+
+def _cased(t):
+    return [t, ' '.join(x.capitalize() for x in t.split(' '))] if t.isupper() else [t]
+
+
 def scan_text(text, prints=None, allow=frozenset(), private=None):
     """Every finding in one text: [(line number, kind, the words as written)]. kind is 'name' (another editing app),
     'private' (his own name) or 'initials'."""
@@ -203,7 +219,8 @@ def scan_text(text, prints=None, allow=frozenset(), private=None):
                 r = cache.get(w)
                 if r is None:
                     r = []
-                    a, b = lead.get((fp(w), False)), lead.get((fp(w, True), True))
+                    a = list(dict.fromkeys(e for f in _bare(w) for e in lead.get((fp(f), False), ())))
+                    b = list(dict.fromkeys(e for f in _bare(w) for c in _cased(f) for e in lead.get((fp(c, True), True), ())))
                     if a: r.append((False, a))
                     if b: r.append((True, b))
                     cache[w] = r
@@ -218,7 +235,9 @@ def scan_text(text, prints=None, allow=frozenset(), private=None):
                         if j < 0 or j + n > len(words): continue
                         if any(not SOFT.match(parts[2 * k + 2]) for k in range(j, j + n - 1)): continue
                         gram = ' '.join(words[j:j + n])
-                        if fp(gram, exact) != full_fp: continue
+                        grams = _bare(gram) if len(words[j + n - 1]) > 3 else [gram]    # the plural rule reads the LAST word's s
+                        if exact: grams = [c for g in grams for c in _cased(g)] if n > 1 else [gram]
+                        if full_fp not in set(fp(g, exact) for g in grams): continue
                         if offs is None: offs = list(itertools.accumulate(len(p) for p in parts))
                         start = offs[2 * j]                                   # offs[k] = end of parts[k]; word j is parts[2j+1]
                         out.append((text.count('\n', 0, start) + 1, kind, ''.join(parts[2 * j + 1:2 * (j + n)])))
@@ -341,6 +360,40 @@ def scan_tree(root='.', only=None, msg=None):
     return found, exempt, read
 
 
+def scan_rev(rev, root='.', keep=()):
+    """What tools/rollback.sh would put back (#1264 review, 25 Nov): every file of an OLD commit, read as scan_tree reads the
+    working tree, except the paths named in keep (a file, or a folder and everything under it: the ones a rollback keeps at
+    today) and the one exception. [(file, line, kind, said, the line)]."""
+    r = subprocess.run(['git', '-C', root, 'ls-tree', '-r', '-z', '--name-only', rev], capture_output=True)
+    if r.returncode != 0: raise SystemExit('names-gate: git could not list the files of %s (%s)' % (rev, r.stderr.decode('utf-8', 'replace').strip()[:200]))
+    kept = [k.rstrip('/') for k in keep]
+    every = [f for f in r.stdout.decode('utf-8', 'replace').split('\0')
+             if f and f not in EXEMPT and not any(f == k or f.startswith(k + '/') for k in kept)]
+    allow, found = read_allow(root), []
+    if not every: return found
+    import threading
+    p = subprocess.Popen(['git', '-C', root, 'cat-file', '--batch'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    def feed():
+        try:
+            for f in every: p.stdin.write(('%s:%s\n' % (rev, f)).encode('utf-8'))
+        finally: p.stdin.close()
+    t = threading.Thread(target=feed, daemon=True); t.start()
+    for f in every:
+        head = p.stdout.readline().split()
+        if len(head) < 3: continue                              # "<name> missing": a submodule's commit, not a file
+        raw = p.stdout.read(int(head[2])); p.stdout.read(1)
+        if head[1] != b'blob': continue
+        found.extend((f, 0, kind, said, 'the path itself') for _, kind, said in scan_text(f.replace('/', ' / ')))
+        if f == ALLOW_FILE: continue
+        if f.lower().endswith(BINARY) or b'\0' in raw[:8192]:
+            found.extend((f, 0, kind, said, where) for kind, said, where in scan_binary(raw))
+            continue
+        text = raw.decode('utf-8', 'replace'); lines = text.split('\n')
+        found.extend((f, ln, kind, said, lines[ln - 1].strip()) for ln, kind, said in scan_text(text, allow=allow))
+    t.join(); p.wait()
+    return found
+
+
 def show(rows, cap=60):
     for f, ln, kind, said, line in rows[:cap]:
         at = line.find(said); a = max(0, at - 44) if at >= 0 else 0
@@ -356,7 +409,9 @@ def self_test():
     P = [(1, 0, fp('zzqcontrolapp'), fp('zzqcontrolapp'), False),
          (2, 0, fp('zzq'), fp('zzq studio'), False),
          (3, 1, fp('zzq'), fp('a zzq maker'), False),
-         (2, 1, fp('Cutter', True), fp('Quiet Cutter', True), True)]
+         (2, 1, fp('Cutter', True), fp('Quiet Cutter', True), True),
+         (1, 0, fp('zq'), fp('zq'), False),
+         (1, 0, fp('Zzqlight', True), fp('Zzqlight', True), True)]
     def names(t): return [s for _, k, s in scan_text(t, prints=P) if k == 'name']
     ok(names('// like ZzqControlApp does') == ['ZzqControlApp'], 'a one-word name in other capitals is not found')
     ok(names('the Zzq-Studio look') == ['Zzq-Studio'], 'a two-word name across a hyphen is not found')
@@ -366,6 +421,16 @@ def self_test():
     ok(names('zzq. Studio is another sentence') == [], 'two words either side of a full stop were read as one name')
     ok(names('Quiet Cutter') == ['Quiet Cutter'] and names('a quiet cutter of film') == [], 'a name that only counts with its capitals: found in lower case, or not found at all')
     ok(names('a zzqcontrolappendix and my zzq, in the studio') == [], 'a longer word that starts like a name, or its words apart, were read as the name')
+    # the plural rule (#1264 review): a plural, or a possessive with no apostrophe, is the name; a plain word ending in s is not
+    ok(names('two zzq studios') == ['zzq studios'], 'the plural of a two-word name is not found')
+    ok(names('the ZzqControlApps panel') == ['ZzqControlApps'], 'a one-word name with an s on the end (a possessive with no apostrophe) is not found')
+    ok(names('what a zzq makers has') == ['a zzq makers'], 'the plural of a three-word name looked up by its middle word is not found')
+    ok(names('two Quiet Cutters') == ['Quiet Cutters'] and names('two quiet cutters') == [], 'the plural of a capitals-only name: not found, or found in lower case')
+    ok(names('zq') == ['zq'] and names('the zqs and zzqs, a zzq studious look') == [], 'a plain word ending in s was read as a name without it (a word of three letters keeps its s)')
+    # …and a capitals-only name in ALL CAPITALS, as a comment headline writes it; never when only some words are capitals
+    ok(names('/* LIKE QUIET CUTTER, A CLIP */') == ['QUIET CUTTER'] and names("QUIET CUTTERS TIMELINE") == ['QUIET CUTTERS'], 'a capitals-only name in ALL CAPITALS is not found')
+    ok(names('a Quiet cutter and a quiet CUTTER') == [], 'a capitals-only name was found with only some of its capitals')
+    ok(names('like Zzqlight does') == ['Zzqlight'] and names('the Zzqlights, a ZZQLIGHT headline, a zzqlight') == [], 'a capitals-only name of ONE word: not found, or found as a plural or in ALL CAPITALS (that is the plain word again)')
     ok([ln for ln, k, s in scan_text('one\ntwo zzq studio\nthree', prints=P)] == [2], 'the line number of a finding is wrong')
     def ini(t, allow=frozenset()): return [s for _, k, s in scan_text(t, prints=[], allow=allow) if k == 'initials']
     A, E = 'A' + 'M', 'A' + 'E'                      # the pair of capitals, never written here as a word of their own
@@ -426,6 +491,10 @@ def self_test():
         ok([f for f, *_ in exempt] == ['CLAUDE.md'], 'the one exception is not listed apart from the findings')
         only, _, _ = scan_tree(d, ['new'], None)
         ok([f for f, *_ in only] == ['new/Zzq-Studio/notes.md'], 'a folder named on the command line is not read as that folder and what is under it')
+        # an OLD commit, as tools/rollback.sh would put it back: its own files (gone.txt is deleted from the tree now), minus the kept ones
+        every_rev = sorted((f, k) for f, _, k, _, _ in scan_rev('HEAD', d))
+        kept_rev = sorted((f, k) for f, _, k, _, _ in scan_rev('HEAD', d, ['tracked.txt']))
+        ok(every_rev == [('gone.txt', 'name'), ('tracked.txt', 'name')] and kept_rev == [('gone.txt', 'name')], 'an old commit is not read as its own files, less the kept ones (%s, %s)' % (every_rev, kept_rev))
     finally:
         PRINTS[:] = old
         shutil.rmtree(d, ignore_errors=True)
@@ -459,6 +528,16 @@ def main(argv):
             gone = strip_picture(f)
             print('%s: %s' % (f, ('took out ' + ', '.join(gone)) if gone else 'nothing to take out'))
         return 0
+    if argv[0] == 'rev':                  # what tools/rollback.sh asks before it asks to publish: exit 1 when the old files name one
+        if len(argv) < 2: print('names-gate: rev <commit> [kept path…]'); return 2
+        if not self_test():
+            print('❌ names-gate: its own self-test failed, so it can judge nothing'); return 2
+        found = scan_rev(argv[1], '.', argv[2:])
+        if not found:
+            print('✓ names-gate: none of the files of %s names another editing app or holds his own name' % argv[1][:12]); return 0
+        print('→ names-gate: %d place(s) in the files of %s name another editing app or hold his own name:' % (len(found), argv[1][:12]))
+        show(found, 12)
+        return 1
     if argv[0] in ('check', 'list'):
         if not self_test():
             print('❌ names-gate: its own self-test failed, so it can judge nothing'); return 1
