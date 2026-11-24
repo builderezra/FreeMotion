@@ -205486,9 +205486,12 @@
               await r4Settle(350);
               let pressed = 0;
               S.say('A line with a button', { buttons: [{ label: 'Do it', fn: () => { pressed++; } }] });
-              await r4Settle(250);
-              const say = document.getElementById('sm-say'), cr = chat().getBoundingClientRect(), sr = say.getBoundingClientRect(), btn = say.querySelector('button');
+              /* a line's button arms about 0.4 s after the line shows (rule 5: a tap already on its way presses nothing) */
+              const armed = () => { const q = document.querySelector('#sm-say .sm-say-b'); return !!q && q.getAttribute('aria-disabled') === 'false'; };
+              for (let i = 0; i < 40 && !armed(); i++) await v.sleep(40);
+              const say = document.getElementById('sm-say'), cr = chat().getBoundingClientRect(), sr = say.getBoundingClientRect(), btn = say.querySelector('.sm-say-b');
               if (!(sr.height >= 43.5) || !btn) throw new Error('setup 1280: Simple’s line did not show with its button (' + Math.round(sr.height) + ' px tall)');
+              if (!armed()) throw new Error('setup 1280: the line’s button did not arm within 1.6 s');
               if (sr.bottom > cr.top + 1.5 || sr.top < 0) fails.push('1280: with the assistant up Simple’s line is at ' + Math.round(sr.top) + ' to ' + Math.round(sr.bottom) + ' and the assistant starts at ' + Math.round(cr.top) + ': want the line just above it, not under it');
               if (Math.abs(sr.left - cr.left) > 1.5 || Math.abs(sr.width - cr.width) > 1.5) fails.push('1280: the line is ' + Math.round(sr.width) + ' px wide from ' + Math.round(sr.left) + ', the assistant ' + Math.round(cr.width) + ' from ' + Math.round(cr.left));
               if (!r4Hits(btn)) fails.push('1280: the line’s button is not on top where it is drawn');
