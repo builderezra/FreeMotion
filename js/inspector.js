@@ -6694,8 +6694,37 @@ window.FM = window.FM || {};
   // every depth effect (z scaling, parallax, focus falloff) firms up together because all of them
   // divide by f.
   function camLegacyFov(P) { return +(2 * Math.atan((P.height || 1080) / 2 / Math.max(1, (P.height || 1080) * 2)) * 180 / Math.PI).toFixed(1); }
+  /* #1255: THE CAMERA'S PARAGRAPHS ARE BEHIND ONE SMALL "?". His words, 23 Nov: "There shouldn't be any explanations like that. We have
+     tutorials for a reason"; asked about the camera, 24 Nov: "question marks for the camera are fine for now", and of such a mark:
+     "a question mark that takes you to the tutorial page that explains it all there." Six paragraphs stood under these controls every
+     time the panel was open (what Field of view is, what Focus blur and Fog do, on and off, what Shutter and Samples mean). They are
+     gone from the panel and said in the camera's own lesson (tutorials/15-camera.md), which the "?" beside the tab's name shows
+     HERE, in the panel, with ‹ back: the pattern of the cog's Friends block (#1243 ST8), drawn through FM.tutorials (createElement
+     and textContent only), so the panel and the Tutorials tab can never disagree. FM._camHelp is transient, like FM._camTab: never
+     saved, and it belongs to the camera it was opened on.
+     WHAT STAYS: the line that says these controls can do nothing on a flat scene (queue 595). It reports THIS scene, at the moment it
+     matters, and goes away when a layer has depth: not a how-to. */
+  function camHelp(body) {
+    const row = el('div', 'cs-backrow cam-helprow');
+    const back = el('button', 'cs-backbtn', '‹'); back.type = 'button';
+    back.setAttribute('aria-label', 'Back');
+    back.addEventListener('click', () => { FM._camHelp = false; FM.inspector.refresh(); });
+    row.appendChild(back);
+    row.appendChild(el('div', 'cam-help-title', 'How the camera works'));
+    body.appendChild(row);
+    const page = el('div', 'cs-helpbody cam-helpbody'), art = el('div', 'cs-lesson');
+    art.appendChild(el('p', 'tut-intro', 'Loading…'));
+    page.appendChild(art);
+    body.appendChild(page);
+    const failed = () => { if (!art.isConnected) return; art.textContent = ''; art.appendChild(el('p', 'tut-intro', 'Couldn’t load this tutorial. Check your connection.')); };
+    if (FM.tutorials && FM.tutorials.load && FM.tutorials.render) FM.tutorials.load('15-camera.md').then(src => { if (art.isConnected) FM.tutorials.render(src, art); }, failed);
+    else failed();
+    try { back.focus({ preventScroll: true }); } catch (e) {}
+  }
   function camPanel(layer, body) {
     const P = FM.scene.project;
+    if (FM._camHelp && FM._camHelpFor === layer.id) { camHelp(body); return; }
+    FM._camHelp = false;
     const tab = CAM_TABS.some(c => c.key === FM._camTab) ? FM._camTab : 'view';
     const rail = el('div', 'cam-rail');
     CAM_TABS.forEach(c => {
@@ -6705,7 +6734,13 @@ window.FM = window.FM || {};
       rail.appendChild(b);
     });
     body.appendChild(rail);
-    body.appendChild(el('div', 'insp-sub-label', (CAM_TABS.find(c => c.key === tab) || {}).label));
+    const head = el('div', 'cam-head');
+    head.appendChild(el('div', 'insp-sub-label', (CAM_TABS.find(c => c.key === tab) || {}).label));
+    const q = el('button', 'cs-help cam-help', '?'); q.type = 'button'; q.title = 'How the camera works';   // #1255: where the paragraphs went
+    q.setAttribute('aria-label', 'How the camera works');
+    q.addEventListener('click', () => { FM._camHelp = true; FM._camHelpFor = layer.id; FM.inspector.refresh(); });
+    head.appendChild(q);
+    body.appendChild(head);
     if (tab === 'blur') {
       if (!layer.motionBlur || typeof layer.motionBlur !== 'object') layer.motionBlur = { enabled: false, shutter: 0.5, samples: 8 };
       const mb = layer.motionBlur;
@@ -6716,7 +6751,6 @@ window.FM = window.FM || {};
         body.appendChild(rangeRow('Samples', () => Math.round(mb.samples || 8),
           v => { mb.samples = Math.max(2, Math.min(32, Math.round(v))); FM.requestRender(); }, 2, 32, 1));
       }
-      body.appendChild(el('div', 'insp-hint', 'Smears the whole scene when the CAMERA moves — a pan, a dolly or a spin. It costs nothing while the camera is still, and nothing at all when it has not moved far enough to see, so it is safe to leave on. Shutter is how long the shutter stays open: 0.5 is the 180° shutter film uses. Samples is how many slices are averaged — more is smoother and slower. This does not smear movement INSIDE the picture: a layer\u2019s own keyframes are Motion Blur (Object), and movement made by an effect is Motion Blur (Footage).'));
       return;
     }
     /* ⚠️ ONE ANSWER TO "IS THIS SCENE FLAT", SHARED BY EVERY CAMERA CONTROL THAT NEEDS DEPTH
@@ -6756,7 +6790,6 @@ window.FM = window.FM || {};
          is what made this a bug report in the first place. */
       const w = flatSceneWarning(layer, 'these two do nothing');
       if (w) body.appendChild(w);
-      body.appendChild(el('div', 'insp-hint', 'Field of view is the lens. Wide (90°+) throws depth hard — layers at different Z separate and the camera’s pan gains real parallax. Narrow (20°) flattens the scene almost to 2D. Distance dollies the camera along Z; it is the same value as the camera’s own Z, so keyframing either animates the move.'));
       return;
     }
     if (tab === 'focus') {
@@ -6774,23 +6807,21 @@ window.FM = window.FM || {};
       if (fw) body.appendChild(fw);
       const f = layer.focus;
       body.appendChild(checkRow('Focus blur', !!f.enabled, v => { f.enabled = v; FM.requestRender(); FM.inspector.refresh(); commitH(); }));
-      if (!f.enabled) { body.appendChild(el('div', 'insp-hint', 'Turn this on to defocus layers by their depth. Give layers different Z values (Position / Scale → Move) and everything off the focus plane softens.')); return; }
+      if (!f.enabled) return;
       body.appendChild(rangeRow('Focus distance', () => FM.evalProp(f.distance, FM.time) || 0, v => { f.distance = Math.round(v); FM.requestRender(); }, -2000, 4000, 5));
       body.appendChild(rangeRow('Depth of field', () => FM.evalProp(f.dof, FM.time) || 200, v => { f.dof = Math.max(1, Math.round(v)); FM.requestRender(); }, 1, 3000, 5));
       body.appendChild(rangeRow('Blur strength', () => FM.evalProp(f.blur, FM.time) || 0, v => { f.blur = Math.max(0, Math.min(2, v)); FM.requestRender(); }, 0, 2, 0.05));
-      body.appendChild(el('div', 'insp-hint', 'Focus distance is the Z that stays sharp. Depth of field is how far either side of it also stays sharp — past that the blur ramps up and tops out three widths out.'));
       return;
     }
     if (!layer.fog) layer.fog = { enabled: false, color: '#ffffff', near: 0, far: Math.round((P.height || 1080) * 2) };
     const g = layer.fog;
     body.appendChild(checkRow('Fog', !!g.enabled, v => { g.enabled = v; FM.requestRender(); FM.inspector.refresh(); commitH(); }));
-    if (!g.enabled) { body.appendChild(el('div', 'insp-hint', 'Turn this on to wash distant layers toward a colour — haze, dusk, underwater. Layers need different Z values for it to do anything.')); return; }
+    if (!g.enabled) return;
     const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, 'Colour'));
     cr.appendChild(colorField(() => g.color || '#ffffff', v => { g.color = v; FM.requestRender(); commitH(); }));
     body.appendChild(cr);
     body.appendChild(rangeRow('Near distance', () => FM.evalProp(g.near, FM.time) || 0, v => { g.near = Math.round(v); FM.requestRender(); }, -2000, 4000, 5));
     body.appendChild(rangeRow('Far distance', () => FM.evalProp(g.far, FM.time) || 0, v => { g.far = Math.round(v); FM.requestRender(); }, -2000, 8000, 5));
-    body.appendChild(el('div', 'insp-hint', 'A layer at the near distance is untouched; at the far distance it is the fog colour outright; between the two it fades across. The wash clips to each layer’s own shape, so text stays text.'));
   }
 
   /* TRANSFORM motion blur — Motion Blur (Object) — has NO block here any more, deliberately.

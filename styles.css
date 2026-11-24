@@ -6918,6 +6918,12 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 .cam-tab svg { width: 22px; height: 22px; }
 .cam-tab:hover { color: var(--text); border-color: var(--accent-dim, var(--line)); }
 .cam-tab.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+/* #1255: the camera panel's "?" beside the tab's name (the cog's Friends block's own .cs-help, #1243 ST8), and the lesson it shows in the panel */
+.cam-head { position: relative; display: flex; align-items: center; min-height: 32px; padding-right: 44px; margin: 2px 0 8px; }
+.cam-head > .insp-sub-label { margin: 0; }
+.cam-helprow { margin: 0 0 8px; }
+.cam-help-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.cam-helpbody { padding: 0 2px 10px; }
 
 /* Anchor-mode pivot marker: the After Effects crosshair-in-a-ring, centred on the anchor point.
    Sits above the selection box so it stays readable over a bright layer. */

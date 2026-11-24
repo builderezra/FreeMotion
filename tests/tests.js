@@ -209469,6 +209469,74 @@
     }
   });
 
+  /* ═══ #1255, THE FULL EDITOR'S THIRD HINTS CUT: THE 3D CAMERA'S PARAGRAPHS ARE BEHIND ONE "?" ═══════════════════════════════════════════
+     His words, 23 Nov 20:53: "There shouldn't be any explanations like that. We have tutorials for a reason"; asked about the camera's
+     paragraphs, 24 Nov: "question marks for the camera are fine for now", and of such a mark: "a question mark that takes you to the
+     tutorial page that explains it all there." Six paragraphs stood under the camera's controls (one on Camera View, two on Focus Blur,
+     two on Fog, one on Motion Blur). The panel now holds its controls and one small "?" beside the tab's name; a press shows the
+     camera's own lesson (tutorials/15-camera.md, which says what the paragraphs said) in the panel, with a way back.
+     What stays, and is checked: queue 595's line that these controls can do nothing on a flat scene. It reports this scene. */
+  test('1255 hints · the camera’s panel holds its controls and no paragraph on any of its four tabs, on or off, with one small ? beside the tab’s name: a press shows the camera’s own lesson in the panel with a way back, the lesson says what the paragraphs said, and back gives the tab he was on; the line that these controls can do nothing on a flat scene still shows (CONTROLS: the panel is the camera’s, with its four tabs and the Focus tab’s four controls; the lesson’s steps were drawn)', { item: '1255', budgetMs: 60000 }, async function () {
+    const _isoK = isoKeep(); try {
+    const S = FM.scene, layers0 = S.layers.slice(), sel0 = S.selectedId, dur0 = S.project.duration, tab0 = FM._camTab, fails = [];
+    const insp = () => document.getElementById('inspector');
+    const paras = () => Array.from(insp().querySelectorAll('.insp-hint:not(.insp-hint-warn)')).map(n => n.textContent.trim()).filter(Boolean);
+    const open = async tab => { FM._camHelp = false; FM._camTab = tab; FM.inspector.openCategory('cameraopts'); await sleep(450); };
+    try {
+      S.layers.length = 0;
+      FM.addShapeLayer('rect');
+      S.layers.forEach(l => { l.start = 0; l.duration = 5; });
+      S.project.duration = 5;
+      if (!FM.addCameraLayer) throw new Error('setup: there is no camera layer to add');
+      FM.addCameraLayer(); await sleep(320);
+      const cam = S.layers.filter(l => l.type === 'camera')[0];
+      if (!cam) throw new Error('setup: the camera layer was not created');
+      cam.start = 0; cam.duration = 5;
+      cam.focus = { enabled: true, distance: 0, dof: 200, blur: 0.5 }; cam.fog = { enabled: true, color: '#ffffff', near: 0, far: 2000 }; cam.motionBlur = { enabled: true, shutter: 0.5, samples: 8 };
+      FM.selectLayer(cam.id); FM.refreshAll(); await sleep(320);
+      await open('focus');
+      const fw = insp() ? insp().textContent : '';
+      if (!insp() || insp().querySelectorAll('.cam-tab').length !== 4 || ['Focus blur', 'Focus distance', 'Depth of field', 'Blur strength'].some(w => fw.indexOf(w) < 0)) throw new Error('CONTROL: the open panel is not the camera’s Focus tab with its four tabs and four controls (“' + fw.trim().slice(0, 80) + '”)');
+      for (const tab of ['view', 'focus', 'fog', 'blur']) {
+        await open(tab);
+        if (paras().length) fails.push('the ' + tab + ' tab still shows a paragraph: “' + paras()[0].slice(0, 50) + '…”');
+        if (insp().querySelectorAll('.cam-help').length !== 1) fails.push('the ' + tab + ' tab has ' + insp().querySelectorAll('.cam-help').length + ' ? buttons beside its name, want one');
+        if (!insp().querySelector('input')) fails.push('the ' + tab + ' tab has no control left');
+      }
+      cam.focus.enabled = false; cam.fog.enabled = false; cam.motionBlur.enabled = false;
+      for (const tab of ['focus', 'fog', 'blur']) {
+        await open(tab);
+        if (paras().length) fails.push('switched off, the ' + tab + ' tab still shows a line: “' + paras()[0].slice(0, 50) + '…”');
+        if (!insp().querySelector('input[type="checkbox"]')) fails.push('switched off, the ' + tab + ' tab lost its switch');
+      }
+      await open('view');
+      if (!insp().querySelector('.insp-hint-warn')) fails.push('on a flat scene the View tab no longer says Field of view and Distance can do nothing: that line reports this scene (queue 595), it is not a how-to');
+      /* the ? and its page */
+      await open('fog');
+      const q = insp().querySelector('.cam-help');
+      if (!q) throw new Error('the camera’s panel has no ? beside the tab’s name · ' + fails.join(' · '));
+      if (!(q.getAttribute('aria-label') || '').trim()) fails.push('the ? has no name for a screen reader');
+      const head = q.parentElement, hr = head.getBoundingClientRect(), qr = q.getBoundingClientRect();
+      if (qr.width < 28 || qr.height < 28 || qr.right > hr.right + 1 || qr.left < hr.left) fails.push('the ? is ' + Math.round(qr.width) + ' × ' + Math.round(qr.height) + ' px and not inside its row');
+      q.click(); await sleep(250);
+      if (!insp().querySelector('.cs-backbtn')) throw new Error('a press on ? showed no page with a way back · ' + fails.join(' · '));
+      if (insp().querySelector('.cam-tab')) fails.push('the ? page still shows the camera’s tabs');
+      for (let i = 0; i < 80 && !insp().querySelector('.tut-steps li'); i++) await sleep(50);
+      if (!insp().querySelector('.tut-steps li')) throw new Error('CONTROL: the camera’s lesson did not draw its steps on the ? page (“' + (insp().textContent || '').trim().slice(0, 70) + '”) · ' + fails.join(' · '));
+      const page = insp().textContent;
+      ['Field of view', 'Depth of field', 'Fog', 'Shutter', 'Samples'].forEach(w => { if (page.indexOf(w) < 0) fails.push('the lesson behind ? does not explain ' + w + ', which the panel’s own paragraph did'); });
+      insp().querySelector('.cs-backbtn').click(); await sleep(350);
+      if (insp().querySelector('.cs-backbtn') || !insp().querySelector('.cam-tab.on') || FM._camTab !== 'fog') fails.push('back did not give the Fog tab again');
+    } finally {
+      FM._camHelp = false; FM._camTab = tab0;
+      S.layers.length = 0; layers0.forEach(l => S.layers.push(l)); S.selectedId = sel0; S.project.duration = dur0;
+      try { FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild(); } catch (e) {}
+      await sleep(60);
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+    } finally { _isoK.put(); }
+  });
+
   /* #1243 F7 — his words: "the outlines and shadows menu… big buttons… opens up below… scroll deep… when you actually press on one
      it opens up that menu and then has a back button… Or… put all of the logos on like the right side layered up… press on one it
      switches to that menu… top… say what menu you're in… thumb can easily reach… like… the position and scale menu."
