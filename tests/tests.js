@@ -121671,6 +121671,13 @@
               const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
               if (!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone())) throw new Error('setup: at 390 the app does not read as a phone, and the line is a phone’s only');
               if (!dlg.classList.contains('hidden')) { FM.closeCanvasDialog(); await settle921(80); }
+              /* THE COG'S LAST OPEN BLOCK WAS FRIENDS (found by mutation, 25 Nov: without this the test could not fail). An opening of
+                 the cog lets go of everything the block held (U.friendsClosed, by js/app.js cvPairSettle) unless Friends was the block it
+                 last had open, and only then is a line that was set with nobody looking still there to be drawn. So he has looked at
+                 Friends once and closed it, as before a trip to Home and back. */
+              FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+              FM.closeCanvasDialog(); await settle921(80);
+              if (!dlg.classList.contains('hidden') || !dlg.classList.contains('cv-fr-big')) throw new Error('CONTROL: closed, the cog does not still say Friends was its open block (' + dlg.className + '), so its next opening lets go of the line before it draws and this test could not see a stale one');
               await ui.share(); ui.close(); await settle921(80);
               if (!C.session || !C.session.isOwner) throw new Error('setup: the Share card did not start sharing');
               FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
