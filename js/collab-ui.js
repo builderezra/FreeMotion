@@ -1361,9 +1361,12 @@ window.FM = window.FM || {};
        installed here, at once, not when the relay's keys have been derived. */
     watchDoc();
     takeWake();
-    /* §22: a phone that hosts has to stay awake — iOS drops every connection soon after the screen locks,
-       and a wake lock only holds while the app is on screen. #967 batch 2: SAID IN THE PANEL (drawShare's `.cs-keepopen`),
-       not as a toast — the toast rose over the short code at the very moment he was reading it out (J1-13). */
+    /* §22: a phone that hosts has to stay awake — iOS drops every connection soon after the screen locks, and a wake lock only holds
+       while the app is on screen. SAID ONCE, in the card's head, on the opening sharing starts in (#1255, 24 Nov, his words on this
+       card: "as little as possible… no explanations at all"). It was a standing line of the panel since #967 J1-13, and before that
+       a toast that rose over the short code as he read it out. Not a one-shot note either: the panel redraws when the link comes
+       up a second later, and the note would be gone before he had read it. The block's close lets go of it (U.friendsClosed). */
+    keepNote = isPhoneNow();
     U.syncBanner();
   }
 
@@ -1396,6 +1399,7 @@ window.FM = window.FM || {};
      disagree; the three short steps show at once and stay if the lesson cannot load (offline). Name and colour are still asked for at
      Start sharing (U.profile, armShare), and "New people join as" is in the live view's ⚙ Sharing settings. */
   let frHelp = false;
+  let keepNote = false;          // #1255: "Keep FreeMotion open while you share" in the live card's head, from afterArm() until the block closes
   function helpButton(host) {
     const q = btn('cs-help', '?', function () { frHelp = true; if (fhost === host && host.isConnected) U.renderFriends(host, { keepStep: true }); });
     q.setAttribute('aria-label', 'How Work with friends works');
@@ -1512,7 +1516,7 @@ window.FM = window.FM || {};
   function joinLinkRow() {
     /* B4/B5 review: never a bare "code" (tools/design/967/b4/words.html) — a friend may be holding either kind. */
     const b = btn('cs-navrow cs-joinlink', 'Got an invite? Join with what your friend sent', function () { closeAny(); U.joinDoor(); });
-    b.appendChild(el('span', 'cs-add-sub', 'Paste their link or swap code, or type their short code'));
+    /* (#1255, 24 Nov: the line "Paste their link or swap code, or type their short code" stood under it; the Join sheet it opens asks for exactly that) */
     return b;
   }
   /* THE OFF SWITCH THAT STAYS (J3-1, blocker — pick A: "a quiet switch row at the foot of the Friends block, in every
@@ -1553,6 +1557,7 @@ window.FM = window.FM || {};
     pendingLinkRole = null;
     offNote = null;                             // said once, where he was looking — not again at the next opening
     frHelp = false;                             // #1243 ST8: the next opening starts on the block, not its "?" page
+    keepNote = false;                           // #1255: said on the opening sharing started in, not at the next one
     U.friendsBar();
   };
   /* THE BAR: what is true in one line, and who is here. Names and colours came from other devices: textContent, and the
@@ -1634,9 +1639,11 @@ window.FM = window.FM || {};
       bk.appendChild(back);
       bk.appendChild(el('h2', 'fm-ask-title', shareStep === 'versions' ? 'Earlier versions' : 'Sharing settings'));
       head.appendChild(bk);
+      if (host && shareStep === 'settings') { head.classList.add('cs-head-q'); head.appendChild(helpButton(host)); }   // #1255: what each switch does is behind it, in lesson 17
     } else {
       head.appendChild(el('h2', 'fm-ask-title', 'Share “' + projectName() + '” live'));
       head.appendChild(el('div', 'cs-state', stateLine(s)));
+      if (keepNote && shareStep === 'main') head.appendChild(el('div', 'cs-note cs-keepnote', 'Keep FreeMotion open while you share'));   // #1255: once, on the opening sharing starts in
       if (host && shareStep === 'main') { head.classList.add('cs-head-q'); head.appendChild(helpButton(host)); }   // #1243 ST8
     }
     /* Rendered once and consumed: it says what happened to the code that is no longer on screen. */
@@ -1665,18 +1672,16 @@ window.FM = window.FM || {};
          #967 batch 2 (J1-6): THE JOB COMES FIRST — the invite straight under the people; Comments moved below it all. */
       const relayOn = !C.signal.codesOnly();
       body.appendChild(inviteBlock());
-      /* #967 batch 2 (J1-13): §22's "keep it open" is said HERE, under the code, where it stays — it was a toast that rose
-         over the short code at the moment he was reading it out. A phone's line only: a PC does not lock mid-session. */
-      if (isPhoneNow()) body.appendChild(el('div', 'cs-relay cs-keepopen', 'Keep FreeMotion open — it pauses when your screen locks.'));
+      /* (#1255, 24 Nov: §22's "Keep FreeMotion open — it pauses when your screen locks." stood here on every opening; #967 J1-13 had
+         moved it here from a toast that rose over the short code. It is said once now, in the head: keepNote.) */
       if (relayOn) body.appendChild(askRow());
       /* S7 (§19.1 "They join as [Editor ▾]"): Docs puts the role a link grants right beside the link. */
       body.appendChild(joinAsRow());
       /* #967 B4 (J5-3): THE TWO CODES HAVE TWO NOUNS. The 9-character one is the "short code"; this ~250-character FM1 block is
          the "swap code" — his pick A, because it says what you do with it — and neither is ever a bare "code". */
       const addBtn = btn('cs-add', relayOn ? 'Link not working? Swap codes instead' : 'Swap codes with someone', function () { shareStep = 'code'; redrawShare(); });
-      addBtn.appendChild(el('span', 'cs-add-sub', relayOn
-        ? 'You copy a swap code to them, they copy one back'
-        : 'No online helpers — you copy a swap code to them, they copy one back' /* queue 921 S3: NOT "read out": the swap code is a ~250-character block you copy into a message. A short code you could read aloud needs the online helpers (S6), and saying "read" of a 250-char blob is a promise the screen does not keep. */));
+      /* (#1255, 24 Nov: a line stood under this door, "You copy a swap code to them, they copy one back"; the step it opens says so in
+         its own two labels, and lesson 17 says it.) */
       body.appendChild(addBtn);
       paintRelayDoors(body);                     // J5-8: with the relays unreachable the code swap is the lit one
       /* S7 (§17.1 entry points): the comments, one tap from the people — the same row the guest panel has. Below the
@@ -1931,11 +1936,12 @@ window.FM = window.FM || {};
        with "Let them in", whoever an Editor hands the link to walks straight in — which is his setting, so
        the switch says so rather than promising a knock that will not come. And with Codes only on there is
        no link to hand anyone, so it says that too. */
+    /* #1255 (24 Nov): with the link in use this switch carried a description (what the link does with "Ask me first" and with "Let
+       them in"); it is in lesson 17, behind this step's "?", and the Editor is still told on his own panel. WHAT STAYS is the line
+       that says why the switch does nothing right now: a report on this room, not a how-to (no dash: his rule for app text). */
     const inviteHint = C.signal.codesOnly()
-      ? 'Off while “Swap codes only” is on — there is no link to pass on. It comes back when you turn that off.'
-      : st.ask
-        ? 'They see the link and can pass it on; you still let each person in. A link they already copied works until you reset it.'
-        : 'They see the link and can pass it on — and with the link set to “Let them in”, whoever they give it to gets straight in. A link they already copied works until you reset it.';
+      ? 'Off while “Swap codes only” is on: there is no link to pass on. It comes back when you turn that off.'
+      : '';
     ppl.appendChild(switchRow('Editors can invite others', inviteHint,
       !!st.editorsInvite, function (v) { st.editorsInvite = v; saveRoom(hostRoomPid || currentPid(), hostRoom); pushSettings(); redrawShare(); }));
     /* D11: said honestly. The video is made on THEIR device, from a copy of the project that has to be on
@@ -1943,7 +1949,7 @@ window.FM = window.FM || {};
     /* #1091: off now also means they keep nothing — Leave deletes their copy and its clips — so "their copy is on their
        device either way" stopped being true. What it still cannot stop is said. */
     ppl.appendChild(switchRow('Viewers and commenters can export',
-      'Off, their FreeMotion won’t export it or keep a copy when they leave. Their device needs the clips to play it, so it can’t stop a screen recording.',
+      '',   // #1255: what off does, and that it cannot stop a screen recording, is said in lesson 17
       st.roExport !== false, function (v) { st.roExport = v; saveRoom(hostRoomPid || currentPid(), hostRoom); pushSettings(); redrawShare(); }));
     const cap = isPhoneNow() ? ((C.LIMITS && C.LIMITS.PEOPLE_MAX_PHONE) || 6) : ((C.LIMITS && C.LIMITS.PEOPLE_MAX_PC) || 12);
     const mr = el('div', 'cs-srow');
@@ -1971,9 +1977,9 @@ window.FM = window.FM || {};
        one settings store, so the two places can never disagree. */
     const dev = sgroup('On this device');
     const flipSetting = function (k) { return function (v) { FM.settings.set(k, v); redrawShare(); }; };
-    dev.appendChild(switchRow('Show others’ pointers', 'Their mouse pointer and their taps, in their colour.', FM.settings.get('collabCursors') !== false, flipSetting('collabCursors')));
-    dev.appendChild(switchRow('Show others’ selections', 'An outline in their colour around the layers they have selected.', FM.settings.get('collabSelections') !== false, flipSetting('collabSelections')));
-    dev.appendChild(switchRow('Swap codes only', CODES_ONLY_HINT, !!FM.settings.get('collabCodesOnly'), function (v) {
+    dev.appendChild(switchRow('Show others’ pointers', '', FM.settings.get('collabCursors') !== false, flipSetting('collabCursors')));   // #1255: the descriptions of these three are in lesson 17
+    dev.appendChild(switchRow('Show others’ selections', '', FM.settings.get('collabSelections') !== false, flipSetting('collabSelections')));
+    dev.appendChild(switchRow('Swap codes only', '', !!FM.settings.get('collabCodesOnly'), function (v) {
       FM.settings.set('collabCodesOnly', v);
       pushSettings();
       shareStep = 'settings';

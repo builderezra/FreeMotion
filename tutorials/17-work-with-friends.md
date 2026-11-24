@@ -20,9 +20,15 @@ Note: Everyone who joins sees the whole project, its notes and reminders include
 
 Note: A friend who types the short code always has to be let in by you. With the link you choose, under **When someone uses the link**: **Ask me first** or **Let them in**. <!-- was the line under that switch: js/collab-ui.js askRow -->
 
+Note: On a phone, keep FreeMotion open while you share: sharing pauses when your screen locks. <!-- was a standing line of a phone's Share panel until #1255 -->
+
+Note: The gear at the foot of the sharing card opens Sharing settings. **Editors can invite others** lets an Editor see the link and pass it on: with the link on **Ask me first** you still let each person in, and on **Let them in** whoever they give it to gets straight in. A link they already copied works until you reset it. With **Viewers and commenters can export** off, their FreeMotion won't export the project or keep a copy when they leave; their device needs the clips to play it, so it can't stop a screen recording. <!-- were the descriptions under those two switches: js/collab-ui.js drawSettingsStep -->
+
+Note: **Show others’ pointers** shows their mouse pointer and their taps, in their colour, and **Show others’ selections** an outline in their colour around the layers they have selected. **Swap codes only** uses no online helpers: links and short codes stop working, and you swap codes with each person instead. <!-- were the descriptions under those three switches -->
+
 Note: In a project a friend shared with you, **Watch along** on someone's row makes your screen follow theirs: where they are in the video, and what they play. Tap it again to stop. <!-- was the line under the people of a friend's panel: js/collab-ui.js drawGuestPanel -->
 
-If it doesn't work: If the link won't connect, tap **Link not working? Swap codes instead** and follow the two steps it shows.
+If it doesn't work: If the link won't connect, tap **Link not working? Swap codes instead** and follow the two steps it shows: you copy a swap code to them, and they copy one back. A friend who was sent something taps **Got an invite? Join with what your friend sent** and pastes the link or swap code, or types the short code.
 
 ### Verification (checked against the code at b46b47d, v17.23)
 
