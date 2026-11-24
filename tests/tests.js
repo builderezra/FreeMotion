@@ -58134,17 +58134,15 @@
   });
 
   test('the Template icon does not depend on matching the background (queue 546)', { item: '546' }, async function () {
-    /* Ezra picked the "stamp" — a dashed master with a solid copy in front — from five drawn options,
-       after three earlier attempts at this icon he rejected.
-       ⚠️ WHAT THIS GUARDS IS THE MISTAKE I MADE BUILDING IT, not the shape. My first version hid the
-       master's covered corner by filling the copy with `var(--panel-2)`. It looked perfect on the page I
-       checked it on, because that page happened to have that background. On a tile with any other
-       background — an active tab, a hover, a future theme — the fill shows as a slightly-wrong box
-       inside the icon. And removing the fill instead puts the dashed lines straight through the solid
-       copy, which is the EXACT fault he reported on the Sample clip icon the same day.
-       An icon that is only correct against one background is a bug waiting for a theme, and nothing else
-       in the suite would notice. So: the master is an open path that traces only what the copy does not
-       cover, and no shape in this icon may carry an opaque fill. */
+    /* 24 Aug: he picked the "stamp" (a dashed master with a solid copy in front) from five drawn options. 24 Nov (#1255): shown every
+       Template redesign again he picked option 1, STACKED CARDS, for every Templates spot ("Yeah, I picked the recommended one. Just go
+       with the recommended one"), so the stamp is gone, and what this test said about its dashes with it.
+       ⚠️ WHAT THIS STILL GUARDS IS THE MISTAKE MADE BUILDING THE STAMP, which any two-card drawing can repeat: hiding the back card's
+       covered corner by FILLING the front card with the tile's colour. It looked perfect on the page it was checked on, because that
+       page happened to have that background; on an active tab, a hover or another theme the fill shows as a slightly-wrong box inside
+       the icon. So the card behind is an OPEN path that traces only what the card in front does not cover, and no shape in this icon
+       may carry an opaque fill. That the drawing IS his Stacked cards, the same everywhere, is the '1255 icons · one drawing per
+       thing' test's to say. */
     const host = document.createElement('div');
     host.style.cssText = 'position:fixed;left:-10000px;top:0;width:340px;height:620px';
     document.body.appendChild(host);
@@ -58156,13 +58154,11 @@
       const svg = tab.querySelector('svg');
       if (!svg) throw new Error('the Template tab has no icon at all');
       const shapes = [].slice.call(svg.querySelectorAll('path, rect, circle, polygon'));
-      if (shapes.length < 2) throw new Error('the Template icon is down to ' + shapes.length + ' shape(s) — the stamp needs a master and a copy');
-      /* THE CONTROL: the dashed master IS the idea he picked, so its absence must fail here rather than
-         quietly leaving a plain double-box that means nothing. */
-      const dashed = shapes.filter(el => (el.getAttribute('stroke-dasharray') || '').trim());
-      if (!dashed.length) throw new Error('nothing in the Template icon is dashed any more — the "master you copy from" reading is gone');
-      const solid = shapes.filter(el => !(el.getAttribute('stroke-dasharray') || '').trim());
-      if (!solid.length) throw new Error('the Template icon has no solid shape — there is a master but no copy');
+      if (shapes.length < 2) throw new Error('the Template icon is down to ' + shapes.length + ' shape(s): a card behind and a card in front are two');
+      /* THE CONTROL: it is a two-card drawing with an OPEN card behind that is being judged, or the fill rule below says nothing */
+      const open = shapes.filter(el => el.tagName.toLowerCase() === 'path' && !/z\s*$/i.test((el.getAttribute('d') || '').trim()));
+      if (!open.length) throw new Error('nothing in the Template icon is an open path: the card behind must trace only what the card in front does not cover');
+      if (shapes.some(el => (el.getAttribute('stroke-dasharray') || '').trim())) throw new Error('the Template icon still carries the old stamp’s dashes; his pick of 24 Nov is the Stacked cards');
       // …and the fragile bit: no opaque fill anywhere, so it cannot depend on the tile behind it.
       const filled = shapes.map(el => ({ el: el, f: (el.getAttribute('fill') || '').trim() }))
                            .filter(o => o.f && o.f !== 'none' && o.f !== 'transparent');
@@ -209421,6 +209417,43 @@
       const left = document.querySelector('#fm-ask:not(.hidden) .fm-ask-cancel');
       if (left) left.click();
     }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* ═══ #1255, ONE DRAWING PER THING. His words on the Templates icon, 24 Nov: "I just want them to be consistent"; then, shown every
+     Template redesign again: "Yeah, I picked the recommended one. Just go with the recommended one." (option 1, Stacked cards). Today's app
+     drew Templates two ways (four squares on Home's tab, a dashed stamp on the Add menu's tab) and the first icon cut would have made it
+     three. Now the Stacked cards are in the app's one icon table and every Templates spot draws them; Home's Elements and Tutorials marks
+     are their own tabs' drawings, so an empty tab shows its tab's picture. CONTROL: the Projects tab's house is in no table entry, so the
+     comparison is seen to tell two drawings apart. */
+  test('1255 icons · one drawing per thing: the Templates icon is his Stacked cards on Home’s Templates tab, on the Add menu’s Template tab and on Home’s empty Templates tab alike, and Home’s Elements and Tutorials tabs carry the same drawings as their empty-tab marks, each read against the app’s one icon table (CONTROLS: the tabs and the Add menu’s tab were found; the Projects tab’s house matches no entry of the table)', { item: '1255', budgetMs: 30000 }, async function () {
+    if (!FM.ICON || !FM.drawnIcon) throw new Error('the app has no table of its own drawn icons (FM.ICON, FM.drawnIcon)');
+    const inner = function (svg) { return svg ? svg.innerHTML.replace(/\s+/g, ' ').trim() : ''; };
+    const want = function (name) { const s = FM.drawnIcon(name); if (!s) throw new Error('CONTROL: the icon table has no ' + name); return inner(s); };
+    const tabIcon = function (tab) { return document.querySelector('#home-screen .hm-tab[data-tab="' + tab + '"] svg.hm-tab-ico'); };
+    const fails = [];
+    [['templates', 'template'], ['elements', 'element'], ['tutorials', 'tutorial']].forEach(function (p) {
+      const svg = tabIcon(p[0]);
+      if (!svg) throw new Error('CONTROL: Home has no ' + p[0] + ' tab icon');
+      if (inner(svg) !== want(p[1])) fails.push('Home’s ' + p[0] + ' tab draws a different picture from the app’s ' + p[1] + ' mark (“' + inner(svg).slice(0, 44) + '…”)');
+    });
+    const house = tabIcon('projects');
+    if (!house) throw new Error('CONTROL: Home has no Projects tab icon');
+    if (Object.keys(FM.ICON).some(function (n) { return inner(house) === want(n); })) throw new Error('CONTROL: the Projects tab’s house reads as equal to an entry of the icon table, so this comparison cannot tell two drawings apart');
+    const tpl = (FM.addMenu && FM.addMenu._tabs ? FM.addMenu._tabs() : []).filter(function (t) { return t.key === 'template'; })[0];
+    if (!tpl || !tpl.icon) throw new Error('CONTROL: the Add menu has no Template tab icon to read · ' + fails.join(' · '));
+    const box = document.createElement('div');
+    box.innerHTML = tpl.icon;
+    const am = box.querySelector('svg');
+    if (!am) fails.push('the Add menu’s Template tab icon is not a drawing');
+    else {
+      if (inner(am) !== want('template')) fails.push('the Add menu’s Template tab draws a different picture from Home’s (“' + inner(am).slice(0, 44) + '…”)');
+      if (am.querySelector('[stroke-dasharray], linearGradient') || am.getAttribute('stroke') !== 'currentColor') fails.push('the Add menu’s Template tab is not one colour: it still carries the old stamp’s dashes or gradients');
+    }
+    if (!FM.home || !FM.home._emptyState) throw new Error('setup: Home has no seam to draw an empty state · ' + fails.join(' · '));
+    const es = FM.home._emptyState('template', 'Probe 1255');
+    if (inner(es.querySelector('.hm-empty-mark svg')) !== want('template')) fails.push('Home’s empty Templates tab does not draw the Stacked cards');
+    if (want('template').indexOf('M7.5 7.5V5a2 2 0 0 1 2-2H19') < 0) fails.push('the table’s template drawing is not the Stacked cards he picked (it starts “' + want('template').slice(0, 44) + '…”)');
     if (fails.length) throw new Error(fails.join(' · '));
   });
 
