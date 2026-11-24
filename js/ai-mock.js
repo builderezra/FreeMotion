@@ -104,6 +104,12 @@ window.FM = window.FM || {};
     var t = String(text || '').toLowerCase();
     var target = (scene && scene.selectedId) || (scene && scene.layers && scene.layers.length ? scene.layers[scene.layers.length - 1].id : null);
     var ops = [], said;
+    /* #1243 F2: a WHOLE NEW video or scene is a build_scene call (js/ai-chat.js), as the persona tells the real model — checked
+       first, because it is also what you ask an empty project for. Answered in the real shape: a sentence and one tool_use. */
+    if (/\b(make|build|create|generate)\b.*\b(video|scene|reel|intro|promo)\b/.test(t)) {
+      return { content: [{ type: 'text', text: 'Building that scene for you now.' },
+        { type: 'tool_use', id: 'mock_build', name: 'build_scene', input: { prompt: String(text || '').trim() } }], stop: 'mock', out: null };
+    }
     if (!target) {
       said = 'There is nothing in the project yet — add a layer and tell me what to do with it.';
     } else if (/bigger|larger|grow/.test(t)) {

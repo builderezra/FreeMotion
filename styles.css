@@ -4648,11 +4648,7 @@ body.home-open #toast { z-index: 205; }
 /* ============================================================
    AI "Director" panel
    ============================================================ */
-.btn-ai {
-  background: linear-gradient(180deg, rgba(41,217,187,.18), rgba(41,217,187,.08));
-  border-color: rgba(41,217,187,.5); color: var(--accent); font-weight: 600;
-}
-.btn-ai:hover { background: linear-gradient(180deg, rgba(41,217,187,.28), rgba(41,217,187,.12)); border-color: var(--accent); }
+/* (#1243 F2: the hidden ✨ Generate button, .btn-ai, is gone with AI Scene — a scene is asked for in Ask & edit.) */
 .ai-spark { font-size: 13px; line-height: 1; filter: drop-shadow(0 0 4px rgba(41,217,187,.5)); }
 
 /* ⚠️ IT STOPS WHERE THE TIMELINE BEGINS (queue 511 clause 3). Ezra: "the AI menu that pops up the
@@ -4831,8 +4827,6 @@ body.home-open #toast { z-index: 205; }
   .ai-grab .grab-bar { width: 40px; height: 4px; border-radius: 999px; background: var(--line); }
   .ai-fields { grid-template-columns: 1fr 1fr; }
   .ai-row { min-height: 46px; }
-  /* the ✨ topbar button stays compact in the scrolling strip */
-  .btn-ai { flex: 0 0 auto; }
   /* the inspector float button hides while the AI sheet is up (no overlap) */
   body.ai-open #insp-toggle { display: none; }
 }
@@ -6088,31 +6082,33 @@ body.hm-selecting #hm-new { visibility: hidden; pointer-events: none; }
 .hm-dlg-actions button.accent, .fm-ask-actions button.accent { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
 /* ---- #948: the + on Templates and Elements — ONE CARD (option A, tools/design/948-options.html) ----------------------
    The card, its title, its scroll and Cancel are #hm-dialog's own classes, so the dark Home, the glass look and the light
-   Home all reach it through rules that already exist; what follows is only what the drawing adds — the from-scratch tile
-   with its shape chips, and the sideways row of his projects — at the drawing's sizes, with phone-sized targets. */
+   Home all reach it through rules that already exist; what follows is only what the drawing adds — the shape buttons (they were a
+   from-scratch tile with shape chips until #1243 H3), and the sideways row of his projects — with phone-sized targets. */
 #hm-libnew { position: fixed; inset: 0; z-index: 210; background: rgba(4, 6, 10, .7); display: flex; align-items: center; justify-content: center; padding: 20px; animation: hm-bloom .24s ease backwards; }
 #hm-libnew.hidden { display: none; }
-.hm-ln-card .hm-dlg-title { margin-bottom: 3px; }
-.hm-ln-sub { flex: none; font-size: 13px; line-height: 1.4; color: var(--text-dim); margin: 0 0 14px; }
-.hm-ln-blank { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 28px 12px 12px; border-radius: 16px; border: 1px solid rgba(255, 255, 255, .1); background: rgba(255, 255, 255, .04); color: var(--text); cursor: pointer; }
-.hm-ln-blank:focus { outline: none; }
-.hm-ln-blank:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-/* the + is drawn, not typed — a glyph sits wherever the font puts its ink (the #hm-new note in index.html) */
-.hm-ln-art { position: relative; flex: none; width: 58px; height: 58px; box-sizing: border-box; border-radius: 13px; border: 2px dashed var(--accent); background: repeating-conic-gradient(rgba(127, 140, 160, .22) 0 25%, transparent 0 50%) 0 0 / 12px 12px; }
-.hm-ln-art::before, .hm-ln-art::after { content: ''; position: absolute; left: 50%; top: 50%; border-radius: 1px; background: var(--accent); transform: translate(-50%, -50%); }
-.hm-ln-art::before { width: 20px; height: 2px; }
-.hm-ln-art::after { width: 2px; height: 20px; }
-.hm-ln-txt { flex: 1; min-width: 0; }
-.hm-ln-tt { font-size: 15px; font-weight: 750; }
-.hm-ln-td { font-size: 12.5px; color: var(--text-dim); margin-top: 2px; }
-.hm-ln-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
-.hm-ln-chip { min-height: 32px; padding: 0 10px; border-radius: 999px; border: 1px solid rgba(255, 255, 255, .14); background: transparent; color: var(--text); font-size: 12.5px; font-weight: 700; cursor: pointer; }
-.hm-ln-chip.on { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
-.hm-ln-chev { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); font-size: 20px; line-height: 1; color: var(--text-dim); pointer-events: none; }
+/* #1243 H3: the from-scratch tile, its description and its chips are gone; the four shapes are the buttons (home.js lnShapeTile),
+   each outline drawn at its true proportion in a 44x50 box, the ratio under it, one tap each. */
+.hm-ln-card .hm-dlg-title { margin-bottom: 14px; }
+.hm-ln-shapes { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.hm-ln-shape { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; min-width: 0; min-height: 88px; padding: 10px 4px 8px; border-radius: 14px; border: 1px solid rgba(255, 255, 255, .1); background: rgba(255, 255, 255, .04); color: var(--text); font: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background-color .15s ease, border-color .15s ease, transform .12s ease; }
+.hm-ln-shape:active { transform: scale(.96); }
+@media (hover: hover) and (pointer: fine) { .hm-ln-shape:hover { border-color: var(--accent); background: rgba(255, 255, 255, .07); } }
+.hm-ln-shape:focus { outline: none; }
+.hm-ln-shape:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hm-ln-box { display: flex; align-items: center; justify-content: center; width: 44px; height: 50px; pointer-events: none; }
+.hm-ln-frame { position: relative; display: block; box-sizing: border-box; border-radius: 6px; border: 2px dashed var(--accent); background: repeating-conic-gradient(rgba(127, 140, 160, .2) 0 25%, transparent 0 50%) 0 0 / 10px 10px; }
+.hm-ln-frame::before, .hm-ln-frame::after { content: ''; position: absolute; left: 50%; top: 50%; border-radius: 1px; background: var(--accent); transform: translate(-50%, -50%); }
+.hm-ln-frame::before { width: 12px; height: 2px; }
+.hm-ln-frame::after { width: 2px; height: 12px; }
+.hm-ln-sl { font-size: 12.5px; font-weight: 750; line-height: 1; pointer-events: none; }
+.hm-dlg-actions button.hm-ln-cancel { min-height: 44px; background: transparent; border-color: transparent; color: var(--text-dim); font-weight: 650; }
+@media (hover: hover) and (pointer: fine) { .hm-dlg-actions button.hm-ln-cancel:hover { color: var(--text); } }
 .hm-ln-lbl { margin: 16px 2px 8px; }
+.hm-dlg-scroll > .hm-ln-lbl:first-child { margin-top: 0; }
+/* #1243 H3: the row of his projects is bigger — 110 px pictures (they were 92), the name under each */
 .hm-ln-strip { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; padding: 2px 2px 6px; margin: 0 -2px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; overscroll-behavior-x: contain; }
-.hm-ln-pc { flex: none; width: 92px; padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; scroll-snap-align: start; }
-.hm-ln-th { position: relative; display: flex; align-items: center; justify-content: center; height: 122px; border-radius: 12px; overflow: hidden; background: #05070b; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); }
+.hm-ln-pc { flex: none; width: 110px; padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; scroll-snap-align: start; }
+.hm-ln-th { position: relative; display: flex; align-items: center; justify-content: center; height: 140px; border-radius: 12px; overflow: hidden; background: #05070b; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .12); }
 .hm-ln-th img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .hm-ln-nm { display: block; margin-top: 5px; font-size: 12.5px; font-weight: 650; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hm-ln-mt { display: block; font-size: 11px; color: var(--text-dim); }
@@ -6121,15 +6117,43 @@ body.hm-selecting #hm-new { visibility: hidden; pointer-events: none; }
 .hm-ln-none { font-size: 13px; color: var(--text-dim); padding: 2px 2px 8px; }
 /* the light Home: the paper, hairlines and blues its other dialogs use (theme-glass.css, the #864 block) */
 html[data-home="light"] #hm-libnew { background: rgba(20, 38, 56, .34); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
-html[data-home="light"] .hm-ln-sub, html[data-home="light"] .hm-ln-td, html[data-home="light"] .hm-ln-mt,
-html[data-home="light"] .hm-ln-none, html[data-home="light"] .hm-ln-chev { color: #5f6b7d; }
-html[data-home="light"] .hm-ln-blank { background-color: rgba(16, 30, 52, .035); border-color: rgba(16, 30, 52, .12); color: #10151f; }
-html[data-home="light"] .hm-ln-chip { border-color: rgba(16, 30, 52, .16); color: #10151f; }
-html[data-home="light"] .hm-ln-chip.on { background-color: #1780b4; border-color: #1780b4; color: #ffffff; }
-html[data-home="light"] .hm-ln-art { border-color: rgba(23, 128, 180, .75); }
-html[data-home="light"] .hm-ln-art::before, html[data-home="light"] .hm-ln-art::after { background: #1780b4; }
+html[data-home="light"] .hm-ln-mt, html[data-home="light"] .hm-ln-none { color: #5f6b7d; }
+html[data-home="light"] .hm-ln-shape { background-color: rgba(16, 30, 52, .035); border-color: rgba(16, 30, 52, .12); color: #10151f; }
+html[data-home="light"] .hm-ln-frame { border-color: rgba(23, 128, 180, .75); }
+html[data-home="light"] .hm-ln-frame::before, html[data-home="light"] .hm-ln-frame::after { background: #1780b4; }
+html[data-home="light"] .hm-dlg-actions button.hm-ln-cancel { background-color: transparent; border-color: transparent; color: #5f6b7d; }
 html[data-home="light"] .hm-ln-pc { color: #10151f; }
 @media (prefers-reduced-motion: reduce) { #hm-libnew { animation: none; } }
+/* ---- #1243 G5: reframe the profile picture (js/home.js openReframe) -------------------------------------------------------
+   His words: "when you add a profile picture … you should be able to reframe it to decide where the picture lands, like what most
+   apps have." The card is #hm-dialog's own (so every Home look dresses it); inside it a square stage shows the photo, dimmed
+   outside a circle of min(72vw, 320px) — the shape the button shows it in. The photo is positioned by home.js (width, height
+   and a translate); a finger on the stage is the app's, never the page's scroll. */
+#hm-reframe { position: fixed; inset: 0; z-index: 215; background: rgba(4, 6, 10, .78); display: flex; align-items: center; justify-content: center; padding: 16px; }
+#hm-reframe.hidden { display: none; }
+/* A PHONE HELD SIDEWAYS (review E2-1): every row of the card is flex:none, so a stage sized from 56vh alone pushed Use photo off a
+   360 px tall screen. The stage now takes only what the card's other rows leave (title 32 + slider 56 + buttons 56 + padding 38 =
+   182, 190 with room), never under 96 px; the card scrolls as the last resort. A portrait phone and a PC are unchanged (56vh wins). */
+.hm-rf-card { width: min(400px, 94vw); overflow-y: auto; overscroll-behavior: contain; }
+.hm-rf-stage { position: relative; flex: none; width: min(100%, 56vh, 56dvh, max(96px, calc(min(88vh, 88dvh) - 190px))); aspect-ratio: 1 / 1; margin: 0 auto; overflow: hidden; border-radius: 14px; background: #05070b; touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; }
+.hm-rf-stage:active { cursor: grabbing; }
+.hm-rf-stage:focus { outline: none; }
+.hm-rf-stage:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hm-rf-img { position: absolute; left: 0; top: 0; max-width: none; max-height: none; transform-origin: 0 0; pointer-events: none; -webkit-user-drag: none; }
+.hm-rf-ring { position: absolute; left: 50%; top: 50%; width: min(72vw, 320px, calc(100% - 16px)); aspect-ratio: 1 / 1; transform: translate(-50%, -50%); border-radius: 50%; box-shadow: 0 0 0 2px rgba(255, 255, 255, .9), 0 0 0 999px rgba(4, 6, 10, .58); pointer-events: none; }
+.hm-rf-zoom { flex: none; display: flex; align-items: center; gap: 12px; min-height: 44px; margin-top: 12px; }
+.hm-rf-slider { flex: 1; min-width: 0; height: 44px; margin: 0; accent-color: var(--accent); }
+/* zoom out / zoom in: 44 px buttons (review E2-6), each drawing its small or big square */
+.hm-rf-less, .hm-rf-more { position: relative; flex: none; display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; margin: 0; padding: 0; border: 0; border-radius: 10px; background: none; color: var(--text-dim); cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.hm-rf-less::before, .hm-rf-more::before { content: ''; display: block; box-sizing: border-box; width: 14px; height: 14px; border-radius: 3px; border: 2px solid currentColor; }
+.hm-rf-more::before { width: 22px; height: 22px; border-radius: 4px; }
+.hm-rf-less:active, .hm-rf-more:active { transform: scale(.92); }
+.hm-rf-less:focus, .hm-rf-more:focus { outline: none; }
+.hm-rf-less:focus-visible, .hm-rf-more:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (hover: hover) and (pointer: fine) { .hm-rf-less:hover, .hm-rf-more:hover { color: var(--text); } }
+#hm-reframe .hm-dlg-actions button { min-height: 44px; }
+html[data-home="light"] #hm-reframe { background: rgba(20, 38, 56, .5); }
+html[data-home="light"] .hm-rf-less, html[data-home="light"] .hm-rf-more { color: #5f6b7d; }
 /* #948 fix 3: editing a template or an element says so — "a slim bar saying “Editing element: Logo sting · Done”, and no
    Export button while you're in it". A pill at the top of the stage (js/home.js libEditSync), on only under body.lib-edit,
    which is set only while a template or element workspace is the open project — an ordinary project never has it. The
@@ -11527,6 +11551,14 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
   align-self: flex-start; background: var(--panel-2); border: 1px solid var(--accent); color: var(--accent);
   border-radius: 8px; padding: 7px 12px; font-size: 12.5px; font-weight: 600; cursor: pointer;
 }
+/* #1243 F2: Ask & edit does what AI Scene did — the key-less doors in one wrapping row, the build's agent rows as quiet notes
+   that update in place, and the spend on his key beside API key */
+.aic-btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.aic-row { font-variant-numeric: tabular-nums; }
+.aic-row-done { color: var(--text-dim); }
+.aic-row-active, .aic-row-streaming { color: var(--text); }
+.aic-linkbtn:disabled { opacity: .55; cursor: default; }
+.aic-spend { flex: 0 0 auto; font-size: 11.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 
 .aic-compose {
   flex: 0 0 auto; display: flex; gap: 8px; align-items: flex-end;
@@ -11550,13 +11582,31 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 .aic-send:disabled { opacity: .45; cursor: default; }
 
 @media (max-width: 700px) {
+  /* #1243 F3 — "condense it so it only covers up like the same amount of area that the add menu comes up to", "when you start
+     actually typing… that goes up even more". It was `height: 74svh` from the bottom. Now the top is the Add menu's own line (the
+     stage's bottom, set as --aic-top by js/ai-chat.js place()) and the bottom sits on the keyboard (--aic-kb), so typing shrinks
+     the transcript and never lifts the top. 26svh is only the fallback for a page with no stage to measure (the old top). */
   #ai-chat {
-    top: auto; left: 0; right: 0; bottom: 0; width: auto;
-    height: 74svh; max-height: 74svh; border-left: none; border-top: 1px solid var(--line);
+    top: var(--aic-top, 26svh); left: 0; right: 0; bottom: var(--aic-kb, 0px); width: auto;
+    height: auto; max-height: none; border-left: none; border-top: 1px solid var(--line);
     border-radius: 16px 16px 0 0; box-shadow: 0 -12px 40px rgba(0,0,0,.55);
-    transform: translateY(100%);
+    transform: translateY(calc(100% + var(--aic-kb, 0px)));
   }
   #ai-chat.open { transform: translateY(0); }
+  /* the bottom is lifted by the keyboard now, so the compose row no longer pads itself by it */
+  #ai-chat .aic-compose { padding-bottom: 10px; }
+  /* while typing (1243-D F3's recommended A): the header folds to one slim row, the box keeps to three lines, the transcript scrolls */
+  /* Measured: with a 300 px keyboard on an 800 px phone about 104 px is left under the line, so the typing rows are compact, and
+     what cannot fit leaves from the TOP (flex-end, clipped) — the box is never pushed under the keyboard. */
+  #ai-chat.aic-typing { justify-content: flex-end; overflow: hidden; }
+  #ai-chat.aic-typing .aic-grab { display: none; }
+  #ai-chat.aic-typing .aic-head { padding: 2px 8px 2px 12px; flex-shrink: 0; }
+  #ai-chat.aic-typing .aic-close { width: 28px; height: 28px; }
+  #ai-chat.aic-typing .aic-keybtn, #ai-chat.aic-typing .aic-spend { display: none; }
+  #ai-chat.aic-typing .aic-list { padding-top: 4px; padding-bottom: 4px; }
+  #ai-chat.aic-typing .aic-compose { padding-top: 6px; padding-bottom: 6px; flex-shrink: 0; }
+  #ai-chat.aic-typing .aic-input { max-height: 72px; padding-top: 7px; padding-bottom: 7px; }
+  #ai-chat.aic-typing .aic-send { width: 38px; height: 38px; }
   #ai-chat:not(.open) { box-shadow: none; }
   /* A phone sheet needs something to pull down on, and a 44px target rather than the ✕ alone. */
   .aic-grab {

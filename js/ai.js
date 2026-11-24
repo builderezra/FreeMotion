@@ -230,7 +230,11 @@ window.FM = window.FM || {};
     if (!dry && !FM.aiKey.has()) { return FM.aiTemplates.build(chips); }   // no key → template floor
 
     state.running = true; state.abort = false; state.dry = dry;
-    var P = panel();
+    /* #1243 F2 — "we don't really need the AI scene button… the AI assistant button should be able to do everything". The build's
+       progress rows go wherever the caller says (opts.sink: reset/row/note/done/error, the shape FM.aiPanel already has). Ask & edit
+       (js/ai-chat.js) passes its own, so a scene asked for in the chat is built and reported IN the chat; the Director panel stays
+       the fallback for every other caller. The engine is otherwise untouched. */
+    var P = opts.sink || panel();
     if (FM.aiBudget) FM.aiBudget.reset();
     P.reset();
     var refMap = {};
@@ -352,7 +356,7 @@ window.FM = window.FM || {};
          may be closed (he closed it to go Home), so the toast is what he actually sees. */
       if (left()) {
         P.done({ cancelled: true, left: homeName, layersAdded: 0 });
-        if (FM.toast) FM.toast('The AI Director stopped — you opened another project. What it had built is kept in “' + homeName + '”.', 5200);
+        if (FM.toast) FM.toast('The scene build stopped — you opened another project. What it had built is kept in “' + homeName + '”.', 5200);   // #1243 F2: no "Director" door any more
         return { error: err, left: true };
       }
       // commit whatever applied so the user keeps it (cancel = keep)

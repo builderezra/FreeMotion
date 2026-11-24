@@ -59,7 +59,9 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
 1. **Identity:** confirm the orange look, "Cutline" [recommended; he said "orange looks really good" but wanted to see it in the editor first].
 2. **The Full editor switch:** keep today's behaviour, or colour it by the SELECTED layer as he described?
    - Today it is white at rest and takes a layer's colour only while you hold that layer by its handle (app.js:3437).
-3. ~~**Template tab icon:** option 1 "Stacked cards", or another number from the options sheet.~~ HE PICKED 1, "Stacked cards" (23 Nov 21:24: "Go for the recommended template option").
+3. ~~**Template tab icon:** option 1 "Stacked cards", or another number from the options sheet.~~
+   - He picked 1, "Stacked cards" (23 Nov 21:24), then REVERSED it on 24 Nov 11:16: "I want it to be the same as ... the templates icon in the actual editor. I think we should be consistent".
+   - So it is the editor's existing Template icon (js/addmenu.js:523), used EVERYWHERE, Home's Templates tab included.
 4. ~~**Category button style:** C1-C4.~~ HE PICKED C2 Cut Paper (23 Nov 21:40). C3 "looks repetitive... the same thing over and over again".
 5. **"Selected" look across menus** (light review M8): (a) a vermilion fill, or (b) a white chip with a vermilion ring [(b) recommended; it's a taste call, so show both].
    - PARTLY ANSWERED 23 Nov 21:12/21:17: NEVER a line under a selected item ("ugly line"), anywhere.
@@ -139,7 +141,7 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
 - Look: Cutline (orange). Minimal ("less is more").
 - Category buttons (Colouring & Media, Outline & Shadows, Mixing and the rest): each icon keeps its own colour; the outline is neutral black/white; no glow (23 Nov, his own spec, drawn as G1).
 - Simple Look panel: L1 (23 Nov 21:00, over the recommended L2).
-- ADD sheet Template tab icon: 1 "Stacked cards" (23 Nov 21:24).
+- Templates icon: the editor's EXISTING one (js/addmenu.js:523), the same everywhere (24 Nov 11:16, reversing "Stacked cards").
 - Effects category buttons: C2 Cut Paper (23 Nov 21:40).
 - The effects browser B1r/B4r, re-confirmed 23 Nov 21:30: "I love that new effects menu. That looks so good."
 - Effect settings (M6) use the DRAG value control, not sliders (23 Nov 21:50). On PC: hover + scroll wheel and click-drag. To be tried in a prototype first; it goes in the tutorials.
