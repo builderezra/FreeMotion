@@ -533,10 +533,16 @@ def main(argv):
         if not self_test():
             print('❌ names-gate: its own self-test failed, so it can judge nothing'); return 2
         found = scan_rev(argv[1], '.', argv[2:])
-        if not found:
-            print('✓ names-gate: none of the files of %s names another editing app or holds his own name' % argv[1][:12]); return 0
-        print('→ names-gate: %d place(s) in the files of %s name another editing app or hold his own name:' % (len(found), argv[1][:12]))
-        show(found, 12)
+        # Two capital initials alone are NOT judged for an old release: the allow list knows today's lines, not that release's, so
+        # nearly every old release would read as naming one and the warning would cry wolf (the cross-check of 25 Nov). A name, or
+        # his own name, is what this answers; the initials are only counted.
+        real = [r for r in found if r[2] != 'initials']
+        ini = len(found) - len(real)
+        also = (' (%d line(s) carry two capital initials: not judged for an old release)' % ini) if ini else ''
+        if not real:
+            print('✓ names-gate: none of the files of %s names another editing app or holds his own name%s' % (argv[1][:12], also)); return 0
+        print('→ names-gate: %d place(s) in the files of %s name another editing app or hold his own name%s:' % (len(real), argv[1][:12], also))
+        show(real, 12)
         return 1
     if argv[0] in ('check', 'list'):
         if not self_test():

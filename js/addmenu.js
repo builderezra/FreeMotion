@@ -564,7 +564,8 @@ window.FM = window.FM || {};
          which is what the entry says. Same shape, more words, because this is the surface where you
          would be asking WHAT a template is rather than where they went. */
       if (!out.length) out.push({ emptyPanel: {
-        icon: 'template',   // #1255: the Stacked cards, drawn, as Home's empty Templates tab draws them (was a typed mark)
+        /* #1255: the Stacked cards, drawn, as Home's empty Templates tab draws them (was a typed mark) */
+        icon: 'template',
         title: 'No templates yet',
         lines: ['A template is a whole project saved as a starting point \u2014 its layers, effects and timing, ready to drop into whatever you are working on.',
                 'To make one: go to the home screen, open a project\u2019s \u22ef menu and choose Save as template.'] } });
@@ -934,7 +935,8 @@ window.FM = window.FM || {};
   }
 
   FM.addMenu = {
-    _emptyPanel: emptyPanel,   // for the suite: the empty tab's panel, drawn from a spec ('1255 icons')
+    /* for the suite: the empty tab's panel, drawn from a spec ('1255 icons') */
+    _emptyPanel: emptyPanel,
     /* Exposed for the suite (queue 340). The Elements browser's empty state tells you how to MAKE an
        element, and for a long time it named a route through this menu that had been deleted — so the
        one instruction in the room pointed at a door that is not there. A test can only catch that if it
