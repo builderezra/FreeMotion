@@ -18478,8 +18478,10 @@
       if (document.querySelectorAll('.mt-trackpad').length !== 1) throw new Error('the X/Y pad is still there alongside the Z pad');
       if (!chip('Z').classList.contains('on')) throw new Error('the Z chip does not read as the active axis');
       if (chip('X').classList.contains('on')) throw new Error('X still reads as active while the pad is editing Z');
-      const hint = zpad.querySelector('.mt-trackpad-hint');
-      if (!hint || !/Z position/i.test(hint.textContent)) throw new Error('the Z pad does not say what it does: "' + (hint && hint.textContent) + '"');
+      /* #1255: the pad's sentence is its NAME for a screen reader now, not words on it ("There shouldn't be any explanations like that") */
+      const zname = zpad.getAttribute('aria-label') || '';
+      if (!/Z position/i.test(zname)) throw new Error('the Z pad is not named for what it does: "' + zname + '"');
+      if (zpad.querySelector('.mt-trackpad-hint') || /swipe/i.test(zpad.textContent || '')) throw new Error('the Z pad still carries a sentence on it: "' + (zpad.textContent || '').trim() + '"');
       if (zpad.querySelectorAll('.mt-zpad-arrow').length !== 2) throw new Error('the Z pad has no up/down affordance');
 
       // Drag it. DOWN pushes the layer away, so z grows — the pad drags the object, not the number.
@@ -70268,8 +70270,11 @@
   });
 
   /* 917.12 — the swipe pad's hint wraps on a phone, and every line started flush against the pad's left
-     edge (0px) while the corner brackets that frame the pad sit 12px in. Measured per wrapped line. */
-  test('917.12 the swipe pad hint sits inside the pad corner brackets on a phone, not against its edge', { item: '917' }, async function () {
+     edge (0px) while the corner brackets that frame the pad sit 12px in. Measured per wrapped line.
+     #1255 (24 Nov): at rest the pad wears a drawn mark and no sentence, so the words that can wrap are the ones it shows while a snap
+     holds. A line as long as two of those is put in the pad's own line element, the way showPadSnap writes one, so it must wrap at
+     380; the mark at rest must sit inside the brackets too, and step aside while the pad speaks. */
+  test('917.12 the swipe pad’s mark and the line it shows while snapped sit inside the pad corner brackets on a phone, not against its edge', { item: '917' }, async function () {
     var frame = function () { return new Promise(function (r) { setTimeout(r, 90); }); };
     var layers0 = FM.scene.layers.slice();
     try {
@@ -70282,17 +70287,25 @@
         FM.inspector.refresh();
         await frame();
         var pad = [].slice.call(document.querySelectorAll('.mt-trackpad')).filter(function (p) { return p.getBoundingClientRect().width > 0; })[0];
-        var hint = pad && pad.querySelector('.mt-trackpad-hint');
-        if (!hint || !hint.textContent.trim()) throw new Error('no swipe pad with a hint on screen in Position / Scale');
+        var hint = pad && pad.querySelector('.mt-trackpad-hint'), mark = pad && pad.querySelector('.pad-mark');
+        if (!hint || !mark) throw new Error('no swipe pad with its mark and its line on screen in Position / Scale');
         var pr = pad.getBoundingClientRect();
-        var rg = document.createRange(); rg.selectNodeContents(hint);
-        var lines = [].slice.call(rg.getClientRects()).filter(function (r) { return r.width > 2; });
-        if (lines.length < 2) throw new Error('the hint fits on one line at 380px (' + lines.length + '), so the wrap the finding is about is not being measured');
         var BRACKET = parseFloat(getComputedStyle(pad, '::before').left) || 12;
-        lines.forEach(function (r, i) {
-          var l = r.left - pr.left, rr = pr.right - r.right;
-          if (l < BRACKET || rr < BRACKET) throw new Error('hint line ' + (i + 1) + ' sits ' + l.toFixed(1) + 'px from the pad\'s left edge and ' + rr.toFixed(1) + 'px from its right — inside the ' + BRACKET + 'px the corner brackets are inset');
-        });
+        var mr = mark.getBoundingClientRect();
+        if (!(mr.width >= 16) || mr.left - pr.left < BRACKET || pr.right - mr.right < BRACKET) throw new Error('at rest the pad’s mark is ' + mr.width.toFixed(1) + ' px wide, ' + (mr.left - pr.left).toFixed(1) + ' px from the pad’s left edge and ' + (pr.right - mr.right).toFixed(1) + ' from its right — not drawn, or outside the ' + BRACKET + 'px the corner brackets are inset');
+        pad.classList.add('snap-x', 'snap-y');
+        hint.textContent = 'Snapped to right edge + bottom edge, and Snapped to right edge + bottom edge once more';
+        try {
+          await frame();
+          var rg = document.createRange(); rg.selectNodeContents(hint);
+          var lines = [].slice.call(rg.getClientRects()).filter(function (r) { return r.width > 2; });
+          if (lines.length < 2) throw new Error('the line fits on one line at 380px (' + lines.length + '), so the wrap the finding is about is not being measured');
+          lines.forEach(function (r, i) {
+            var l = r.left - pr.left, rr = pr.right - r.right;
+            if (l < BRACKET || rr < BRACKET) throw new Error('line ' + (i + 1) + ' of the pad’s words sits ' + l.toFixed(1) + 'px from the pad\'s left edge and ' + rr.toFixed(1) + 'px from its right — inside the ' + BRACKET + 'px the corner brackets are inset');
+          });
+          if (mark.getClientRects().length) throw new Error('while the pad names a snap its mark is still drawn, over the words');
+        } finally { pad.classList.remove('snap-x', 'snap-y'); hint.textContent = ''; }
       }, 380);
     } finally {
       FM.scene.layers.length = 0;
@@ -92554,10 +92567,11 @@
     try {
       const A = sh('rect'); FM.scene.layers.push(A); FM.selectLayer(A.id); FM._mtMode = 'anchor';
       FM.refreshAll(); FM.inspector.refresh(); FM.inspector.openCategory('transform');
-      const hint = document.querySelector('.mt-trackpad-hint');
-      if (!hint) throw new Error('setup: the anchor pad (.mt-trackpad-hint) is not in the DOM in anchor mode — the assertion would be vacuous');
-      if (/nine|centre, edges and corners/i.test(hint.textContent)) throw new Error('the anchor pad hint still describes nine points; the grid snaps to 25');
-      if (!/quarter/i.test(hint.textContent)) throw new Error('the anchor pad hint does not describe the quarter-point grid it snaps to: "' + hint.textContent + '"');
+      /* #1255: the pad's sentence is its name for a screen reader now (aria-label); a drawn mark is on the pad */
+      const apad = document.querySelector('.mt-trackpad'), aname = apad ? (apad.getAttribute('aria-label') || '') : '';
+      if (!apad || !/anchor/i.test(aname)) throw new Error('setup: the anchor pad is not in the DOM in anchor mode (the first pad is named "' + aname + '") — the assertion would be vacuous');
+      if (/nine|centre, edges and corners/i.test(aname)) throw new Error('the anchor pad’s name still describes nine points; the grid snaps to 25');
+      if (!/quarter/i.test(aname)) throw new Error('the anchor pad’s name does not describe the quarter-point grid it snaps to: "' + aname + '"');
       FM.scene.layers.splice(FM.scene.layers.indexOf(A), 1);
     } finally { FM._mtMode = mode0; FM.scene.selectedId = sel1; try { FM.refreshAll(); FM.inspector.refresh(); } catch (e) {} }
   });
@@ -111375,7 +111389,7 @@
             if (Math.abs(r.dx + 40) > 3 || Math.abs(r.dy) > 3 || Math.hypot(r.ox, r.oy) > 2) bad.push('Customise Points, ' + RF690B_HOW[k] + ' on corner 0: the corner the first finger dragged 40 px left moved ' + hb4J({ x: r2(r.dx), y: r2(r.dy) }) + ' and the corner under the second finger moved ' + hb4J({ x: r2(r.ox), y: r2(r.oy) }) + ' — the second finger took the drag');
           });
           /* 2. ON ITS POINT PAD (Swipe here to move point, gain project width / 300): it steps from the LAST event, so a takeover reads the gap as travel. */
-          const padNow = () => { const p = document.querySelector('.mt-trackpad'); return p && /move point/i.test(p.textContent || '') ? p : null; };
+          const padNow = () => { const p = document.querySelector('.mt-trackpad'); return p && /move the point/i.test(p.getAttribute('aria-label') || '') ? p : null; };   /* #1255: told by its name; its sentence is no longer on it */
           if (!padNow()) throw new Error('setup: the Customise Points panel has no Swipe here to move point pad');
           const sens = (FM.scene.project.width || 1080) / 300;
           let g0;
@@ -209196,6 +209210,185 @@
       try { FM.timeline.rebuild(); } catch (e) {}
     }
     if (fails.length) throw new Error(fails.join(' · '));
+    } finally { _isoK.put(); }
+  });
+
+  /* ═══ #1255, his note of 23 Nov 20:53, clauses 6 and 7, THE FULL EDITOR'S SECOND CUT: THE SWIPE PADS AND THE TOOL BARS ═════════════════
+     His words: "There shouldn't be any explanations like that. We have tutorials for a reason… not, you know, constantly there." Every pad
+     you swipe on carried a sentence ("Swipe here to move layer · snaps to centre, edges & earlier keyframes"); it wears a drawn four-way
+     mark now (FM.PAD_MARK, one string for every pad) and the sentence is its name for a screen reader. The Move pad still NAMES a snap
+     while one holds: that says what just happened, it is not a how-to. CONTROLS: the pad really moves the layer; each panel is open. */
+  test('1255 hints · the swipe pads of Move & Transform wear a drawn four-way mark and no sentence: the Move, Anchor and point pads show the mark and are named for a screen reader, the Z pad keeps its two arrows, the Move pad still names a snap while one holds and wears the mark again after it, and the point editor shows no how-to paragraph (CONTROL: a swipe on the Move pad moves the layer)', { item: '1255', budgetMs: 60000 }, async function () {
+    const _isoK = isoKeep(); try {
+    const S = FM.scene, P = S.project, keep = S.layers.slice(), keepSel = S.selectedId, keepT = FM.time, mode0 = FM._mtMode, axis0 = FM._mtAxis, size0 = { w: P.width, h: P.height }, fails = [];
+    const snap0 = FM.timeline && FM.timeline.isSnapping, wasPE = !!(FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive());
+    const SENTENCE = /swipe|snaps to/i;
+    const shown = n => !!(n && n.getClientRects().length);
+    const padOf = () => [].slice.call(document.querySelectorAll('.mt-trackpad')).filter(shown)[0] || null;
+    const readPad = (what, nameRe) => {
+      const pad = padOf();
+      if (!pad) { fails.push(what + ': no pad on screen'); return null; }
+      const mark = pad.querySelector('.pad-mark'), name = pad.getAttribute('aria-label') || '';
+      if (!mark || !mark.querySelector('path') || !shown(mark)) fails.push(what + ' wears no drawn mark');
+      if (SENTENCE.test(pad.textContent || '')) fails.push(what + ' still carries a sentence (“' + (pad.textContent || '').trim() + '”)');
+      if (!nameRe.test(name)) fails.push(what + ' is named “' + name + '” for a screen reader');
+      return pad;
+    };
+    try {
+      P.width = 1080; P.height = 1920;
+      if (FM.timeline) FM.timeline.isSnapping = function () { return true; };
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'Pads 1255', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#c04070' });
+      L.start = 0; L.duration = 5;
+      S.layers = [L]; FM.selectLayer(L.id); FM.time = 0;
+      /* MOVE: at rest, then a nudge that stays on the frame's centre (a snap), then a swipe off it */
+      FM._mtMode = 'move'; FM._mtAxis = 'xy'; FM.inspector.openCategory('transform'); FM.inspector.refresh(); await sleep(120);
+      const pad = readPad('the Move pad', /move the layer/i);
+      if (pad) {
+        const r = pad.getBoundingClientRect(), x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+        const ev = (type, dx, dy, buttons) => attached(padOf(), 'the Move pad').dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, pointerType: 'mouse', clientX: x0 + dx, clientY: y0 + dy, buttons: buttons == null ? 1 : buttons }));
+        ev('pointerdown', 0, 0);
+        let named = '';
+        for (const d of [1, 2, 3]) { ev('pointermove', d, 0); const ln = padOf() && padOf().querySelector('.mt-trackpad-hint'); named = (ln && ln.textContent) || ''; if (/^Snapped to /.test(named)) break; }
+        if (!/^Snapped to /.test(named)) fails.push('a layer on the frame’s centre, nudged up to 3 px on the pad: the pad names no snap (it says “' + named + '”); it should still say what it caught');
+        else if (shown(padOf().querySelector('.pad-mark'))) fails.push('while the Move pad names a snap (“' + named + '”) its mark is still drawn, over the words');
+        ev('pointermove', 80, 80); ev('pointerup', 80, 80, 0);
+        await sleep(80);
+        const x1 = FM.evalProp(L.transform.x, 0), y1 = FM.evalProp(L.transform.y, 0);
+        if (!(Math.abs(x1 - 540) > 40 && Math.abs(y1 - 960) > 40)) throw new Error('CONTROL: an 80 px swipe down and right on the Move pad left the layer at ' + x1 + ', ' + y1 + ', so the pad that was read is not the working one · ' + fails.join(' · '));
+        const after = padOf(), ln2 = after && after.querySelector('.mt-trackpad-hint'), said = ((ln2 && ln2.textContent) || '').trim();
+        if (said) fails.push('after the swipe let go, off every snap, the Move pad still says “' + said + '”');
+        else if (!shown(after && after.querySelector('.pad-mark'))) fails.push('after the snap let go the Move pad does not wear its mark again');
+      }
+      /* Z: two arrows, no words */
+      FM._mtAxis = 'z'; FM.inspector.refresh(); await sleep(100);
+      const z = document.querySelector('.mt-zpad');
+      if (!shown(z)) fails.push('the Z pad did not open');
+      else {
+        if (z.querySelectorAll('.mt-zpad-arrow').length !== 2) fails.push('the Z pad lost its two arrows, the only sign it has now');
+        if (z.querySelector('.mt-trackpad-hint') || SENTENCE.test(z.textContent || '')) fails.push('the Z pad still carries a sentence (“' + (z.textContent || '').trim() + '”)');
+        if (!/Z position/i.test(z.getAttribute('aria-label') || '')) fails.push('the Z pad is named “' + (z.getAttribute('aria-label') || '') + '” for a screen reader');
+      }
+      /* ANCHOR */
+      FM._mtAxis = 'xy'; FM._mtMode = 'anchor'; FM.inspector.refresh(); await sleep(100);
+      readPad('the Anchor pad', /anchor.*quarter/i);
+      /* THE POINT PAD, in Customise Points, and the paragraph that stood under it */
+      FM._mtMode = 'move';
+      const T = FM.makeLayer('shape', { shape: 'triangle', name: 'Points 1255', x: 540, y: 900, shapeW: 400, shapeH: 400, fill: '#22c55e' });
+      T.start = 0; T.duration = 5;
+      S.layers = [T]; FM.selectLayer(T.id); await sleep(100);
+      FM.inspector.openCategory('element'); await sleep(350);
+      if (!FM.pointEdit || !FM.pointEdit.isActive()) throw new Error('CONTROL: Customise Points did not open the point editor on the triangle, so its pad was not read · ' + fails.join(' · '));
+      readPad('the point pad', /move the point/i);
+      const how = [].slice.call(document.querySelectorAll('.insp-hint')).filter(shown).map(n => (n.textContent || '').trim()).filter(t => /tap a point|double-tap|hollow ring/i.test(t));
+      if (how.length) fails.push('the point editor still shows its how-to paragraph (“' + how[0].slice(0, 60) + '…”)');
+    } finally {
+      try { if (FM.pointEdit && FM.pointEdit.isActive() && !wasPE) FM.pointEdit.stop(); } catch (e) {}
+      if (FM.timeline) FM.timeline.isSnapping = snap0;
+      P.width = size0.w; P.height = size0.h;
+      FM._mtMode = mode0; FM._mtAxis = axis0;
+      S.layers = keep; S.selectedId = keepSel; FM.time = keepT;
+      try { FM.refreshAll(); FM.inspector.openCategory('home'); } catch (e) {}
+    }
+    if (fails.length) throw new Error(fails.join(' · ') + ' — his words: “There shouldn’t be any explanations like that… not, you know, constantly there”');
+    } finally { _isoK.put(); }
+  });
+
+  /* The tool bars: each said how to use its tool all the while it was open. The pen bar keeps the count of points (information, as the
+     count of strokes is: queue 535), the tracker's bar says what IS (a point set, or not yet), the mask bar and Insert your Media
+     hold their controls only. CONTROLS: every bar is really open with its own buttons, and the pen bar's count really counts. */
+  test('1255 hints · the tool bars of the Full editor hold their buttons and no how-to: the pen bar’s pad wears the mark and its line only counts the points, the mask bar has no gesture line with the mask open or closed and its nudge pad wears the mark, the tracker’s bar says only whether a point is set, and Insert your Media opens with no line above its slots (CONTROLS: each bar is open with its own buttons, and the count counts)', { item: '1255', budgetMs: 90000 }, async function () {
+    const _isoK = isoKeep(); try {
+    const S = FM.scene, P = S.project, keep = S.layers.slice(), keepSel = S.selectedId, keepT = FM.time, dur0 = P.duration, size0 = { w: P.width, h: P.height }, fails = [], mediaSet = [];
+    const HOWTO = /tap the canvas|use the pad|land on the first point|tap to add|tap the first point|drag points|double-tap|tap an edge|swipe|tap the head|any feature|tap again|track to follow|tap a slot/i;
+    const shown = n => !!(n && n.getClientRects().length);
+    /* what a bar says outside its buttons and its pad */
+    const says = bar => [].filter.call(bar.childNodes, n => n.nodeType === 3 || (n.nodeType === 1 && n.tagName !== 'BUTTON' && n.tagName !== 'LABEL' && !/\b(db-pad|mk-pad)\b/.test(n.className || ''))).map(n => (n.textContent || '').trim()).filter(Boolean);
+    const wasDraw = !!(FM.drawTool && FM.drawTool.active), wasMask = !!(FM.maskTool && FM.maskTool.isActive()), wasPick = !!(FM.tracker && FM.tracker.isPicking()), wasFill = !!(FM.templateFill && FM.templateFill.isOpen());
+    try {
+      P.width = 1080; P.height = 1920;
+      /* THE PEN BAR (a shape drawn point by point) */
+      S.layers = []; FM.selectLayer(null); FM.time = 0;
+      FM.startDraw('vector'); await sleep(240);
+      const db = document.getElementById('draw-bar'), add = db && db.querySelector('.db-add');
+      if (!FM.drawTool.active || !db || !shown(add) || !shown(db.querySelector('.db-done'))) throw new Error('CONTROL: the pen tool did not open its bar with + Add point and Done');
+      const dpad = db.querySelector('.db-pad'), dline = db.querySelector('.db-hint');
+      if (!dpad || !dline) throw new Error('CONTROL: the pen bar has no pad or no line element (.db-pad, .db-hint)');
+      if (!dpad.querySelector('.pad-mark path')) fails.push('the pen bar’s pad wears no drawn mark');
+      if (dpad.querySelector('.db-pad-hint') || HOWTO.test(dpad.textContent || '')) fails.push('the pen bar’s pad still carries a sentence (“' + (dpad.textContent || '').trim() + '”)');
+      if (!/move the point/i.test(dpad.getAttribute('aria-label') || '')) fails.push('the pen bar’s pad is named “' + (dpad.getAttribute('aria-label') || '') + '” for a screen reader');
+      if ((dline.textContent || '').trim()) fails.push('with no point yet the pen bar says “' + dline.textContent + '”, want nothing');
+      const send = (t, x, y, b) => attached(dpad, 'the pen bar’s pad').dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'touch', isPrimary: true, buttons: b }));
+      send('pointerdown', 100, 100, 1); send('pointerup', 100, 100, 0); add.click(); await sleep(40);
+      const one = (dline.textContent || '').trim();
+      send('pointerdown', 100, 100, 1); send('pointermove', 180, 140, 1); send('pointerup', 180, 140, 0); add.click(); await sleep(40);
+      const two = (dline.textContent || '').trim();
+      if (FM.drawTool.points.length !== 2) throw new Error('CONTROL: two presses of + Add point left ' + FM.drawTool.points.length + ' points, so the count that was read is not of this shape · ' + fails.join(' · '));
+      if (one !== '1 point' || two !== '2 points') fails.push('the pen bar’s line read “' + one + '” after one point and “' + two + '” after two, want 1 point and 2 points and nothing else');
+      if (FM.drawTool._stop) FM.drawTool._stop(); await sleep(120);
+      /* THE MASK BAR: closed, a point selected, and an open path */
+      const M = FM.makeLayer('shape', { shape: 'rect', name: 'Mask 1255', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#c04070' });
+      M.start = 0; M.duration = 5;
+      M.masks = [{ id: 'mk1255', enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true, path: [[100, 100], [300, 100], [300, 300], [100, 300]] },
+                 { id: 'mk1255o', enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: false, path: [[100, 100], [300, 100]] }];
+      S.layers = [M]; FM.selectLayer(M.id); FM.refreshAll(); await sleep(160);
+      FM.maskTool.open(M.id, 'mk1255'); await sleep(260);
+      let mb = document.getElementById('mask-bar');
+      if (!FM.maskTool.isActive() || !mb || !shown(mb.querySelector('.mk-done'))) throw new Error('CONTROL: the mask tool did not open its bar with Done · ' + fails.join(' · '));
+      if (says(mb).length) fails.push('with a closed mask the mask bar says “' + says(mb).join(' ') + '” beside its buttons');
+      FM.maskTool._select(1); await sleep(160);
+      mb = document.getElementById('mask-bar');
+      const mpad = mb && mb.querySelector('.mk-pad');
+      if (!mpad || !shown(mb.querySelector('.mk-del'))) throw new Error('CONTROL: selecting a mask point did not offer the pad and Delete · ' + fails.join(' · '));
+      if (says(mb).length) fails.push('with a mask point selected the mask bar says “' + says(mb).join(' ') + '” beside its buttons');
+      if (!mpad.querySelector('.pad-mark path')) fails.push('the mask bar’s nudge pad wears no drawn mark');
+      if (HOWTO.test(mpad.textContent || '')) fails.push('the mask bar’s nudge pad still carries words (“' + (mpad.textContent || '').trim() + '”)');
+      if (!/selected point/i.test(mpad.getAttribute('aria-label') || '')) fails.push('the mask bar’s nudge pad is named “' + (mpad.getAttribute('aria-label') || '') + '” for a screen reader');
+      FM.maskTool.open(M.id, 'mk1255o'); await sleep(260);
+      mb = document.getElementById('mask-bar');
+      if (!mb || !mb.querySelector('.mk-close')) throw new Error('CONTROL: an open mask path did not show Close path on the bar · ' + fails.join(' · '));
+      if (says(mb).length) fails.push('with an open mask path the mask bar says “' + says(mb).join(' ') + '” beside its buttons');
+      FM.maskTool.stop(); await sleep(120);
+      /* THE TRACKER'S BAR: before a point is set, and after */
+      const V = FM.makeLayer('video', { name: 'Track 1255', x: 540, y: 960, start: 0, duration: 3 });
+      V.muted = true;
+      S.layers = [V]; FM.media.set(V.id, { el: offscreen(64, 48), width: 64, height: 48 }); mediaSet.push(V.id);
+      FM.selectLayer(V.id); FM.refreshAll(); await sleep(120);
+      FM.tracker.pick(V); await sleep(80);
+      let tb = document.getElementById('trk-bar');
+      const ov = document.getElementById('trk-overlay');
+      if (!FM.tracker.isPicking() || !tb || !ov || !tb.querySelector('button')) throw new Error('CONTROL: the tracker did not open its bar with Cancel · ' + fails.join(' · '));
+      const before = says(tb).join(' ');
+      if (HOWTO.test(before) || before !== 'No point yet') fails.push('before a point is set the tracker’s bar says “' + before + '”, want No point yet (what is, not how)');
+      ov.dispatchEvent(new PointerEvent('pointerdown', { bubbles: false, cancelable: true, pointerId: 41, pointerType: 'touch', isPrimary: true, clientX: 10, clientY: 10, buttons: 1 }));
+      await sleep(60);
+      tb = document.getElementById('trk-bar');
+      if (!tb || !tb.querySelector('.btn-accent')) throw new Error('CONTROL: a tap on the tracker’s overlay set no point (no Track button) · ' + fails.join(' · '));
+      const afterTap = says(tb).join(' ');
+      if (HOWTO.test(afterTap) || afterTap !== 'Point set') fails.push('with a point set the tracker’s bar says “' + afterTap + '”, want Point set');
+      FM.tracker.cancel(); await sleep(60);
+      /* INSERT YOUR MEDIA */
+      const I = FM.makeLayer('image', { name: 'Slot 1255', x: 540, y: 960 }); I.start = 0; I.duration = 3;
+      S.layers = [I]; P.duration = 3; FM.refreshAll(); await sleep(60);
+      if (!FM.templateFill.open()) throw new Error('CONTROL: Insert your Media refused a project with a replaceable picture · ' + fails.join(' · '));
+      await sleep(160);
+      const tf = document.getElementById('tpl-fill');
+      if (!tf || !tf.querySelector('.tfill-slot')) throw new Error('CONTROL: Insert your Media is open with no slot · ' + fails.join(' · '));
+      const lead = tf.querySelector('.tfill-lead');
+      if ((lead && shown(lead)) || /tap a slot/i.test(tf.textContent || '')) fails.push('Insert your Media still opens with a line above its slots (“' + ((lead && lead.textContent) || 'Tap a slot…') + '”)');
+      const rail = tf.querySelector('.tfill-slots'), scrub = tf.querySelector('.tfill-scrub');
+      if (rail && scrub) { const gap = tf.querySelector('.tfill-slot').getBoundingClientRect().top - scrub.getBoundingClientRect().bottom; if (!(gap >= 8)) fails.push('with the line gone the first slot sits ' + gap.toFixed(1) + ' px under the scrub bar, want 8 or more'); }
+      FM.templateFill.close(); await sleep(80);
+    } finally {
+      try { if (FM.drawTool && FM.drawTool.active && !wasDraw && FM.drawTool._stop) FM.drawTool._stop(); } catch (e) {}
+      try { if (FM.maskTool.isActive() && !wasMask) FM.maskTool.stop(); } catch (e) {}
+      try { if (FM.tracker.isPicking() && !wasPick) FM.tracker.cancel(); } catch (e) {}
+      try { if (FM.templateFill.isOpen() && !wasFill) FM.templateFill.close(); } catch (e) {}
+      mediaSet.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      P.width = size0.w; P.height = size0.h; P.duration = dur0;
+      S.layers = keep; S.selectedId = keepSel; FM.time = keepT;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+    if (fails.length) throw new Error(fails.join(' · ') + ' — his words: “There shouldn’t be any explanations like that… not, you know, constantly there”');
     } finally { _isoK.put(); }
   });
 

@@ -537,6 +537,13 @@ body {
    earlier keyframes" wraps — every line started hard against the pad's left edge, 12px outside the
    brackets that frame it. */
 .mt-trackpad-hint { color: #56657c; font-size: 13px; pointer-events: none; padding: 0 16px; text-align: center; }
+/* #1255: A SWIPE PAD'S DRAWN FOUR-WAY MARK (FM.PAD_MARK, js/draw-tool.js), where its sentence stood ("There shouldn't be any explanations
+   like that"). The Move pad's own line is empty at rest and takes no room; it names a snap while one holds, and the mark steps aside
+   for those words. The pen bar's pad is tall (104 px) and takes the same mark; the mask bar's is a 40 px strip and takes a smaller one. */
+.pad-mark { width: 28px; height: 28px; flex: none; color: #56657c; pointer-events: none; }
+.mt-trackpad-hint:empty { display: none; }
+.mt-trackpad.snap-x .pad-mark, .mt-trackpad.snap-y .pad-mark { display: none; }
+.mk-pad .pad-mark { width: 20px; height: 20px; color: var(--text-faint); }
 .mt-trackpad::before, .mt-trackpad::after { content: ''; position: absolute; width: 20px; height: 20px; border: 2px solid #475774; }
 .mt-trackpad::before { left: 12px; top: 12px; border-right: 0; border-bottom: 0; border-radius: 6px 0 0 0; }
 .mt-trackpad::after { right: 12px; bottom: 12px; border-left: 0; border-top: 0; border-radius: 0 0 6px 0; }
@@ -6585,7 +6592,7 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
                     repeating-linear-gradient(0deg, rgba(255,255,255,.07) 0 1px, transparent 1px 26px);
 }
 #draw-bar .db-pad:active { cursor: grabbing; border-color: var(--accent); }
-#draw-bar .db-pad-hint { font-size: 11px; color: var(--text-faint); pointer-events: none; padding: 0 10px; line-height: 1.35; }
+#draw-bar .db-pad .pad-mark { color: var(--text-faint); }   /* #1255: the pad's drawn mark, where .db-pad-hint's sentence stood */
 #draw-bar .db-add { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 
 /* ⋯ menu quick-colour strip + parent-picker button state */
@@ -10460,7 +10467,7 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
    container's own padding — so the first slot snapped to scrollLeft: 14 and sat flush against the
    screen edge with its selection ring clipped. Measured, not guessed: padding read 14px and scrollLeft
    read 14 at the same moment. */
-.tfill-slots { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; padding: 0 14px 4px;
+.tfill-slots { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; padding: 12px 14px 4px;   /* 12 px on top: the gap the lead line's box gave before #1255 took the line */
                scroll-snap-type: x proximity; scroll-padding: 0 14px; }
 .tfill-slot { position: relative; flex: 0 0 auto; width: 84px; padding: 0; border-radius: 12px; cursor: pointer;
               background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; scroll-snap-align: start; }

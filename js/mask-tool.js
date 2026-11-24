@@ -305,18 +305,15 @@ window.FM = window.FM || {};
   function updateBar() {
     if (!bar) return;
     bar.innerHTML = '';
-    const hint = document.createElement('span');
-    hint.style.cssText = 'font-size:12px;color:var(--text-faint);max-width:44vw;';
+    /* (#1255, his words of 23 Nov: "There shouldn't be any explanations like that". The bar began with a line that changed with the mask:
+       "Tap to add mask points", "Tap the first point to close", "Drag points · tap an edge to add · double-tap to delete". It holds its
+       buttons only now.) */
     if (!closed) {
-      hint.textContent = pts.length < 3 ? 'Tap to add mask points' : 'Tap the first point to close';
-      bar.appendChild(hint);
       if (sel >= 0 && pts.length) { const del = mkBtn('Delete', 'mk-del'); del.addEventListener('click', () => delPoint(sel)); bar.appendChild(del); }
       const close = mkBtn('Close path', 'mk-close');
       if (pts.length < 3) close.disabled = true, close.style.opacity = '.45';
       close.addEventListener('click', closePath); bar.appendChild(close);
     } else {
-      hint.textContent = 'Drag points · tap an edge to add · double-tap to delete';
-      bar.appendChild(hint);
       if (sel >= 0) {
         const sm = mkBtn(pts[sel] && pts[sel][2] === 1 ? 'Corner' : 'Smooth', 'mk-smooth');
         sm.addEventListener('click', () => { toggleSmooth(sel); updateBar(); });
@@ -337,10 +334,8 @@ window.FM = window.FM || {};
       pad.className = 'mk-pad';
       pad.title = 'Swipe here to move the selected point precisely';
       pad.style.cssText = 'flex:1 1 90px;min-width:70px;max-width:180px;min-height:40px;border:1px dashed var(--line);border-radius:12px;background:var(--panel-2);display:flex;align-items:center;justify-content:center;text-align:center;touch-action:none;cursor:grab;';
-      const ph = document.createElement('span');
-      ph.style.cssText = 'font-size:10.5px;color:var(--text-faint);pointer-events:none;padding:0 8px;line-height:1.3;';
-      ph.textContent = 'Swipe to nudge';
-      pad.appendChild(ph);
+      pad.insertAdjacentHTML('beforeend', FM.PAD_MARK || '');   // #1255: the drawn mark every swipe pad wears, where "Swipe to nudge" stood; its title and its name keep the words
+      pad.setAttribute('role', 'group'); pad.setAttribute('aria-label', 'Swipe here to move the selected point precisely');
       bar.appendChild(pad);
       FM.nudgePad(pad, {
         get: () => (pts[sel] ? [pts[sel][0], pts[sel][1]] : null),
@@ -417,7 +412,7 @@ window.FM = window.FM || {};
       window.addEventListener('pointercancel', onUp, true);
       window.addEventListener('resize', onResize);
       bar = document.createElement('div'); bar.id = 'mask-bar';
-      bar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:max(18px,env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:8px 10px 8px 16px;box-shadow:0 6px 24px rgba(0,0,0,.5);max-width:94vw;';
+      bar.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:max(18px,env(safe-area-inset-bottom));z-index:60;display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:8px 10px;box-shadow:0 6px 24px rgba(0,0,0,.5);max-width:94vw;';   // even padding: the bar holds its buttons only (#1255; the 16 px on the left was the gesture line's)
       document.body.appendChild(bar);
       // The green add-FAB shares the bottom strip and sat exactly over the Done pill at 380px — a user
       // finishing a mask hit + and opened the Add sheet mid-edit. Park it while the editor owns the

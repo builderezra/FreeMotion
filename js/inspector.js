@@ -14,6 +14,10 @@ window.FM = window.FM || {};
     if (text != null) n.textContent = text;
     return n;
   }
+  /* #1255 (his words, 23 Nov: "There shouldn't be any explanations like that… not, you know, constantly there"): a swipe pad wears the
+     drawn four-way mark (FM.PAD_MARK in js/draw-tool.js, one string for every pad) and the sentence it carried becomes its name for
+     a screen reader. The mark is a fixed string. */
+  function padMark(pad, name) { pad.insertAdjacentHTML('beforeend', FM.PAD_MARK || ''); pad.setAttribute('role', 'group'); pad.setAttribute('aria-label', name); return pad; }
   function round(v, dp) { const m = Math.pow(10, dp); return Math.round(v * m) / m; }
   function commitH() { if (FM.history) FM.history.commit(); }
   function keyframeName(button, label, read) {
@@ -5573,7 +5577,7 @@ window.FM = window.FM || {};
     const bx = mtVBox('X', () => { const s = pe.getSel(); return s ? s.x : 0; }, v => { const s = pe.getSel(); if (s) pe.setSelPos(v, s.y); }, { dp: 1, scrub: 1 });
     const by = mtVBox('Y', () => { const s = pe.getSel(); return s ? s.y : 0; }, v => { const s = pe.getSel(); if (s) pe.setSelPos(s.x, v); }, { dp: 1, scrub: 1 });
     values.append(bx, by); center.appendChild(values);
-    const pad = el('div', 'mt-trackpad'); pad.appendChild(el('span', 'mt-trackpad-hint', 'Swipe here to move point'));
+    const pad = padMark(el('div', 'mt-trackpad'), 'Swipe here to move the point');   // #1255: the mark, not the sentence
     const sens = ((FM.scene.project.width || 1080) / 300);
     let pd = null;
     /* ⚠️ ONE FINGER MOVES THE POINT (queue 690, real input, round two). This pad steps from the LAST event, so a second
@@ -5591,7 +5595,8 @@ window.FM = window.FM || {};
     pad.addEventListener('pointerup', e => { if (!pd || otherPtFinger(e)) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} pe.commit(); });
     pad.addEventListener('pointercancel', e => { if (!pd || otherPtFinger(e)) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} pe.commit(); });
     center.appendChild(pad);
-    center.appendChild(el('div', 'insp-hint', 'Tap a point to select it · on a curve point, drag its handles to shape the curve · tap a hollow ring to add a point · double-tap to delete'));
+    /* (#1255: a paragraph stood under the pad every time the point editor was open: "Tap a point to select it · on a curve point, drag its
+       handles to shape the curve · tap a hollow ring to add a point · double-tap to delete". The lesson on custom shapes teaches it.) */
 
     // stroke still belongs to the shape (open drawings need their line width here)
     if (!layer.stroke) layer.stroke = { enabled: false, width: 8, color: '#ffffff' };
@@ -5754,8 +5759,9 @@ window.FM = window.FM || {};
       if ((FM._mtAxis || 'xy') === 'z') {
         const zpad = el('div', 'mt-trackpad mt-zpad');
         zpad.appendChild(el('i', 'mt-zpad-arrow up'));
-        const zhint = el('span', 'mt-trackpad-hint', 'Swipe here to adjust Z position');
-        zpad.appendChild(zhint);
+        /* (#1255: "Swipe here to adjust Z position" stood between the arrows. The arrows are the pad's sign and the lit Z chip above says
+           which number it moves, so the sentence is the pad's name for a screen reader only.) */
+        zpad.setAttribute('role', 'group'); zpad.setAttribute('aria-label', 'Swipe up or down to change the Z position');
         zpad.appendChild(el('i', 'mt-zpad-arrow down'));
         const zsens = ((FM.scene.project.width || 1080) / 640) * 2;   // depth ranges wider than x/y
         let zd = null;
@@ -5781,7 +5787,10 @@ window.FM = window.FM || {};
 
       // 2D trackpad
       const pad = el('div', 'mt-trackpad');
-      const padHint = el('span', 'mt-trackpad-hint', 'Swipe here to move layer · snaps to centre, edges & earlier keyframes');
+      /* #1255: EMPTY AT REST. It read "Swipe here to move layer · snaps to centre, edges & earlier keyframes" all the while; the pad
+         wears the drawn mark instead (padMark below). This line still NAMES a snap while one holds (showPadSnap): that says what
+         just happened, it is not a how-to; styles.css takes the mark away while it speaks and gives the empty line no room. */
+      const padHint = el('span', 'mt-trackpad-hint', '');
       // Snapping was invisible: the layer just stopped somewhere and you had to guess whether it had
       // actually landed on anything (Ezra: "there should be an indicator of grid snapping when you are
       // using the move and transform move pad"). Now the pad shows a rule on the axis that locked, the
@@ -5789,6 +5798,7 @@ window.FM = window.FM || {};
       // same guide the X/Y boxes already used but the pad never asked for.
       const padVRule = el('i', 'mt-pad-rule v'), padHRule = el('i', 'mt-pad-rule h');
       pad.appendChild(padVRule); pad.appendChild(padHRule); pad.appendChild(padHint);
+      padMark(pad, 'Swipe here to move the layer. It snaps to the centre, the edges and earlier keyframes');
       const PAD_HINT = padHint.textContent;
       const targetName = (v, axis) => {
         const P = FM.scene.project;
@@ -6088,7 +6098,7 @@ window.FM = window.FM || {};
       const bax = mtVBox('Anchor X', () => getA('anchorX') * 100, v => setAnchor(v / 100, getA('anchorY')), { dp: 1, unit: '%', scrub: 0.3, min: -400, max: 500, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
       const bay = mtVBox('Anchor Y', () => getA('anchorY') * 100, v => setAnchor(getA('anchorX'), v / 100), { dp: 1, unit: '%', scrub: 0.3, min: -400, max: 500, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
       refreshables.push(bax, bay); values.append(bax, bay);
-      const apad = el('div', 'mt-trackpad'); apad.appendChild(el('span', 'mt-trackpad-hint', 'Swipe to place the anchor · snaps to the quarter points'));   // queue 759: the grid is 0 / ¼ / ½ / ¾ / 1 each way — 25 points, not nine
+      const apad = padMark(el('div', 'mt-trackpad'), 'Swipe to place the anchor. It snaps to the quarter points');   // queue 759: the grid is 0 / ¼ / ½ / ¾ / 1 each way — 25 points, not nine. #1255: the sentence is the pad's name now, the mark is on it
       // 260px of swipe crosses the layer, and it snaps to the 25 quarter points (queue 759: the hint used to say nine)
       const SNAP = [0, 0.25, 0.5, 0.75, 1];
       const snapA = v => { if (!magnetOn()) return v; for (let i = 0; i < SNAP.length; i++) if (Math.abs(v - SNAP[i]) < 0.045) return SNAP[i]; return v; };
