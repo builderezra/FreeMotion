@@ -207229,6 +207229,57 @@
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
   });
 
+  /* #1243 S28's Volume row, his words of 24 Nov: "I feel like volume should be able to go up to like 10 times." The row's slider stopped at
+     200 %; Full's has gone to 1000 % since queue 195 and Simple's command never clamped below that. The slider is in two halves: 0–100 %
+     as it was, then 100 % to 1000 % in equal steps of loudness. Driven as he does it (the slider's input and change), the level read
+     from the clip. CONTROLS: 50 on the slider is still 50 %, and a level of 350 % set in Full shows where it is. */
+  test('1243 S28 · Simple’s Volume goes up to ten times: the slider’s end writes 1000 % in one step and says so, half way up its right half is about 316 %, a level of 350 % set in Full shows at its own place and reads 350%, the left half is 0 to 100 % as before and still rests on 100 %, and at 380 the row’s number is whole on screen at 1000% (CONTROLS: 50 on the slider writes 50 %; before any press the clip is at 100 %)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await r4At(380, 0, async function () {
+      await smFakeLoad(() => smP2((W, H) => [smV('B', 3, 3, W, H, { muted: false, volume: 3.5 }), smV('A', 0, 3, W, H, { muted: false })], async function (v) {
+        const lvl = n => { const L = v.L(n), x = L.volume == null ? 1 : FM.evalProp(L.volume, FM.time); return Math.round(x * 100); };
+        const row = async n => {
+          FM.selectLayer(null); FM.selectLayer(v.L(n).id); await r4Settle(150);
+          if (!smTool('volume')) throw new Error('setup: ' + n + '’s tray has no Volume (' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+          smTool('volume').click(); await r4Settle(150);
+          const rng = document.querySelector('#sm-tray .sm-vol-r:not(.sm-opa-r)'), val = document.querySelector('#sm-tray .sm-vol-v:not(.sm-opa-v)');
+          if (!rng || !val) throw new Error('setup: ' + n + '’s Volume row has no slider or no number');
+          return { rng: rng, val: val };
+        };
+        const set = async (r, p) => { r.rng.value = String(p); r.rng.dispatchEvent(new Event('input', { bubbles: true })); const said = r.val.textContent; r.rng.dispatchEvent(new Event('change', { bubbles: true })); await v.idle(); await r4Settle(80); return said; };
+        FM.time = 0;
+        if (lvl('A') !== 100) throw new Error('CONTROL: before any press clip A is at ' + lvl('A') + ' %, not 100');
+        let r = await row('A');
+        if (+r.rng.max !== 200 || r.rng.value !== '100') fails.push('at 100 % the slider stands at ' + r.rng.value + ' of ' + r.rng.max + ', want the middle (100 of 200)');
+        const n0 = v.steps();
+        let said = await set(r, 50);
+        if (lvl('A') !== 50 || said !== '50%') throw new Error('CONTROL: 50 on the slider wrote ' + lvl('A') + ' % and said “' + said + '”, want 50 % · ' + fails.join(' · '));
+        r = await row('A');
+        said = await set(r, 200);
+        if (lvl('A') !== 1000) fails.push('the slider’s end wrote ' + lvl('A') + ' %, want 1000 % — his words: “volume should be able to go up to like 10 times”');
+        if (said !== '1000%') fails.push('at its end the row says “' + said + '”, want 1000%');
+        if (v.steps() !== n0 + 2) fails.push('two changes of volume took ' + (v.steps() - n0) + ' undo steps, want one each');
+        r = await row('A');
+        if (r.rng.value !== '200') fails.push('at 1000 % the slider stands at ' + r.rng.value + ', want its end (200)');
+        const vr = r.val.getBoundingClientRect();
+        if (r.val.scrollWidth > r.val.clientWidth + 1 || vr.right > innerWidth + 0.5 || vr.left < -0.5) fails.push('at 380 the number “' + r.val.textContent + '” is cut or off screen (' + Math.round(vr.left) + '–' + Math.round(vr.right) + ' of ' + innerWidth + ')');
+        if ((r.rng.getAttribute('aria-valuetext') || '') !== '1000%') fails.push('a screen reader hears “' + r.rng.getAttribute('aria-valuetext') + '” for the slider at its end, want 1000%');
+        said = await set(r, 150);
+        if (!(lvl('A') >= 310 && lvl('A') <= 322)) fails.push('half way up the right half wrote ' + lvl('A') + ' %, want about 316 % (equal steps of loudness from 100 to 1000)');
+        if (said !== lvl('A') + '%') fails.push('the row said “' + said + '” and wrote ' + lvl('A') + ' %: what it shows is not what it writes');
+        r = await row('A');
+        r.rng.value = '97'; r.rng.dispatchEvent(new Event('input', { bubbles: true })); await r4Settle(40);
+        if (r.rng.value !== '100' || r.val.textContent !== '100%') fails.push('97 on the slider did not rest on 100 % (it stands at ' + r.rng.value + ' and says “' + r.val.textContent + '”)');
+        /* a level Full set above 200 %: shown where it is, not pinned to an end */
+        r = await row('B');
+        if (r.val.textContent !== '350%') fails.push('a clip Full set to 350 % reads “' + r.val.textContent + '” in Simple’s row');
+        if (!(+r.rng.value >= 152 && +r.rng.value <= 156)) fails.push('a clip at 350 % stands at ' + r.rng.value + ' on the slider, want about 154 (its own place in the right half), not an end');
+      }));
+    });
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
   /* ═══ #1243 R RELEASE 8b · THE REST OF S33's FIRST WAVE (1243-R (c) row 8b; R (a)'s trays) ═══
      His words, 8 Nov (S33): "a second section where it's got stuff like makeup, like retouch… opacity, motion blur… another section which is
      more like an audio section where they've got extract audio, isolate voice… reduce noise, audio effects, enhance voice". Each door drives

@@ -738,15 +738,25 @@ window.FM = window.FM || {};
     if (!t) return;
     const now = (() => { const v = t.volume == null ? 1 : FM.evalProp(t.volume, FM.time); return isFinite(v) ? v : 1; })();
     const val = el('span', 'sm-vol-v', pct(now) + '%');
-    const rng = el('input', 'sm-vol-r'); rng.type = 'range'; rng.min = '0'; rng.max = '200'; rng.step = '1'; rng.value = String(Math.min(200, pct(now)));
+    /* HIS WORDS, 24 Nov: "I feel like volume should be able to go up to like 10 times." Full's Volume has gone to 1000 % since queue 195
+       (a boost goes through the limiter in the preview and in the export) and Simple's command never clamped below that (S.planVolume);
+       only this row stopped at 200 %. A plain slider over 0–1000 would squeeze every ordinary level into its first tenth (the reason
+       Full's is a ruler), so the slider is in TWO HALVES: positions 0–100 are 0–100 % exactly as before, positions 100–200 run from
+       100 % to the top in equal steps of loudness (the same ratio each step: half way up is about 316 %). What it shows is what it
+       writes: whole per cent. */
+    const VOL_TOP = Math.max(1, +((FM.LIMITS && FM.LIMITS.volume) || [])[1] || 10), TOP_LOG = Math.log10(VOL_TOP);
+    const posOf = v => v <= 1 ? Math.max(0, v) * 100 : Math.min(200, 100 + 100 * Math.log10(Math.min(VOL_TOP, v)) / TOP_LOG);
+    const volOf = p => p <= 100 ? Math.max(0, p) / 100 : Math.round(100 * Math.pow(VOL_TOP, (Math.min(200, p) - 100) / 100)) / 100;
+    const rng = el('input', 'sm-vol-r'); rng.type = 'range'; rng.min = '0'; rng.max = '200'; rng.step = '1'; rng.value = String(Math.round(posOf(now)));
     rng.setAttribute('aria-label', w.volumeLabel || 'Volume in percent');
-    /* #1243 S28 polish (B S28 step 4: "0-200% with a soft stop at 100% and a Mute pill"): the slider rests on 100% within 4 of it, so the
-       clip's own level is easy to find again */
-    const soft = () => { let p = parseFloat(rng.value); if (Math.abs(p - 100) <= 4 && Math.abs(now * 100 - p) > 0.5) { p = 100; rng.value = '100'; } return p / 100; };
-    rng.addEventListener('input', () => { const v = soft(); val.textContent = pct(v) + '%'; const m = FM.media && FM.media.get(t.id); if (m && m.el) { try { m.el.volume = Math.min(1, v); } catch (e) {} } });
+    rng.setAttribute('aria-valuetext', pct(now) + '%');   // the slider's own number is a position since the two halves: a screen reader hears the level
+    /* #1243 S28 polish (B S28 step 4: "a soft stop at 100% and a Mute pill"): the slider rests on 100% within 4 of it, so the clip's own
+       level is easy to find again */
+    const soft = () => { let p = parseFloat(rng.value); if (Math.abs(p - 100) <= 4 && Math.abs(posOf(now) - p) > 0.5) { p = 100; rng.value = '100'; } return volOf(p); };
+    rng.addEventListener('input', () => { const v = soft(); val.textContent = pct(v) + '%'; rng.setAttribute('aria-valuetext', pct(v) + '%'); const m = FM.media && FM.media.get(t.id); if (m && m.el) { try { m.el.volume = Math.min(1, v); } catch (e) {} } });
     rng.addEventListener('change', () => { const v = soft(); if (Math.abs(v - now) > 0.004) S.cmd.volume(id, v); });
     run.append(rng, val);
-    put(run, { id: 'mute', label: w.mute || 'Mute', icon: 'mute', pressed: !!t.muted, run: () => S.cmd.mute(id, !t.muted) });   // R (a) "Volume: ‹ · 0–200 % · Mute"
+    put(run, { id: 'mute', label: w.mute || 'Mute', icon: 'mute', pressed: !!t.muted, run: () => S.cmd.mute(id, !t.muted) });   // R (a) "Volume: ‹ · 0–200 % · Mute" (to 1000 % since 24 Nov)
   }
   /* #1243 R release 8 (R (a) "Opacity: ‹ · slider"; his S33 words: "they've got opacity"): 0–100 %, the picture changes while the slider
      moves (the preview is taken back to the byte before the one step lands, as Strength's is), one step on release */
