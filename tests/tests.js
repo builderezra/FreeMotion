@@ -211434,6 +211434,84 @@
     } finally { _isoK.put(); }
   });
 
+  /* #1255, from the v18.53 review. cam-help-sticks: FM._camHelp was cleared only by the page's own ‹, so after the card's back, a tap on
+     another layer or the inspector's back, Camera Options on the same camera opened on the lesson again instead of its controls.
+     MERGE-2: the page fetched lesson 15 and, offline after an update (sw.js keeps only this version's lessons), said only that it could
+     not load. It now opens at once on a short paragraph of its own for the tab he came from, which the lesson replaces when it loads. */
+  test('1255 hints · the camera’s ? page ends with any way out of its card: after the card’s own back, a tap on another layer and the camera again, or the inspector’s back, Camera Options opens on its controls and not the lesson; and the page is never empty: with the lesson unreachable it shows a short paragraph for the Fog tab he came from and no Couldn’t load (CONTROLS: the ? showed the page each time; with the lesson reachable its steps replace the paragraph)', { item: '1255', budgetMs: 60000 }, async function () {
+    const _isoK = isoKeep(); try {
+    const S = FM.scene, layers0 = S.layers.slice(), sel0 = S.selectedId, dur0 = S.project.duration, tab0 = FM._camTab, T = FM.tutorials, load0 = T && T.load, fails = [];
+    const insp = () => document.getElementById('inspector');
+    const onPage = () => !!insp().querySelector('.cam-helpbody');
+    const onControls = () => !onPage() && !!insp().querySelector('.cam-tab');
+    const openCam = async () => { FM.inspector.openCategory('cameraopts'); await sleep(300); };
+    const toControls = async () => { const b = insp().querySelector('.cam-helprow .cs-backbtn'); if (b) { b.click(); await sleep(250); } };
+    const pressQ = async what => {
+      const q = insp().querySelector('.cam-help');
+      if (!q) throw new Error('CONTROL (' + what + '): Camera Options shows no ? · ' + fails.join(' · '));
+      q.click(); await sleep(250);
+      if (!onPage()) throw new Error('CONTROL (' + what + '): a press on ? did not show the page · ' + fails.join(' · '));
+    };
+    try {
+      if (!T || !load0) throw new Error('setup: FM.tutorials.load is missing');
+      if (!FM.addCameraLayer) throw new Error('setup: there is no camera layer to add');
+      S.layers.length = 0;
+      FM.addShapeLayer('rect');
+      S.layers.forEach(l => { l.start = 0; l.duration = 5; });
+      S.project.duration = 5;
+      FM.addCameraLayer(); await sleep(320);
+      const cam = S.layers.filter(l => l.type === 'camera')[0], other = S.layers.filter(l => l.type !== 'camera')[0];
+      if (!cam || !other) throw new Error('setup: the camera or the shape was not created');
+      cam.start = 0; cam.duration = 5;
+      FM._camHelp = false; FM._camTab = 'view';
+      FM.selectLayer(cam.id); FM.refreshAll(); await sleep(320);
+      /* 1: the card's own back */
+      await openCam(); await pressQ('the card’s back');
+      const cb = insp().querySelector('.cat-back');
+      if (!cb) throw new Error('CONTROL: the camera’s card has no back of its own');
+      cb.click(); await sleep(250);
+      await openCam();
+      if (!onControls()) fails.push('after the card’s own back, Camera Options opened on the lesson again, not its controls');
+      await toControls();
+      /* 2: another layer, then the camera again */
+      await pressQ('another layer');
+      FM.selectLayer(other.id); FM.refreshAll(); await sleep(250);
+      FM.selectLayer(cam.id); FM.refreshAll(); await sleep(250);
+      await openCam();
+      if (!onControls()) fails.push('after a tap on another layer and the camera again, Camera Options opened on the lesson, not its controls');
+      await toControls();
+      /* 3: the inspector's back */
+      await pressQ('the inspector’s back');
+      FM.inspector.back(); await sleep(250);
+      await openCam();
+      if (!onControls()) fails.push('after the inspector’s back, Camera Options opened on the lesson, not its controls');
+      await toControls();
+      /* the page is never empty: the lesson cannot be fetched */
+      FM._camTab = 'fog'; FM.inspector.refresh(); await sleep(250);
+      T.load = () => Promise.reject(new Error('offline, for the test'));
+      await pressQ('offline');
+      await sleep(250);
+      const off = (insp().querySelector('.cam-helpbody') || {}).textContent || '';
+      if (/Couldn.t load|Loading/.test(off)) fails.push('with the lesson unreachable the ? page says “' + off.trim().slice(0, 60) + '” and nothing about the camera');
+      if (off.indexOf('Fog') < 0 || off.indexOf('Near distance') < 0) fails.push('with the lesson unreachable the ? page does not say what Fog does (“' + off.trim().slice(0, 60) + '”)');
+      T.load = load0;
+      await toControls();
+      /* CONTROL: reachable, the lesson's steps replace the paragraph */
+      await pressQ('online');
+      for (let i = 0; i < 80 && !insp().querySelector('.cam-helpbody .tut-steps li'); i++) await sleep(50);
+      if (!insp().querySelector('.cam-helpbody .tut-steps li')) throw new Error('CONTROL: with the lesson reachable the ? page did not draw its steps · ' + fails.join(' · '));
+      if (insp().querySelector('.cam-help-own')) fails.push('the lesson drew its steps but the short paragraph is still on the page above it');
+    } finally {
+      if (T) T.load = load0;
+      FM._camHelp = false; FM._camTab = tab0;
+      S.layers.length = 0; layers0.forEach(l => S.layers.push(l)); S.selectedId = sel0; S.project.duration = dur0;
+      try { FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild(); } catch (e) {}
+      await sleep(60);
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+    } finally { _isoK.put(); }
+  });
+
   /* ═══ #1255, THE THIRD HINTS CUT: THE EDIT-TOGETHER CARD HOLDS NO SMALL LINES OF EXPLANATION ═══════════════════════════════════════════
      His words, 24 Nov: "you can choose whatever you want for the edit together card, having small lines. Just know that my preference
      is as little as possible, so as clean and simple as possible, with no explanations at all. And just you can have a question mark

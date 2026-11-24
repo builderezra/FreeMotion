@@ -21,7 +21,7 @@ You'll be able to move the whole scene as if a camera were filming it.
 
 On a computer: the same. Click an empty spot in the timeline first so the Add panel shows at the bottom left. <!-- not walked: the walk was the 380 px phone layout only -->
 
-Tip: Field of view and Distance only matter when layers sit at different depths. Give a layer a Z value in Position / Scale first.
+Tip: Field of view, Distance, Focus blur and Fog only matter when layers sit at different depths. Give a layer a Z value in Position / Scale first.
 
 If it doesn't work: If nothing moves, check the camera is the selected layer when you set the keyframes, not one of your clips.
 
@@ -46,4 +46,5 @@ If it doesn't work: If nothing moves, check the camera is the selected layer whe
 | Tip: Field of view / Distance rows | js/inspector.js:5842 | yes |
 | 4 Move pressed while lit switches to anchor and hides the diamond | js/inspector.js:5370-5378, :4970-4977 | yes |
 | 8 the ? beside the tab's name shows this lesson in the panel | js/inspector.js camHelp, camPanel | added 24 Nov for #1255 |
+| Tip: Focus blur and Fog need depth too (the panel's own lines said so until #1255) | js/inspector.js camPanel (Focus: flatSceneWarning; Fog: Near and Far distance act on Z) | added 25 Nov |
 | Camera View / Focus Blur / Fog / Motion Blur paragraphs: what the panel's own six paragraphs said until #1255 | js/inspector.js camPanel (CAM_TABS' labels; the Focus blur, Fog and Motion blur ticks; Shutter, Samples) | moved here 24 Nov |

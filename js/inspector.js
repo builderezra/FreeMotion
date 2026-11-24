@@ -6703,7 +6703,17 @@ window.FM = window.FM || {};
      and textContent only), so the panel and the Tutorials tab can never disagree. FM._camHelp is transient, like FM._camTab: never
      saved, and it belongs to the camera it was opened on.
      WHAT STAYS: the line that says these controls can do nothing on a flat scene (queue 595). It reports THIS scene, at the moment it
-     matters, and goes away when a layer has depth: not a how-to. */
+     matters, and goes away when a layer has depth: not a how-to.
+     THE PAGE IS NEVER EMPTY (review MERGE-2): a lesson is fetched at this version's ?v=, and sw.js drops the last version's copy, so
+     after an update an offline phone could not load it and the page said only "Couldn't load". So the page opens at once on a short
+     paragraph of its own for the tab he came from (CAM_HELP below), and the lesson replaces it when it loads; if it never loads, the
+     paragraph stays. The pattern of the Friends block's page (howItWorks, collab-ui.js drawFriendsHelp). */
+  const CAM_HELP = {
+    view: 'Field of view is the lens: wide pushes layers at different depths apart, narrow flattens the scene. Distance moves the camera in and out. Both only matter when layers sit at different depths.',
+    focus: 'Focus blur softens layers by their depth. Focus distance is the depth that stays sharp, and Depth of field is how far either side of it also stays sharp. It only works when layers sit at different depths.',
+    fog: 'Fog washes far layers towards a colour. A layer at the Near distance is untouched, and at the Far distance it is the fog colour. It only works when layers sit at different depths.',
+    blur: 'Motion blur smears the scene while the camera moves. Shutter is how long the shutter stays open (0.5 is what film uses). More Samples is smoother and slower.',
+  };
   function camHelp(body) {
     const row = el('div', 'cs-backrow cam-helprow');
     const back = el('button', 'cs-backbtn', '‹'); back.type = 'button';
@@ -6713,12 +6723,11 @@ window.FM = window.FM || {};
     row.appendChild(el('div', 'cam-help-title', 'How the camera works'));
     body.appendChild(row);
     const page = el('div', 'cs-helpbody cam-helpbody'), art = el('div', 'cs-lesson');
-    art.appendChild(el('p', 'tut-intro', 'Loading…'));
+    const tab = CAM_HELP[FM._camTab] ? FM._camTab : 'view';
+    art.appendChild(el('p', 'tut-intro cam-help-own', CAM_HELP[tab]));   // at once, and the offline answer
     page.appendChild(art);
     body.appendChild(page);
-    const failed = () => { if (!art.isConnected) return; art.textContent = ''; art.appendChild(el('p', 'tut-intro', 'Couldn’t load this tutorial. Check your connection.')); };
-    if (FM.tutorials && FM.tutorials.load && FM.tutorials.render) FM.tutorials.load('15-camera.md').then(src => { if (art.isConnected) FM.tutorials.render(src, art); }, failed);
-    else failed();
+    if (FM.tutorials && FM.tutorials.load && FM.tutorials.render) FM.tutorials.load('15-camera.md').then(src => { if (art.isConnected) FM.tutorials.render(src, art); }, () => {});
     try { back.focus({ preventScroll: true }); } catch (e) {}
   }
   function camPanel(layer, body) {
@@ -8126,6 +8135,7 @@ window.FM = window.FM || {};
       // to it alone. Left open while a second clip is selected it silently edits one of them, so
       // selecting more drops straight back to the multi actions.
       if (view !== 'home' && FM.selectionIds && FM.selectionIds().length >= 2) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }
+      if (view !== 'cameraopts') FM._camHelp = false;   // #1255 review cam-help-sticks: the camera's ? page ends with any way out of its card
       /* A FLAG THE VIEW CANNOT HONOUR MUST NOT SURVIVE A REFRESH. The crop easing sub-view is gated on
        * layer.crop existing, and this panel deliberately does not create a crop just to show one — so a
        * _cropEasing left armed with no crop sat waiting and hijacked whatever refresh came next, the
