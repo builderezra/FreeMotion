@@ -67,8 +67,10 @@ window.FM = window.FM || {};
     /* Phase 3 · Effect segments: the D16 A set's Effects, Change effect and Strength (tools/design/plans/simple-mode/vis/kit.js) */
     effects: '<path d="M11 3.5l1.9 5.1 5.1 1.9-5.1 1.9L11 17.5l-1.9-5.1L4 10.5l5.1-1.9z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z"/>',
     /* #1243 S14: Ask & edit — a speech bubble with two lines of writing and one small spark, our own drawing in the D16 A stroke.
-       Not the assistant's four-point star: beside Effects in this row a second sparkle would read as the same tool (plan 1243-A S14) */
-    ai: '<path d="M5 5.5h8.5a2.5 2.5 0 0 1 2.5 2.5v6a2.5 2.5 0 0 1-2.5 2.5H10L6 20v-3.5H5A2.5 2.5 0 0 1 2.5 14V8A2.5 2.5 0 0 1 5 5.5z"/><path d="M6.5 9.5h6M6.5 12.5h3.5"/><path d="M19.5 2.4l.75 1.85 1.85.75-1.85.75-.75 1.85-.75-1.85-1.85-.75 1.85-.75z"/>',
+       Not the assistant's four-point star: beside Effects in this row a second sparkle would read as the same tool (plan 1243-A S14).
+       The bubble is 12.5 units wide, not 13.5 (the 24 Nov review, SEE-3): at the 22 px the row draws it the spark's left tip came
+       within a fifth of a pixel of the bubble's corner and the two ran together; there is a whole unit between them now */
+    ai: '<path d="M5 5.5h7.5a2.5 2.5 0 0 1 2.5 2.5v6a2.5 2.5 0 0 1-2.5 2.5H10L6 20v-3.5H5A2.5 2.5 0 0 1 2.5 14V8A2.5 2.5 0 0 1 5 5.5z"/><path d="M6.5 9.5h6M6.5 12.5h3.5"/><path d="M19.5 2.4l.75 1.85 1.85.75-1.85.75-.75 1.85-.75-1.85-1.85-.75 1.85-.75z"/>',
     change: '<path d="M4 9h13l-3.5-3.5M20 15H7l3.5 3.5"/>',
     strength: '<path d="M4 7h9M17 7h3M4 17h3M11 17h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
     /* #1243 R release 8: Opacity, Transform and Transform's row (our own drawings, the D16 A stroke) */
@@ -175,6 +177,7 @@ window.FM = window.FM || {};
        Home closes a sub-row and Extras. Leaving Simple calls nothing here, so Full is today's. */
     let wasSimple = document.body.classList.contains('ed-simple'), wasSheet = document.body.classList.contains('insp-open'), wasHome = document.body.classList.contains('home-open');
     let wasAi = document.body.classList.contains('aic-open');   // #1243 S14: Ask & edit up (js/ai-chat.js show / hide)
+    let wasRo = document.body.classList.contains('collab-ro');   // …and whether he may only look (js/collab-ui.js)
     window.addEventListener('resize', () => { if (wasAi) aiDock(); });
     if (window.MutationObserver) new MutationObserver(() => {
       const b = document.body.classList, s = b.contains('ed-simple'), sh = b.contains('insp-open'), hm = b.contains('home-open'), ai = b.contains('aic-open');
@@ -188,10 +191,25 @@ window.FM = window.FM || {};
            its API key button closes it and opens Settings in one press, and the focus must not go behind Settings (which hands
            the assistant back when it closes) */
         if (!ai && !phone.matches && !(FM.settings && FM.settings.isOpen && FM.settings.isOpen())) {
-          const a = document.activeElement, c = document.getElementById('ai-chat'), n = tools.querySelector('[data-tool="ai"]');
+          /* …to Ask & edit when the project row is back; with an item selected meanwhile ("Tap a layer first and this means that
+             one") the project row is hidden, so to that item's first tool (the 24 Nov review, AI-SM4: the focus fell to the page) */
+          const a = document.activeElement, c = document.getElementById('ai-chat'), n = bar.dataset.mode === 'project' ? tools.querySelector('[data-tool="ai"]') : tray.querySelector('button, input');
           if (n && (!a || a === document.body || (c && c.contains(a)))) n.focus({ preventScroll: true });
         }
       }
+      /* THE ASSISTANT'S SHEET GOING AWAY UNCOVERS THE PLAY ROW TOO (the 24 Nov review, AI-SM3): on a phone its grab bar lies over Link,
+         as the layer sheet's does (MODE-4, below), so a double tap closed it and switched linking for the whole project. The same
+         hold, armed the same way: only when a real press on the assistant came within the last second (noted in mount). */
+      if (s && wasAi && !ai && performance.now() - sheetPressAt < 1000) armShut();
+      /* …and somebody whose role drops to view-only while it is up loses it (the same review): the assistant writes edits, and its
+         door already refuses them (openAi). Simple's line says why. */
+      const ro = b.contains('collab-ro');
+      if (s && ai && ro && !wasRo && FM.aiChat && FM.aiChat.hide) {
+        FM.aiChat.hide();
+        const why = FM.spine && FM.spine.roReason ? FM.spine.roReason() : '';
+        if (why) { if (FM.spine.explain) FM.spine.explain(why); else if (FM.spine.say) FM.spine.say(why); }
+      }
+      wasRo = ro;
       wasAi = ai;
       if (s && !wasSimple) requestAnimationFrame(() => { if (FM.refreshPreviewScale) FM.refreshPreviewScale(); if (FM.canvasEdit && FM.canvasEdit.stageResized) FM.canvasEdit.stageResized(); });
       /* …and Extras as closeExtras closes it, its band drawn again and Clips no longer pressed: the band kept Extras' menu and title under
@@ -267,6 +285,9 @@ window.FM = window.FM || {};
     /* when a real press last came down on the phone's sheet (armShut asks): passive, and it notes nothing in Full */
     const ipanel = document.getElementById('inspector-panel');
     if (ipanel) ipanel.addEventListener('pointerdown', e => { if (e.isTrusted && isSimple()) sheetPressAt = performance.now(); }, { capture: true, passive: true });
+    /* …and on the assistant's sheet (#1243 S14; the 24 Nov review, AI-SM3), which stands at the same sheet line. It is built when it
+       is first opened, so the press is noted on the document. */
+    document.addEventListener('pointerdown', e => { if (!e.isTrusted || !isSimple()) return; const c = document.getElementById('ai-chat'); if (c && e.target && c.contains(e.target)) sheetPressAt = performance.now(); }, { capture: true, passive: true });
     const insp = document.getElementById('inspector');
     if (insp) {
       insp.addEventListener('focusin', e => { if (!isSimple()) return; const t = e.target; lookFocus = (t && t.dataset && t.dataset.look) || ''; });
@@ -2056,6 +2077,12 @@ window.FM = window.FM || {};
      One menu at a time: opening it closes a sub-row, Extras and Look's panel. The assistant writes Full-style edits, which Simple reads
      back like any other edit (a move can leave a gap chip): an op set that speaks Simple's commands is #1243 AI1's job. ═══ */
   const aiUp = () => document.body.classList.contains('aic-open');
+  /* ONE MENU AT A TIME, FROM OUTSIDE THE BAR TOO (the 24 Nov review, AI-SM1 and AI-SM2): the Export button, and on a PC a cut's ◇ on
+     the timeline beside it, can be pressed while the assistant is up. What they open takes its place, as the assistant takes
+     theirs (openAi). Before this Export's panel opened UNDER the assistant, and a second press closed it again unseen. */
+  const aiOff = () => { if (aiUp() && FM.aiChat && FM.aiChat.hide) FM.aiChat.hide(); };
+  /* where Simple's spoken line floats while the assistant is over the PC band (aiDock writes them on the bar; styles.css reads them) */
+  const SAY_VARS = ['--sm-say-l', '--sm-say-w', '--sm-say-b'];
   const AI_VARS = ['--sm-ai-l', '--sm-ai-t', '--sm-ai-w', '--sm-ai-b'];
   let aiSeen = null;   // the band's ResizeObserver while the chat is docked over it
   function aiDock() {
@@ -2063,6 +2090,7 @@ window.FM = window.FM || {};
     if (!c) return;
     const on = isSimple() && !phone.matches && aiUp() && !!band;
     if (!on) {
+      if (bar) SAY_VARS.forEach(p => bar.style.removeProperty(p));
       AI_VARS.forEach(p => c.style.removeProperty(p));
       if (aiSeen) { aiSeen.disconnect(); aiSeen = null; }
       return;
@@ -2071,6 +2099,10 @@ window.FM = window.FM || {};
     if (!(r.width > 0 && r.height > 0)) return;
     const v = [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.max(0, Math.round(innerHeight - r.bottom))];
     AI_VARS.forEach((p, i) => { if (c.style.getPropertyValue(p) !== v[i] + 'px') c.style.setProperty(p, v[i] + 'px'); });
+    /* …and the line Simple says (the 24 Nov review, SEE-2): its place is the bar's top, which is under the assistant here, so a
+       refusal from the timeline beside it ("Locked… Do it anyway") could be neither read nor pressed. It floats just above the
+       assistant's top edge, over the foot of the picture, as a phone panel's line floats above the sheet line. */
+    if (bar) [v[0], v[2], Math.max(0, Math.round(innerHeight - r.top))].forEach((x, i) => { if (bar.style.getPropertyValue(SAY_VARS[i]) !== x + 'px') bar.style.setProperty(SAY_VARS[i], x + 'px'); });
     if (!aiSeen && window.ResizeObserver) { aiSeen = new ResizeObserver(() => aiDock()); aiSeen.observe(band); }
   }
   function panelUp(ids) {
@@ -2261,6 +2293,7 @@ window.FM = window.FM || {};
       if (subFor) { subFor = null; segUndrag(); }
       if (extrasOpen) { extrasOpen = false; extrasMark(); }
       extrasSheetOff();
+      aiOff();   // the 24 Nov review, AI-SM1: Export takes the assistant's place
       if (FM.selectionIds && FM.selectionIds().length && FM.selectLayer) FM.selectLayer(null);
       panelFor = PROJECT; panelKind = 'export'; exportInit(); posterCv = null; posterAt = NaN; lastSig = '';
       if (FM.mobile && FM.mobile.unlatch) FM.mobile.unlatch();
@@ -2321,6 +2354,7 @@ window.FM = window.FM || {};
          over the cut before a clip whose More or Look is open set the Transition row under that panel, where the bar is hidden: the press
          showed nothing until the panel's ‹ was pressed. */
       if (panelFor) dropPanel();
+      aiOff();   // …and the assistant, which on a PC lies over the bar this row is drawn on (the 24 Nov review, AI-SM2)
       /* `of`: the selected item the row belongs to when it acts on another (#1243 S1 A: the first clip's Transition, for the cut after it) */
       subFor = { key: key, id: id || null, from: from || null, of: of || null, sel: (FM.selectionIds ? FM.selectionIds() : []).join(',') };
       lastSig = ''; this.sync();
@@ -2354,7 +2388,7 @@ window.FM = window.FM || {};
         if (aiUp()) {
           if (FM.aiChat && FM.aiChat.hide) FM.aiChat.hide();
           backTo = ''; lastSig = ''; this.sync();
-          const n = tools.querySelector('[data-tool="ai"]'); if (n) n.focus({ preventScroll: true });
+          const n = bar.dataset.mode === 'project' ? tools.querySelector('[data-tool="ai"]') : tray.querySelector('button, input'); if (n) n.focus({ preventScroll: true });   // AI-SM4: with an item selected, its first tool
           return;
         }
         if (extrasUp()) { backTo = 'extras'; this.closeExtras(); return; }

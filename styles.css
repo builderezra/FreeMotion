@@ -12863,8 +12863,21 @@ body.ed-simple #sm-bar { display: flex; flex-direction: column; flex: 0 0 auto; 
 @media (min-width: 701px) {
   body.ed-simple #ai-chat { transition: none; }
   body.ed-simple #ai-chat.open { left: var(--sm-ai-l, 0px); right: auto; top: var(--sm-ai-t, 0px); bottom: var(--sm-ai-b, 0px); width: var(--sm-ai-w, 376px);
-    border-left: 0; border-right: 1px solid var(--line); box-shadow: none; }
+    border-left: 0; border-right: 1px solid var(--line); border-top: 1px solid var(--line); box-shadow: none; }
+  /* (its top edge is the band's own 1 px line, which it lies over: without it the line between the picture and the bottom row
+     stopped where the assistant began; the 24 Nov review, SEE-4) */
+  /* …its compose row keeps the bottom safe area, as the band it lies over does: a landscape phone takes this layout, and the box
+     and Send would sit under the home indicator (the same review). 0 on a desktop. */
+  body.ed-simple #ai-chat.open .aic-compose { padding-bottom: calc(10px + var(--aic-kb, 0px) + env(safe-area-inset-bottom, 0px)); }
+  /* WHAT SIMPLE SAYS WHILE THE ASSISTANT IS OVER THE BAND (the 24 Nov review, SEE-2): the floating line's place is the bar's top,
+     which is under the assistant, so a line with a button ("Locked… Do it anyway", from a chip on the timeline beside it) could be
+     neither read nor pressed. It floats just above the assistant's top edge (--sm-say-l / w / b, written on the bar by aiDock). */
+  body.ed-simple.aic-open #sm-bar > #sm-say { position: fixed; left: var(--sm-say-l, 0px); right: auto; width: var(--sm-say-w, 376px); bottom: var(--sm-say-b, 0px); }
 }
+/* On a phone it is Full's sheet as it stands, less its upward shadow: that lay over the bottom 40 px of the picture he is judging
+   the edit on, and Simple's own sheet at the same line has none for that reason (below, the 9 Nov review; here the 24 Nov one,
+   SEE-1). Its own top edge is the line between them. */
+@media (max-width: 700px) { body.ed-simple #ai-chat.open { box-shadow: none; } }
 /* ═══ #1243 S3 · S9 · S15 · rule 3 (release 4): ONE BAR, FOUR MODES, ONE STRIP, ONE SHEET LINE ═════════════════════════════════════
    His words (8 Nov): "when you actually tap on a layer, that first row goes away", "I don't want two menus at once", "make it like
    CapCut where you can scroll it". #sm-bar is ONE 56 px row (and its 1 px edge and the safe area) whose contents swap by

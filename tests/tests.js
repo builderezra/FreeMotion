@@ -205213,7 +205213,9 @@
               if (!(fr.width >= 63.5)) fails.push(at + 'Ask & edit is ' + fr.width.toFixed(1) + ' px wide, under the row’s 64');
               const fl = first.querySelector('.sm-tool-l'), face = fl ? fl.textContent : '';
               if (face !== 'Ask & edit') fails.push(at + 'its face says “' + face + '”, want Ask & edit, the name #1243 F2 gave the assistant');
-              if (fl && (fl.scrollWidth > fl.clientWidth + 1 || fl.getBoundingClientRect().width > fr.width + 0.5)) fails.push(at + 'its name is cut or runs out of the tool (' + fl.scrollWidth + ' px of words in ' + fl.clientWidth + ', the tool is ' + fr.width.toFixed(1) + ')');
+              /* (a label in this column sizes to its own words, so its scroll width never differs from its width: the one thing that can
+                 show is the words being wider than the tool; the 24 Nov review, S14T-4) */
+              if (fl && fl.getBoundingClientRect().width > fr.width + 0.5) fails.push(at + 'its name runs out of the tool (' + fl.getBoundingClientRect().width.toFixed(1) + ' px of words, the tool is ' + fr.width.toFixed(1) + ')');
               if (!d(first)) fails.push(at + 'Ask & edit has no drawing');
               else if (d(first) === d(fx)) fails.push(at + 'Ask & edit wears Effects’ drawing: two tools in one row would look the same');
               if (!r4Hits(first)) fails.push(at + 'Ask & edit is not pressable at its centre');
@@ -205267,6 +205269,7 @@
             if (Math.abs(st1.height - st0.height) > 0.5 || Math.abs(st1.top - st0.top) > 0.5) fails.push('380: the picture moved or changed size when the assistant opened (top ' + Math.round(st0.top) + ', ' + Math.round(st0.height) + ' tall → top ' + Math.round(st1.top) + ', ' + Math.round(st1.height) + ' tall): rule 3, the stage never shrinks');
             if (r4Mode() !== 'panel') fails.push('380: with the assistant up the bar is in mode “' + r4Mode() + '”, want panel');
             if (carried().length) fails.push('380: on a phone the assistant carries the PC band’s properties (' + carried().join(', ') + ')');
+            if (getComputedStyle(c).boxShadow !== 'none') fails.push('380: the open assistant casts a shadow (' + getComputedStyle(c).boxShadow + ') up over the foot of the picture; a Simple sheet has none');
             FM.aiChat.hide(); await r4Settle(400);
             if (r4Mode() !== 'project') fails.push('380: after the assistant closed the bar is in mode “' + r4Mode() + '”, want the project row');
           });
@@ -205289,6 +205292,7 @@
             const ox = Math.min(r.right, stage.right) - Math.max(r.left, stage.left), oy = Math.min(r.bottom, stage.bottom) - Math.max(r.top, stage.top);
             if (ox > 1 && oy > 1) fails.push('1280: the assistant covers ' + Math.round(ox) + ' × ' + Math.round(oy) + ' px of the picture');
             if (r4Mode() !== 'panel') fails.push('1280: with the assistant up the bar is in mode “' + r4Mode() + '”, want panel');
+            if (parseFloat(getComputedStyle(c).borderTopWidth) !== 1) fails.push('1280: the assistant’s top edge is ' + getComputedStyle(c).borderTopWidth + ' wide: it lies over the band’s 1 px line and must draw it');
             await r4Settle(300);
             const inp = c.querySelector('.aic-input'), ae = document.activeElement;
             if (!inp) fails.push('1280: the assistant has no box to type in (.aic-input)');
@@ -205378,7 +205382,7 @@
               n = 0;
               await smWithRole(role, async function () {
                 const b = smTool('ai');
-                if (!b) throw new Error('setup: the project row has no Ask & edit');
+                if (!b) { fails.push('the project row has no Ask & edit for a ' + role + ' to press'); return; }
                 b.click(); await r4Settle(250);
                 if (n || document.body.classList.contains('aic-open')) fails.push('a ' + role + '’s press on Ask & edit opened the assistant (' + n + ' time(s)): it writes edits, and a ' + role + ' changes nothing');
                 if (r4Mode() !== 'project') fails.push('after a ' + role + '’s press the bar is in mode “' + r4Mode() + '”, want the project row still');
@@ -205388,7 +205392,7 @@
             }
             n = 0;
             const b = smTool('ai');
-            if (!b) throw new Error('setup: the project row lost Ask & edit');
+            if (!b) throw new Error('the project row has no Ask & edit · ' + fails.join(' · '));
             b.click(); await r4Settle(250);
             if (n !== 1) throw new Error('CONTROL: with the role back a press on Ask & edit opened the assistant ' + n + ' times, want once, so the two refusals above were not the role’s · ' + fails.join(' · '));
             document.body.classList.remove('aic-open'); await r4Settle(150);
@@ -205424,6 +205428,158 @@
       if (showOwn) Object.defineProperty(FM.aiChat, 'show', showOwn); else delete FM.aiChat.show;
       document.body.classList.remove('aic-open');
       try { if (FM.settings && FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close({ handBack: false }); } catch (e) {}
+      try { FM.aiChat.hide(); } catch (e) {}
+      if (FM.simpleTools && FM.simpleTools._reset) FM.simpleTools._reset();
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* S14 e · ONE MENU AT A TIME FROM OUTSIDE THE BAR, AND WHAT THE ASSISTANT MUST NOT HIDE (the 24 Nov review of S14: AI-SM1, AI-SM2,
+     SEE-2, AI-SM4, and a role that drops while it is up). With the assistant up, the Export button (both widths) and a cut's ◇ (a PC,
+     where the timeline is beside it) can still be pressed: what they open takes its place. A line Simple says floats above it. Escape
+     with a clip selected leaves the focus on that clip's tools. CONTROLS: Export and the ◇ open the same things with it closed. */
+  test('1243 S14 · with the assistant up, Export takes its place at 380 and 1280 and at 1280 a cut’s ◇ opens its Transition row in its place, so one menu is up; at 1280 a line Simple says floats just above the assistant, readable and its button pressable; Escape with a clip selected puts the focus on that clip’s tools; and a role that drops to view-only closes it and says View only (CONTROLS: Export and the ◇ open the same things with the assistant closed)', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    if (!FM.aiChat || !FM.aiChat.show || !FM.aiChat.hide) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
+    const fails = [];
+    const chat = () => document.getElementById('ai-chat'), up = () => !!(chat() && chat().classList.contains('open'));
+    const exportBtn = () => ['m-export', 'btn-export'].map(id => document.getElementById(id)).filter(x => x && x.getClientRects().length)[0] || null;
+    const chip = () => document.querySelector('.sm-chip-tr[data-tr]');
+    try {
+      await smHintKeep('1', async function () {
+        for (const width of [380, 1280]) {
+          await r4At(width, width > 700 ? 800 : 0, async function () {
+            await smP2(smClips3, async function (v) {
+              const at = width + ': ', S = FM.spine;
+              FM.selectLayer(null); await r4Settle(150);
+              /* Export */
+              if (!exportBtn()) throw new Error('setup ' + at + 'no Export button on show');
+              exportBtn().click(); await r4Settle(450);
+              if (!FM.simpleTools.exportOpen()) throw new Error('CONTROL ' + at + 'with the assistant closed a press on Export did not open Simple’s Export panel');
+              FM.simpleTools.closePanel(); await r4Settle(350);
+              if (!FM.simpleTools.openAi()) { fails.push(at + 'FM.simpleTools.openAi did not open the assistant'); return; }
+              await r4Settle(400);
+              exportBtn().click(); await r4Settle(500);
+              if (up()) fails.push(at + 'Export was pressed with the assistant up and the assistant stayed: its panel is under it, and a second press closes it unseen');
+              if (!FM.simpleTools.exportOpen()) fails.push(at + 'Export was pressed with the assistant up and no Export panel is open');
+              else { const b = document.querySelector('#inspector [data-exp]'); if (!b || !r4Hits(b)) fails.push(at + 'the Export panel that took the assistant’s place is not on top where its first button is'); }
+              if (r4Mode() !== 'panel') fails.push(at + 'with Export up the bar is in mode “' + r4Mode() + '”, want panel');
+              FM.simpleTools.closePanel(); await r4Settle(350);
+              try { FM.aiChat.hide(); } catch (e) {}
+              await r4Settle(200);
+              if (width < 701) return;
+              /* a cut's ◇, on the timeline beside the assistant */
+              FM.selectLayer(null); await r4Settle(200);
+              if (!chip()) throw new Error('setup 1280: the clip row shows no ◇ over a cut');
+              chip().click(); await r4Settle(300);
+              if (r4Mode() !== 'sub' || !FM.simpleTools.subFor() || FM.simpleTools.subFor().key !== 'transition') throw new Error('CONTROL 1280: with the assistant closed a press on a ◇ did not open the Transition row (mode “' + r4Mode() + '”)');
+              FM.simpleTools._reset(); FM.selectLayer(null); FM.simpleTools.sync(); await r4Settle(250);
+              if (!FM.simpleTools.openAi()) { fails.push('1280: the assistant did not open a second time'); return; }
+              await r4Settle(350);
+              if (!chip()) throw new Error('setup 1280: with the assistant up the clip row shows no ◇');
+              chip().click(); await r4Settle(400);
+              if (up()) fails.push('1280: a ◇ was pressed with the assistant up and the assistant stayed, the Transition row under it');
+              if (r4Mode() !== 'sub' || !FM.simpleTools.subFor() || FM.simpleTools.subFor().key !== 'transition') fails.push('1280: a ◇ pressed with the assistant up left the bar in mode “' + r4Mode() + '”, want its Transition row');
+              FM.simpleTools._reset(); FM.selectLayer(null); FM.simpleTools.sync(); await r4Settle(250);
+              /* a line Simple says while the assistant is up */
+              if (!FM.simpleTools.openAi()) { fails.push('1280: the assistant did not open a third time'); return; }
+              await r4Settle(350);
+              let pressed = 0;
+              S.say('A line with a button', { buttons: [{ label: 'Do it', fn: () => { pressed++; } }] });
+              await r4Settle(250);
+              const say = document.getElementById('sm-say'), cr = chat().getBoundingClientRect(), sr = say.getBoundingClientRect(), btn = say.querySelector('button');
+              if (!(sr.height >= 43.5) || !btn) throw new Error('setup 1280: Simple’s line did not show with its button (' + Math.round(sr.height) + ' px tall)');
+              if (sr.bottom > cr.top + 1.5 || sr.top < 0) fails.push('1280: with the assistant up Simple’s line is at ' + Math.round(sr.top) + ' to ' + Math.round(sr.bottom) + ' and the assistant starts at ' + Math.round(cr.top) + ': want the line just above it, not under it');
+              if (Math.abs(sr.left - cr.left) > 1.5 || Math.abs(sr.width - cr.width) > 1.5) fails.push('1280: the line is ' + Math.round(sr.width) + ' px wide from ' + Math.round(sr.left) + ', the assistant ' + Math.round(cr.width) + ' from ' + Math.round(cr.left));
+              if (!r4Hits(btn)) fails.push('1280: the line’s button is not on top where it is drawn');
+              else { btn.click(); await r4Settle(120); if (pressed !== 1) fails.push('1280: a press on the line’s button ran it ' + pressed + ' times, want once'); }
+              /* Escape with a clip selected */
+              FM.selectLayer(v.L('B').id); await r4Settle(250);
+              if (!up()) fails.push('1280: selecting a clip on the timeline closed the assistant (its greeting says tap a layer first)');
+              else {
+                const inp = chat().querySelector('.aic-input');
+                if (inp) inp.focus({ preventScroll: true });
+                (document.activeElement || document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+                await r4Settle(300);
+                const ae = document.activeElement, tray = document.getElementById('sm-tray');
+                if (up()) fails.push('1280: Escape left the assistant open');
+                if (r4Mode() !== 'item') fails.push('1280: after Escape with Clip 2 selected the bar is in mode “' + r4Mode() + '”, want its tray');
+                if (!ae || ae === document.body || !tray || !tray.contains(ae)) fails.push('1280: after Escape with a clip selected the focus is on ' + ((ae && ae !== document.body && (ae.id || ae.className || ae.tagName)) || 'nothing') + ', want that clip’s tools');
+              }
+              /* a role that drops while it is up */
+              FM.selectLayer(null); await r4Settle(200);
+              if (!FM.simpleTools.openAi()) { fails.push('1280: the assistant did not open a fourth time'); return; }
+              await r4Settle(350);
+              try {
+                await smWithRole('viewer', async function () {
+                  document.body.classList.add('collab-ro'); await r4Settle(300);
+                  if (up()) fails.push('1280: his role dropped to view-only with the assistant up and it stayed open: it writes edits');
+                  else if (v.say() !== 'View only') fails.push('1280: the assistant closed for a viewer and Simple said “' + v.say() + '”, want View only');
+                });
+              } finally { document.body.classList.remove('collab-ro'); await r4Settle(150); }
+            });
+          });
+        }
+      });
+    } finally {
+      document.body.classList.remove('collab-ro');
+      try { FM.aiChat.hide(); } catch (e) {}
+      if (FM.simpleTools && FM.simpleTools._reset) FM.simpleTools._reset();
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* S14 f · THE ASSISTANT'S SHEET GOING AWAY HOLDS THE SECOND TAP (the 24 Nov review, AI-SM3; N15's twin). On a phone the assistant
+     stands at the sheet line, so its grab bar lies over the play row's Link, a switch for the whole project. A real mouse double-clicks
+     the grab bar over Link at 380×800, 120 and 300 ms apart: the assistant closes and linking stays as it was. CONTROL: one real click
+     on that same spot 0.1 s after the assistant is closed from script switches linking, so the spot is Link, the pointer reaches it,
+     and a close with no finger on the assistant holds no press. */
+  test('1243 S14 · at 380×800 a REAL double click on the assistant’s grab bar over Link closes the assistant and presses nothing it uncovered: linking stays as it was, nothing changes, nothing plays (CONTROL: one real click on that spot 0.1 s after the assistant is closed with no finger on it switches linking)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    if (!window.frameElement) throw new Error('this test needs run.html’s iframe');
+    if (!FM.aiChat || !FM.aiChat.show || !FM.aiChat.hide) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
+    const fails = [];
+    try {
+      await onScreen924(async function () {
+        await r4At(380, 800, async function () {
+          for (const gap of [120, 300]) {
+            await smP2(smClips3, async function (v) {
+              const S = FM.spine, at = '380×800, ' + gap + ' ms apart: ';
+              FM.simpleTools._reset();   // no press the last half made on a sheet carries into this one
+              FM.selectLayer(null); await r4Settle(200);
+              if (!FM.simpleTools.openAi || !FM.simpleTools.openAi()) throw new Error('the assistant did not open from Simple’s bar (FM.simpleTools.openAi)');
+              await r4Settle(500);
+              const c = document.getElementById('ai-chat'), grab = c && c.querySelector('.aic-grab'), lk = document.getElementById('btn-sm-link');
+              if (!grab || !lk || !grab.getClientRects().length || !lk.getClientRects().length) throw new Error('setup: the assistant has no grab bar on show, or the play row no Link');
+              const g = grab.getBoundingClientRect(), l = lk.getBoundingClientRect();
+              const y0 = Math.max(g.top, l.top) + 2, y1 = Math.min(g.bottom, l.bottom) - 2;
+              if (!(y1 > y0) || l.left < g.left || l.right > g.right) throw new Error('380×800: the assistant’s grab bar (' + Math.round(g.top) + '–' + Math.round(g.bottom) + ') does not lie over Link (' + Math.round(l.top) + '–' + Math.round(l.bottom) + '): the assistant does not start at the play row');
+              const p = { x: Math.round(l.left + l.width / 2), y: Math.round((y0 + y1) / 2) };
+              await r4Lift(p.y);
+              /* CONTROL: the spot with the assistant down is Link, pressed 0.1 s after a close that no finger made */
+              FM.aiChat.hide(); await r4Settle(60);
+              const m0 = S.linkMode();
+              await realInput924([{ t: 'mouseMove', x: p.x, y: p.y, ms: 30 }, { t: 'mouseDown', x: p.x, y: p.y, ms: 40 }, { t: 'mouseUp', x: p.x, y: p.y, ms: 0 }], 'one click on Link');
+              await r4Settle(300); await v.idle();
+              if (S.linkMode() === m0) throw new Error('CONTROL at ' + at + 'one real click at (' + p.x + ', ' + p.y + ') 0.1 s after the assistant was closed from script did not switch linking: the spot is not Link, or a close with no finger on the assistant held the press · ' + fails.join(' · '));
+              S.cmd.link(m0); await v.idle(); await r4Settle(200);
+              if (S.linkMode() !== m0) throw new Error('setup: linking could not be put back');
+              if (!FM.simpleTools.openAi()) throw new Error('setup: the assistant did not open again');
+              await r4Settle(600);
+              const s1 = v.steps(), doc1 = v.doc();
+              await realInput924([{ t: 'mouseDown', x: p.x, y: p.y, ms: 40 }, { t: 'mouseUp', x: p.x, y: p.y, ms: gap }, { t: 'mouseDown', x: p.x, y: p.y, ms: 40 }, { t: 'mouseUp', x: p.x, y: p.y, ms: 0 }], 'a double click on the assistant’s grab bar (' + gap + ' ms apart)');
+              await r4Settle(500); await v.idle();
+              const under = document.elementFromPoint(p.x, p.y), what = under ? (under.closest('button') || under).id || String(under.getAttribute('class') || under.tagName) : 'nothing';
+              if (c.classList.contains('open')) fails.push(at + 'the double click left the assistant up (now under the pointer: ' + what + ')');
+              if (S.linkMode() !== m0) { fails.push(at + 'the second click pressed Link, which the assistant uncovered: linking switched for the whole project'); S.cmd.link(m0); await v.idle(); }
+              if (v.steps() !== s1 || v.doc() !== doc1) fails.push(at + 'the second click changed the project: ' + (v.steps() - s1) + ' steps (now under the pointer: ' + what + ')');
+              if (FM.playing) { fails.push(at + 'the second click started playback'); if (FM.pause) FM.pause(); }
+            });
+            window.frameElement.style.top = '0px';
+          }
+        });
+      });
+    } finally {
       try { FM.aiChat.hide(); } catch (e) {}
       if (FM.simpleTools && FM.simpleTools._reset) FM.simpleTools._reset();
     }
