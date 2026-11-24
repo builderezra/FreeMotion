@@ -150,10 +150,10 @@ window.FM = window.FM || {};
         hits.forEach(e => { grid.appendChild(card(e, items.indexOf(e), items, !q && shown === 0 && items.indexOf(e) === 0)); });
         shown += hits.length;
       });
-      if (!shown) grid.appendChild(empty('▷', 'No tutorial matches “' + query + '”', 'Try a word like export, text or music.'));
+      if (!shown) grid.appendChild(empty('tutorial', 'No tutorial matches “' + query + '”', 'Try a word like export, text or music.'));
     }).catch(() => {
       if (!still()) return;
-      grid.appendChild(empty('▷', 'Couldn’t load the tutorials', 'Check your connection, then open this tab again.'));
+      grid.appendChild(empty('tutorial', 'Couldn’t load the tutorials', 'Check your connection, then open this tab again.'));
     });
   }
 

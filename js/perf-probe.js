@@ -411,7 +411,7 @@ window.FM = window.FM || {};
          * which is precisely the kind of confident wrong number this whole feature exists to end. */
         const unusable = wasHidden || sorted.length < 5;
         if (unusable) {
-          lines.push('⚠ THIS SAMPLE IS NOT USABLE — the app was in the background or hidden for some');
+          lines.push('! THIS SAMPLE IS NOT USABLE — the app was in the background or hidden for some');
           lines.push('  of it, so the browser stopped drawing. Run it again and keep the app on screen.');
           lines.push('');
         }
@@ -429,7 +429,7 @@ window.FM = window.FM || {};
           /* And whether the ladder was allowed to act at all. Without this, a tier that never moved
              reads as "the ladder is broken" when the honest answer may be "nothing asked it". */
           if (!everEligible) {
-            lines.push('         ⚠ the quality ladder never ran during this sample — it only adapts while');
+            lines.push('         ! the quality ladder never ran during this sample — it only adapts while');
             lines.push('           PLAYING or dragging, and neither happened here. The tier above means');
             lines.push('           "untouched", not "decided to stay".');
           }
@@ -476,7 +476,7 @@ window.FM = window.FM || {};
           const why = (wS && wS.reason) || (cS && cS.reason) || '';
           if (why && (wCpu || cCpu || !warpUp || !colUp)) lines.push('         fell back because: ' + why);
           if (!warpUp && !colUp) {
-            lines.push('         ⚠ NO WEBGL ON THIS DEVICE. Every warp and every colour effect is a');
+            lines.push('         ! NO WEBGL ON THIS DEVICE. Every warp and every colour effect is a');
             lines.push('           per-pixel JavaScript loop here. On a stacked layer that IS the lag,');
             lines.push('           and it is the one thing the last three releases were meant to fix.');
           }
@@ -507,7 +507,7 @@ window.FM = window.FM || {};
           if (pMed != null && dMed != null) {
             const ratio = pMed / dMed;
             if (ratio >= 1.5) {
-              lines.push('         ⚠ PLAYING IS ' + ratio.toFixed(1) + '× SLOWER THAN SCRUBBING. Both draw the same');
+              lines.push('         ! PLAYING IS ' + ratio.toFixed(1) + '× SLOWER THAN SCRUBBING. Both draw the same');
               lines.push('           frames through the same compositor, so this is NOT rendering cost —');
               lines.push('           it is something only playback does (the media clock, the sync loop).');
             } else if (ratio <= 0.67) {
@@ -562,7 +562,7 @@ window.FM = window.FM || {};
           /* Say what it MEANS, because a bare rate is not something he should have to interpret —
            * and because the two readings point at completely different next steps. */
           if (dRate / secs > 4) {
-            lines.push('         ⚠ the rate is being rewritten often. preservesPitch turns that into a');
+            lines.push('         ! the rate is being rewritten often. preservesPitch turns that into a');
             lines.push('           PITCH change, which is heard as a scratchy warble — this is ours.');
           } else if (dSyncs > 20) {
             lines.push('         the sync controller is quiet, so scratchiness heard here is NOT our');

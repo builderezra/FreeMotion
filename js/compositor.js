@@ -744,7 +744,7 @@ window.FM = window.FM || {};
     ] },
     { type: 'stripes', label: 'Stripes', color: true, defColor: '#000000', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Width', min: 4, max: 80, step: 1, def: 16, unit: 'px' },
-      { key: 'direction', label: 'Direction', def: 0, options: [[0, 'Diag ↘'], [1, 'Diag ↗'], [2, 'Across'], [3, 'Down']] },
+      { key: 'direction', label: 'Direction', def: 0, options: [[0, 'Diag down'], [1, 'Diag up'], [2, 'Across'], [3, 'Down']] },
       { key: 'duty', label: 'Bar / gap', min: 0.05, max: 0.95, step: 0.05, def: 0.5 },
       { key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.02, def: 0.6 },
       /* #966 opts3: the stripes could only sit still. SCROLL SPEED keeps them moving across their own direction — a barber pole, hazard
@@ -1830,7 +1830,7 @@ window.FM = window.FM || {};
          (round the upright line through the pivot), Flip ↕ tumbles it head over heels (round the level line), at the same
          Speed and Start angle; seen from straight on, so it narrows to a line and comes back mirrored — its back. (Card
          Flip is the one with perspective, for a single turn.) Flat runs the old lines untouched. */
-      { key: 'axis', label: 'Turns', def: 0, options: [[0, 'Flat'], [1, 'Flip ↔'], [2, 'Flip ↕']], note: '↔ like a coin on its edge, ↕ head over heels — the back shows mirrored' },
+      { key: 'axis', label: 'Turns', def: 0, options: [[0, 'Flat'], [1, 'Flip sideways'], [2, 'Flip over']], note: 'Sideways is like a coin on its edge, over is head over heels — the back shows mirrored' },
     ] },
     /* #482 polish 2.2. Pulse was a sine about the middle of the layer, the same amount both ways. WAVE picks the shape of each
        beat, SQUASH & STRETCH trades width for height as it grows (1 = wider as it grows, −1 = taller), and the PIVOT puts the
@@ -2528,7 +2528,7 @@ window.FM = window.FM || {};
       { key: 'high', label: 'Bright cut', min: 0, max: 1, step: 0.01, def: 0.85 },
       { key: 'length', label: 'Max run', min: 8, max: 600, step: 4, def: 160, unit: 'px' },
       /* #482 polish 13.5: two diagonals, ↘ and ↗ — 0 and 1 are the old rows and columns, so a saved value means what it did. */
-      { key: 'direction', label: 'Direction', options: [[0, 'Horizontal'], [1, 'Vertical'], [2, 'Diagonal ↘'], [3, 'Diagonal ↗']], def: 0 },
+      { key: 'direction', label: 'Direction', options: [[0, 'Horizontal'], [1, 'Vertical'], [2, 'Diagonal down'], [3, 'Diagonal up']], def: 0 },
       { key: 'order', label: 'Order', options: [[0, 'Dark → bright'], [1, 'Bright → dark']], def: 0 },
       /* #482 polish 13.5. A run was always ordered by brightness, the same lines were sorted in every Pixel Sort, and they never
          changed. Sort by orders each run by Hue (a rainbow smear), Saturation or one channel instead — Dark cut and Bright cut

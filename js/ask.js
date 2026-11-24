@@ -122,7 +122,7 @@ window.FM = window.FM || {};
     const multi = withInput && !!opts.input.multiline;
     titleEl.textContent = opts.title || '';
     titleEl.classList.toggle('hidden', !opts.title);
-    msgEl.textContent = opts.message || '';
+    if (FM.lineInto) FM.lineInto(msgEl, opts.message || ''); else msgEl.textContent = opts.message || '';   // #1255: a message may name the cog by its drawing (FM.IC.cog)
     msgEl.classList.toggle('hidden', !opts.message);
     line.classList.toggle('hidden', !withInput || multi);
     area.classList.toggle('hidden', !multi);
