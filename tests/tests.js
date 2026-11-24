@@ -4230,7 +4230,7 @@
   test('layers: the Null layer is called Controller, keeps its red, and its saved type is unchanged', { item: 'controller-rename' }, async function () {
     /* Queue 363. Ezra gave me the call rather than a name: "If you can think of another name for null
        that still makes sense and describes what it is then change the name of it to that."
-       Null is After Effects' word and it names what the thing is NOT. It is an invisible layer that
+       Null is [another app]'s word and it names what the thing is NOT. It is an invisible layer that
        renders nothing and exists to be parented to, so "Controller" says what you use it for.
        SCOPED TO CONTAINERS, never document.body.textContent — the entry warns about this and it has
        produced a false pass here before, because the suite prints its own test titles into the page and
@@ -4809,15 +4809,15 @@
     }
   });
 
-  test('the ⧉ menu is ours, not Alight Motion’s — wording and order', { item: '437' }, async function () {
+  test('the ⧉ menu is ours, not another app’s — wording and order', { item: '437' }, async function () {
     /* Queue 437, and he raised it unprompted: "With this drop down menu also re order the buttons in it
-       because it's the same layout and wording as alight motion, if you can come up with different
+       because it's the same layout and wording as [the reference app], if you can come up with different
        wording as well, like instead of paste layer just paste on timeline. And copy selected instead of
        copy layer."
        His two examples are taken as the RULE rather than as two edits: name the object the way the app
        already talks about it ("selected", which is what the top bar says), and say WHERE a thing lands.
-       This is BEFORE-PUBLISHING.md work arriving early — that file records the UI is modelled on AM and
-       has to be made ours before any public release — so the AM strings are asserted GONE, not merely
+       This is BEFORE-PUBLISHING.md work arriving early — that file records the UI is modelled on [the reference app] and
+       has to be made ours before any public release — so the strings are asserted GONE, not merely
        the new ones present. A rename that left a synonym behind would read as done and would not be. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const layers0 = FM.scene.layers.slice();
@@ -4843,10 +4843,10 @@
         // his two examples, verbatim
         if (!has(/^copy selected$/i)) throw new Error('"Copy selected" is missing — that is one of the two rewordings he gave by name');
         if (!has(/^paste on timeline$/i)) throw new Error('"Paste on timeline" is missing — that is the other rewording he gave by name');
-        // …and AM's words must be GONE, not merely joined by ours
+        // …and [the reference app]'s words must be GONE, not merely joined by ours
         if (has(/^copy layer$/i)) throw new Error('"Copy Layer" is still there — he asked for "copy selected" INSTEAD of it');
         if (has(/^paste layer$/i)) throw new Error('"Paste Layer" is still there — he asked for "paste on timeline" INSTEAD of it');
-        if (has(/^paste style/i)) throw new Error('"Paste Style…" is still AM’s wording, and it now disagrees with the overlay it opens');
+        if (has(/^paste style/i)) throw new Error('"Paste Style…" is still the old wording, and it now disagrees with the overlay it opens');
         if (has(/^duplicate layer$/i)) throw new Error('"Duplicate Layer" still says "Layer" about a selection that is often several — the same fault as Copy Layer');
         /* THE ORDER, which is the other half of his sentence. Clipboard actions in the order they are
            used, and the save-for-later entry at the end rather than splitting them. (Queue 994 took the
@@ -5687,7 +5687,7 @@
      * ⚠️ PACED AT 30ms BETWEEN MOVES. The suite's other grip tests fire every move inside one frame, before a
      * single rAF tick, which is exactly why none of them could see this. The pacing IS the fixture.
      * ⚠️ BOTH WAYS. A: born inside the zone → must land within two frames of the finger. B: travelling INTO the
-     * zone from outside → must still auto-scroll, because that is the Alight Motion behaviour he has and this
+     * zone from outside → must still auto-scroll, because that is the [the reference app] behaviour he has and this
      * fix must not take it away. A test with only A passes for a fix that simply deletes the auto-scroll. */
     const layers0 = FM.scene.layers.slice();
     try {
@@ -5727,7 +5727,7 @@
         const expectedA = startA + 30 / pps;
         if (Math.abs(landedA - expectedA) > 2 / fps + 1e-6) throw new Error('a grip born inside the edge zone, dragged +30px with the loop allowed to tick, landed at ' + landedA.toFixed(3) + 's against the finger’s ' + expectedA.toFixed(3) + 's — the edge auto-scroll armed on mere presence and re-trimmed every frame; on a phone 30px of finger became seconds of clip (queue 707)');
 
-        // ── B: a grip that TRAVELS INTO the zone must still auto-scroll (the AM behaviour is kept) ───────
+        // ── B: a grip that TRAVELS INTO the zone must still auto-scroll (the behaviour is kept) ───────
         FM.scene.layers.forEach((l, ix) => { l.start = ix * 2; l.duration = 2.5; });
         FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); FM.setTime(0); tl.scrollLeft = 0; await sleep(360);
         // Park clip 1's LEFT grip well outside the zone (x≈200) by scrolling, so the drag has to TRAVEL in.
@@ -7537,7 +7537,7 @@
   });
 
   test('534: Convert to Outline says coming soon, and the look it used to do is a real effect', { item: '534' }, async function () {
-    /* Queue 534. Ezra explained that Alight Motion's button FLATTENS a shape's editable points into one
+    /* Queue 534. Ezra explained that [the reference app]'s button FLATTENS a shape's editable points into one
        outline — and the points it removes are a feature we do not have. Ours did something else: it
        turned the shape into a stroked path with no fill. So: the button says coming soon and is
        reworded, and the LOOK lives in the effects menu, where it already did.
@@ -13536,7 +13536,7 @@
   test('effects: Voronoi Cells wander individually, and an old one stays frozen', { item: 'voronoi-alive' }, function () {
     /* Queue 350. His words: "Voronoi cells needs the ability to make them move, and I want it to
        actually move in a cool way and not just a drag it up and down, like they're alive. Because
-       that's what alight motion has."
+       that's what [the reference app] has."
        The second half is the design instruction and it is the one worth pinning, because the cheap
        implementation — one Speed slider scrolling the whole field — satisfies "it moves" and is exactly
        what he ruled out. So the test does not ask whether pixels changed; it asks whether any single
@@ -13774,7 +13774,7 @@
   });
 
   test('templates: the Insert-your-Media screen lists the clips you can swap, in the order you watch them', { item: 'template-fill' }, function () {
-    /* Queue 343 clause 2. Ezra, with an Alight Motion screenshot: "the long term goal for templates is
+    /* Queue 343 clause 2. Ezra, with an [the reference app] screenshot: "the long term goal for templates is
        to make it when you press on them you can quickly swap out the media for ur own clips so you can
        use them as templates and not just the exact same thing as elements."
        The SWAP was never the missing part — FM.replaceMediaWith already keeps the layer's transform,
@@ -18392,7 +18392,7 @@
   });
 
   test('keyframes: inert outlines until you open the editor that owns them', { item: 'kf-idle-live' }, function () {
-    // v5.42, from Ezra's Alight Motion screenshots. Tapping a layer shows every keyframe but arms
+    // v5.42, from Ezra's [the reference app] screenshots. Tapping a layer shows every keyframe but arms
     // none of them — "they're clearly showing you where they are but you can't move them yet or hover
     // over them or anything at all". Opening a property's editor arms just that property's keyframes;
     // the rest stay outlines. Selecting a clip used to arm every diamond on the layer.
@@ -18451,7 +18451,7 @@
   });
 
   test('move & transform: tapping Z turns the pad into a depth slider', { item: 'mt-z-pad' }, function () {
-    // v5.43. Ezra, from an AM screenshot: "it's showing what the z position editing looks like and I
+    // v5.43. Ezra, from a reference-app screenshot: "it's showing what the z position editing looks like and I
     // would like you to add z position editing as well… you just tap on z and then it switches to
     // this version." A sub-mode of the move pad, not a fifth button on the mode rail.
     const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
@@ -19870,7 +19870,7 @@
     });
   });
 
-  /* ---------------- Fill Behind (queue 32, the last of AM's "Other") --------------------------
+  /* ---------------- Fill Behind (queue 32, the last of [the reference app]'s "Other") --------------------------
    * The blurred-backdrop fill from phone video apps: a layer that does not cover the canvas gets the
    * empty space filled with an enlarged, blurred copy of ITSELF, and draws sharp on top. Third
    * member of the Copy Background family, and wired the same way — dispatched out of drawLayer,
@@ -21222,7 +21222,7 @@
   });
 
   test('parameter rows: tapping a name selects that one property’s keyframes', { item: 'param-row-select' }, function () {
-    // The explicit counterpart to v5.42. Ezra, from Alight Motion: "to tell what slider you
+    // The explicit counterpart to v5.42. Ezra, from [the reference app]: "to tell what slider you
     // have selected — hence forth what key frames ur gonna be editing, it shows by making the item ur
     // changing have a different colour on the name of it, you can also tap on the name to select the
     // row." Selection is per-PROPERTY (his screenshot has Offset's X green and its Y not), and it
@@ -23080,7 +23080,7 @@
       FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
       cogRow('Import a project file').click(); await sleep(60);
       if (spy.open !== 1) throw new Error('cog ▸ Import a project file no longer reaches FM.storage.importFile — that is where "Open project…" went');
-      /* CANVAS IS NO LONGER A ROW EITHER (queue 310) — *"we don't need the Canva settings button"*, and
+      /* CANVAS IS NO LONGER A ROW EITHER (queue 310) — *"we don't need the Canvas settings button"*, and
          it has a door on both bars. The check that matters is unchanged in substance: pressing the
          surviving control must open the canvas dialog. */
       if (FM.settings.isOpen()) FM.settings.close();
@@ -23648,7 +23648,7 @@
   });
 
   /* ---------------- the transport clock, and audio that survives a slow comp ----------------
-   * Ezra: "the sound has lag issues too. In alight motion no matter how laggy the video is, the
+   * Ezra: "the sound has lag issues too. In [the reference app] no matter how laggy the video is, the
    * audio NEVER lags." Measured with an AudioWorklet tap on the real graph, a 24 s clip carrying a
    * known 440 Hz carrier plus a 1320 Hz burst every 50 ms, and a busy-loop wrapped around
    * FM.renderScene to stand in for a heavy comp:
@@ -47012,7 +47012,7 @@
     /* His whole request was "edit points has literally no keyframe functionality" — so the first half
        is simply: is the ◆ there. The second half is the part that would otherwise look like it works
        and quietly do nothing: between two keys the evaluated points are a throwaway array, so an edit
-       has to CREATE the keyframe it is editing (AE roto, and what mask-tool.js already does). */
+       has to CREATE the keyframe it is editing (as rotoscoping tools do, and what mask-tool.js already does). */
     if (!FM.pointEdit || !FM.pointEdit.start) throw new Error('FM.pointEdit missing');
     const scene = FM.scene, keep = scene.layers.slice(), keepSel = scene.selectedId, keepT = FM.time;
     const wasActive = FM.pointEdit.isActive();
@@ -47285,7 +47285,7 @@
          by design. The default From colour is red (hue 0°, a 30° window) and this fixture is orange (#e8a33d, hue 35.8°), so nothing is
          caught and the matte is black on a black ground; on a red layer it is white ('966 opts9 Replace Colour Show selection …'). */
       'replacecolor:view=max': 1,
-      /* #966 opts10 (hunt/966-opts10): COLOURIZE's Lightness −100 sinks the tint all the way to black — Photoshop's Colorize Lightness
+      /* #966 opts10 (hunt/966-opts10): COLOURIZE's Lightness −100 sinks the tint all the way to black — [another app]'s Colorize Lightness
          at its bottom end, by design, brightness:amount=min's twin. At the default Tone blend and Amount 1 the layer becomes black on this
          fixture's black ground; any Amount below 1, Screen or Overlay, or a lighter ground shows it ('966 opts10 Colourize Lightness …'). */
       'colorize:light=min': 1,
@@ -48200,9 +48200,9 @@
     }, 375);
   });
 
-  /* ---------------- queue 292: a refresh flashed the OLD Alight-Motion-shaped layout ----------------
+  /* ---------------- queue 292: a refresh flashed the OLD [the reference app]-shaped layout ----------------
    * His most urgent report: "when you refresh the page it shows an old version that looks a lot like
-   * alight motion, this is bad because if someone sees it in the final version they may be able to use
+   * [the reference app], this is bad because if someone sees it in the final version they may be able to use
    * this against us."
    * He was looking at the FIRST PAINT. `layout-studio` was added by js/settings.js, so until that ran
    * the page rendered the UNCLASSED default — the retired Classic layout, with a 50px top bar and the
@@ -48973,7 +48973,7 @@
 
   test('the phone timeline carries an Add layer instead of the + button (queue 294)', { item: 'add-row' }, async function () {
     /* "the plus button inside the creator menu is kind of on the nose like… it looks very similar to what
-     * a light motion has and I was thinking of a way to get rid of it from being there while also keeping
+     * [the reference app] has and I was thinking of a way to get rid of it from being there while also keeping
      * functionality… it could be a layer now… if you just tap anywhere on that line it'll open up the
      * same admin where you can add shapes or elements or whatever."
      * The label is his too, and SHORT is an explicit instruction rather than taste: "when you start a new
@@ -50470,7 +50470,7 @@
   });
 
   test('a trimmed edge lands on a whole frame (queue 153)', { item: '153' }, async function () {
-    /* His words, about Alight Motion's trim: *"the notches are frames and the whole thing has to actually
+    /* His words, about [the reference app]'s trim: *"the notches are frames and the whole thing has to actually
      * line up with the notches."* That sentence is the requirement, and it is about the RESULT.
      * `applyTrimAt` already quantised the DELTA (`Math.round(sec*fps)/fps`) — but a whole-frame change to
      * an edge that is not on a frame keeps it off the grid for ever, and an imported clip's duration is
@@ -52963,14 +52963,14 @@
   /* ---------------- #306 / #292: the app must look like itself at FIRST PAINT ---------------- */
 
   /* HIS REPORT, twice, months apart: "when you refresh the page it shows an old version that looks a
-   * lot like alight motion" (#292) and then "the glitch that shows the old version of FreeMotion that
-   * has a more alight motion look STILL shows up when I press refresh" (#306).
+   * lot like [the reference app]" (#292) and then "the glitch that shows the old version of FreeMotion that
+   * has a more [the reference app] look STILL shows up when I press refresh" (#306).
    * THE CAUSE, found at v9.11: theme-glass.css gates 75 rules on html[data-theme="glass"], and that
    * attribute was applied by js/settings.js — which loads at the BOTTOM of the body, after roughly
    * 1.5MB of script. So the browser painted the bare styles.css first and only snapped to the real
    * appearance once settings.js ran. settings.js's own comment states the consequence exactly: "with
    * it absent the app falls back to the bare stylesheet, which is exactly the Classic look queue 178
-   * removed." That bare look IS the Alight-Motion-shaped one he kept seeing.
+   * removed." That bare look IS the [the reference app]-shaped one he kept seeing.
    * My v8.51 fix for #292 addressed a DIFFERENT first-paint flash (the layout-studio class) and was
    * real, but it was not this one — which is why the report came back.
    *
@@ -52985,7 +52985,7 @@
     const htmlTag = (/<html\b[^>]*>/i.exec(src) || [''])[0];
     if (!htmlTag) throw new Error('no <html> tag found in the shipped markup');
     if (!/data-theme\s*=\s*["']glass["']/i.test(htmlTag)) {
-      throw new Error('the shipped <html> tag does not carry data-theme="glass" (' + htmlTag.slice(0, 120) + ') — every load will paint the unthemed stylesheet until settings.js runs, which is the old Alight-Motion-looking flash reported as #292 and #306');
+      throw new Error('the shipped <html> tag does not carry data-theme="glass" (' + htmlTag.slice(0, 120) + ') — every load will paint the unthemed stylesheet until settings.js runs, which is the old-layout flash reported as #292 and #306');
     }
     // and the attribute has to still MEAN something: if theme-glass.css stopped gating on it, this
     // guard would be protecting nothing and should be rewritten rather than left to pass forever.
@@ -74158,7 +74158,7 @@
 
   /* ================= queue 306: the service worker's silent downgrade =============================
    * Ezra, for weeks: *"an older version of our project shows up when you refresh"*, and later *"The
-   * glitch that shows the old version of FreeMotion that has a more alight motion look STILL shows up
+   * glitch that shows the old version of FreeMotion that has a more [the reference app] look STILL shows up
    * when I press refresh… it's such a big issue, PLEASE"*.
    *
    * WHY THIS PATH AND WHY IT SURVIVED. A failed navigation is answered from cache; the stale index.html
@@ -74430,7 +74430,7 @@
   /* ================= queue 308 / 309 / 310: clearing out the settings panel ======================
    * *"you get rid of the trim to last clip button because it automatically does that now"*, *"it has
    * the show guide button but we don't need that there because it's already got a place"*, *"we don't
-   * need the snapping magnet button and also we don't need the Canva settings button"* — and then, on
+   * need the snapping magnet button and also we don't need the Canvas settings button"* — and then, on
    * the obvious worry, *"They all have homes and don't need to be repeated there"*.
    *
    * SO THE TEST IS TWO-SIDED, and the second side is the one that matters. Asserting only that four
@@ -81751,13 +81751,13 @@
                      'gridrepeat', 'linearrepeat', 'radialrepeat', 'blocknoise', 'hexarray', 'rays',
                      'rasterextrude', 'starpoly3d', 'axiscross3d', 'hollowbox3d', 'fliplayer',
                      /* ⚠️ `roundcorners` JOINED THIS LIST LAST, AND IT IS THE ONE THE ENTRY CALLED WORST.
-                        Clause 1 renamed twenty-two labels copied from Alight Motion and MISSED the only
-                        one that was not copied from AM at all — ours read "Rounded Corners / Apple
+                        Clause 1 renamed twenty-two labels copied from [the reference app] and MISSED the only
+                        one that was not copied from [the reference app] at all — ours read "Rounded Corners / Apple
                         style", with a second hit on the toggle ("Apple corners") and a third in the
                         effect browser's description. That is another company's TRADE MARK in our own
                         UI, on a product he intends to publish, and BEFORE-PUBLISHING.md exists for
                         exactly this class of thing. It shipped for months because the rename swept the
-                        AM names and nobody looked at ours. */
+                        copied names and nobody looked at ours. */
                      'roundcorners'];
     const gone = RENAMED.filter(t => !FM.fxRegistry.makeInstance(t));
     if (gone.length)
@@ -81798,8 +81798,9 @@
     /* ⚠️ AND NO OTHER COMPANY'S NAME MAY SIT IN THE UI. The label above is only one instance; the check
        that matters is the class. Apple's mark appeared in THREE user-facing strings for this one effect
        — the label, a toggle and the browser description — so finding and fixing the label alone would
-       have left two. Comments are exempt: explaining WHY a curve exponent is what it is needs the word. */
-    const BRANDS = /\b(Apple|Alight ?Motion|After ?Effects|Adobe|Premiere|Final ?Cut|CapCut|Instagram|TikTok)\b/i;
+       have left two. (Since #1264 a comment may not name another editing app either: the ship's gate reads those.)
+       The platforms are written out here; another editing app is found by its fingerprint (names1264, beside the 1254 tests). */
+    const BRANDS = { test: function (t) { return /\b(Apple|Instagram|TikTok)\b/i.test(t) || !!names1264(t); } };
     const hits = [];
     const defs = FM.fxRegistry.allIncludingHidden ? FM.fxRegistry.allIncludingHidden() : FM.fxRegistry.all();
     for (const d of defs) {
@@ -81828,7 +81829,7 @@
         if (p && p.label && RETIRED.test(p.label)) back.push(key + ' param: "' + p.label + '"');
       }
     }
-    if (back.length) throw new Error('a retired Alight Motion effect name is back on screen: ' + back.join(' · ') + ' (queue 484 — v14.09 renamed the label and this text kept the old one)');
+    if (back.length) throw new Error('a retired effect name is back on screen: ' + back.join(' · ') + ' (queue 484 — v14.09 renamed the label and this text kept the old one)');
   });
 
   /* ═══ QUEUE 657 — "HEALTHY" MUST NOT MEAN "SMOOTH BECAUSE IT GAVE UP SHARPNESS" ═══════════════
@@ -83338,12 +83339,12 @@
   });
 
   /* ═══ QUEUE 484 CLAUSE 2 — MOST OF THE "MISSING" EFFECTS WERE NEVER MISSING ═══════════════════
-   * He asked for the effects Alight Motion has that we lack. Checked one by one against our own 199,
+   * He asked for the effects [the reference app] has that we lack. Checked one by one against our own 199,
    * most were already here under a name he would never search for: Random Displacement is Turbulent
    * Displace, Star is Sunburst, Time Quantization is Frame Stutter, Luma Stamper is Luma Matte,
    * Turbulence is Fractal Ridges, Repeat is Trail.
    * So the fix is not to build them and not to rename them back — clause 1 exists to move AWAY from
-   * AM's names, and one of them turned out to be a trade mark. The other name becomes a SEARCH TERM.
+   * [the reference app]'s names, and one of them turned out to be a trade mark. The other name becomes a SEARCH TERM.
    * ⚠️ A DEAD ALIAS IS SILENT: a key that no longer matches an effect simply never fires, and the
    * search quietly stops finding the thing. Both directions are asserted here. */
   test('#484: the effects he thinks are missing can be found by the name he would type', { item: '484' }, function () {
@@ -83391,7 +83392,7 @@
   });
 
   /* ═══ QUEUE 484 CLAUSE 2 — WRAP SHIFT, the first of the gaps he asked to be filled ════════════
-   * *"look for effects alight motion has that we don't, add them but change the names."* Theirs is
+   * *"look for effects [the reference app] has that we don't, add them but change the names."* Theirs is
    * called Offset; ours is Wrap Shift. It slides the picture and brings whatever leaves one edge back
    * in the other.
    * ⚠️ THE ASSERTION IS THAT IT IS A PERMUTATION, and that is chosen rather than convenient. "Some
@@ -95388,7 +95389,7 @@
 
   test('680 — undo does not drag a clip that starts before zero forward to 0', { item: '680' }, async function () {
     /* 🔴 DATA LOSS, found by a bug hunt he asked for. A NEGATIVE START IS A DELIBERATE, SUPPORTED
-       STATE: js/timeline.js floors a clip drag at -(duration - 0.1) under the comment "AM: a clip can
+       STATE: js/timeline.js floors a clip drag at -(duration - 0.1) under the comment "[the reference app]: a clip can
        be dragged PAST 0 into negative start — it keeps going", and this suite itself builds a
        `start: -2` scene elsewhere as valid input.
        But `history.restore()` runs the IMPORT sanitiser over every layer of the restored snapshot, and
@@ -99004,7 +99005,7 @@
   });
 
   /* ── queue 856: the AI you can TALK TO ─────────────────────────────────────────────────────────
-   * Ezra asked for CapCut's "just talk to her and say what you want and then it goes and does it for
+   * Ezra asked for [another app]'s "just talk to her and say what you want and then it goes and does it for
    * you inside the edit". These four cover the things that would actually hurt him, not the things
    * that are easy to assert:
    *   1. a sentence is ONE undo step — the whole reason he can trust it, and the one that breaks
@@ -107221,7 +107222,7 @@
   test('690 the mask editor follows the playhead — after a scrub its outline is the frame on screen, and dragging a point there keeps the rest of that frame', { item: '690', budgetMs: 60000 }, async function () {
     /* js/mask-tool.js seeded its working points ONCE, in open(), from the path at the playhead — and nothing reseeded them
        when the playhead moved: draw() only reseeded when the mask OBJECT changed (undo / load). So with an animated mask
-       (the AE-style roto its own header advertises: edits write into the keyframe at the playhead), he scrubbed to the
+       (the roto its own header advertises: edits write into the keyframe at the playhead), he scrubbed to the
        next frame he wanted to fix and the teal outline stayed where the mask was on the frame he opened it on, while the
        mask itself had moved on. Touching a handle there made flush() write the WHOLE stale outline into a new keyframe at
        the playhead: that frame snapped back to the old frame's shape with one point moved, and the roto he had there was
@@ -109677,7 +109678,7 @@
       await sleep(100);
       const src = await FM.projects.create({ name: 'HUNTe caption src', width: 1080, height: 1920 }); o.made.push(src);
       const bar = FM.makeLayer('shape', { name: 'HUNTe bar', shape: 'rect', x: 540, y: 1574, shapeW: 900, shapeH: 160, fill: '#e76f51' });
-      const txt = FM.makeLayer('text', { name: 'HUNTe name', text: 'EZRA SMITH', x: 540, y: 1574, fontSize: 80 });
+      const txt = FM.makeLayer('text', { name: 'HUNTe name', text: 'YOUR NAME', x: 540, y: 1574, fontSize: 80 });
       [txt, bar].forEach(function (l) { l.start = 0; l.duration = 4; FM.scene.layers.push(l); });
       FM.refreshAll(); FM.history.commit();
       if (!FM.storage.flushSync()) throw new Error('setup: the source project could not be saved');
@@ -138764,7 +138765,8 @@
   });
 
   test('simple P1 · T20 no company name in any word the Simple editor shows, and the scan catches one', { item: '980' }, function () {
-    const BRANDS = /\b(Apple|Alight ?Motion|After ?Effects|Adobe|Premiere|Final ?Cut|CapCut|Instagram|TikTok|DaVinci|Resolve|iMovie|LumaFusion)\b/i;
+    const PLATFORMS = /\b(Apple|Instagram|TikTok)\b/i;   // these are written out; another editing app is found by its fingerprint (names1264, beside the 1254 tests): no file may write one (#1264)
+    const BRANDS = { test: function (t) { return PLATFORMS.test(t) || !!names1264(t); }, find: function (t) { const m = PLATFORMS.exec(t); return m ? m[0] : names1264(t); } };
     const scan = function (o, path, out) {
       if (typeof o === 'string') { if (BRANDS.test(o)) out.push(path + ': "' + o + '"'); return out; }
       if (typeof o === 'function') { try { scan(String(o.length >= 4 ? o(2, 5, 3.2, 2) : o.length === 1 ? o(1.5) : o(4, 15)), path + '()', out); } catch (e) {} return out; }
@@ -138774,11 +138776,11 @@
     if (!FM.spineWords) throw new Error('FM.spineWords is missing — js/spine-words.js did not load');
     const hits = scan(FM.spineWords, 'spineWords', []);
     if (hits.length) throw new Error('another company’s name is in Simple’s words: ' + hits.join(' · '));
-    const n = scan({ a: 'Lay them out like CapCut' }, 'control', []);
-    if (n.length !== 1) throw new Error('CONTROL: the scan did not catch a planted brand name');
+    const n = scan({ a: 'Lay them out like ZzqControlApp', b: 'as TikTok does', c: 'in a plain row' }, 'control', []);   // a made-up name whose fingerprint is on the list, a platform, and plain words
+    if (n.length !== 2) throw new Error('CONTROL: the scan caught ' + n.length + ' of the 2 planted names (a made-up editing app and a platform), or took plain words for a name');
     const ids = ['btn-sm-link', 'sm-timeline', 'sm-say', 'cv-editor'];   // 1 Oct: the switch is the cog's (#cv-editor, built when the cog opens); #1243 S5 · S34 A: Link took ✂'s place
     const dom = ids.map(id => document.getElementById(id)).filter(Boolean).map(e => e.textContent + ' ' + (e.getAttribute('aria-label') || '') + ' ' + (e.title || '')).join(' ');
-    if (BRANDS.test(dom)) throw new Error('a company name is in the Simple editor’s controls: ' + dom.match(BRANDS)[0]);
+    if (BRANDS.test(dom)) throw new Error('a company name is in the Simple editor’s controls: ' + BRANDS.find(dom));
   });
 
 
@@ -141613,7 +141615,7 @@
      is one row again, so the panel keeps its room, and the second click of a double click never presses a tool that moved
      under it. The phone keeps its one row with More and Delete pinned (finding 22). Each test below but the phone's control
      fails on option A by what it measures.
-     #1243 R RELEASE 8 (R decision 6, his S15 "make it like CapCut where you can scroll it" and S33's section lines) REVERSES his pick B:
+     #1243 R RELEASE 8 (R decision 6, his S15 "make it like [another app] where you can scroll it" and S33's section lines) REVERSES his pick B:
      a PC shows the same single scrolling strip as a phone, More is gone (S4) and Delete scrolls at the strip's end (S31). The tests below
      were rewritten to what that strip promises: one 56 px row, every tool in reach by scrolling (smTrayReach), the band whole. */
   /* A PC window w × h as it first opens: the frame's height as well, because the band's height follows it, and no band height
@@ -150363,7 +150365,7 @@
 
   /* SU1 #12 (r1, r2): reopening a project in Simple brought back the clip selected when he left it — the last one, off the right of the
      screen — while Clip 1 sat under the playhead, so the tray and its 🗑 acted on a clip he could not see. A project opens in Simple
-     with nothing selected (the quiet "clips · length" line), as CapCut does. Full restores its selection exactly as before (§0.4). */
+     with nothing selected (the quiet "clips · length" line), as [another app] does. Full restores its selection exactly as before (§0.4). */
   test('SU1 #12 · at 380 a project reopened in Simple opens with nothing selected, so the tray cannot act on a clip off the screen; Full still restores its selection', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     const tools = () => Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool).join(',');
@@ -154681,7 +154683,7 @@
   // ── end 966 B22 ──
 
   /* ═══ #966 §B33 (refers to #545): BLACK & WHITE MIXER — how bright each colour turns in grey: six sliders (Reds, Yellows,
-     Greens, Cyans, Blues, Magentas, −200..300 %, starting at Photoshop's default mix 40 / 60 / 40 / 60 / 20 / 80), a Colour filter
+     Greens, Cyans, Blues, Magentas, −200..300 %, starting at [another app]'s default mix 40 / 60 / 40 / 60 / 20 / 80), a Colour filter
      row that writes them (Neutral, Red, Orange, Yellow, Green, Blue, Infrared), Contrast, and a Tint with its colour
      (tools/design/plans/fxnew-bwmix/NOTES.md). Every test fails on fb24f68b by NAMING what is missing: _cgNeed (B18's) asks for the
      registry entry and the kernel before anything is measured. The kernel runs on typed arrays through FM._applyPixelFx — the very
@@ -165907,13 +165909,13 @@
     }
   });
 
-  /* ═══ #954 — every effect named away from Alight Motion, and the effect groups in our own order ═══════════════════════════════
-   * His words, 1 Sep: "i want every effect to be named different to what it is in alight motion and also have different ordering
-   * to avoid getting taken down by aligiht motion for copying". The 26 Sep sheet (tools/design/954-options.html; the record with
-   * ids is tools/design/954-effect-names.md) found 40 labels that were distinctly Alight Motion's and drew a new name for each.
+  /* ═══ #954 — every effect named away from [the reference app], and the effect groups in our own order ═══════════════════════════════
+   * His words, 1 Sep: "i want every effect to be named different to what it is in [the reference app] and also have different ordering
+   * to avoid getting taken down by [the reference app] for copying". The 26 Sep sheet (tools/design/954-options.html; the record with
+   * ids is tools/design/954-effect-names.md) found 40 labels that were distinctly [the reference app]'s and drew a new name for each.
    * Decided 11 Oct (#1130): the 40 renames as drawn, the 70 plain craft names kept, the new group order as drawn. LABELS ONLY:
    * every type id is unchanged, so a saved project opens exactly as before, and the old name stays a search word.
-   * Each row: the type id, the old Alight Motion name, the new name as drawn, its category (which does not change). */
+   * Each row: the type id, the old [the reference app] name, the new name as drawn, its category (which does not change). */
   const T954 = [
     ['thermal', 'Hot Colour', 'Heat Map', 'color'],
     ['ripple', 'Circular Ripple', 'Pond Rings', 'distort'],
@@ -165957,7 +165959,7 @@
     ['lightning', 'Lightning', 'Bolts', 'proc'],
   ];
 
-  test('954 none of the 40 effects that carried an Alight Motion name shows it any more, each is named as drawn and still found by typing its old name, and a plain name like Gaussian Blur is unchanged', { item: '954' }, function () {
+  test('954 none of the 40 effects that carried another app’s name shows it any more, each is named as drawn and still found by typing its old name, and a plain name like Gaussian Blur is unchanged', { item: '954' }, function () {
     const R = FM.fxRegistry;
     if (!R || !R.get || !R.all) throw new Error('setup: the effect registry is not reachable');
     if (T954.length !== 40) throw new Error('setup: the table holds ' + T954.length + ' renames, not the 40 on the sheet');
@@ -165972,7 +165974,7 @@
       else if (r.label !== row[2]) bad.push(row[0] + ' is called ' + r.label + ', not ' + row[2] + ' as drawn');
       if (r.category !== row[3]) bad.push(row[2] + ' moved to ' + r.category + ', out of ' + row[3]);
     });
-    if (bad.length) throw new Error(bad.length + ' of the 40 effects still carry their Alight Motion name or are not named as drawn: ' + bad.slice(0, 8).join('; '));
+    if (bad.length) throw new Error(bad.length + ' of the 40 effects still carry their old name or are not named as drawn: ' + bad.slice(0, 8).join('; '));
     /* ONE EFFECT EACH: no other effect is called the new name, and nothing is still called the old one */
     const all = R.all();
     T954.forEach(function (row) {
@@ -166022,7 +166024,7 @@
     if (!same(fx, NEW)) throw new Error('FM.FX_CATEGORIES runs ' + fx.join(', ') + ' - not the order the browser reads');
   });
 
-  test('954 no lesson tells him to type or tap an effect by the Alight Motion name it no longer carries', { item: '954' }, async function () {
+  test('954 no lesson tells him to type or tap an effect by the old name it no longer carries', { item: '954' }, async function () {
     if (!FM.tutorials || typeof FM.tutorials.clean !== 'function') throw new Error('setup: FM.tutorials is not loaded, so the lessons cannot be read the way the app reads them');
     const get = async function (u, json) {
       const r = await fetch(u + '?t=' + Date.now());
@@ -166046,23 +166048,49 @@
     }
     /* CONTROL: the lessons do name effects in bold (lesson 03's Drop Shadow is one), so the bolds are being read */
     if (!effectBolds) throw new Error('CONTROL: not one bold phrase in ' + list.length + ' lessons is an effect name - the lessons are not being read, so finding no old name proves nothing');
-    if (bad.length) throw new Error(bad.length + ' lesson line(s) still name an effect the way Alight Motion does: ' + bad.slice(0, 6).join('; '));
+    if (bad.length) throw new Error(bad.length + ' lesson line(s) still name an effect by its old name: ' + bad.slice(0, 6).join('; '));
   });
 
   /* ═══ #1254 — NOTHING BUT THE APP ON THE LIVE SITE, AND NOTHING IN IT THAT NAMES THE APP IT WAS FIRST MODELLED ON ════════════════════
    * His words, 16 Nov: "I found a really old build … that should not be findable … if there is on the GitHub any old versions that's
-   * really bad because the old versions are clearly copies of a light motion and if anyone can find that ever then they will
+   * really bad because the old versions are clearly copies of [the reference app] and if anyone can find that ever then they will
    * basically you know get us some big trouble". Measured that night: GitHub Pages was publishing every file in the repo (the notes,
    * the request list, these tests, the tools), and the app's own served code named that app 64 times in comments.
    * Three things hold it shut. (1) _config.yml leaves everything but the app off the site, and tools/_public.py (run by ship.sh, with
    * its own self-test) refuses a release whose top-level paths are not all app-or-excluded; this suite pins the file's existence and
-   * its sense. (2) index.html asks search engines not to list the page. (3) No file the site serves may name that app: the comments
-   * say [the reference app], and this test reads every served file so a later session cannot write the name back. The private
-   * record (BEFORE-PUBLISHING.md, REQUESTS.md, tests/) keeps the name; none of it is served. */
-  const NAMED1254 = /a\s*l\s*i\s*g\s*i?\s*h\s*t[\s_-]*motion/i;
-  test('1254 · no file the live site serves names the app FreeMotion was first modelled on: the page, every script and stylesheet it loads, the worker, the manifest and the lessons (CONTROL: the files are really read, and the check finds the name in a planted line)', { item: '1254', budgetMs: 120000 }, async function () {
+   * its sense. (2) index.html asks search engines not to list the page. (3) No file the site serves may name that app, or any
+   * other editing app (#1264, 24 Nov, his words: "absolutely zero trace anywhere in any of our files"): this test reads every served file
+   * so a later session cannot write a name back, and tools/names-gate.py refuses a release in which ANY file names one, these tests included. */
+  /* THE NAMES ARE NOT WRITTEN HERE EITHER (#1264). The tests that must FIND a name (in the effects' words, in Simple's words, in
+   * every served file) know each one only as a FINGERPRINT of its words: two 32-bit sums, sixteen hex digits, made by the list's
+   * keeper outside the repo (tools/names-gate.py holds the same list for the ship, as SHA-256). A name that is also a plain word in
+   * lower case counts only as a proper name is written, with its capitals. names1264(text) gives the first name found, as written,
+   * or ''. The list also holds one made-up name (ZzqControlApp, Zzq Studio) so that a control can plant a name without writing one. */
+  // BEGIN PRINTS 1264
+  const PRINTS1264 = { any: new Set(['078cfb1098ee5430', '0939f08a65c2c7ae', '1c1c55da9f094fff', '1d2baf1531666794', '1e4ff5ab070ea33f', '277162b329f1e348', '30eb8ca0387d3020', '31ddabcf25c42eb0', '33f24e12641923d4', '35fbc5d1c4b060a6', '39dff82147463ac5', '426c6e96e4e92980', '46a77d51416394ab', '49c4c15aabfd7387', '4d583d580c3b0ab4', '4f1f399a723efdb1', '4f465ccea60a1699', '546d573320336348', '6044e9bcd476d940', '641332ece18de0ac', '656d185e37a09157', '6585bf15f2d294c4', '66532efe687d81ad', '6d471ba77179114a', '7306545244fe4f15', '75ca3ee0eeb5f12c', '799734b394760b60', '7f3657fb82f8fcb8', '8140b61ea1aa3057', '8298cfe7b879cf42', '8860645adf164236', '8df14558c2b4541a', '8e96409e125e51b1', '8ef161fd8fd9765d', '8f290fcdb7291708', '9a63d948c4cf8a94', '9ce55424a28b8516', '9f0247b5d9aebe62', 'a136c79dc8c830f4', 'a252d38b0f578111', 'a5329da8a225454f', 'a564c98c649c50d0', 'a5c70ef3e564f6b9', 'a8921113ed7ac214', 'b0661a386d50a107', 'b07ee30241e3f5a7', 'bc08455af43a6365', 'bc8ecff4e9b14b49', 'be973f53bad570e1', 'c3513b499d2fe4f9', 'c56d72099477241e', 'cb4d00c93e9cfab0', 'cbaccaec15dfb4e7', 'd114c7af9ec2bfb5', 'd6acd5665e2ff208', 'd882c09037a156ad', 'd9b2cfb340782937', 'e0d2c12a7bfdeb0a', 'e434ba06913dab15', 'e4d4464444e26c08', 'e53a0d32d2cce7b3', 'e7ca52421d3f050a', 'e95abfe49ac45eb0', 'eb93d51b570a3d92', 'edf67fb6f726566e', 'f3a30c2812cb7e27', 'f4a0741221a4f26c', 'f4ff8fd2c82103ee', 'f577310bc54447fa', 'f7222bbb90bd8333', 'f7da66bba5562976', 'fdb792363426b0ff', 'ff9c6347d64a8a04']), exact: new Set(['040db706dce35a02', '08aa190133b16c53', '0ff12770541115db', '107d16e2a7d7d46e', '12168b1d2ccc7418', '142570d16d6703fc', '22cd2611ccf2b82a', '2bd9df41609a8b1e', '3c391de065e12b8d', '4a8122d875b62ed7', '4e7247dd60cb02a4', '4fb4ced957027279', '5092a0c1f42f2fd9', '67b80e39394d7aaa', '685e51ceab4dc1a4', '6cb63a3ccef568ee', '85f6fdfa68a89d5f', '882288b21a811928', '8de9443f2a1e6305', '8ee27c3a9aed95b5', '94c753024e8b48c2', '9f71e6781a54b697', 'a19ad83c79c58fcd', 'a5f5bf4e2ddadd28', 'bf797841c0acfe56', 'c38191c8f0ad1ca9', 'c75cdd030b1ac1da', 'ee5a75d967f1ba0e', 'f20b94294ad077ff', 'f2f36498a15bdede', 'ffb53d1c5779de04']), lead: new Set(['078cfb1098ee5430', '159ac2b790bef70d', '1e4ff5ab070ea33f', '2f3e125b7af1225e', '30eb8ca0387d3020', '31ddabcf25c42eb0', '34375e0efa74e551', '35fbc5d1c4b060a6', '426c6e96e4e92980', '4349c6e5cfa8bd0e', '46a77d51416394ab', '49c4c15aabfd7387', '4d583d580c3b0ab4', '4f1f399a723efdb1', '4f465ccea60a1699', '546d573320336348', '6044e9bcd476d940', '6122e6af4ba41f49', '641332ece18de0ac', '6585bf15f2d294c4', '66532efe687d81ad', '71e70b9af50f56b9', '7306545244fe4f15', '75ca3ee0eeb5f12c', '799734b394760b60', '8140b61ea1aa3057', '8298cfe7b879cf42', '8dc32e5982d4ec7b', '8df14558c2b4541a', '8e96409e125e51b1', '8ef161fd8fd9765d', '8f290fcdb7291708', '9a63d948c4cf8a94', '9cb0274c2aa6c7e0', '9ce55424a28b8516', '9f0247b5d9aebe62', 'a136c79dc8c830f4', 'a252d38b0f578111', 'a5329da8a225454f', 'a5c70ef3e564f6b9', 'a8921113ed7ac214', 'b0661a386d50a107', 'b77876810dcd167c', 'bc8ecff4e9b14b49', 'be973f53bad570e1', 'c3513b499d2fe4f9', 'c56d72099477241e', 'cb4d00c93e9cfab0', 'cbaccaec15dfb4e7', 'd114c7af9ec2bfb5', 'd6acd5665e2ff208', 'd882c09037a156ad', 'd9b2cfb340782937', 'debf798c121cc800', 'e40c292c2eb4bea1', 'e434ba06913dab15', 'e4d4464444e26c08', 'e53a0d32d2cce7b3', 'edf67fb6f726566e', 'f3a30c2812cb7e27', 'f4a0741221a4f26c', 'f577310bc54447fa', 'f75d512646734fd6', 'f7da66bba5562976', 'fbe6d55088a212ad', 'fc9adf039a9b01b9', 'fdb792363426b0ff', 'ff9c6347d64a8a04']), leadExact: new Set(['002a89fe5ef5d69c', '0b2c214f2313e3df', '0efd073e47f97bd8', '2aad742ec15e040c', '2fbb5e61801e804c', '3468032d2b6b6dcb', '3ef50ad0d3a4fbc0', '41fa4f704bd65065', '454e6cdbd898741d', '51470710581c2cc1', '57cea976d3408e57', '5aedf3b13f5a12f3', '64feed5b4cbaf586', '7537bf3cee8468de', '7d37669771be451b', '82487900c3ff1609', '8e3b4bb8454626fb', '904a17b837b73c14', 'a37f187cf3c04c5d', 'a5309da95818ba6f', 'a7dd3a6930141afc', 'a91b328f43794a12', 'aad076474bd12540', 'b57fc1f87e237aaf', 'b960112c23865556', 'bb56345720efe917', 'be046417ad464e49', 'c749a5e6530075e9', 'd371d44e6cdb7b42']) };
+  // END PRINTS 1264
+  const print1264 = function (s) { let a = 0x811c9dc5, b = 0x9747b28c; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); a = Math.imul(a ^ c, 0x01000193); b = Math.imul(b ^ c, 0x85ebca6b); b ^= b >>> 13; } return ('0000000' + (a >>> 0).toString(16)).slice(-8) + ('0000000' + (b >>> 0).toString(16)).slice(-8); };
+  const names1264 = function (text) {
+    const s = String(text).replace(/[A-Za-z0-9+\/=]{120,}/g, function (m) { return ' '.repeat(m.length); }), re = /[A-Za-z0-9]+/g, w = [], at = [];   // an embedded picture (base64) is not prose
+    let m; while ((m = re.exec(s))) { w.push(m[0]); at.push(m.index); }
+    for (let i = 0; i < w.length; i++) {
+      const L = PRINTS1264.lead.has(print1264(w[i].toLowerCase())), X = PRINTS1264.leadExact.has(print1264(w[i]));
+      if (!L && !X) continue;
+      let g = w[i];
+      for (let n = 1; n <= 3; n++) {
+        if (n > 1) {   // the next word belongs to the same name only across a space, a hyphen or a wrapped comment's edge
+          if (i + n > w.length || !/^[\s*\/#>|_\-]{1,14}$/.test(s.slice(at[i + n - 2] + w[i + n - 2].length, at[i + n - 1]))) break;
+          g += ' ' + w[i + n - 1];
+        }
+        if ((L && PRINTS1264.any.has(print1264(g.toLowerCase()))) || (X && PRINTS1264.exact.has(print1264('cs:' + g)))) return s.slice(at[i], at[i + n - 1] + w[i + n - 1].length);
+      }
+    }
+    return '';
+  };
+  // END HELPER 1264
+  test('1254 · no file the live site serves names another editing app: the page, every script and stylesheet it loads, the worker, the lessons and the drawn effect pictures (CONTROL: the files are really read, and the check finds a planted name)', { item: '1254', budgetMs: 120000 }, async function () {
     const get = async function (u) { const r = await fetch(u + (u.indexOf('?') < 0 ? '?t=' : '&t=') + Date.now()); if (!r.ok) throw new Error('setup: ' + u + ' answered ' + r.status); return r.text(); };
-    if (!NAMED1254.test('// the [x] look, like Alight-Motion does') || !NAMED1254.test('alight motions') || NAMED1254.test('a light touch of motion blur')) throw new Error('CONTROL: the name check does not tell a planted line from plain words');
+    if (!names1264('// the [x] look, like Zzq-Studio does') || !names1264('ZZQCONTROLAPP’s') || names1264('a light touch of motion blur, after effects are applied to the final cut')) throw new Error('CONTROL: the name check does not tell a planted line from plain words');
     const html = await get('index.html');
     const refs = [];
     html.replace(/<(?:script|link)\b[^>]*?\b(?:src|href)="([^"#:]+)"/g, function (_, u) { if (/\.(js|css|json)(\?|$)/.test(u)) refs.push(u); return _; });
@@ -166081,11 +166109,11 @@
     for (const f of files) {
       const s = f === 'index.html' ? html : await get(f);
       bytes += s.length;
-      const m = NAMED1254.exec(s);
-      if (m) bad.push(f + ' (“' + s.slice(Math.max(0, m.index - 40), m.index + 30).replace(/\s+/g, ' ') + '”)');
+      const m = names1264(s);
+      if (m) { const at = s.indexOf(m); bad.push(f + ' (“' + s.slice(Math.max(0, at - 40), at + m.length + 30).replace(/\s+/g, ' ') + '”)'); }
     }
     if (bytes < 5e6) throw new Error('CONTROL: ' + files.length + ' served files came to only ' + bytes + ' characters, so they were not really read');
-    if (bad.length) throw new Error(bad.length + ' served file(s) name it — say [the reference app] there; the private notes keep the name: ' + bad.slice(0, 6).join(' · '));
+    if (bad.length) throw new Error(bad.length + ' served file(s) name another editing app (say what the thing does instead; in his own quoted words, [another app]): ' + bad.slice(0, 6).join(' · '));
   });
   test('1254 · the page asks search engines not to list it, and the site config leaves the notes, the request list, the tests and the tools off the live site while the app and the lessons stay on it (CONTROL: the config is read as a list)', { item: '1254' }, async function () {
     const html = await (await fetch('index.html?t=' + Date.now())).text();
@@ -166388,7 +166416,7 @@
 
   /* ═══ queue 985 — THE EXPORT CARD IS OPTION A, “WHAT YOU’LL GET” ═══════════════════════════════════════════════════════
    * His words, 29 Sep: "the export menus settings are honestly a bit daunting for someone who doesnt know how it works. I
-   * dont want to lose any function but i want it to actually make sense at first glance. Capcut does a really good job of
+   * dont want to lose any function but i want it to actually make sense at first glance. [another app] does a really good job of
    * this but dont fully copy". A was decided 11 Oct (#1130); tools/design/985/mapping.md places each of the 34 settings.
    * Clause 2 is the hard rule — no function lost, the same export for the same values — so these tests drive the NEW card
    * and read back the controls the export has always read (#exp-format, #exp-res, #exp-cw, #exp-fps, #exp-quality,
@@ -204854,7 +204882,7 @@
 
   /* ═══ #1243 R RELEASE 4 — S15 · S3 · S9 · THE FLOATING LINE · RULE 3 (tools/design/plans/2026-11-08-1243/1243-R.md, row 4 of (c)) ═══════
      His words, 8 Nov: S3 "when you actually tap on a layer, that first row goes away"; S9 "when you open up any of these sub menus, I want
-     the first menu to go away. I don't want two menus at once"; S15 "it should be like scrollable … make it like CapCut where you can
+     the first menu to go away. I don't want two menus at once"; S15 "it should be like scrollable … make it like [another app] where you can
      scroll it". Simple's bar is ONE row whose contents swap by #sm-bar[data-mode] (project · item · sub · panel); every row is one
      strip that scrolls sideways; Simple's lines and the first-run hint float just above the bar; a panel runs from the stage's bottom
      edge on a phone (FM.mobile.sheetLine) and takes the whole band on a PC. Each test fails on v18.36 by what it measures, never by a
@@ -206145,7 +206173,7 @@
 
   /* ═══ #1243 R RELEASE 5 — S5 · S34 A (tools/design/plans/2026-11-08-1243/1243-R.md, row 5 of (c)) ═══════════════════════════════════
      His words, 8 Nov: S5 "for the play button row, get rid of the playback options. Get rid of the split button… put the split button on
-     the row that pops up when you have a layer selected… just so that row is really simple"; S34 "CapCut has… a feature to… turn linking
+     the row that pops up when you have a layer selected… just so that row is really simple"; S34 "[another app] has… a feature to… turn linking
      stuff on and off… just one simple button to like link stuff". R's play row: Link · (Curve, later) · spacer · |◀ — "No ⋯, no ✂". Each
      test fails on v18.39 by what it measures: every probe throws its own sentence first. */
   const r5Link = () => document.getElementById('btn-sm-link');
@@ -206524,7 +206552,7 @@
 
   /* ═══ #1243 R RELEASE 6 — S8 (tools/design/plans/2026-11-08-1243/1243-R.md (a) and row 6 of (c); plan B S8) ═══════════════════════════
      His words, 8 Nov: "when you click on any of the menus, it should open up a sub menu… captions… different like presets… kind of like what
-     CapCut would do". Each test fails on v18.39 by what it measures. */
+     [another app] would do". Each test fails on v18.39 by what it measures. */
   const r6Look = key => document.querySelector('#sm-tray .sm-tool[data-tool="look:' + key + '"]');
   const r6Hl = L => ((L && L.effects) || []).filter(e => e && e.type === 'wordhighlight');
 

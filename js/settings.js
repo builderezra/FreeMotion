@@ -483,7 +483,7 @@ window.FM = window.FM || {};
          worry himself before it could be raised: *"They all have homes and don't need to be repeated
          there"*. Each one was checked against its survivor before its row was deleted, because that is
          the half he cannot verify from his side:
-         · **Canvas** — *"we don't need the Canva settings button"*. Lives on both bars: #btn-canvas on
+         · **Canvas** — *"we don't need the Canvas settings button"*. Lives on both bars: #btn-canvas on
            the desktop rail and #m-settings on the phone's, both visible, both opening the same dialog.
          · **Snapping (magnet)** — *"we don't need the snapping magnet button"*. Lives on the ⛶ view bar
            as #vb-snap, which presses #btn-snap and reads its state back, so the two cannot disagree.

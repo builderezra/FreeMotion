@@ -102,7 +102,7 @@ window.FM = window.FM || {};
   FM.bezierAt = bezierAt;
   FM.EASE_PRESETS = { linear: [0, 0, 1, 1], easeIn: [.42, 0, 1, 1], easeOut: [0, 0, .58, 1], easeInOut: [.42, 0, .58, 1], overshoot: [.34, 1.56, .64, 1], anticipate: [.36, 0, .66, -.56] };
 
-  // Loop a keyframed property past its last keyframe (AM: cycle repeats, pingpong reverses each pass): the time `p` is read
+  // Loop a keyframed property past its last keyframe (cycle repeats, pingpong reverses each pass): the time `p` is read
   // at. `t` unchanged unless `p` loops and `t` is past its last key.
   /* bughunt5 #13: this was inline in evalProp, so nothing else could use it, and the mask path (FM.evalMaskPath, js/masks.js)
      and a drawing's keyframed points (FM.evalShapeSubs, js/compositor.js) froze on their last key while the Loop menu, which
@@ -827,7 +827,7 @@ window.FM = window.FM || {};
     // just something for a future reader to mistake for live state. The CAMERA's own motionBlur is a
     // different feature and is set where cameras are built, not here.
       wiggle: { enabled: false, amp: 12, freq: 2 },               // procedural position jitter (deterministic)
-      parent: null,               // layer id this layer inherits transform from (AM parenting)
+      parent: null,               // layer id this layer inherits transform from (parenting)
       parentMode: 'normal',       // 'normal' | 'locked' (stay upright) | 'weighted' (partial rotation)
       parentWeight: 0.5,          // weighted mode: fraction of parent rotation the child keeps
       transform: {

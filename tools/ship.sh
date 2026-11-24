@@ -637,6 +637,18 @@ if ! python3 tools/_public.py check; then
   echo "❌ THIS RELEASE WOULD PUBLISH SOMETHING THAT IS NOT THE APP — not committing, not pushing."
   exit 1
 fi
+# NO FILE MAY NAME ANOTHER EDITING APP, AND NEITHER MAY THE COMMIT MESSAGE (#1264, 24 Nov). His words: "Just make sure there's
+# absolutely zero trace anywhere in any of our files, any of our GitHubs, anything that it mentions anything about [another app]
+# or any editing software at all. Nowhere to be found." A sweep took the names out once, and a sweep is a thing to remember, so
+# this is the lock: every text file the commit would hold (tracked, and new ones git does not ignore), its path, and the message
+# itself are read, and one name refuses the release. The gate knows the names only as fingerprints, so it carries none itself
+# (tools/names-gate.py says how one is added); it self-tests first; a few seconds. What it does NOT read is the old commits:
+# the history is a separate job that needs his own yes.
+mkdir -p .claude/ship; printf '%s\n' "$MSG" > .claude/ship/names-msg.txt
+if ! python3 tools/names-gate.py check --msg .claude/ship/names-msg.txt; then
+  echo "❌ THIS RELEASE NAMES ANOTHER EDITING APP (a file, a path or the commit message) — not committing, not pushing."
+  exit 1
+fi
 # THE FAILSAFE MUST PROVE ITSELF TOO (12 Sep). tools/rollback.sh is the answer to his question "whats the
 # fail safe if an ai fucks up all the code?" — and on the day it was written it broke TWICE, in opposite
 # directions: untracked (so `git clean -fd` and its own `git stash -u` would eat it), then, once that was

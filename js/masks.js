@@ -65,7 +65,7 @@ window.FM = window.FM || {};
 
   /* evalMaskPath(mask, t) -> pts array in canvas space.
    * Static path (plain array): returned as-is (live reference — the editor writes back into it). Animated
-   * path: AE-style SAME-VERTEX-COUNT rule — interpolate vertex-by-vertex ONLY when the two surrounding
+   * path: SAME-VERTEX-COUNT rule — interpolate vertex-by-vertex ONLY when the two surrounding
    * keyframes have matching vertex counts (lerp each [x,y], carry the smooth flag from the EARLIER kf); if
    * the counts differ, SNAP to the keyframe at/just-before t (no morph across a topology change). Empty/
    * 1-point paths are returned verbatim. */
@@ -126,7 +126,7 @@ window.FM = window.FM || {};
    * (both mean "render the layer normally"), so an enabled-but-still-empty mask never blanks the layer.
    *
    * Ordered compositing: SEED the buffer FULL WHITE iff the first enabled mask is subtract/intersect (so a
-   * lone subtract/intersect still reveals something — AE-practical), else EMPTY. Then STAMP each enabled
+   * lone subtract/intersect still reveals something — the practical choice), else EMPTY. Then STAMP each enabled
    * mask's filled path (blurred by feather; inverted within-frame if set; at its opacity) onto the buffer
    * by its mode (add=source-over, subtract=destination-out, intersect=destination-in).
    *

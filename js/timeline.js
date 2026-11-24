@@ -1,4 +1,4 @@
-/* FreeMotion — Timeline UI (AM-style): each layer is a row with a HEAD (eye/thumb/name/lock,
+/* FreeMotion — Timeline UI: each layer is a row with a HEAD (eye/thumb/name/lock,
  * drag-to-reorder) + a clip LANE (colored bar, keyframes, trim grips, waveform). The timeline
  * IS the layer manager — there is no separate layers panel. */
 window.FM = window.FM || {};
@@ -8,7 +8,7 @@ window.FM = window.FM || {};
   let rulerEl, tracksEl, playheadEl, innerEl, snaplineEl, loopRegionEl, timelineEl;
   let HEAD_W = 172;
   let zoom = 1;          // 1 = fit-to-width; >1 zooms in (lanes scroll horizontally, heads stay pinned)
-  // AM-style fixed-centre playhead — now UNIVERSAL (phone AND desktop): the line (#tl-centerline) is
+  // Fixed-centre playhead — now UNIVERSAL (phone AND desktop): the line (#tl-centerline) is
   // CSS-pinned at TRUE screen centre (left: 50vw) and NEVER moves; the content scrolls under it. PAD
   // shifts the ruler/clips/keyframes right so the current time lands exactly under that line —
   // PAD = (half the viewport) − head column. Left pad lets t=0 reach centre; the trailing pad in
@@ -711,7 +711,7 @@ window.FM = window.FM || {};
   // Snap a proposed clip start so the clip's start OR end lands on 0 / playhead / another clip edge.
   // Returns { v: snapped start, snapped: bool, guide: alignment time for the guide line }.
   function snapStart(layer, ns, pps, excl, sup) {
-    if (!snapping) return { v: ns, snapped: false, guide: 0 };   // clip start may go NEGATIVE (AM: drag past 0); floor applied by the caller
+    if (!snapping) return { v: ns, snapped: false, guide: 0 };   // clip start may go NEGATIVE (drag past 0); floor applied by the caller
     const snapPx = 7, dur = layer.duration;   // 7 SCREEN px — the time radius scales with zoom automatically (7/pps seconds)
     const starts = [0, FM.time], ends = [FM.time];
     // sup: targets this clip was ALREADY sitting on when the drag began — the user just snapped
@@ -1065,7 +1065,7 @@ window.FM = window.FM || {};
     }
   }
 
-  // AM: a row of frame thumbnails along the clip bar. `frames` are ImageBitmaps; for an image clip it's
+  // A row of frame thumbnails along the clip bar. `frames` are ImageBitmaps; for an image clip it's
   // one frame (tiled); for video a handful of distinct frames cycled across the width.
   function drawFilmstrip(canvas, frames, m) {
     const ctx = canvas.getContext('2d'), H = canvas.height;
@@ -1518,7 +1518,7 @@ window.FM = window.FM || {};
       if (FM.selectMode) { FM.toggleSelect(layer.id); FM.refreshAll(); return; }   // select-mode: taps toggle membership
       if (e.shiftKey || e.metaKey || e.ctrlKey) FM.toggleSelect(layer.id); else FM.selectLayer(layer.id);
     });
-    // AM: HOLD the header cell (mouse OR touch) → multi-select mode; keep holding and DRAG up/down
+    // HOLD the header cell (mouse OR touch) → multi-select mode; keep holding and DRAG up/down
     // to paint more rows into the selection. Reordering lives on the right-edge ≡ handle now, so a
     // mouse hold no longer conflicts with anything. Android's synthetic long-press contextmenu is
     // suppressed via the shared lpFiredAt window (see contextmenu handler).
@@ -1588,7 +1588,7 @@ window.FM = window.FM || {};
   }
 
   // Long-press fired on a header: enter select mode and PAINT-SELECT — every row the pointer passes
-  // while held joins the selection (AM). No timeline rebuild mid-gesture (it would detach the node
+  // while held joins the selection. No timeline rebuild mid-gesture (it would detach the node
   // under the pointer); highlights are applied directly and the full refresh runs on release.
   function beginPaintSelect(layer) {
     lpFiredAt = Date.now();
@@ -1694,7 +1694,7 @@ window.FM = window.FM || {};
     if (FM.syncSelectionChrome) FM.syncSelectionChrome();   // one owner for sel-multi/sel-mode (see app.js)
   }
 
-  // ≡ drag handle at each row's RIGHT edge (AM): press + drag vertically to reorder layers.
+  // ≡ drag handle at each row's RIGHT edge: press + drag vertically to reorder layers.
   // Pointer-based (mouse AND touch). iOS-style reorder:
   //  • rows PART to open a real gap where the drop will land (animated), instead of just a line
   //  • a multi-selection stacks into one tight block under the finger and drops as a unit
@@ -2148,7 +2148,7 @@ window.FM = window.FM || {};
     clip.style.borderColor = shade(col, 24);
     clip.dataset.id = layer.id;
 
-    // AM: each clip shows its NAME on the bar (the track-head becomes eye-only in the overview).
+    // Each clip shows its NAME on the bar (the track-head becomes eye-only in the overview).
     // Hidden on the SELECTED clip (its name lives in the edit pill + it shows the ‹ › grip caps).
     const clabel = document.createElement('span');
     clabel.className = 'clip-label';
@@ -2194,7 +2194,7 @@ window.FM = window.FM || {};
         if (layer.trimStart + srcSpan < m.duration - 0.05) clip.appendChild(Object.assign(document.createElement('div'), { className: 'clip-trim r' }));
       }
     }
-    // AM: video + image clips show a FILMSTRIP of frames on the bar (distinct frames for video; the
+    // Video + image clips show a FILMSTRIP of frames on the bar (distinct frames for video; the
     // photo, tiled, for an image). Built lazily + cached on the media record (m.stripFrames).
     if (layer.type === 'video' || layer.type === 'image') {
       const m = FM.media.get(layer.id);
@@ -2280,7 +2280,7 @@ window.FM = window.FM || {};
       if (e.shiftKey || e.metaKey || e.ctrlKey) { FM.toggleSelect(layer.id); return; }   // multi-select, no drag
       const isTouch = e.pointerType === 'touch' || e.pointerType === 'pen';
       if (isTouch) {
-        // AM model: touch-down does NOT select. A clean tap selects (pointerup); a horizontal drag
+        // Model: touch-down does NOT select. A clean tap selects (pointerup); a horizontal drag
         // scrubs the playhead; an already-selected clip can be press-held to move it in time.
         clipTap = { layer: layer, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY, downTime: timeFromX(e.clientX), baseTime: FM.time, moved: false, holdTimer: null, lastMoveAt: performance.now(), startScrollTop: timelineEl ? timelineEl.scrollTop : 0, axis: null, caught: caughtGlide(e) };   // caught: queue 690
         // ANY unlocked clip, selected or not. Ezra: "On mobile you can only drag clips on the timeline
@@ -2515,7 +2515,7 @@ window.FM = window.FM || {};
          (it trims at once), so it never needed them. */
       clip.appendChild(grip);
     });
-    // SLIP (Canva-style): the clip keeps its exact place and length on the timeline — dragging the
+    // SLIP: the clip keeps its exact place and length on the timeline — dragging the
     // ⇄ pill slides the MEDIA inside it. Shown on the selected video clip when the source has slack
     // beyond the visible span (nothing to slip otherwise).
     if (layer.id === FM.scene.selectedId && layer.type === 'video' && !layer.locked) {
@@ -2710,7 +2710,7 @@ window.FM = window.FM || {};
       // property that had a keyframe at 1.2s shared a single diamond, and dragging it retimed all of
       // them at once. Now each animated property owns its own, so a slider's keyframes are its own.
       //
-      // TWO STATES, and the default is the quiet one (v5.42). Ezra, with AM screenshots: on first
+      // TWO STATES, and the default is the quiet one (v5.42). Ezra, with screenshots: on first
       // tapping a layer "they're clearly showing you where they are but you can't move them yet or
       // hover over them or anything at all"; then, once he opens a specific property's editor, that
       // property's keyframes "become clear and highlighted when you go over them, whilst the others
@@ -3918,7 +3918,7 @@ window.FM = window.FM || {};
       tracksEl.appendChild(empty);
       return;
     }
-    // AM phone-edit: when a clip is selected on a phone, show ONLY that clip's row
+    // Phone-edit: when a clip is selected on a phone, show ONLY that clip's row
     // (the others hide so the property options can dock right under it).
     // Never solo during multi-select / select-mode — you need every row visible to build the set.
     const soloId = soloLayerId();
@@ -3940,7 +3940,7 @@ window.FM = window.FM || {};
          element with a real pointerdown listener, and the gesture code it starts (acquire/layout)
          reasons about `statics` — which in solo view is empty, the one case its own comment calls out
          as having "nowhere to drop". Not creating it removes the state instead of covering it up. */
-      if (!soloId) row.appendChild(buildDragHandle(row, layer, index));   // ≡ right-edge reorder (AM)
+      if (!soloId) row.appendChild(buildDragHandle(row, layer, index));   // ≡ right-edge reorder
       tracksEl.appendChild(row);
     });
     /* AT ITS OWN INDEX (queue 294, clause 5). The row is drawn before the layer that currently sits at
@@ -4175,7 +4175,7 @@ window.FM = window.FM || {};
    * Two things, and he was explicit about both:
    *  · SIX VALUES in two rows — Start · End · Duration, then In · Out · Change, with Change signed.
    *    Start/End are the clip's place on the TIMELINE; In/Out are the trim points inside the SOURCE,
-   *    which is why AM shows both and why a shape (no source) shows a dash rather than a made-up number.
+   *    which is why [the reference app] shows both and why a shape (no source) shows a dash rather than a made-up number.
    *  · A NOTCH STRIP with the exact landing notch filled, and a coloured mark at each end — pink at the
    *    in-point, green at the out-point — so it reads as the whole clip's span, not just the edge.
    * This can only be honest because v11.57 made the trim land on whole frames; before that the strip
@@ -4580,7 +4580,7 @@ window.FM = window.FM || {};
     if (!clipMove || !tracksEl) return;
     const pps = pxPerSec();
     const dx = x - clipMove.startX;
-    // AM: a clip can be dragged PAST 0 into negative start — it keeps going (you just can't scroll
+    // A clip can be dragged PAST 0 into negative start — it keeps going (you just can't scroll
     // before 0 to see the hidden part). Floor it so at least a sliver stays at/after 0 (never vanishes).
     /* ONE FLOOR FOR THE WHOLE SELECTION (BUG-HUNT). Each clip used to be floored against its OWN
        duration — the primary here, every secondary below — so the moment a SHORT clip hit its floor it
@@ -4746,7 +4746,7 @@ window.FM = window.FM || {};
   FM._trimZonePx = trimZonePx;   // seam: the test reads the real zone rather than copying 6%
   FM._trimDrag = function () { return trimDrag; };   // seam (queue 752): the brake counter
   // While a trim finger sits near a viewport edge, scroll the timeline so the clip can keep extending past
-  // the screen (AM behaviour). Re-arms via rAF until the finger leaves the edge or the drag ends.
+  // the screen. Re-arms via rAF until the finger leaves the edge or the drag ends.
   function trimEdgeScroll() {
     trimScrollRAF = 0;
     touchGesture();   // queue 751: same for a trim held at the edge
@@ -5049,7 +5049,7 @@ window.FM = window.FM || {};
         scrollSettle = setTimeout(() => { userScrollAt = 0; FM.timeline.updatePlayhead(); }, 160);
         FM.scrubTime(snapT(Math.max(0, Math.min(FM.scene.project.duration, sL / pxPerSec()))));
       }, { passive: true });
-      // Grabbing the timeline while it's PLAYING pauses it (AM). Detected on the raw INPUT (touch/
+      // Grabbing the timeline while it's PLAYING pauses it. Detected on the raw INPUT (touch/
       // mouse down + wheel), not the scroll event — during playback the playhead's own auto-scroll
       // rewrites scrollLeft every frame, so user scrolls get swallowed by the feedback guard above.
       if (timelineEl) {
@@ -5118,7 +5118,7 @@ window.FM = window.FM || {};
         beginScrub(e);
       };
       // Grab ANYWHERE the timeline could be — the ruler, the lanes, AND the empty space above/below the
-      // clips (the whole scroller) — to scrub on drag / deselect on tap (AM behaviour). Clips, trim grips,
+      // clips (the whole scroller) — to scrub on drag / deselect on tap. Clips, trim grips,
       // keyframes, track heads and markers own their own pointers, so let those through untouched.
       timelineEl.addEventListener('pointerdown', (e) => {
         if (e.button !== undefined && e.button !== 0 && e.pointerType === 'mouse') return;
@@ -5387,7 +5387,7 @@ window.FM = window.FM || {};
         }
         if (slipDrag) {
           const dt = (e.clientX - slipDrag.startX) / pxPerSec();
-          // drag right → the media slides right → EARLIER source shows (trimStart decreases), like Canva
+          // drag right → the media slides right → EARLIER source shows (trimStart decreases), like [another app]
           slipDrag.layer.trimStart = Math.max(0, Math.min(slipDrag.max, slipDrag.trim0 - dt * slipDrag.rate));
           renderSlipGhost(slipDrag);   // the film visibly slides under the fixed window
           FM.seekVideosToTime(); FM.requestRender();
@@ -5411,7 +5411,7 @@ window.FM = window.FM || {};
              travelled in at 336 — the measurement is what showed the rule was aimed at the wrong thing.
              So: the zone is min(TRIM_EDGE, 6% of the viewport) — 23px on a phone, 46px on a desktop — and a
              finger that has not moved 6px since it landed cannot arm it (a grab-and-rest at the very edge
-             stays where it is; a grab-and-push extends past the screen, which is the AM behaviour he has). */
+             stays where it is; a grab-and-push extends past the screen, which is the behaviour he has). */
           const dragged = Math.abs(e.clientX - trimDrag.startX) >= 6;
           if (inZone && dragged && !trimScrollRAF) {
             trimDrag._scrollFrames = 0;   // queue 752: a fresh edge-hold gets a fresh brake, as the clip path's does

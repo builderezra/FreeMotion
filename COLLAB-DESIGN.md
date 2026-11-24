@@ -2734,4 +2734,4 @@ fails with the fix reverted.* What changed, and the decisions the spec did not a
 7. **Keep it under Labs until you've tried Mac ↔ iPhone yourself** (same Wi-Fi, then mobile data, then lock/unlock)? Recommended: **yes**. It takes about 5 minutes of your time and nobody else can do it.
 8. **Hosting from a phone:** allowed, with "keep the app open". Recommended: host from the PC when you can.
 9. **Later upgrades:** tint the exact inspector row someone is dragging; comment pins on the canvas; a bring-your-own relay (TURN) key, entered like the AI key, for the roughly 10–20% of cross-network connections that fail. Recommended: **later, in that order**.
-10. **Before any public link, demo or tutorial**, the Alight-Motion-style UI needs its re-skin (BEFORE-PUBLISHING.md). Recommended: private invites to friends are fine now; re-skin before anything public.
+10. **Before any public link, demo or tutorial**, the [another app]-style UI needs its re-skin (BEFORE-PUBLISHING.md). Recommended: private invites to friends are fine now; re-skin before anything public.

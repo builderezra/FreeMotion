@@ -94,7 +94,7 @@ Then propose:
 (b) 15 new filters (looks);
 (c) 10 upgrades to existing effects that give them more useful controls.
 For each:
-- an ORIGINAL name (do not copy names from Alight Motion or CapCut);
+- an ORIGINAL name (do not copy names from [another app] or [another app]);
 - what it looks like, in one or two plain sentences;
 - its controls (key, label, min, max, default, unit);
 - an implementation sketch in the same style as the existing effects in compositor.js (pseudo-code);
@@ -126,7 +126,7 @@ Then list 80–120 specific sounds grouped into those categories, plus any new c
 Flag anything that needs attribution or has unclear licensing, and leave those out of the main list.
 ```
 
-## 6. Make the look our own (Alight Motion check)
+## 6. Make the look our own ([another app] check)
 
 ```
 You're helping on FreeMotion, a video and motion editor web app. The repo is public at https://github.com/builderezra/FreeMotion and the live app is at https://builderezra.github.io/FreeMotion/. It is vanilla HTML/CSS/JS: no framework, no build step, a global `FM` object, everything stored locally (localStorage and IndexedDB), working on phones (700px wide or less) and PCs.
@@ -138,8 +138,8 @@ RULES. Two other AI sessions change this code every hour, so you must not clash 
 - Every finding must cite the file and line and quote the code. Give the steps to trigger it, a severity (critical/high/medium/low) and your confidence. Mark anything you could not confirm as UNVERIFIED. Do not guess.
 - Skip anything already listed in audits/*.json or REQUESTS.md (search both for the file or feature first).
 
-TASK: the app's interface was modelled on Alight Motion, and before it goes public it must look and read as its own. Read BEFORE-PUBLISHING.md first, then the UI (index.html, styles.css, theme-glass.css, and the js files that build menus).
-List every remaining thing a user would recognise as copied from Alight Motion: layout, names, icons, menu structure, effect names, colours, wording.
-For each one: where it is (file and line), why it reads as Alight Motion, and 2 original alternatives (describe them; don't change anything).
+TASK: the app's interface was modelled on [another app], and before it goes public it must look and read as its own. Read BEFORE-PUBLISHING.md first, then the UI (index.html, styles.css, theme-glass.css, and the js files that build menus).
+List every remaining thing a user would recognise as copied from [another app]: layout, names, icons, menu structure, effect names, colours, wording.
+For each one: where it is (file and line), why it reads as [another app], and 2 original alternatives (describe them; don't change anything).
 Rank them by how recognisable they are.
 ```

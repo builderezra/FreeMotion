@@ -1,8 +1,8 @@
-/* FreeMotion — AM-style "Add" menu (shared component).
+/* FreeMotion — "Add" menu (shared component).
  * Used in TWO places:
  *   • PC: the inspector's no-selection state (nothing selected → this menu; select a clip → editor).
  *   • Mobile: the green + FAB bottom-sheet.
- * AM interaction model: TOP-ROW tabs OPEN A SUB-SECTION of choices; the QUICK-ADD rail ADDS INSTANTLY. */
+ * Interaction model: TOP-ROW tabs OPEN A SUB-SECTION of choices; the QUICK-ADD rail ADDS INSTANTLY. */
 window.FM = window.FM || {};
 (function (FM) {
   'use strict';
@@ -142,7 +142,7 @@ window.FM = window.FM || {};
       : '<path d="' + d + '" fill="currentColor" stroke="none"/>';
     return '<svg viewBox="0 0 24 24">' + body + '</svg>';
   }
-  // The extra AM shape library (pages 2–4 of AM's shape sheet).
+  // The extra shape library (pages 2–4 of [the reference app]'s shape sheet).
   var LIB_SHAPES = [
     ['speech', 'Speech'], ['moon', 'Moon'], ['snowflake', 'Snowflake'], ['shield', 'Shield'], ['check', 'Check'],
     ['droplet', 'Droplet'], ['cloud', 'Cloud'], ['play', 'Play'], ['spiral', 'Spiral'], ['sparkle', 'Sparkle'],
@@ -256,12 +256,12 @@ window.FM = window.FM || {};
         { label: 'Camera', icon: ico('<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>'), add: function () { FM.addCameraLayer && FM.addCameraLayer(); } },
         /* "CONTROLLER", not "Null" (queue 363). Ezra: "If you can think of another name for null that
            still makes sense and describes what it is then change the name of it to that."
-           Null is After Effects' word and it names what the thing is NOT. What it IS: an invisible layer
+           Null is [another app]'s word and it names what the thing is NOT. What it IS: an invisible layer
            that renders nothing and exists to be parented to — you animate it and everything attached
            follows. "Controller" says what you use it for, is a real word, and collides with nothing.
            "Anchor" and "Pivot" were both rejected on purpose: every layer already has an ANCHOR POINT
            control, so an Anchor layer would collide with an existing, different, visible concept — worse
-           than a vague name. "Empty" (Blender's word) repeats Null's mistake of naming an absence.
+           than a vague name. "Empty" ([another app]'s word) repeats Null's mistake of naming an absence.
            `layer.type` stays 'null', so every saved project keeps working — this is a string change. */
         /* ⚠️ THESE TWO SAY WHAT THEY ARE FOR NOW — queue 596. Ezra: *"What do the controllers and
            adjustments even do? What is their function?"* **He was asking about two of his own layer
@@ -546,7 +546,7 @@ window.FM = window.FM || {};
            is the add below, unchanged */
         return { label: t.name, thumb: t.thumb || null, templateId: t.id,
           // the SAME shape queue 375 replaced on the tab — it lives here too, as the fallback for a
-          // template saved before thumbs existed, and changing only one of the two would have left AM's
+          // template saved before thumbs existed, and changing only one of the two would have left [the reference app]'s
           // glyph on screen while the entry claimed it was gone.
           icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 8.6h16"/><rect x="7.2" y="11.7" width="9.6" height="5.6" rx="1.4"/>'),
           add: async function () { const ok = await FM.templates.insertInto(t.id); if (FM.toast) FM.toast(ok === false ? 'Template data missing \u2014 re-save it from a project' : 'Inserted \u201c' + t.name + '\u201d'); } };   // await the result \u2014 insertInto returns false when the IDB pack was evicted; the toast used to lie
@@ -896,7 +896,7 @@ window.FM = window.FM || {};
       b.insertBefore(timg, b.firstChild);
       b.classList.add('addmenu-media', 'has-thumb');
     }
-    if (!iconOnly) {   // shape cards are icon-only (AM) — the name lives in the tooltip
+    if (!iconOnly) {   // shape cards are icon-only — the name lives in the tooltip
       var lb = document.createElement('span'); lb.className = 'addmenu-lbl';
       lb.textContent = label;   // element/template/file names are USER input — textContent, never innerHTML (#r3)
       b.appendChild(lb);
@@ -1089,7 +1089,7 @@ window.FM = window.FM || {};
            make every older import unreachable, and one-tap re-adding is the whole point of the list. */
         var isLib = !!(splitTab && pinnedOpts.length > 0);
         bodyEl.classList.toggle('addmenu-body--lib', isLib);
-        var iconOnly = tab.key === 'shape';   // AM: shape grid is icon-only (name = tooltip) \u2192 bigger art, denser grid
+        var iconOnly = tab.key === 'shape';   // Shape grid is icon-only (name = tooltip) \u2192 bigger art, denser grid
         /* The tint follows the item's position in the WHOLE tab, not its position on the page, so a
            button keeps its colour when the pager moves and two pages never open with the same run of
            hues. Media/Audio library tiles are skipped — they show the user's own frame, and a colour
@@ -1136,7 +1136,7 @@ window.FM = window.FM || {};
           }
           return c;
         }
-        // AM: the grid PAGES HORIZONTALLY (swipe sideways) with page dots — not a vertical scroll.
+        // The grid PAGES HORIZONTALLY (swipe sideways) with page dots — not a vertical scroll.
         /* The Elements tab used to get its own search field and scrolling list, because every saved
          * element was dumped into it. Nothing open-ended lives here any more — it is nine fixed
          * entries, all visible at once — so the field searched a list you could already see whole.

@@ -1,6 +1,6 @@
 # #985 — where every export setting lives in A, B and C
 
-His words (29 Sep): *"the export menus settings are honestly a bit daunting for someone who doesnt know how it works. I dont want to lose any function but i want it to actually make sense at first glance. Capcut does a really good job of this but dont fully copy"*
+His words (29 Sep): *"the export menus settings are honestly a bit daunting for someone who doesnt know how it works. I dont want to lose any function but i want it to actually make sense at first glance. [another app] does a really good job of this but dont fully copy"*
 
 This file makes "don't lose any function" checkable. Each row is one thing today's export does (the 34-item inventory, with the code location), and says where it ends up in each redesign. **Every row has a home in all three. Nothing is dropped.**
 

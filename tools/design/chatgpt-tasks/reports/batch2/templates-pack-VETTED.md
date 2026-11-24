@@ -351,12 +351,12 @@ The JXA script confirmed that every plate, dot and image box above sits inside i
 
 ## E. Names
 
-- **No copying found.** Alight Motion has no fixed in-app catalogue of named templates; its templates are shared project links. CapCut's templates are made by users and number in the millions, so an exact check is impossible.
-- A search found nothing for Scroll Stop, Clutch Moment, Mic Check or Daily Cut. The nearest was a CapCut user template called "Mic". All 20 names are ordinary English phrases.
+- **No copying found.** [another app] has no fixed in-app catalogue of named templates; its templates are shared project links. [another app]'s templates are made by users and number in the millions, so an exact check is impossible.
+- A search found nothing for Scroll Stop, Clutch Moment, Mic Check or Daily Cut. The nearest was a [another app] user template called "Mic". All 20 names are ordinary English phrases.
 - **Clashes inside our own app**, which matter more:
   - "Split Timeline" reads like the timeline's Split action.
   - "The Play" reads like the ▶ Play control.
-  - "Daily Cut" reads like the Cut action, and "Cut" is also CapCut's brand word.
+  - "Daily Cut" reads like the Cut action, and "Cut" is also [another app]'s brand word.
   - "Keep This" is vague and sits beside the many "Keep …" toggles.
 - Effects-pack precedent was plain labels, so these renames are suggested (his choice):
   - Hook Intro

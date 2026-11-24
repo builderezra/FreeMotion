@@ -812,7 +812,7 @@ window.FM = window.FM || {};
   };
 
   function updateReadout() {
-    // AM-style timecode: MM:SS:FF for the current playhead time.
+    // Timecode: MM:SS:FF for the current playhead time.
     const f = FM.scene.project.fps || 30;
     const tot = Math.round(FM.time * f), ff = tot % f, s = Math.floor(tot / f), m = Math.floor(s / 60), sec = s % 60;
     const p2 = n => (n < 10 ? '0' : '') + n;
@@ -1143,10 +1143,10 @@ window.FM = window.FM || {};
     if (cnt) cnt.textContent = phone ? (n + ' selected') : (n + (n === 1 ? ' layer selected' : ' layers selected'));
   };
 
-  // Desktop top bar: the name field shows the SELECTED LAYER's name (rename it there, AM-style) and
+  // Desktop top bar: the name field shows the SELECTED LAYER's name (rename it there) and
   // reverts to the project name when nothing is selected; the delete button appears only with a
   // selection. Called from refreshAll AND selectLayer so it tracks every selection change.
-  // ===== AM layer actions (top-bar ⋯ menu when a clip is selected) =====
+  // ===== Layer actions (top-bar ⋯ menu when a clip is selected) =====
   FM.fitLayer = function (layer, mode) {   // 'fit' | 'fill' | 'stretch' to the composition area
     const P = FM.scene.project;
     const sz = FM.layerSize ? FM.layerSize(layer) : { w: 100, h: 100 };
@@ -2050,7 +2050,7 @@ window.FM = window.FM || {};
   };
 
   // Quantize to the project frame grid — EVERYTHING user-placed (playhead, keyframes, markers,
-  // splits) lives on an exact frame, like AM. Playback itself stays smooth (tick bypasses setTime).
+  // splits) lives on an exact frame. Playback itself stays smooth (tick bypasses setTime).
   FM.snapFrame = function (t) { const f = FM.scene.project.fps || 30; return Math.round(t * f) / f; };
   FM.setTime = function (t, noSnap) {
     if (!FM.playing && !noSnap) t = FM.snapFrame(t);   // momentum glide passes noSnap for a smooth ride; it snaps on settle
@@ -3715,13 +3715,13 @@ window.FM = window.FM || {};
     FM.scene.selectedIds = [layer.id];
     refreshAll();
     if (FM.history) FM.history.commit();
-    // Jump straight into the AM-style focused text editor with the placeholder pre-selected, so the
-    // first keystroke replaces it (matches AM: add text → keyboard up → type).
+    // Jump straight into the focused text editor with the placeholder pre-selected, so the
+    // first keystroke replaces it (matches [the reference app]: add text → keyboard up → type).
     if (FM.textEdit) FM.textEdit.start(layer.id, { selectAll: true });
   };
 
   // Null object: an invisible transform controller. Parent real layers to it and animate the
-  // null to drive the whole rig (AM-style). Drawn as nothing; selectable via the timeline/canvas.
+  // null to drive the whole rig. Drawn as nothing; selectable via the timeline/canvas.
   FM.addNullLayer = function () {
     const P = FM.scene.project;
     const layer = FM.makeLayer('null', { name: 'Controller', x: P.width / 2, y: P.height / 2, duration: P.duration || 5 });   // empty project (dur 0) → a usable 5s so the layer actually renders. TYPE stays 'null' (queue 363): the rename is user-facing only, so saved projects keep working.
@@ -4064,7 +4064,7 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   };
 
-  // Adjustment layer: an effect layer that grades/filters everything beneath it (AM-style).
+  // Adjustment layer: an effect layer that grades/filters everything beneath it.
   FM.addAdjustmentLayer = function () {
     const P = FM.scene.project;
     const layer = FM.makeLayer('adjustment', { name: 'Adjustment', x: P.width / 2, y: P.height / 2, duration: P.duration || 5 });
@@ -4354,7 +4354,7 @@ window.FM = window.FM || {};
     if (FM.fxBrowser && FM.fxBrowser.isOpen && FM.fxBrowser.isOpen()
         && FM.fxBrowser.layerId && FM.fxBrowser.layerId() === id && FM.fxBrowser.close) FM.fxBrowser.close();
     if (FM.groupContext === id && FM.exitGroup) FM.exitGroup(true);   // deleting the group you're inside
-    // Deleting a GROUP deletes its members too (AM). Recurse first so nested groups cascade and
+    // Deleting a GROUP deletes its members too. Recurse first so nested groups cascade and
     // each member's media/audio teardown runs through this same path — but refresh/undo commit
     // only once, at the outermost call (one Ctrl+Z restores the whole group). (#r7)
     const target = FM.scene.layers.find(l => l.id === id);
@@ -4570,7 +4570,7 @@ window.FM = window.FM || {};
   }
   FM.relinkParent = relinkParent;
 
-  // ---- AM-style grouping: a 'group' layer is an invisible transform parent; members follow it
+  // ---- Grouping: a 'group' layer is an invisible transform parent; members follow it
   // via the existing parent chain. Timeline shows the group as a collapsible row.
   // opts.mask → MASKING group: the top member clips the rest (composited as one unit in renderScene).
   FM.groupSelection = function (opts) {
@@ -4810,7 +4810,7 @@ window.FM = window.FM || {};
     if (FM.history) FM.history.commit();
   };
 
-  // ---- Edit Group (AM): open a group in its own timeline view — only its members show, edit them
+  // ---- Edit Group: open a group in its own timeline view — only its members show, edit them
   // individually, then back out (‹ back / the crumb pill). Purely a view scope; time stays global.
   FM.groupContext = null;
   /* The floating "‹ Editing group  Group" pill is GONE (queue 190). Ezra: "Get rid of the editing group
@@ -5285,7 +5285,7 @@ window.FM = window.FM || {};
     const idMap = Object.create(null);   // null-proto: a crafted parent/target id of 'constructor' must not "remap" to a prototype function
     const copies = FM.clipboard.map(entry => {
       // fresh id + " copy". No positional offset any more (queue 156) — a paste lands exactly on the
-      // source's position, which matches the AM behaviour this function already follows for TIME
+      // source's position, which matches the behaviour this function already follows for TIME
       // (it re-times to the playhead just below).
       const copy = FM.cloneLayer(entry.snapshot);
       idMap[entry.snapshot.id] = copy.id;
@@ -5293,7 +5293,7 @@ window.FM = window.FM || {};
     });
     FM.relinkSplitCopies(copies.map(c => ({ src: c.entry.snapshot, copy: c.copy })));   // queue 914.8
     if (FM.spine && FM.spine.onCopy) FM.spine.onCopy(copies.map(c => c.copy), 'paste');   // Simple mode P1 (§12.2)
-    // Paste at the PLAYHEAD (like AM) instead of back on the source clip's original time.
+    // Paste at the PLAYHEAD instead of back on the source clip's original time.
     // Anchor the earliest copied clip to the playhead and keep the relative offsets between
     // clips that were copied together. autoFitDuration (via refreshAll) grows the timeline if
     // a pasted clip now runs past the end.
@@ -5719,7 +5719,7 @@ window.FM = window.FM || {};
 
   // ===== Playhead-is-outside-the-clip actions ([the reference app] parity) =====
   // Trim-start / split / trim-end all need the playhead INSIDE the clip. Parked outside, they are three
-  // dead buttons, so AM swaps them for the two that do make sense out there: slide the clip to the
+  // dead buttons, so [the reference app] swaps them for the two that do make sense out there: slide the clip to the
   // playhead, or stretch its near edge out to meet it.
   //  -1 = playhead sits before the clip · 0 = inside it (the trim/split set applies) · 1 = after it
   FM.clipPlayheadSide = function (layer, t) {
@@ -6212,7 +6212,7 @@ window.FM = window.FM || {};
     /* v5.91. Ezra circled the first six entries and said "Remove the circled options in this menu":
        Duplicate, Duplicate in place, Copy, Paste Style…, Split at playhead, Move to playhead.
        Every one of them already has a door somewhere the hand actually is — ⧉ in the top bar carries
-       Duplicate / Copy / Paste Style (js/app.js ~2486, and it is the surface AM uses for them), and
+       Duplicate / Copy / Paste Style (js/app.js ~2486, and it is the surface [the reference app] uses for them), and
        Split sits beside the playhead in the transport row where it was moved deliberately in v5.x.
        This menu had become the place where a second copy of everything accumulated, which is the same
        complaint as queue 35 about the project ⋯ menu. The ACTIONS are untouched — FM.duplicateSelection,
@@ -6354,14 +6354,14 @@ window.FM = window.FM || {};
     if (FM.toast) FM.toast(ok ? 'Element saved — find it under Add → Elements, or the Elements tab on Home' : 'Could not save element');
   };
 
-  /* ---------- layers live in the timeline now (AM-style); this is a thin alias ---------- */
+  /* ---------- layers live in the timeline now; this is a thin alias ---------- */
   FM.layersPanel = { refresh() { if (FM.timeline) FM.timeline.rebuild(); } };
   // (the old index-based FM.reorderLayer is gone — FM.moveLayers below is the one reorder entry
   // point: id-based, group-aware, no-op-guarded, used by the ≡ drag and the multi-select bar)
 
   // Alignment snap targets for one axis, shared by canvas dragging AND the Move & Transform scrubbers:
   // the composition centre + both edges, PLUS every value this layer already holds at its OTHER
-  // keyframes — so you can re-align it to a position it was at earlier (AM behaviour). De-duped.
+  // keyframes — so you can re-align it to a position it was at earlier. De-duped.
   FM.alignTargets = function (layer, axis) {
     const P = FM.scene.project;
     const out = axis === 'x' ? [P.width / 2, 0, P.width] : [P.height / 2, 0, P.height];
@@ -8494,7 +8494,7 @@ window.FM = window.FM || {};
       const r = moreLayerBtn.getBoundingClientRect();
       FM.contextMenu.show(Math.max(8, r.right - 230), r.bottom + 6, FM.layerMenuItems(L));
     });
-    // ⧉ Layer-actions menu. Re-ordered and re-worded away from AM's list at queue 437 — see the note
+    // ⧉ Layer-actions menu. Re-ordered and re-worded away from [the reference app]'s list at queue 437 — see the note
     // on the item array below for the rule his two examples imply.
     const layerMenuBtn = document.getElementById('btn-layermenu');
     if (layerMenuBtn) layerMenuBtn.addEventListener('click', () => {
@@ -8521,22 +8521,22 @@ window.FM = window.FM || {};
        * same layout and wording as [the reference app], if you can come up with different wording as well,
        * like instead of paste layer just paste on timeline. And copy selected instead of copy layer."
        * This is BEFORE-PUBLISHING.md work arriving early — that file records that the UI is modelled
-       * on AM and has to be made ours before any public release — and it is worth taking his two
+       * on [the reference app] and has to be made ours before any public release — and it is worth taking his two
        * examples as the rule rather than as two one-off edits.
        *
        * THE RULE HIS EXAMPLES IMPLY: name the OBJECT the way the app talks about it, and say WHERE a
-       * thing lands. AM's list says "Layer" five times about a selection that is often several layers;
+       * thing lands. [the reference app]'s list says "Layer" five times about a selection that is often several layers;
        * "selected" is what the rest of this app already calls it (the top bar says "4 selected"). And
        * "Paste Layer" does not say where the paste goes, while "Paste on timeline" does — which also
        * distinguishes it from Paste look, the other paste in the same menu.
        *
-       * THE ORDER IS BY JOB, not AM's interleave. Selection first, then the clipboard trio in the
+       * THE ORDER IS BY JOB, not [the reference app]'s interleave. Selection first, then the clipboard trio in the
        * order you actually use it (copy → duplicate → paste), then the SAVE-for-later entry, which is
        * a different kind of act and sits after the pastes instead of splitting them.
        * Separators carry that grouping so it reads as three families rather than seven rows.
        *
        * "Paste look…" rather than "Paste Style…" — "look" is the word the Presets card uses for the
-       * same idea ("Save look + animations…"), where AM had two words.
+       * same idea ("Save look + animations…"), where [the reference app] had two words.
        * ⚠️ NO "Save look as preset" HERE ANY MORE (queue 994). It called FM.savePresetPrompt, exactly
        * what the Presets card's "Save look + animations…" calls, so it was a second door to one save —
        * and his rule for that (#406, 19 Aug) was *"if you realise we just have two buttons for the same
@@ -8561,7 +8561,7 @@ window.FM = window.FM || {};
         { label: 'Save as element…', disabled: !hasSel, action: () => FM.saveElementPrompt() },
       ], { right: r.right, above: r.top });
     });
-    // ⛶ → toggle AM's right-side VIEW toolbar (fit · grid · layers · camera · canvas zoom).
+    // ⛶ → toggle [the reference app]'s right-side VIEW toolbar (fit · grid · layers · camera · canvas zoom).
     const amFitBtn = document.getElementById('btn-amfit');
     const viewBar = document.getElementById('view-bar');
     if (amFitBtn && viewBar) {
@@ -9645,7 +9645,7 @@ window.FM = window.FM || {};
     };
     FM.paintAspectUses(document);
 
-    // canvas-size / aspect-ratio dialog (AM-style)
+    // canvas-size / aspect-ratio dialog
     let cvAspect = '9:16';
     const cvDialog = document.getElementById('canvas-dialog');
     const cvClampDim = v => Math.max(16, Math.min(7680, Math.round((parseInt(v, 10) || 16) / 2) * 2));   // even, sane bounds (matches import clamp)

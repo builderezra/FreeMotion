@@ -1,4 +1,4 @@
-/* FreeMotion — Home screen (AM-style project browser).
+/* FreeMotion — Home screen (project browser).
  * Full-screen overlay above the editor: all projects at a glance (thumbnail cards), plus a
  * Templates tab. Backed by FM.projects / FM.templates (storage.js). The editor stays mounted
  * underneath — opening a project just swaps the scene and hides this overlay.
@@ -1399,14 +1399,14 @@ window.FM = window.FM || {};
     // Thumbnails now live in IndexedDB (out of the autosave-hot index) — load async, placeholder first.
     const ph = drawnMark('span', 'hm-thumb-empty', 'play'); th.appendChild(ph);
     FM.projects.getThumb(p.id).then(url => { if (url) { const img = document.createElement('img'); img.src = url; img.alt = ''; img.addEventListener('load', () => { if (ph.parentNode) ph.remove(); }); th.insertBefore(img, ph); } });
-    th.appendChild(el('span', 'hm-dur', fmtDur(p.duration)));   // AM-style timecode badge on the thumb
+    th.appendChild(el('span', 'hm-dur', fmtDur(p.duration)));   // Timecode badge on the thumb
     if (isOpen) th.appendChild(el('span', 'hm-open-badge', 'OPEN'));
     if (isPinned('projects', p.id)) { th.appendChild(pinBadge()); card.classList.add('is-pinned'); }
     const cx = collabOf(p);
     if (cx) th.appendChild(liveBadge(cx));
     // The tick is selectify's now (v6.17) — appending one here as well would put TWO in the corner.
     const name = el('div', 'hm-name', p.name || 'Untitled');
-    // duration lives on the thumb badge; the meta line carries the AM set: aspect · resolution · fps · layers
+    // duration lives on the thumb badge; the meta line carries the set: aspect · resolution · fps · layers
     const meta = el('div', 'hm-meta');
     const mi = txt => { if (txt) meta.appendChild(el('span', 'hm-mi', txt)); };
     mi(aspectLabel(p.width, p.height));

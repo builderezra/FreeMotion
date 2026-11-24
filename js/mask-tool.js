@@ -5,7 +5,7 @@
  * PEN mode (empty path): tap to drop points in sequence; tap the first point (or Close) to close it.
  * EDIT mode (closed path): drag a point to reshape, tap an edge ring to insert, double-tap a point to
  * delete, select + Smooth to toggle curve/corner. Points are [x,y] corners or [x,y,1] smooth.
- * If the mask's path is animated ({kf}), edits write into the keyframe at the playhead (AE-style roto).
+ * If the mask's path is animated ({kf}), edits write into the keyframe at the playhead (roto).
  * Overlay lays out in screen px over #preview (viewport reset first); commits via FM.history.
  */
 window.FM = window.FM || {};

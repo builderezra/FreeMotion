@@ -1193,7 +1193,7 @@ a string proven unique (`grep -c`) before replacing, and check which function th
 
 **⚠️ 22 Aug — A WHOLE REQUEST OF HIS WAS UNREACHABLE FOR EIGHT DAYS. #153 had NO HEADER**: his verbatim
 words, a screenshot and a two-part spec ("trimming should show the numbers and the frame notches, like
-Alight Motion") sat inside **#154's body**, an unrelated entry about a black bar. The numbering jumped
+[another app]") sat inside **#154's body**, an unrelated entry about a black bar. The numbering jumped
 152 → 154 and nothing noticed. **Fifth distinct cause of the unreachable-entry family** — after unnumbered
 items, the `[0-9]` grep, a malformed line, and an entry ticked `[x]` while saying "STAYS OPEN".
 **#153 now has its own header and is ACTIONABLE.** The feature itself is the next build: a live readout
@@ -2114,7 +2114,7 @@ asked once is not a question that still needs asking.
 
 ⚠️ **APPLE'S TRADE MARK WAS IN THE EFFECTS UI UNTIL v14.15** — "Rounded Corners / Apple style", plus its
 toggle and its browser description. #484 called that exact string "the worst one, needs no debate" and
-then renamed the 22 Alight Motion labels and never looked at ours. Now *Squircle Corners*, with a sweep
+then renamed the 22 [another app] labels and never looked at ours. Now *Squircle Corners*, with a sweep
 asserting no effect label, param or description carries any company's name. **Publishing blocker, not
 tidying.**
 

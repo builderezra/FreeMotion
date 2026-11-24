@@ -1242,13 +1242,13 @@
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
       <div class="brand"><span class="brand-name"><svg class="fm-ic brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M8.5 5.8v12.4a.8.8 0 0 0 1.2.7l9.9-6.2a.8.8 0 0 0 0-1.4L9.7 5.1a.8.8 0 0 0-1.2.7z"/></svg>FreeMotion</span> <span class="ver" title="Tap to force-update to the very latest build">v18.52</span></div>
       <div class="top-actions">
-        <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
+        <!-- Undo/Redo moved to the centred transport row ([the reference app] keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
              is selected), so they're off the bar here — kept hidden below so app.js keeps their handlers. -->
         <span class="spacer"></span>
         <input id="proj-name" class="proj-name" type="text" value="Untitled" title="Project name" spellcheck="false">
         <span class="spacer"></span>
-        <!-- These live here (so app.js keeps their handlers wired) but are hidden from the bar — AM keeps
+        <!-- These live here (so app.js keeps their handlers wired) but are hidden from the bar — [the reference app] keeps
              the top minimal. Each one is PRESSED by the control that really owns it now: the settings
              cog (btn-canvas, btn-save-proj, btn-fit, btn-help), the ⛶ view bar (guides), or the Export
              dialog (btn-snapshot). Nothing opens them here. -->
@@ -1307,7 +1307,7 @@
       </div>
     </header>
 
-    <!-- Mobile-only AM-style top bar (phone): back · project name · settings · green export -->
+    <!-- Mobile-only top bar (phone): back · project name · settings · green export -->
     <header id="topbar-m">
       <button id="m-back" class="m-tbtn" aria-label="Projects / file"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
       <input id="proj-name-m" class="m-projname" type="text" value="Untitled" spellcheck="false" aria-label="Project name">
@@ -1360,7 +1360,7 @@
       <button id="m-settings" class="m-tbtn" aria-label="Canvas settings"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
       <button id="m-export" class="m-export" aria-label="Export"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M8 8l4-4 4 4M6 20h12"/></svg></button>
       <button id="m-group" class="m-tbtn" aria-label="Group selected layers"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/><path d="M13 7h4a1 1 0 0 1 1 1v4M11 17H7a1 1 0 0 1-1-1v-4"/></svg></button>
-      <!-- Parenting, not duplicate (see js/mobile.js). The icon is AM's: a small box linked to a larger
+      <!-- Parenting, not duplicate (see js/mobile.js). The icon is [the reference app]'s: a small box linked to a larger
            one, i.e. this layer riding another's transform. -->
       <button id="m-dup" class="m-tbtn" aria-label="Parent this layer to another"><svg viewBox="0 0 24 24" class="m-ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><path d="M7 13V9a2 2 0 0 1 2-2h4"/></svg></button>
       <!-- MASKING GROUP GETS ITS OWN BUTTON IN THE PHONE BAR (queue 436). Ezra: "I wanted the ability
@@ -1393,7 +1393,7 @@
             <div class="dh-pc">Drag a video or image here<br>or click <b>Import media</b></div>
           </div>
         </div>
-        <!-- AM-style right-side VIEW toolbar (toggled by the ⛶ button): fit · layers · camera · canvas zoom · toggles.
+        <!-- Right-side VIEW toolbar (toggled by the ⛶ button): fit · layers · camera · canvas zoom · toggles.
              The grid button that used to sit here was a SECOND control for FM.showGuides — vb-guides below
              already owns it. Ezra spotted it: "you've added the grid button twice in that menu". -->
         <div id="view-bar" class="hidden" aria-label="View options">
@@ -1545,7 +1545,7 @@
            there anymore since it's sufficient to have it just show in the view menu on the right side".
            It stays in the DOM, hidden, because app.js writes to it in two places and the 1× stepper in
            the right-hand rail is the one he is keeping. -->
-      <!-- Non-AM controls kept OFF the row (per Ezra) but still in the DOM so app.js/timeline.js keep
+      <!-- Other controls kept OFF the row (per Ezra) but still in the DOM so app.js/timeline.js keep
            their handlers; reached from the ⋯ More menu. Hidden, never shown directly. -->
       <div id="transport-extra" style="display:none"><span id="rate-chip" class="hidden">1×</span>
         <button id="btn-loop" class="tbtn" title="Loop playback"><svg viewBox="0 0 24 24" class="tco" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 2 21 6 17 10"/><path d="M3 11a9 9 0 0 1 15-7"/><polyline points="7 22 3 18 7 14"/><path d="M21 13a9 9 0 0 1-15 7"/></svg></button>
@@ -1592,7 +1592,7 @@
         <div id="sm-live" class="sm-vh" role="status" aria-live="polite"></div>
       </div>
       <!-- Phone only: a fixed-centre playhead that lives OUTSIDE the scroller, so it can never move.
-           The timeline content scrolls underneath it (AM behaviour). Positioned by timeline.js. -->
+           The timeline content scrolls underneath it. Positioned by timeline.js. -->
       <!-- THE TOP OF THE PLAYHEAD IS A BUTTON NOW (queue 364, clauses 3 + 4). Ezra: "make it so you tap
            the top of the playhead to add bookmarks, and also make it so the top of the playhead is a bit
            thicker so it's easier to tap on."
@@ -1635,7 +1635,7 @@
   <div id="toast-sr" class="fm-sr-only" role="status" aria-atomic="true"></div>
   <button id="insp-toggle" title="Inspector">✎</button>
 
-  <!-- Mobile-only: AM-style green + FAB (add) + the Add bottom-sheet (contents built by mobile.js) -->
+  <!-- Mobile-only: green + FAB (add) + the Add bottom-sheet (contents built by mobile.js) -->
   <!-- The + carries the home screen's own light (queue 194). The aura is a SEPARATE inner layer, not
        the button's background, because it has to be clipped to the circle and #add-fab itself must
        never take an overflow clip — per spec the filter runs before the clip, so any overflow:hidden
@@ -1655,7 +1655,7 @@
 
   <input type="file" id="file-input" accept="video/*,image/*,audio/*" multiple hidden>
 
-  <!-- Home screen (AM): all projects at a glance + Templates tab. Built by home.js. -->
+  <!-- Home screen: all projects at a glance + Templates tab. Built by home.js. -->
   <div id="home-screen" class="hidden">
     <!-- The light look's colour wash (queue 639). A REAL element: #home-screen's two
          pseudo-elements are the drifting light layers, and ::before carries the -8% overscan that #187
@@ -1770,7 +1770,7 @@
     </div>
   </div>
 
-  <!-- Full-screen Add-Effect browser (AM): featured carousel · paged recents/favourites · categories · search. Built by fx-browser.js. -->
+  <!-- Full-screen Add-Effect browser: featured carousel · paged recents/favourites · categories · search. Built by fx-browser.js. -->
   <div id="fx-browser" class="hidden">
     <div class="fxb-top">
       <button class="fxb-close" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6 18 18M18 6 6 18"/></svg></button>
@@ -1840,7 +1840,7 @@
 
   <!-- THE EXPORT CARD IS OPTION A, "WHAT YOU'LL GET" (queue 985). His words, 29 Sep: "the export menus settings are
        honestly a bit daunting for someone who doesnt know how it works. I dont want to lose any function but i want it to
-       actually make sense at first glance. Capcut does a really good job of this but dont fully copy". Three designs were
+       actually make sense at first glance. [another app] does a really good job of this but dont fully copy". Three designs were
        drawn (tools/design/985/); A was decided 11 Oct (#1130). It opens on the answer — a picture, the length and about
        how big the file will be — then five buttons for what to make, four plain rows, and the exact controls behind
        More options. tools/design/985/mapping.md gives every one of the old dialog's 34 settings its place here.

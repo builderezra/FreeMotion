@@ -267,7 +267,7 @@ sort behind his own requests, as `_classify.py` requires. Do not merge or build 
     - Brushed Metal
   - **Then the 10 filters**, each only after its effects ship: Terminal, Colour Lag, Rainy Window, Pool Light,
     Gold Foil, Shards, Dotwork, Postcard, Folded Print, Patch.
-  - Low Poly, Watercolour and Jigsaw still need a CapCut name check.
+  - Low Poly, Watercolour and Jigsaw still need a [another app] name check.
 - **Sounds:** `sound-effects-VETTED.md`. 79 of 80 are CC0 and fine to ship without credit. The first set is 24
   sounds plus 2 nature loops, about 0.7-0.9 MB.
   - This is new work and his decision. He listens and picks, and he downloads the Freesound files himself,

@@ -10,15 +10,15 @@
     "css_where": "styles.css:5709-5751 (.set-scrim, .set-scrim.open, .set-panel, .set-head, .set-close, .set-body, .set-group, .set-row, .set-hint, .set-switch, .set-seg/.set-segbtn, .set-select, .set-colorwrap, .set-foot), styles.css:6661-6680 (.set-action, .danger #ff8a8a, :disabled), styles.css:7709-7720 (.set-perf, .set-perf-out bg var(--panel-2)); theme-glass.css:76-89 (glass material: .set-panel background var(--glass-tint-strong), shadow rgba(0,0,0,.55)), :102-108 (.set-panel border/shadow), :112-118 (.set-group gradient hardcoded rgba(188,230,239,.085)), :272-280 (.set-close gradient), :449-457 (.set-segbtn.on/.set-switch.on accent gradient, fine on light), :503-510 (@supports fallback .set-panel #0c1c25). Variables come from theme-glass.css:25-50 (--panel #0a141a, --panel-2 #0f1e26, --panel-3 #172c36, --line #1d3742, --text #e9f4f7, --text-dim #93aeb9, --glass-tint-strong rgba(12,28,37,.82)). Panel built in js/settings.js:297-757.",
     "fix_sketch": "Scope the fix to the light home being ON SCREEN, not just to the setting. data-home stays \"light\" inside the editor, where this panel must stay dark (see the editor surface). body.home-open is added by FM.home.open() (js/home.js:2726) and removed by close() (:2735), so use `html[data-home=\"light\"] body.home-open .set-scrim`. Redefine the variables on the scrim so the panel inherits them: --panel #f7f9fc; --panel-2 rgba(16,30,52,.04); --panel-3 rgba(16,30,52,.07); --line rgba(16,30,52,.12); --line-soft rgba(16,30,52,.08); --text #10151f; --text-dim #5a6478; --glass-tint-strong rgba(255,255,255,.94); --glass-rim-soft rgba(16,30,52,.10); color #10151f. Then override the hardcoded values: `.set-scrim.open` background rgba(20,38,56,.34), the same veil #hm-dialog uses at theme-glass.css:1004; `.set-panel` box-shadow 0 26px 60px -26px rgba(16,30,52,.6); `.set-group` background rgba(16,30,52,.03) plus border rgba(16,30,52,.10) (it is a background-image gradient at :112, so set background-image:none or a light gradient); `.set-close` gradient replaced with light glass like `.hm-search-btn` light (theme-glass.css:777); `.set-action.danger` color #c62740 (the ctx-light danger, :967); the @supports fallback background #f7f9fc. Scoping with CSS rather than a class added when the panel is built also means the in-panel 'New light look' switch re-themes the panel live. Measured: toggling it flips data-home to dark with the panel still open (27-settings-toggle-off-from-light.png).",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-light-s0.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-light-s1.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-light-s2.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-light-s3.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-light-s4.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-dark-s0.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-dark-s2.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-dark-s4.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/27-settings-toggle-off-from-light.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-light-s0.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-light-s1.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-light-s2.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-light-s3.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-light-s4.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-dark-s0.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-dark-s2.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-dark-s4.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/27-settings-toggle-off-from-light.png"
     ]
    },
    {
@@ -30,8 +30,8 @@
     "css_where": "same rules as the phone settings surface",
     "fix_sketch": "The same variable-scoped fix covers it.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/22-settings-1280-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/22-settings-1280-dark.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/22-settings-1280-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/22-settings-1280-dark.png"
     ]
    },
    {
@@ -43,8 +43,8 @@
     "css_where": "n/a (regression guard for the fix above)",
     "fix_sketch": "None. Keep it dark and add a check that stays green after the light fix.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/20-settings-in-editor-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/20-settings-in-editor-dark.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/20-settings-in-editor-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/20-settings-in-editor-dark.png"
     ]
    },
    {
@@ -56,8 +56,8 @@
     "css_where": "styles.css:5724 (.set-row flex, no wrap), :5733 (.set-seg flex:none), :5734 (.set-segbtn padding 7px 18px); row built by segmentRow in js/settings.js:162-186, used at :447-449",
     "fix_sketch": "Let segment rows wrap (`.set-row:has(.set-seg){flex-wrap:wrap}`), or give .set-seg `flex:0 1 auto; min-width:0` with tighter .set-segbtn padding (7px 12px) under 400px. Also add overflow-x:hidden on .set-body so a future overflow cannot draw a scrollbar.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-light-s1.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/25-settings-measure-380-light.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/01-settings-light-s1.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/25-settings-measure-380-light.png"
     ]
    },
    {
@@ -69,11 +69,11 @@
     "css_where": "styles.css:3439 (#shortcuts-overlay scrim rgba(4,7,14,.62)), :3485 (.shortcuts-card bg var(--panel-2)), :3492 (.shortcuts-card .btn var(--panel-2)), :3470-3484 (.shortcuts-foot .btn); theme-glass.css:81-89 (glass material), :500 (.shortcuts-card .btn background #0c1c25 hardcoded), :509 (@supports fallback #0c1c25); js/shortcuts.js popOpen (~line 110-116); js/popfrom.js:50-70",
     "fix_sketch": "Light: apply the same variable block to `html[data-home=\"light\"] body.home-open #shortcuts-overlay`, set the overlay background to rgba(20,38,56,.34), and override `.shortcuts-card .btn` / `.shortcuts-foot .btn` (hardcoded #0c1c25) with a light fill. Leave `.shortcuts-tut` accent as is. Anchor: in shortcuts.js popOpen, skip FM.popFrom when FM.home && FM.home.isOpen() so it centres as on phone, or anchor it to #hm-settings-btn.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/17-shortcuts-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/17-shortcuts-dark.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/24-shortcuts-1280-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/24-shortcuts-1280-dark.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/28-help-anchor-1280.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/17-shortcuts-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/17-shortcuts-dark.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/24-shortcuts-1280-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/24-shortcuts-1280-dark.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/28-help-anchor-1280.png"
     ]
    },
    {
@@ -85,8 +85,8 @@
     "css_where": "styles.css:3529-3535 (#toast z-index 60, bg var(--panel-3)), :3515-3528 (why 60: must stay below modals \u2014 a raise to 130 was refused by a test), :4546 (#home-screen z 200), :5102 (#hm-dialog 210), :5072 (.hm-selbar 215), :5709 (.set-scrim 220), :6584 (body.fm-pushing #toast 213)",
     "fix_sketch": "Targeted, so it still sits under every modal: `body.home-open #toast { z-index: 205; }`. That is above #home-screen 200 and below #hm-dialog 210, .hm-selbar 215, .set-scrim 220, #shortcuts-overlay 230 and #ctx-menu 300. Light look: `html[data-home=\"light\"] body.home-open #toast { background:#fff; color:#10151f; border-color:rgba(23,128,180,.55); box-shadow:0 10px 30px rgba(16,30,52,.18); }`. Settings' Copy confirmation still needs its own route, e.g. the button label flips to 'Copied'. Keep the no-toast-over-modal rule.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/03-pin-toast-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/03b-toast-dark.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/03-pin-toast-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/03b-toast-dark.png"
     ]
    },
    {
@@ -98,8 +98,8 @@
     "css_where": "styles.css:5072 (.hm-selbar), :5075 (.hm-selbtn background var(--panel-2), color var(--text)), :5077 (.hm-selbtn.danger #e0313122 / #ff8a8a); theme-glass.css:749-752 (light rules exist for .hm-selbar and .hm-selcount only)",
     "fix_sketch": "Add `html[data-home=\"light\"] .hm-selbtn { background-color: rgba(16,30,52,.05); border-color: rgba(16,30,52,.14); color:#10151f; }` and `html[data-home=\"light\"] .hm-selbtn.danger { color:#c62740; background-color: rgba(198,39,64,.08); border-color: rgba(198,39,64,.35); }`, reusing the ctx-light danger ink from theme-glass.css:967. Optional, both looks: shorter padding (8px 11px) or nowrap so the four buttons fit one row at 380, and hide #hm-new while body.hm-selecting.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/06-select-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/06-select-dark.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/06-select-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/06-select-dark.png"
     ]
    },
    {
@@ -111,8 +111,8 @@
     "css_where": "styles.css:3270-3271 (.cv-num background var(--panel-3), color var(--text)); theme-glass.css:1017-1021 (light list covers #hm-new-name, .hm-fld select, #hm-new-bg, .hm-aspect but not .cv-num); :1032 (focus)",
     "fix_sketch": "Add `html[data-home=\"light\"] #hm-dialog .cv-num` to the selector list at theme-glass.css:1017 (background-color rgba(16,30,52,.045); border-color rgba(16,30,52,.14); color #10151f), and to the :focus border rule at :1032.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/16-newproj-custom-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/16-newproj-custom-dark.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/16-newproj-custom-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/16-newproj-custom-dark.png"
     ]
    },
    {
@@ -124,10 +124,10 @@
     "css_where": "theme-glass.css:1004-1052 (light), styles.css:5102+ (base)",
     "fix_sketch": "None.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/15-newproj-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/15-newproj-dark.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/23-newproj-1280-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/23-newproj-1280-dark.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/15-newproj-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/15-newproj-dark.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/23-newproj-1280-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/23-newproj-1280-dark.png"
     ]
    },
    {
@@ -139,8 +139,8 @@
     "css_where": "js/contextmenu.js:100-113 (ctx-light added only when #home-screen is visible AND data-home=light); theme-glass.css:954-981",
     "fix_sketch": "None.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/02-cardmenu-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/02-cardmenu-dark.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/02-cardmenu-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/02-cardmenu-dark.png"
     ]
    },
    {
@@ -162,8 +162,8 @@
     "css_where": "theme-glass.css:954-981",
     "fix_sketch": "None.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/08-templates-menu-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/08-templates-menu-dark.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/08-templates-menu-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/08-templates-menu-dark.png"
     ]
    },
    {
@@ -175,10 +175,10 @@
     "css_where": "theme-glass.css:954-981",
     "fix_sketch": "None.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/26-element-menu-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/26-element-menu-dark.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/09c-draft-menu-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/09c-draft-menu-dark.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/26-element-menu-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/26-element-menu-dark.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/09c-draft-menu-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/09c-draft-menu-dark.png"
     ]
    },
    {
@@ -190,10 +190,10 @@
     "css_where": "js/home.js:2023-2066 (pickProject/newFromTab \u2192 FM.contextMenu); theme-glass.css:954-981",
     "fix_sketch": "None.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/13-templates-plus-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/13-templates-plus-dark.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/14-elements-plus-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/14-elements-plus-dark.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/13-templates-plus-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/13-templates-plus-dark.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/14-elements-plus-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/14-elements-plus-dark.png"
     ]
    },
    {
@@ -205,10 +205,10 @@
     "css_where": "theme-glass.css:741-784",
     "fix_sketch": "None.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/04-search-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/04-search-dark.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/05-search-nomatch-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/05-search-nomatch-dark.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/04-search-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/04-search-dark.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/05-search-nomatch-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/05-search-nomatch-dark.png"
     ]
    },
    {
@@ -220,9 +220,9 @@
     "css_where": "theme-glass.css:632-678",
     "fix_sketch": "None.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/00-home-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/00-home-dark.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/03-pin-toast-dark.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/00-home-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/00-home-dark.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/03-pin-toast-dark.png"
     ]
    },
    {
@@ -234,10 +234,10 @@
     "css_where": "theme-glass.css:632-678",
     "fix_sketch": "None.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/07-templates-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/07-templates-dark.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/09-elements-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/09-elements-dark.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/07-templates-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/07-templates-dark.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/09-elements-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/09-elements-dark.png"
     ]
    },
    {
@@ -249,12 +249,12 @@
     "css_where": "theme-glass.css:718-733",
     "fix_sketch": "None.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/10-templates-empty-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/10-templates-empty-dark.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/11-elements-empty-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/11-elements-empty-dark.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/12-tutorials-light.png",
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/12-tutorials-dark.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/10-templates-empty-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/10-templates-empty-dark.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/11-elements-empty-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/11-elements-empty-dark.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/12-tutorials-light.png",
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/12-tutorials-dark.png"
     ]
    },
    {
@@ -276,11 +276,11 @@
     "css_where": "js/contextmenu.js:110-113",
     "fix_sketch": "None. It is the pattern to copy.",
     "screenshots": [
-     "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/21-ctx-in-editor-light.png"
+     "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/21-ctx-in-editor-light.png"
     ]
    }
   ],
-  "notes": "Read-only audit; nothing in the repo was changed. tools/shot.py failed with 'DevTools endpoint never came up' when several ran in parallel (load average was 73), so I used a one-Chrome, many-shots copy of it: /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/multishot.py. It takes a JSON list of steps (steps-*.json in the same folder) and uses the same mechanics (--home sets FM.settings homeLight plus data-home). Watch-out if you reuse it: once a step opens a project, fm.view='editor' is saved and the next reload lands in the editor.\n\nFix list, most visible first:\n(1) Settings panel is fully dark on the light Home. Redefine the theme variables on `html[data-home=\"light\"] body.home-open .set-scrim` and override the hardcoded bits. Use body.home-open, NOT html[data-home] alone, because data-home stays \"light\" inside the editor and the editor's Settings must stay dark (verified).\n(2) Toasts are invisible on Home in BOTH looks: #toast z 60 sits under #home-screen z 200. That includes the backup result and its \"clips too big\" warning. `body.home-open #toast { z-index: 205 }` keeps them under every modal, plus a light toast style.\n(3) Shortcuts overlay is dark on the light Home. At 1280, in both looks, it anchors to the editor's #btn-help and lifts a stray '?' above Home.\n(4) Select bar buttons are dark pills on the light bar, and Delete is faint pink.\n(5) New project Custom W/H/fps inputs (.cv-num) are dark on the white card.\n(6) Not theme: at 380 the Playback quality segment overflows its card by 30px and puts a horizontal scrollbar on the settings body.\nNative prompt()/confirm() sub-dialogs (13 call sites in home.js) cannot be themed. Replacing them with an in-app modal is a big change, so it needs Ezra's OK first.\nCorrect in both looks: all ctx menus (project, template, element, draft, + menus), search and notes, cards and pinned card, the three empty states, and the New project dialog in its default state at 380 and 1280.\nI tried to catch the Settings slide-in mid-flight with --frames 0,60,120,240,400; every frame was already fully open, because captures were too slow under this load. The panel does have a .24s transform transition (styles.css:5714)."
+  "notes": "Read-only audit; nothing in the repo was changed. tools/shot.py failed with 'DevTools endpoint never came up' when several ran in parallel (load average was 73), so I used a one-Chrome, many-shots copy of it: /private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/theme-home/multishot.py. It takes a JSON list of steps (steps-*.json in the same folder) and uses the same mechanics (--home sets FM.settings homeLight plus data-home). Watch-out if you reuse it: once a step opens a project, fm.view='editor' is saved and the next reload lands in the editor.\n\nFix list, most visible first:\n(1) Settings panel is fully dark on the light Home. Redefine the theme variables on `html[data-home=\"light\"] body.home-open .set-scrim` and override the hardcoded bits. Use body.home-open, NOT html[data-home] alone, because data-home stays \"light\" inside the editor and the editor's Settings must stay dark (verified).\n(2) Toasts are invisible on Home in BOTH looks: #toast z 60 sits under #home-screen z 200. That includes the backup result and its \"clips too big\" warning. `body.home-open #toast { z-index: 205 }` keeps them under every modal, plus a light toast style.\n(3) Shortcuts overlay is dark on the light Home. At 1280, in both looks, it anchors to the editor's #btn-help and lifts a stray '?' above Home.\n(4) Select bar buttons are dark pills on the light bar, and Delete is faint pink.\n(5) New project Custom W/H/fps inputs (.cv-num) are dark on the white card.\n(6) Not theme: at 380 the Playback quality segment overflows its card by 30px and puts a horizontal scrollbar on the settings body.\nNative prompt()/confirm() sub-dialogs (13 call sites in home.js) cannot be themed. Replacing them with an in-app modal is a big change, so it needs Ezra's OK first.\nCorrect in both looks: all ctx menus (project, template, element, draft, + menus), search and notes, cards and pinned card, the three empty states, and the New project dialog in its default state at 380 and 1280.\nI tried to catch the Settings slide-in mid-flight with --frames 0,60,120,240,400; every frame was already fully open, because captures were too slow under this load. The panel does have a .24s transform transition (styles.css:5714)."
  },
  "anim-home": {
   "vocabulary": "The app's open/close animation vocabulary, measured by reading the CSS. All line numbers are in styles.css unless marked otherwise.\n\n(1) HOME family (global keyframes, usable anywhere)\n- hm-rise, 6371: translateY(15px) + opacity 0 -> none. Home intro uses it at .5s cubic-bezier(.22,.9,.32,1) backwards (6389). The tab-change restage uses .22s with the same ease (6394).\n- hm-rise-fab, 6376: keeps translateX(-50%) in both keyframes, plus translateY(18px) scale(.86) -> rest. Used at .55s (6396). This is the ready-made keyframe for anything centred with left:50% plus translateX(-50%).\n- hm-bloom, 6370: opacity 0 -> 1. Used for the backdrop at 1.15s and 1.7s.\n- hm-tab-pop, 7725: scale 1 -> .93 -> 1 over 180ms cubic-bezier(.3,.8,.4,1). The press dip on a tab.\n- hm-dot-pop, 9324: staggered 0/60/120ms, 340ms cubic-bezier(.34,1.56,.64,1). Touch only (hover:none). The \u22ef dots.\n- hm-glint: the ring around the open project card.\n\n(2) PHONE HINGE family, queue 612 (he picked it). Keyframes only exist inside @media (max-width:700px) at 9091.\n- fm-hinge-corner, 9097: perspective(1400px) rotateX(-78deg) rotateZ(-3deg) -> 0, 320ms cubic-bezier(.18,.85,.28,1.02) both. Used by #ctx-menu.ctx-hinge. contextmenu.js sets transform-origin to the corner.\n- fm-hinge-up, 9116: perspective(1400px) translateY(100%) rotateX(-58deg) -> 0, 360ms, same ease. Used by #add-sheet.open with origin 50% 100%. It sets transition:none so it doesn't double-animate (queue 706).\n- fm-hinge-panel, 9125: perspective(1600px) rotateX(-42deg) translateY(14px) -> 0, 360ms, same ease. Used by #fx-browser.fxb-sheet: the shallower swing meant for large or full-height panels.\n\n(3) PC POP family, queue 548. Keyframes only exist inside @media (min-width:701px) at 8878.\n- pop-grow / pop-grow-down, 8936/8941: translate(var(--pop-dx,0), var(--pop-dy,0) \u00b16px) scale(.86) opacity 0 -> 1, 190ms cubic-bezier(.2,.9,.3,1.08) both. Used by .pop-card through js/popfrom.js (FM.popFrom), with a comic tail.\n- pop-flip, 8954: rotateX(-82deg) -> 0, 340ms cubic-bezier(.18,.85,.28,1.02). The notepad only.\n- cv-grow, 7665: scale(.82) translate(6px,-10px) -> 1. The editor canvas-settings cog card, 160ms.\n\n(4) SCREEN TRANSITIONS\n- fm-push-in/out/lead and fm-pop-in/out: 380ms (var --fm-push-ms). Push-in eases with cubic-bezier(.16,.84,.28,1); pop uses cubic-bezier(0,0,.2,1).\n- The home -> editor slide.\n\n(5) OTHER TRANSITIONS AND ONE-OFFS\n- Settings side panel: transform translateX(-100%) -> 0 over .24s cubic-bezier(.22,.8,.3,1), plus a scrim background fade over .24s (5709-5718).\n- sb-panel-in/out and sb-item-in/out (747-753), the editor side bars: 190ms cubic-bezier(.16,1,.3,1) in. Out is 140ms cubic-bezier(.4,0,1,1), described as 'exit is decisive, not the entrance reversed'.\n- vb-hint-in: 120ms ease-out.\n- cog-turn: 280ms cubic-bezier(.2,.8,.3,1). Only the editor's .ico cog turns; the home cog (#hm-settings-btn) has none.\n- touch-pop, fm-pausebloom and ld-in: small feedback pieces.\n\n(6) CONVENTIONS THE CODE REPEATS\n- Every animation has a prefers-reduced-motion: reduce override.\n- To restart a class-driven animation, the class is removed, then `void el.offsetWidth`, then the class is added.\n- A class-driven entrance must be added after layout measurement (contextmenu.js 124-141).\n- Close is usually instant: ctx-menu, dialogs and overlays just get .hidden. The only animated close on home is the Settings panel. The code's stated rule for exits is a fast 90-140ms, no stagger.",
@@ -396,7 +396,7 @@
   ]
  },
  "anim-editor": {
-  "vocabulary": "Everything below was measured at 380x800 and 1280x900 with tools/shot.py. Scratch folder: /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/anim-editor/. The probe helpers are in lib.js, the tests in t/*.js, and the raw results in out/<test>-<width>.txt. Each probe clicks or calls the real opener, then reads document.getAnimations() for the menu's subtree in the same task, along with the computed animation-name and transition. It then samples opacity, transform and rect at 0, 40, 100, 200 and 400ms.\n\nCAVEAT: the load average was 190\u2013250 because other auditors were running at the same time, so the sampled timings are coarse (headless frames were delayed). The verdicts do not rely on them: getAnimations() and the declared animation/transition are deterministic.\n\nThe editor has 5 motion languages.\n\n(1) PHONE \"HINGE FAMILY\" \u2014 his pick, queue 612, styles.css:9073-9136, gated to @media (max-width:700px). Each surface swings about the edge it comes from.\n- fm-hinge-corner, 320ms cubic-bezier(.18,.85,.28,1.02) both, on #ctx-menu.ctx-hinge. contextmenu.js sets transform-origin to the corner the clamp chose, and adds the class only after measuring.\n- fm-hinge-up, 360ms, on #add-sheet.open, origin 50% 100%. It closes with the base `transition: transform .22s ease` slide (mobile.js:393 closeAdd).\n- fm-hinge-panel, 360ms, perspective(1600px) rotateX(-42deg) translateY(14px). Only #fx-browser.fxb-sheet uses it.\n\n(2) PC \"POP FAMILY\" \u2014 queue 548, styles.css:8877-8963, gated to @media (min-width:701px). Placed by js/popfrom.js with a comic .pop-tail, and the button is lifted out of the blur (.pop-src).\n- pop-grow, 190ms cubic-bezier(.2,.9,.3,1.08) both, from opacity 0, +6px, scale(.86). The keyframe carries --pop-dx/--pop-dy, which fall back to 0.\n- pop-grow-down, the same, from -6px.\n- pop-flip, 340ms cubic-bezier(.18,.85,.28,1.02), rotateX(-82deg). Notes only: the \"unique\" animation he asked for.\n- cv-grow, 160ms cubic-bezier(.2,.8,.3,1), for canvas settings (styles.css:7651).\n- In this family ONLY THE OPEN IS ANIMATED; every close cuts to display:none or remove at t=0.\n\n(3) SIDE RAILS, both layouts (styles.css:747-788, driven by js/app.js:5911-5946 setSideBar):\n- In: sb-panel-in / sb-panel-inL clip-path reveal, 190ms cubic-bezier(.16,1,.3,1). Controls follow with sb-item-in / sb-item-inL, 200ms cubic-bezier(.34,1.4,.64,1), staggered 26ms from a 40ms delay.\n- Out: sb-panel-out 140ms and sb-item-out 90ms. The JS hides the rail on animationend.\n- Lesson recorded at styles.css:770: use fill `backwards`, not `both`, or clip-path and opacity stay pinned.\n\n(4) SLIDE TRANSITIONS, animated both ways:\n- #inspector-panel phone sheet: transform .22s ease plus box-shadow (styles.css:3638).\n- .set-panel: translateX .24s cubic-bezier(.22,.8,.3,1), and .set-scrim background .24s (styles.css:5709-5718). settings.js:778 adds .open in rAF.\n- #ai-panel and #ai-chat: transform .24s ease (styles.css:3876-3901, 4016-4022, 9421, 9496).\n\n(5) SMALL ENTRANCES:\n- fxb-fav-in: .2s cubic-bezier(0,0,.2,1), opacity 0 + translateY(-14px). The effects-browser favourites view (styles.css:1909-1919). fxb-fav-fade (200ms linear opacity) is its reduced-motion fallback.\n- ld-in: 180ms cubic-bezier(0,0,.2,1), opacity 0 + translateY(6px). The loading dot (styles.css:7166/7190).\n- vb-hint-in: 120ms ease-out.\n- cog-turn: 280ms, on the cog icon.\n\nEvery one of these has a prefers-reduced-motion override (none, or a fade). Any new animation should follow that pattern.\n\nTwo traps for new work:\n- The toast and all the tool pills are centred with `transform: translateX(-50%)`. A keyframe on them must carry that offset, the way pop-grow carries --pop-dx, or it throws the centring away.\n- inspector.refresh() rebuilds the whole panel on every slider drag (root.innerHTML='' at js/inspector.js ~6500). An entrance put on .cat-body must be gated on the navSig/navChanged it already computes, or it replays on every edit.",
+  "vocabulary": "Everything below was measured at 380x800 and 1280x900 with tools/shot.py. Scratch folder: /private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/anim-editor/. The probe helpers are in lib.js, the tests in t/*.js, and the raw results in out/<test>-<width>.txt. Each probe clicks or calls the real opener, then reads document.getAnimations() for the menu's subtree in the same task, along with the computed animation-name and transition. It then samples opacity, transform and rect at 0, 40, 100, 200 and 400ms.\n\nCAVEAT: the load average was 190\u2013250 because other auditors were running at the same time, so the sampled timings are coarse (headless frames were delayed). The verdicts do not rely on them: getAnimations() and the declared animation/transition are deterministic.\n\nThe editor has 5 motion languages.\n\n(1) PHONE \"HINGE FAMILY\" \u2014 his pick, queue 612, styles.css:9073-9136, gated to @media (max-width:700px). Each surface swings about the edge it comes from.\n- fm-hinge-corner, 320ms cubic-bezier(.18,.85,.28,1.02) both, on #ctx-menu.ctx-hinge. contextmenu.js sets transform-origin to the corner the clamp chose, and adds the class only after measuring.\n- fm-hinge-up, 360ms, on #add-sheet.open, origin 50% 100%. It closes with the base `transition: transform .22s ease` slide (mobile.js:393 closeAdd).\n- fm-hinge-panel, 360ms, perspective(1600px) rotateX(-42deg) translateY(14px). Only #fx-browser.fxb-sheet uses it.\n\n(2) PC \"POP FAMILY\" \u2014 queue 548, styles.css:8877-8963, gated to @media (min-width:701px). Placed by js/popfrom.js with a comic .pop-tail, and the button is lifted out of the blur (.pop-src).\n- pop-grow, 190ms cubic-bezier(.2,.9,.3,1.08) both, from opacity 0, +6px, scale(.86). The keyframe carries --pop-dx/--pop-dy, which fall back to 0.\n- pop-grow-down, the same, from -6px.\n- pop-flip, 340ms cubic-bezier(.18,.85,.28,1.02), rotateX(-82deg). Notes only: the \"unique\" animation he asked for.\n- cv-grow, 160ms cubic-bezier(.2,.8,.3,1), for canvas settings (styles.css:7651).\n- In this family ONLY THE OPEN IS ANIMATED; every close cuts to display:none or remove at t=0.\n\n(3) SIDE RAILS, both layouts (styles.css:747-788, driven by js/app.js:5911-5946 setSideBar):\n- In: sb-panel-in / sb-panel-inL clip-path reveal, 190ms cubic-bezier(.16,1,.3,1). Controls follow with sb-item-in / sb-item-inL, 200ms cubic-bezier(.34,1.4,.64,1), staggered 26ms from a 40ms delay.\n- Out: sb-panel-out 140ms and sb-item-out 90ms. The JS hides the rail on animationend.\n- Lesson recorded at styles.css:770: use fill `backwards`, not `both`, or clip-path and opacity stay pinned.\n\n(4) SLIDE TRANSITIONS, animated both ways:\n- #inspector-panel phone sheet: transform .22s ease plus box-shadow (styles.css:3638).\n- .set-panel: translateX .24s cubic-bezier(.22,.8,.3,1), and .set-scrim background .24s (styles.css:5709-5718). settings.js:778 adds .open in rAF.\n- #ai-panel and #ai-chat: transform .24s ease (styles.css:3876-3901, 4016-4022, 9421, 9496).\n\n(5) SMALL ENTRANCES:\n- fxb-fav-in: .2s cubic-bezier(0,0,.2,1), opacity 0 + translateY(-14px). The effects-browser favourites view (styles.css:1909-1919). fxb-fav-fade (200ms linear opacity) is its reduced-motion fallback.\n- ld-in: 180ms cubic-bezier(0,0,.2,1), opacity 0 + translateY(6px). The loading dot (styles.css:7166/7190).\n- vb-hint-in: 120ms ease-out.\n- cog-turn: 280ms, on the cog icon.\n\nEvery one of these has a prefers-reduced-motion override (none, or a fade). Any new animation should follow that pattern.\n\nTwo traps for new work:\n- The toast and all the tool pills are centred with `transform: translateX(-50%)`. A keyframe on them must carry that offset, the way pop-grow carries --pop-dx, or it throws the centring away.\n- inspector.refresh() rebuilds the whole panel on every slider drag (root.innerHTML='' at js/inspector.js ~6500). An entrance put on .cat-body must be gated on the navSig/navChanged it already computes, or it replays on every edit.",
   "menus": [
    {
     "name": "Inspector bottom sheet (phone)",
@@ -702,7 +702,7 @@
    "Popsicle (popsicle, vivid)",
    "Hi-Vis (hivis, vivid)"
   ],
-  "how_filters_are_defined": "HOW A FILTER IS DEFINED. A filter is data in the FILTERS array in js/filters.js (lines 71-500): { id, name, section, desc, effects: [e(type, params), ...] }. e() (line 69) lists only the params that move off the effect's default. Section keys are cinematic, tuff, retro, glow, stylised, mono and vivid. The row order comes from SECTIONS (lines 35-65), and within a row filters appear in declaration order, so appended filters land at the end of their row. FM.filters.makeInstance (line 610) turns a definition into an ordinary FM.FX_CONTAINER with .name and .fid. saneChild (line 508) checks each child against the live FM.fxRegistry: an unknown type or param key is dropped and out-of-range numbers are clamped. The thumbnail photo is set per filter in js/fx-thumbs.js FILTER_SUBJECT (line 439), which is why each recipe below ends with a comment giving its subject.\n\nRULES THE SUITE ENFORCES (tests/tests.js):\n(a) Every type, key and range must exist (line ~42085).\n(b) The nine CSS_FX types (blur, brightness, contrast, saturate, hue, grayscale, sepia, invert, glow) must come before any other effect.\n(c) Don't use `glow`: its halo sits behind an opaque photo and can't be seen (queue 858). Use lightglow or softglow instead.\n(d) Every ingredient has to change the queue-858 fixture by at least 0.05, and the test fails if more than 6 ingredients across the library land under 0.3 (line ~54984).\n(e) Every Tuff filter needs flashdark.\n(f) Mono filters need colour spread \u22644, and their mean brightness must be at least 8 away from every other mono filter.\n(g) Each section needs at least 3 filters.\n(h) No photo is used twice inside one section, and the cars only appear in Tuff.\n\nDEFAULTS TO WATCH. A key you don't set falls back to a default that is often not neutral: colorbalance is red 25 / blue -25, levels is inblack 14 / inwhite 236, and vignette is 0.6 / 35. Set every key the look depends on. Since queue 904, colorbalance has a `range` option (0 All, 1 Darks, 2 Mids, 3 Lights). No existing filter uses it yet. It makes split-tones possible, and Portra, Moody and Cyberpunk use it. Two copies of the same effect in one filter work fine. Params are from the live registry, dumped to .../audit/filters/registry.txt.\n\nHOW I VERIFIED THE 10. I pushed them into the in-memory FM.FILTERS of a throwaway tools/shot.py Chrome and edited no files. Results:\n- All 10 pass the type, key, range and CSS-first checks (bad=[]), and each builds with every child intact.\n- Every ingredient moves the 858 fixture by 1.10 or more, so none is weak. For reference, no existing ingredient is under 0.3 either.\n- Each filter changes its own thumbnail photo by 14 to 34 (test 778 requires at least 1.5).\n- I list the nearest existing filter on the same photo (pixel mean absolute difference) for each one.\n- Suggested subjects break none of the per-section rules.\n- Sections afterwards: cinematic 11, retro 11, glow 9, stylised 10, vivid 8, Tuff and B/W unchanged, 66 filters in total.\n- Portra is a Kodak trademark. The file already uses Kodachrome, Polaroid and Technicolor as names, but \"Portrait Film\" is a safe alternative.\n- The unsharpmask radius is not scaled to the preview size (its kernel at js/compositor.js:5918 takes no ps), so the sharpening in HDR and Digicam will look weaker on a full 1080 export than on the tile.\n- Spare 11th, also verified and distinct: Lomo (retro, 'ramp') = contrast 1.28, saturate 1.4, crossprocess 0.35, vignette {0.85, 20}. Shown in final-sheet-2.png.\n\nSCREENSHOTS (all under /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/filters/):\n- proposed-10-filters-sheet.png: each proposal on its photo, beside the original and the 3-4 closest existing filters.\n- filters-tab-380.png and filters-tab-stylised-380.png: the real Filters tab at 380px.\n- poster-and-hdr.png\n\nTWO BUGS FOUND WHILE CHECKING:\n1) Poster Print renders pure black-and-white dots with no colour at all, but its description says \"Few colours, printed as dots\". Seen in the real Filters tab tile at 380px (filters-tab-stylised-380.png) and on every photo I rendered it on. Cause: the halftone kernel (js/compositor.js ~4820-4860) writes d[i]=d[i+1]=d[i+2]=v with v 0 or 255, so the posterised colour underneath is thrown away. This is the same kind of fault as Comic Ink (queue 813): the description promises colour and the filter renders monochrome. One option I tested keeps the colour: contrast 1.2, posterize 4, then dots {size 6, radius 0.42, opacity 0.5, color '#101010'} instead of halftone (poster-and-hdr.png, row 2). It's a visual change, so show him options before changing it.\n2) Unsharp Mask sharpens R, G and B separately, so a clipped white next to saturated orange turns blue. Measured on the sunpath sun core: (255,253,255) becomes (206,204,255) when unsharpmask runs after highlight recovery. The existing Overdrive filter already shows a lavender sun on that photo. The HDR recipe below avoids this by putting unsharpmask before highlightsshadows, which gives a neutral (214,214,214).",
+  "how_filters_are_defined": "HOW A FILTER IS DEFINED. A filter is data in the FILTERS array in js/filters.js (lines 71-500): { id, name, section, desc, effects: [e(type, params), ...] }. e() (line 69) lists only the params that move off the effect's default. Section keys are cinematic, tuff, retro, glow, stylised, mono and vivid. The row order comes from SECTIONS (lines 35-65), and within a row filters appear in declaration order, so appended filters land at the end of their row. FM.filters.makeInstance (line 610) turns a definition into an ordinary FM.FX_CONTAINER with .name and .fid. saneChild (line 508) checks each child against the live FM.fxRegistry: an unknown type or param key is dropped and out-of-range numbers are clamped. The thumbnail photo is set per filter in js/fx-thumbs.js FILTER_SUBJECT (line 439), which is why each recipe below ends with a comment giving its subject.\n\nRULES THE SUITE ENFORCES (tests/tests.js):\n(a) Every type, key and range must exist (line ~42085).\n(b) The nine CSS_FX types (blur, brightness, contrast, saturate, hue, grayscale, sepia, invert, glow) must come before any other effect.\n(c) Don't use `glow`: its halo sits behind an opaque photo and can't be seen (queue 858). Use lightglow or softglow instead.\n(d) Every ingredient has to change the queue-858 fixture by at least 0.05, and the test fails if more than 6 ingredients across the library land under 0.3 (line ~54984).\n(e) Every Tuff filter needs flashdark.\n(f) Mono filters need colour spread \u22644, and their mean brightness must be at least 8 away from every other mono filter.\n(g) Each section needs at least 3 filters.\n(h) No photo is used twice inside one section, and the cars only appear in Tuff.\n\nDEFAULTS TO WATCH. A key you don't set falls back to a default that is often not neutral: colorbalance is red 25 / blue -25, levels is inblack 14 / inwhite 236, and vignette is 0.6 / 35. Set every key the look depends on. Since queue 904, colorbalance has a `range` option (0 All, 1 Darks, 2 Mids, 3 Lights). No existing filter uses it yet. It makes split-tones possible, and Portra, Moody and Cyberpunk use it. Two copies of the same effect in one filter work fine. Params are from the live registry, dumped to .../audit/filters/registry.txt.\n\nHOW I VERIFIED THE 10. I pushed them into the in-memory FM.FILTERS of a throwaway tools/shot.py Chrome and edited no files. Results:\n- All 10 pass the type, key, range and CSS-first checks (bad=[]), and each builds with every child intact.\n- Every ingredient moves the 858 fixture by 1.10 or more, so none is weak. For reference, no existing ingredient is under 0.3 either.\n- Each filter changes its own thumbnail photo by 14 to 34 (test 778 requires at least 1.5).\n- I list the nearest existing filter on the same photo (pixel mean absolute difference) for each one.\n- Suggested subjects break none of the per-section rules.\n- Sections afterwards: cinematic 11, retro 11, glow 9, stylised 10, vivid 8, Tuff and B/W unchanged, 66 filters in total.\n- Portra is a Kodak trademark. The file already uses Kodachrome, Polaroid and Technicolor as names, but \"Portrait Film\" is a safe alternative.\n- The unsharpmask radius is not scaled to the preview size (its kernel at js/compositor.js:5918 takes no ps), so the sharpening in HDR and Digicam will look weaker on a full 1080 export than on the tile.\n- Spare 11th, also verified and distinct: Lomo (retro, 'ramp') = contrast 1.28, saturate 1.4, crossprocess 0.35, vignette {0.85, 20}. Shown in final-sheet-2.png.\n\nSCREENSHOTS (all under /private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/filters/):\n- proposed-10-filters-sheet.png: each proposal on its photo, beside the original and the 3-4 closest existing filters.\n- filters-tab-380.png and filters-tab-stylised-380.png: the real Filters tab at 380px.\n- poster-and-hdr.png\n\nTWO BUGS FOUND WHILE CHECKING:\n1) Poster Print renders pure black-and-white dots with no colour at all, but its description says \"Few colours, printed as dots\". Seen in the real Filters tab tile at 380px (filters-tab-stylised-380.png) and on every photo I rendered it on. Cause: the halftone kernel (js/compositor.js ~4820-4860) writes d[i]=d[i+1]=d[i+2]=v with v 0 or 255, so the posterised colour underneath is thrown away. This is the same kind of fault as Comic Ink (queue 813): the description promises colour and the filter renders monochrome. One option I tested keeps the colour: contrast 1.2, posterize 4, then dots {size 6, radius 0.42, opacity 0.5, color '#101010'} instead of halftone (poster-and-hdr.png, row 2). It's a visual change, so show him options before changing it.\n2) Unsharp Mask sharpens R, G and B separately, so a clipped white next to saturated orange turns blue. Measured on the sunpath sun core: (255,253,255) becomes (206,204,255) when unsharpmask runs after highlight recovery. The existing Overdrive filter already shows a lavender sun on that photo. The HDR recipe below avoids this by putting unsharpmask before highlightsshadows, which gives a neutral (214,214,214).",
   "proposals": [
    {
     "name": "Sepia",
@@ -714,7 +714,7 @@
     "name": "Digicam",
     "look": "The Y2K / CCD point-and-shoot trend: slightly cool and magenta, crunchy over-sharpening, whites clipping into a hard little glow, square colour sensor noise.",
     "recipe": "    { id: 'digicam', name: 'Digicam', section: 'retro',\n      desc: 'A 2000s pocket camera \u2014 cool and a touch magenta, over-sharpened, highlights clipping into a hard glow.',\n      effects: [e('brightness', { amount: 1.08 }), e('contrast', { amount: 1.14 }), e('saturate', { amount: 1.12 }),\n                e('temperature', { amount: -14, tint: 10 }),\n                e('unsharpmask', { amount: 1.6, radius: 1 }),\n                e('levels', { inblack: 8, inwhite: 226 }),\n                e('lightglow', { amount: 0.3, radius: 6, threshold: 78 }),\n                e('filmgrain', { amount: 16, size: 1, shape: 0, color: 70 })] },\n    // js/fx-thumbs.js FILTER_SUBJECT: digicam: 'run'",
-    "why_new": "Every retro filter copies film or tape: VHS, CRT, Super 8, Polaroid, Kodachrome. None copies an early digital sensor, which is one of the biggest current TikTok and CapCut looks. Closest: Whiteout (Tuff) blows out and desaturates with a flash pulse. Candy is bright, cool and saturated with a soft bloom, but no sharpening, clipping or sensor noise. On its photo Digicam is 17.0 from Neon Night, its nearest, and further than that from Whiteout and Candy (sheet row 2). It moves its photo by 34. The weakest ingredients, unsharpmask 1.41 and lightglow 1.38, are still well above the 0.3 weak line."
+    "why_new": "Every retro filter copies film or tape: VHS, CRT, Super 8, Polaroid, Kodachrome. None copies an early digital sensor, which is one of the biggest current TikTok and [another app] looks. Closest: Whiteout (Tuff) blows out and desaturates with a flash pulse. Candy is bright, cool and saturated with a soft bloom, but no sharpening, clipping or sensor noise. On its photo Digicam is 17.0 from Neon Night, its nearest, and further than that from Whiteout and Candy (sheet row 2). It moves its photo by 34. The weakest ingredients, unsharpmask 1.41 and lightglow 1.38, are still well above the 0.3 weak line."
    },
    {
     "name": "Portra",
@@ -726,7 +726,7 @@
     "name": "Moody",
     "look": "Dark, muted and green-leaning: forest shade or overcast. Greens sink toward olive-teal and lose brightness, shadows go cool teal-green, highlights go faintly warm and are held down, with a soft vignette.",
     "recipe": "    { id: 'moody', name: 'Moody', section: 'cinematic',\n      desc: 'Dark and muted, leaning green \u2014 greens sink to olive-teal, shadows cool, highlights warm and held down.',\n      effects: [e('brightness', { amount: 0.88 }), e('contrast', { amount: 1.14 }), e('saturate', { amount: 0.72 }),\n                e('hslbands', { band: 3, hue: 18, sat: -40, lum: -30, range: 1.3 }),\n                e('colorbalance', { red: -16, green: 8, blue: 6, range: 1 }),\n                e('colorbalance', { red: 10, green: 6, blue: -10, range: 3 }),\n                e('highlightsshadows', { highlights: -24, shadows: -6 }),\n                e('vignette', { amount: 0.38, size: 34 })] },\n    // js/fx-thumbs.js FILTER_SUBJECT: moody: 'dusk'",
-    "why_new": "The 'moody' preset is a staple of VSCO and Lightroom, and nothing in the set leans green. Dark filters are either warm (Low Key, Ember) or cold blue (Midnight, Cold Steel). It's the first filter to use HSL Bands. Closest in Cinematic: Low Key is warm and crushed, and Matte is flat and light. Nearest on its photo are Ash 8.9 and Nightdrive 9.4. Both are Tuff filters with a flashdark pulse: Ash is warm near-mono and Nightdrive is teal-and-orange, not muted olive. It moves its photo by 34.1."
+    "why_new": "The 'moody' preset is a staple of [another app] and [another app], and nothing in the set leans green. Dark filters are either warm (Low Key, Ember) or cold blue (Midnight, Cold Steel). It's the first filter to use HSL Bands. Closest in Cinematic: Low Key is warm and crushed, and Matte is flat and light. Nearest on its photo are Ash 8.9 and Nightdrive 9.4. Both are Tuff filters with a flashdark pulse: Ash is warm near-mono and Nightdrive is teal-and-orange, not muted olive. It moves its photo by 34.1."
    },
    {
     "name": "Cyberpunk",
@@ -762,7 +762,7 @@
     "name": "HDR",
     "look": "The phone-HDR look pushed further: shadows opened up, highlights pulled back, local contrast crisp, colour lifted with vibrance, and no crushed blacks.",
     "recipe": "    { id: 'hdr', name: 'HDR', section: 'vivid',\n      desc: 'Shadows opened, highlights held and every edge crisp \u2014 the phone-HDR look pushed a step further.',\n      /* unsharpmask BEFORE highlightsshadows: the other way round, a clipped sun sharpens per channel\n         against orange sky and turns blue \u2014 measured (255,253,255) -> (206,204,255); this order gives (214,214,214). */\n      effects: [e('saturate', { amount: 1.15 }),\n                e('unsharpmask', { amount: 1.0, radius: 4 }),\n                e('highlightsshadows', { highlights: -32, shadows: 38 }),\n                e('vibrance', { amount: 2.0, highlights: 30 }),\n                e('levels', { inblack: 8, inwhite: 250 })] },\n    // js/fx-thumbs.js FILTER_SUBJECT: hdr: 'sunpath'",
-    "why_new": "Nothing lifts the shadows and pulls the highlights down at the same time, and the 'HDR' filter is a standard in CapCut. Hi-Vis maxes colour and sets hard blacks with levels, the opposite of opening shadows. Poppy raises saturation and contrast. Overdrive (Tuff) over-sharpens, darkens, blooms and pulses. Nearest on its photo: Tropic 12.0, Poppy 12.6. On the sheet the cloud and wave detail shows it is a different look. It moves its photo by 21.3. On the dark 'figures' photo it lifted to grey mud, which is why 'sunpath' is suggested."
+    "why_new": "Nothing lifts the shadows and pulls the highlights down at the same time, and the 'HDR' filter is a standard in [another app]. Hi-Vis maxes colour and sets hard blacks with levels, the opposite of opening shadows. Poppy raises saturation and contrast. Overdrive (Tuff) over-sharpens, darkens, blooms and pulses. Nearest on its photo: Tropic 12.0, Poppy 12.6. On the sheet the cloud and wave detail shows it is a different look. It moves its photo by 21.3. On the dark 'figures' photo it lifted to grey mud, which is why 'sunpath' is suggested."
    }
   ]
  },
@@ -1284,7 +1284,7 @@
     "user_sees": "Deleting a Null (or any layer that others are parented to) sends its children to the canvas's top-left corner, because they fall back to their raw local positions. The saved file keeps a parent id that points at nothing. Ungrouping carefully keeps layers in place; deleting a parent does not.",
     "evidence": "deleteLayer only cascades for type==='group'. For any other parent it filters the layer out and leaves the children's `parent` pointing at the deleted id. Nothing bakes the parent's transform in the way bakeGroupTransform does for ungroup.\nRan p10_delparent.js: Null at (540,1400), red child local (0,0). Red ink was at (156,500) before deleting the Null and (0,0) after; A.parent is still the dead id.",
     "repro": "Parent a shape to a Null that sits elsewhere, then delete the Null.",
-    "fix_sketch": "This is a behaviour choice for Ezra: bake the deleted parent's world transform into each child and clear `parent` (After Effects-style, the same maths as bakeGroupTransform), or at least clear the dangling id.",
+    "fix_sketch": "This is a behaviour choice for Ezra: bake the deleted parent's world transform into each child and clear `parent` ([another app]-style, the same maths as bakeGroupTransform), or at least clear the dangling id.",
     "big_change": true,
     "verdicts": [
      {
@@ -1638,7 +1638,7 @@
      },
      {
       "real": true,
-      "reason": "I couldn't refute this one. It isn't intended and it isn't already logged, and I reproduced it myself.\n\n**Reproduced.** I ran /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic-rev-audio/probe.js through tools/shot.py. It calls FM.exporter.buildAudioMix on a 3s reversed clip over 2s of audio: the first second is a 440 Hz tone, t",
+      "reason": "I couldn't refute this one. It isn't intended and it isn't already logged, and I reproduced it myself.\n\n**Reproduced.** I ran /private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic-rev-audio/probe.js through tools/shot.py. It calls FM.exporter.buildAudioMix on a 3s reversed clip over 2s of audio: the first second is a 440 Hz tone, t",
       "already_logged": null
      }
     ],
@@ -1796,7 +1796,7 @@
     "screen": "Home > Settings panel (gear)",
     "layout": "380x800 home light (also 320x700 home light)",
     "description": "In the LIGHT home look the Settings panel is still the dark-glass panel. Measured .set-panel background is rgba(12,28,37,.82), which renders as muddy slate over the light page. No html[data-home=\"light\"] rule for .set-panel/.set-group/.set-row exists anywhere. The only rules are the dark ones at theme-glass.css:76/102/112/504 and styles.css:5711-5725. Side effect: the row dividers disappear in light only. .set-row + .set-row uses border-top 1px var(--line) = rgb(29,55,66), and the panel under it is rgb(37,53,62), so there is almost no contrast. In dark the same line sits on rgb(23,40,48) and is visible. Compare settings-dark.png. This is exactly Ezra's 'settings menu stays light in light mode' point.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/settings-light.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/settings-light.png",
     "severity": "high",
     "open_js": "document.getElementById('hm-settings-btn').click()",
     "selector_hint": ".set-scrim.open .set-panel, .set-group, .set-row + .set-row",
@@ -1807,7 +1807,7 @@
     "screen": "Editor, empty project opened from Home",
     "layout": "380x800 editor",
     "description": "On a fresh launch, tapping the (empty, already-open) project card on Home shows the wrong add control. It gets the PC thin 7px teal line (.tl-addrow.tl-addrow--line) with the playhead drawn through it. The '+ Add layer' label inside is opacity:0 (styles.css:8143), so a phone shows no readable way to add anything. It should get the big '+ Tap here to start creating' empty state (queue 326/354). Measured: before and after opening, row class = 'tl-addrow tl-addrow--line' and #timeline-panel has no tl-empty-start. After FM.refreshAll() it becomes 'tl-addrow tl-addrow--empty' + 'tl-empty-start', which is the correct look (empty-state-after-refresh.png). Going back and reopening the project stays wrong (reopen.png). Creating a new project through the + dialog is correct (newproj-create.png). Likely cause: timeline.js:2760 decides 'phone' via isPhoneNow() (needs FM.mobile), the row was built before that existed, and opening the project from Home does not rebuild it.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/editor-empty.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/editor-empty.png",
     "severity": "high",
     "open_js": "document.querySelector('.hm-grid > *').click()",
     "selector_hint": ".tl-addrow.tl-addrow--line / #timeline-panel.tl-empty-start (js/timeline.js:2760, 2651)",
@@ -1818,7 +1818,7 @@
     "screen": "Editor top bar",
     "layout": "320x700 editor",
     "description": "At 320px the project name and layer name have no room left. #proj-name-m ('Untitled') is 20px wide and shows only a stray letter fragment next to the back arrow (crop-n320-topbar.png). With a layer selected, #clip-name-m ('Square') is 14px wide and shows nothing at all (crop-n320-topbar-layer.png). At 380 both names are readable.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/crop-n320-topbar.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/crop-n320-topbar.png",
     "severity": "medium",
     "open_js": "document.querySelector('.hm-grid > *').click()",
     "selector_hint": "#topbar-m #proj-name-m.m-projname, #clip-name-m",
@@ -1829,7 +1829,7 @@
     "screen": "Home header + tabs",
     "layout": "320x700 home light and dark",
     "description": "At 320px three of the four home tabs are cut off with an ellipsis: 'Templ\u2026', 'Eleme\u2026', 'Tutori\u2026'. Each .hm-tab clientWidth is 64 while Templates needs 73 and Elements 68. The FreeMotion wordmark also runs right into the search button: .hm-brand right edge = 133.69 = #hm-search-btn left edge, zero gap (crop-n320-header.png).",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/n320-home-light.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/n320-home-light.png",
     "severity": "medium",
     "open_js": "",
     "selector_hint": ".hm-tabs .hm-tab (text-overflow: ellipsis), .hm-brand vs #hm-search-btn",
@@ -1840,7 +1840,7 @@
     "screen": "New project dialog and Canvas settings dialog: Background swatch row",
     "layout": "320x700 home light (New project); 380x800 and 320x700 editor (Canvas settings)",
     "description": "The background swatch row (.hm-bg-row, 202-214px wide) is wider than the row it sits in. In New project at 320 it ends at x=318 while .hm-fld ends at 288. The custom-colour input #hm-new-bg is clipped at the right, and .hm-dlg-scroll gets horizontal scroll (scrollWidth 291 > clientWidth 264) with a visible scrollbar under 'Canvas'. In Canvas settings (m-settings) at 380 the custom swatch #cv-bg sticks 18px past every other control's right edge (row right 348.5, field right 330). At 320 it runs past the card edge (row right 337.5, .export-card right 306): the swatch is cut off, a horizontal scrollbar appears, and 'App settings\u2026' wraps to two lines (n320-cvs.png, m-settings.png).",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/n320-newproj-light.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/n320-newproj-light.png",
     "severity": "medium",
     "open_js": "document.getElementById('hm-new').click()  /* canvas settings: open project, then document.getElementById('m-settings').click() */",
     "selector_hint": ".hm-dlg-scroll .hm-bg-row, #hm-new-bg, #cv-bg",
@@ -1851,7 +1851,7 @@
     "screen": "Effects browser, after picking an effect card",
     "layout": "380x800 editor",
     "description": "Picking an effect card brings up the commit bar ('Clear / Add naked / Add 1 effect'). It lands on top of the gold FAVES button and covers half of it, cutting the '\u2605 FAVES' label in two. Measured: .fxb-commit has a transparent background, z-index 4 and spans y 742-800; .fxb-favmore spans y 717-778. The picture was taken 2.5s after the tap, so this is the settled state, not mid-animation (crop-fx-actionbar.png).",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/fx-sel.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/fx-sel.png",
     "severity": "medium",
     "open_js": "/* layer selected \u2192 Effects (8) \u2192 + Add Effect */ [...document.querySelectorAll('.fxb-card')].find(b=>/Pixel Sort/.test(b.title||b.getAttribute('aria-label'))).click()",
     "selector_hint": ".fxb-commit over .fxb-recents-body .fxb-favmore",
@@ -1862,7 +1862,7 @@
     "screen": "Export dialog",
     "layout": "380x800 and 320x700 editor",
     "description": "The Resolution and Frame rate selects are 179px wide (155px at 320), so they cut off their own value. 'Same as project \u2014 1080\u00d71920' shows as 'Same as project \u2026' and at 320 as 'Same as proj\u2026'. The part that tells you the actual size and fps is exactly the part that gets hidden.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/export.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/export.png",
     "severity": "medium",
     "open_js": "document.getElementById('m-export').click()",
     "selector_hint": "#export-dialog #exp-res, #exp-fps",
@@ -1879,7 +1879,7 @@
     "screen": "Inspector > Position / Scale: X Y Z value boxes",
     "layout": "320x700 editor (also 380x800)",
     "description": "The X/Y/Z value boxes (.mt-vbox-val) run out of room. At 320, even the default '540.0' and '960.0' touch the box edges, and the keyframe diamond sits on top of the '.0' (crop-n320-xyz.png). With an off-canvas value such as -1234.5 the text is clipped: scrollWidth 74 > clientWidth 59 renders '-1234.' (crop-xyz-big-320.png). At 380 the same values fill the box edge to edge with the diamond overlapping the last digit (crop-xyz-big-380.png).",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/crop-xyz-big-320.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/crop-xyz-big-320.png",
     "severity": "medium",
     "open_js": "/* select a layer, then */ [...document.querySelectorAll('button')].find(b=>b.textContent.trim().startsWith('4')).click()",
     "selector_hint": ".mt-vbox .mt-vbox-val + keyframe diamond",
@@ -1901,7 +1901,7 @@
     "screen": "Home top bar (light look)",
     "layout": "380x800 home light (every light home screenshot)",
     "description": "The light home header has a hard 1px near-black line along its bottom, curving around the 20px rounded corners. Pixel = rgb(18,32,41) = --line-soft, the dark theme's hairline. It comes from html[data-theme=\"glass\"] .hm-top { border-bottom: 1px solid var(--line-soft) } (theme-glass.css:256-262). html[data-home=\"light\"] .hm-top (theme-glass.css:816) sets the radius and shadow but never overrides that border, so a dark outline is left on a white bar.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/crop-home-light-header.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/crop-home-light-header.png",
     "severity": "low",
     "open_js": "",
     "selector_hint": "html[data-home=light] .hm-top border-bottom",
@@ -1923,7 +1923,7 @@
     "screen": "Home select mode bottom bar",
     "layout": "380x800 home light",
     "description": "In select mode the bottom bar (#hm-selbar, flex-wrap:wrap) doesn't fit on one line, so 'Cancel' wraps onto a second row by itself. The + button (#hm-new, 58px at y 718-776) also shows through the 96%-opaque bar as a faint circle between 'Select all' and 'Duplicate'.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/crop-select-bar.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/crop-select-bar.png",
     "severity": "low",
     "open_js": "document.getElementById('hm-select-btn').click()",
     "selector_hint": "#hm-selbar .hm-selbtn, #hm-new behind it",
@@ -1945,7 +1945,7 @@
     "screen": "Add menu (add sheet)",
     "layout": "380x800 editor; 320x700 editor",
     "description": "The add sheet is see-through (background rgba(12,28,37,.82)), so the timeline's fullscreen button shows through as a faint bracket icon at the sheet's top-right, next to 'ADD' (crop-addmenu-topright.png). At 320 the add-sheet labels are also cut off: 'Elem\u2026', 'Templ\u2026' and 'Custom eleme\u2026' (n320-addmenu.png).",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/n320-addmenu.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/n320-addmenu.png",
     "severity": "low",
     "open_js": "FM.mobile.openAdd()",
     "selector_hint": "#add-sheet background; .addmenu-tabs buttons; #btn-amfit behind",
@@ -1957,7 +1957,7 @@
      },
      {
       "real": true,
-      "reason": "I couldn't refute either half, and I checked both myself. Screenshots are in /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic10/. To open the sheet I hid Home and called FM.mobile.openAdd().\n\n(1) Bleed-through. At 380x800 the sheet runs from y=372 to 800. #btn-amfit is at 338,376, 34x34. document.elementsFromPoint at the butto",
+      "reason": "I couldn't refute either half, and I checked both myself. Screenshots are in /private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic10/. To open the sheet I hid Home and called FM.mobile.openAdd().\n\n(1) Bleed-through. At 380x800 the sheet runs from y=372 to 800. #btn-amfit is at 338,376, 34x34. document.elementsFromPoint at the butto",
       "already_logged": null
      }
     ],
@@ -1967,7 +1967,7 @@
     "screen": "Inspector > Position / Scale: swipe pad",
     "layout": "380x800 and 320x700 editor",
     "description": "The hint 'Swipe here to move layer \u00b7 snaps to centre, edges & earlier keyframes' sits flush against the pad's left edge with zero padding, while the pad's corner brackets are inset about 12px. .mt-trackpad-hint (styles.css:454) is the full 258px pad width, text-align:start, padding 0, so the wrapped text touches both sides.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/crop-cat4-pad.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/crop-cat4-pad.png",
     "severity": "low",
     "open_js": "[...document.querySelectorAll('button')].find(b=>b.textContent.trim().startsWith('4')).click()",
     "selector_hint": ".mt-trackpad .mt-trackpad-hint",
@@ -1989,19 +1989,19 @@
     "screen": "Effects browser NEW row",
     "layout": "380x800 and 320x700 editor",
     "description": "The auto-scrolling NEW row (.fxb-featured; scrollLeft moves 39\u219289 on its own) cuts cards off with a hard edge and no fade. When the browser opens, the first card already reads 'quish' with its left border missing, and the right card reads 'Compoun' / 'Needs a se'.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/fxbrowser.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/fxbrowser.png",
     "severity": "low",
     "open_js": "/* layer selected \u2192 Effects (8) \u2192 + Add Effect */",
     "selector_hint": ".fxb-featured (no mask-image)",
     "verdicts": [
      {
       "real": true,
-      "reason": "I reproduced it at 380x800 with the app's real buttons: add a Square, open Effects (8), tap + Add Effect. Screenshots are in /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic-vp12/ (fxb-0.png and fxb-3000.png; the script is open.js).\n\n- **Measured values:** `#fx-browser .fxb-featured` computes `mask-image: none` / `-webkit-mask",
+      "reason": "I reproduced it at 380x800 with the app's real buttons: add a Square, open Effects (8), tap + Add Effect. Screenshots are in /private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic-vp12/ (fxb-0.png and fxb-3000.png; the script is open.js).\n\n- **Measured values:** `#fx-browser .fxb-featured` computes `mask-image: none` / `-webkit-mask",
       "already_logged": null
      },
      {
       "real": true,
-      "reason": "I tried to refute this and could not. Reproduced at 380x800 with FM.fxBrowser.open(L), the same entry point the inspector's \"+ Add Effect\" button uses (js/inspector.js:2036). Screenshot: /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic-vp12/fxb-1500.png. The finder's own shot at visual-phone/fxbrowser.png shows the same thing.",
+      "reason": "I tried to refute this and could not. Reproduced at 380x800 with FM.fxBrowser.open(L), the same entry point the inspector's \"+ Add Effect\" button uses (js/inspector.js:2036). Screenshot: /private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic-vp12/fxb-1500.png. The finder's own shot at visual-phone/fxbrowser.png shows the same thing.",
       "already_logged": null
      }
     ],
@@ -2011,7 +2011,7 @@
     "screen": "Editor canvas empty state",
     "layout": "380x800 and 320x700 editor",
     "description": "On a phone the empty canvas says 'Drag a video or image here or click Import media' (index.html:412), but a phone has no drag-and-drop and no 'Import media' button. At 320 it also wraps so that 'here' sits alone on its own line.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/n320-addmenu.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/n320-addmenu.png",
     "severity": "low",
     "open_js": "document.querySelector('.hm-grid > *').click()",
     "selector_hint": "index.html:412 canvas empty hint",
@@ -2033,7 +2033,7 @@
     "screen": "New project dialog",
     "layout": "380x800 home light and dark",
     "description": "The Resolution and Frame rate selects are different widths, so their left edges don't line up (x\u2248447 vs 421 in the @2x shot). The custom-colour input #hm-new-bg defaults to #000 and looks like a second copy of the Black swatch next to it, with nothing marking it as a colour picker.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/newproj-light.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/newproj-light.png",
     "severity": "low",
     "open_js": "document.getElementById('hm-new').click()",
     "selector_hint": "#hm-new-res, #hm-new-fps, #hm-new-bg",
@@ -2055,7 +2055,7 @@
     "screen": "Inspector > Presets",
     "layout": "380x800 editor",
     "description": "The 'Save look + animations\u2026' and 'Save effects only as preset' buttons are thin (about 20px tall) with small text. They are inset about 5px further than the search field and section labels above them. They don't match the other inspector buttons, such as the large '+ Add Effect' in Effects.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/cat7.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/cat7.png",
     "severity": "low",
     "open_js": "[...document.querySelectorAll('button')].find(b=>b.textContent.trim().startsWith('7')).click()",
     "selector_hint": "Presets category save buttons",
@@ -2077,19 +2077,19 @@
     "screen": "Effect control rows: segmented option rows",
     "layout": "380x800 and 320x700 editor",
     "description": "The option rows (.fx-seg) wrap unevenly and leave one item alone on its last line. Match Grade 'Contrast only' at 380 (fx-match.png). At 320: HSL Bands 'Custom', Squish 'Floor + ceiling' and 'Every layer' (n320-fx-hsl.png, n320-fx-squish.png). The label column ('Band', 'Walls') takes about a third of the width. Everything is still on screen and tappable; nothing runs off the edge.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/n320-fx-squish.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-phone/n320-fx-squish.png",
     "severity": "low",
     "open_js": "/* add Squish / HSL Bands / Match Grade via Effects \u2192 + Add Effect \u2192 search */",
     "selector_hint": ".fx-seg",
     "verdicts": [
      {
       "real": true,
-      "reason": "I tried to disprove it and couldn't. I added each effect through the real UI (project card, then + Shape Square, then category 8, then + Add Effect, then search and add). Screenshots and button measurements are in /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic16/ (*.png plus the matching *.out JSON with each button's positio",
+      "reason": "I tried to disprove it and couldn't. I added each effect through the real UI (project card, then + Shape Square, then category 8, then + Add Effect, then search and add). Screenshots and button measurements are in /private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic16/ (*.png plus the matching *.out JSON with each button's positio",
       "already_logged": null
      },
      {
       "real": true,
-      "reason": "I measured it myself at 320x700 (dark home, shape layer, Squish + HSL Bands + Match Grade added through FM.fxRegistry.makeInstance, Effects card clicked open). Screenshot: /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic16/n320b.png. The lines came out like this: Walls [All, Floor, Sides] / [Floor + ceiling]; Collide [Frame on",
+      "reason": "I measured it myself at 320x700 (dark home, shape layer, Squish + HSL Bands + Match Grade added through FM.fxRegistry.makeInstance, Effects card clicked open). Screenshot: /private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic16/n320b.png. The lines came out like this: Walls [All, Floor, Sides] / [Floor + ceiling]; Collide [Frame on",
       "already_logged": null
      }
     ],
@@ -2103,7 +2103,7 @@
     "screen": "Home \u203a Settings panel (light look)",
     "layout": "1280x900 home light; also 900x700 home light",
     "description": "With the light Home look on, the Settings panel still draws in the dark theme: dark teal panel rgba(12,28,37,.82), light text rgb(233,244,247), and a dark scrim over the white page. This is the exact thing Ezra asked to check (\"make sure the settings menu stays light in light mode\"). theme-glass.css has 68 html[data-home=\"light\"] rules but none for .set-panel, .set-group, .set-row or .set-switch. So only the glass-theme dark rules apply (theme-glass.css:76-112, styles.css:5711-5725). One side effect you can see: the hairlines between rows (.set-row + .set-row, border-top 1px var(--line) #1d3742) disappear in light mode. They show clearly in the dark-look shot of the same panel (compare z-set-light.png with z-set-dark.png).",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/home-light-1280-settings.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/home-light-1280-settings.png",
     "severity": "high",
     "selector_hint": ".set-scrim.open > aside.set-panel, .set-group, .set-row + .set-row",
     "open_js": "document.getElementById('hm-settings-btn').click()",
@@ -2125,7 +2125,7 @@
     "screen": "Editor \u203a timeline toolbar (narrow PC window)",
     "layout": "900x700 editor (also 800x700)",
     "description": "The Layer actions button (#btn-layermenu, the copy icon) and the Back to projects button (#btn-back, <) overlap. At 900x700 they sit at x 298-332 and 314-348, 18px on top of each other, and they read as one glyph. elementFromPoint in the overlap returns btn-back, so a click aimed at the layer/copy menu leaves the editor instead. At 800x700 it is worse. #btn-layermenu (248-282) is drawn outside the timeline, on top of the inspector's 'D' key button, whose label is hidden under it. The Back chevron also merges with skip-to-start into '<|\u25c1'. At both widths the right-hand group (v16.75, ?, notes, gear, export, options, fullscreen) wraps onto a second toolbar row, and the playhead knob sits in that row.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/z-ed2-900-tb.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/z-ed2-900-tb.png",
     "severity": "high",
     "selector_hint": "#btn-layermenu (parent .t-side.t-left) vs #btn-back; see also ov-800.png / z-ov-800-zoom.png",
     "open_js": "document.querySelector('#home-screen .hm-card').click(); /*1.5s*/ [...document.querySelectorAll('button')].find(b=>b.offsetParent&&b.textContent.trim()==='Shape').click(); /*0.5s*/ [...document.querySelectorAll('button')].find(b=>b.offsetParent&&(b.getAttribute('aria-label')||b.title||b.textContent.trim())==='Square').click(); /* then measure document.getElementById('btn-layermenu'/'btn-back').getBoundingClientRect() */",
@@ -2147,7 +2147,7 @@
     "screen": "Editor \u203a Inspector category tiles (layer selected)",
     "layout": "1280x900, 900x700 and 1280x700 editor",
     "description": "Category tile labels are cut off on PC. 'Outline & Shadows' shows as 'Outline &', 'Position / Scale' as 'Position /' and 'Customise Shape' as 'Customise'. The tops of the hidden second line show as stray marks under each label. Measured .cat-label: scrollHeight 24, clientHeight 14, overflow hidden. At 1280x700 even one-line labels lose their descenders ('Colourina', 'Mixina'). The cause is the max-height calc on body #inspector-panel .cat-label (styles.css ~8361-8374), which leaves room for less than one full line. The icons are also shrunk to about 10-12px in 57-73px tiles (--cat-ico clamp). On a 380px phone the labels fit on one line.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/z-ed2-900-cats.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/z-ed2-900-cats.png",
     "severity": "medium",
     "selector_hint": "body #inspector-panel .cat-card .cat-label; also z-ov-1280-cats.png and ed2-1280.png",
     "open_js": "(open editor + add Square as above; the category grid shows once the layer is selected)",
@@ -2169,7 +2169,7 @@
     "screen": "Editor \u203a Add menu \u203a Template tab (empty)",
     "layout": "1280x900 and 900x700 editor, no layer selected",
     "description": "The empty-state text is cropped at both ends. The 'No templates yet' title (and its mark) sits above the top of the 110px .addmenu-pager: the title is at y 532-550 and the pager top is at y 548. Only the title's descenders show, as a few dots. The last paragraph ('To make one: go to the home screen\u2026') is cut through the middle at the bottom. .am-empty is display:flex with justify-content:center and max-height:100% (styles.css:9272), so content taller than the pager spills off both edges. The top part can never be scrolled into view.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/z-am-1280-Template.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/z-am-1280-Template.png",
     "severity": "medium",
     "selector_hint": ".addmenu-pager > .addmenu-page > .am-empty (.am-empty-title)",
     "open_js": "document.querySelector('#home-screen .hm-card').click(); /*1.5s*/ [...document.querySelectorAll('button')].find(b=>b.offsetParent&&b.textContent.trim()==='Template').click()",
@@ -2181,7 +2181,7 @@
      },
      {
       "real": true,
-      "reason": "I couldn't refute it. It isn't logged anywhere and it isn't intended.\n\nWhat I measured: I reproduced it at 1280x900 (dark home, the finding's open_js, then clicked the real Template button). Screenshot: /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic-vpc3/pc1280.png\n- .addmenu-pager is 750-858 (108px) and .am-empty fills it e",
+      "reason": "I couldn't refute it. It isn't logged anywhere and it isn't intended.\n\nWhat I measured: I reproduced it at 1280x900 (dark home, the finding's open_js, then clicked the real Template button). Screenshot: /private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic-vpc3/pc1280.png\n- .addmenu-pager is 750-858 (108px) and .am-empty fills it e",
       "already_logged": null
      }
     ],
@@ -2191,7 +2191,7 @@
     "screen": "Editor \u203a text editing bar open (timeline)",
     "layout": "1280x900 and 900x700 editor",
     "description": "While the text editor is open, the playhead line does not match the time shown. Adding a Text layer opens the floating text bar and hides the inspector (#inspector-panel display:none), so the timeline widens to the full window. The clips keep their old offset: every clip starts at x=333 while the playhead is at x=641, the timecode reads 00:00:00 and FM.time is 0. The playhead line therefore crosses every clip about a third of the way in. Pressing \u2713 brings the inspector back and the clips return to x=640. The same thing happens at 900x700 (clips start at 150, playhead at 451).",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/multi-1280.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/multi-1280.png",
     "severity": "medium",
     "selector_hint": "#timeline .clip left vs #tl-headtap centre while #te-input is focused",
     "open_js": "open a project, then with nothing selected click Elements tile then the 'Text' tile; measure [...document.querySelectorAll('.clip')].map(c=>c.getBoundingClientRect().left) vs document.getElementById('tl-headtap').getBoundingClientRect()",
@@ -2213,7 +2213,7 @@
     "screen": "Home \u203a New project dialog \u203a Custom aspect (light look)",
     "layout": "900x700 home light",
     "description": "After picking 'Custom', the Width \u00d7 Height number inputs (#hm-new-w, #hm-new-h, class .cv-num) show as dark navy blocks: background rgb(23,44,54), white text, border rgb(29,55,66). They sit inside the otherwise light dialog, where the name field and swatches got light styling (rgba(16,30,52,.043)). There is no light-look rule for .cv-num.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/npc-light-900.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/npc-light-900.png",
     "severity": "medium",
     "selector_hint": "#hm-new-w.cv-num, #hm-new-h.cv-num",
     "open_js": "document.getElementById('hm-new').click(); [...document.querySelectorAll('#home-screen button')].find(b=>/^Custom/.test(b.textContent.trim())).click()",
@@ -2235,7 +2235,7 @@
     "screen": "Home \u203a Select mode bar (light look)",
     "layout": "1280x900 home light",
     "description": "In the light select bar, the Delete button looks disabled even though it works (disabled=false). Its text is #ff8a8a on rgba(224,49,49,.13) over the near-white bar (rgba(248,250,253,.96)), roughly 1.8:1 contrast. The other three buttons (Select all, Duplicate, Cancel) are solid dark pills. theme-glass.css:749 lightens the .hm-selbar background, but .hm-selbtn and .hm-selbtn.danger (styles.css:5075-5077) keep their dark-look colours. In the dark look the same button reads as active.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/z-selbar-light.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/z-selbar-light.png",
     "severity": "medium",
     "selector_hint": ".hm-selbar .hm-selbtn.danger",
     "open_js": "document.getElementById('hm-select-btn').click(); document.querySelector('#home-screen .hm-card').click()",
@@ -2247,7 +2247,7 @@
      },
      {
       "real": true,
-      "reason": "I could not refute it. I checked it myself on the light home at 1280x900. I clicked #hm-select-btn, then the first .hm-card, and the bar read \"1 selected\". Screenshot: /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic-pc6/light-1280.png.\n\nComputed styles from that run:\n- Delete: disabled=false, opacity 1, text rgb(255,138,138),",
+      "reason": "I could not refute it. I checked it myself on the light home at 1280x900. I clicked #hm-select-btn, then the first .hm-card, and the bar read \"1 selected\". Screenshot: /private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic-pc6/light-1280.png.\n\nComputed styles from that run:\n- Delete: disabled=false, opacity 1, text rgb(255,138,138),",
       "already_logged": null
      }
     ],
@@ -2257,7 +2257,7 @@
     "screen": "Home \u203a Select mode (both looks)",
     "layout": "1280x900 home light and dark",
     "description": "In select mode the + button (#hm-new) stays visible (opacity 1, top 818, bottom 876), but the select bar (.hm-selbar, z-index 215) starts at y=842. The bar cuts the round + in half and only its top peeks out. This is still the case 2s after entering select mode. No rule hides the + button under body.hm-selecting.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/home-dark-1280-select.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/home-dark-1280-select.png",
     "severity": "low",
     "selector_hint": "body.hm-selecting #hm-new vs .hm-selbar",
     "open_js": "document.getElementById('hm-select-btn').click(); document.querySelector('#home-screen .hm-card').click()",
@@ -2279,7 +2279,7 @@
     "screen": "Home \u203a top bar (light look)",
     "layout": "1280x900 and 900x700 home light",
     "description": "The white top bar in the light look has a near-black 1px bottom border (rgb(18,32,41)) that curves round its 20px bottom corners, like a dark outline under a light card. It comes from html[data-theme=\"glass\"] .hm-top { border-bottom: 1px solid var(--line-soft) } (theme-glass.css:256-262, --line-soft #122029). The light rule at theme-glass.css:816 adds the radius but never overrides the border colour.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/z-header-light.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/z-header-light.png",
     "severity": "low",
     "selector_hint": "html[data-home=\"light\"] .hm-top border-bottom",
     "open_js": "(home screen as loaded, --home light)",
@@ -2301,7 +2301,7 @@
     "screen": "Editor \u203a Layer actions menu (#btn-layermenu)",
     "layout": "1280x900 and 900x700 editor",
     "description": "The Layer actions menu opens detached from its button. js/app.js (~line 5813) places it at r.right \u2212 200, but the menu is only about 151px wide, so its right edge lands 49px left of the button. At 1280 it opens over the Back chevron (menu at x 322-473, button at 488-522). At 900 it opens over the inspector's category tiles (x 133-284).",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/ed-900-btn-layermenu.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/ed-900-btn-layermenu.png",
     "severity": "low",
     "selector_hint": "#ctx-menu opened from #btn-layermenu; see also ed-1280-btn-layermenu.png",
     "open_js": "(open editor + add Square) document.getElementById('btn-layermenu').click()",
@@ -2318,7 +2318,7 @@
     "screen": "Editor \u203a \u2699 Canvas settings pop-up; Home \u203a New project dialog",
     "layout": "1280x900 and 900x700 editor; home light/dark",
     "description": "The custom background colour picker is a bare native input[type=color]. In Canvas settings it is a 50\u00d727 box with a white frame and a black bar. Its right edge (x 1134) runs 19px past the column where the selects and values end (1115), only 6px from the card edge (1140). It is also not the same size or shape as the four 34px rounded swatches beside it. In the New project dialog (#hm-new-bg, 38px) it shows a square-cornered black box that reads as a second 'Black' swatch, with nothing marking it as a custom picker.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/z-canvas-bg.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/z-canvas-bg.png",
     "severity": "low",
     "selector_hint": ".export-card.pop-tailed .hm-bg-row input[type=color]; #hm-new-bg (see z-np-light.png)",
     "open_js": "(open editor) document.getElementById('btn-settings').click()",
@@ -2329,14 +2329,14 @@
     "screen": "Editor \u203a Export pop-up",
     "layout": "1280x900 and 900x700 editor",
     "description": "The Resolution and Frame rate values are cut off to 'Same as project \u2026' in the 179px selects on the 330px card. The full values are 'Same as project \u2014 1080\u00d71920' and 'Same as project \u2014 30 fps', so the actual size and rate never show. 'Export just this layer' (#exp-solo-btn, 'All layers') is a button styled like a field and is the only control in the stack with no dropdown arrow.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/ed-1280-btn-export.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/ed-1280-btn-export.png",
     "severity": "low",
     "selector_hint": "#exp-res, #exp-fps, #exp-solo-btn",
     "open_js": "(open editor) document.getElementById('btn-export').click()",
     "verdicts": [
      {
       "real": true,
-      "reason": "I could not refute it. I re-took the shot in a fresh headless Chrome at 1280x900, opening the dialog with the real clicks: home card, then Shape, then Square, then #btn-export. Shot: /private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic-vpc11/ed-1280.png. Both Resolution and Frame rate still read \"Same as project \u2026\". The earlier 90",
+      "reason": "I could not refute it. I re-took the shot in a fresh headless Chrome at 1280x900, opening the dialog with the real clicks: home card, then Shape, then Square, then #btn-export. Shot: /private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/skeptic-vpc11/ed-1280.png. Both Resolution and Frame rate still read \"Same as project \u2026\". The earlier 90",
       "already_logged": null
      }
     ],
@@ -2346,7 +2346,7 @@
     "screen": "Home \u203a project \u22ef menu",
     "layout": "1280x900 home light/dark",
     "description": "On a wide window the project \u22ef menu opens from the \u22ef button's left edge and hangs 106px off the right side of the card column (menu x 946-1096, card right edge 990) instead of lining up with the card. js/home.js:1286 uses Math.min(r.left, innerWidth \u2212 210). At 900 it is clamped and right-aligned differently (x 691-841), so the menu sits in a different place depending on window width.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/home-light-1280-more.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/home-light-1280-more.png",
     "severity": "low",
     "selector_hint": "#ctx-menu opened from [aria-label=\"Project actions\"]",
     "open_js": "document.querySelector('#home-screen [aria-label=\"Project actions\"]').click()",
@@ -2357,7 +2357,7 @@
     "screen": "Editor \u203a Effects browser opening",
     "layout": "1280x900 and 900x700 editor",
     "description": "When '+ Add Effect' opens the browser, the toast 'Tip: hold any effect to browse its presets' (js/fx-browser.js:1843, 2.6s) is drawn over the timeline transport. At 1280 it covers the copy, record, skip and timecode controls. At 900 it covers the copy/back pair and the play controls.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/fx2-900.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/fx2-900.png",
     "severity": "low",
     "selector_hint": ".white-chrome toast from FM.toast in fx-browser.js:1843",
     "open_js": "(open editor + add Square) click .cat-card 'Effects', then the '+ Add Effect' button",
@@ -2368,7 +2368,7 @@
     "screen": "Editor \u203a floating text-edit bar",
     "layout": "1280x900 and 900x700 editor",
     "description": "The top control row of the text-edit bar (colour, align, font, size, Aa, \u2713) stops about 34px short of the bar's right edge, while its left inset is 10px and the text box below runs the full width. The row looks off-centre and unfinished on the right.",
-    "screenshot": "/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/z-textbar.png",
+    "screenshot": "/private/tmp/claude-501/-Users-me-Claude-FreeMotion/fde0eeaf-7d73-45b8-9f83-7761553e344d/scratchpad/audit/visual-pc/z-textbar.png",
     "severity": "low",
     "selector_hint": "text edit bar containing #te-input (top row)",
     "open_js": "open a project; with nothing selected click Elements then 'Text'",

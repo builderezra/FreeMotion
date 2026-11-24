@@ -6,7 +6,7 @@ window.FM = window.FM || {};
 (function (FM) {
   'use strict';
 
-  // type -> AM category. Every existing effect is assigned. New categories appear as effects fill them.
+  // type -> category. Every existing effect is assigned. New categories appear as effects fill them.
   const CATEGORY_OF = {
     brightness: 'color', contrast: 'color', saturate: 'color', hue: 'color',
     grayscale: 'color', sepia: 'color', invert: 'color', tint: 'color',
@@ -77,12 +77,12 @@ window.FM = window.FM || {};
     magnifybg: 'stylize', // …and the same copy through a lens
     fillbehind: 'blur',  // …and the third of the family: fill the frame AROUND the layer with a blurred copy of it
 
-    // batch 26 (AM parity fill-ins)
+    // batch 26 (parity fill-ins)
     softglow: 'color', replacecolor: 'color', spotcolor: 'color', fourcolor: 'color', spectralmap: 'color',
     radialshadow: 'color', voronoi: 'proc', tunnel: 'distort',
     // batch 27
     touchup: 'matte',     // Remove Object — content-aware rectangular fill (delogo-style)
-    // batch 28 (more AM Distortion/Warp + Procedural + Color parity)
+    // batch 28 (more Distortion/Warp + Procedural + Color parity)
     turbulentdisplace: 'distort', stretchseg: 'distort', tileshift: 'distort', tilerotate: 'distort', wrapshift: 'distort',
     palettemap: 'color', lightning: 'proc',
     // batch 29 (layer-referencing displacement)
@@ -202,7 +202,7 @@ window.FM = window.FM || {};
        by accident and the menu he asked to delete came back. */
   };
   /* THE ORDER IS OURS, NOT [THE REFERENCE APP]'S (#954). His words, 1 Sep: *"i want every effect to be named different to what it is
-     in [the reference app] and also have different ordering to avoid getting taken down by [the reference app] for copying"*. AM's own
+     in [the reference app] and also have different ordering to avoid getting taken down by [the reference app] for copying"*. [the reference app]'s own
      order is published nowhere reachable, so ours is changed anyway, as drawn on the 26 Sep sheet (tools/design/954-options.html)
      and decided 11 Oct (#1130): Colouring stays first, Keying moves up beside it, the rest are reshuffled. Was: color, blur,
      distort, proc, stylize, drawing, move, repeat, matte, opacity, text, threed. Every effect keeps its own category. */
@@ -644,7 +644,7 @@ window.FM = window.FM || {};
    * Chroma Key Pro, Auto-Shake → Shake, Random Jitter → Wiggle) and Repeat, which is Trail.
    * 🔑 **SO CLAUSE 2 IS MOSTLY NOT A MISSING-EFFECTS PROBLEM. IT IS A FINDING PROBLEM** — and that is a
    * complaint he has made in its own right, that the effects list is hard to search. Renaming them back
-   * toward AM's words is the one thing we must NOT do (clause 1 exists to move away from those names,
+   * toward [the reference app]'s words is the one thing we must NOT do (clause 1 exists to move away from those names,
    * and one of them was a trade mark). So the other name becomes a SEARCH TERM instead: the tile keeps
    * our name, and typing what he was looking for still finds it.
    * ⚠️ A DEAD KEY HERE WOULD BE SILENT — the alias would simply never match, and nobody would know. A
@@ -722,10 +722,10 @@ window.FM = window.FM || {};
     /* #966 B49: the photo editor's name for it in every spelling, the look people ask for by name, and the plain description. Not
        'sepia' or 'cross process' (effects of their own), though both are looks it makes. */
     splittone:         ['split toning', 'split tone', 'split-tone', 'tint', 'teal and orange', 'grade', 'colour grade', 'color grade', 'shadows highlights colour', 'shadows highlights color', 'warm and cool', 'cinematic'],
-    /* #966 B39: the trade's names for it (After Effects calls it Gradient Wipe; editors say luma wipe), and the transition people
+    /* #966 B39: the trade's names for it ([another app] calls it Gradient Wipe; editors say luma wipe), and the transition people
        want from it. Not 'gradient' alone: that word belongs to Gradient Overlay, Gradient Map and the fill gradient */
     gradientwipe:      ['gradient wipe', 'luma wipe', 'luminance wipe', 'brightness wipe', 'map wipe', 'custom wipe', 'texture wipe', 'transition', 'reveal'],
-    /* #966 B38: the trade's names for it (After Effects' Fractal Noise, the shader world's Perlin and value noise) and what people make
+    /* #966 B38: the trade's names for it ([another app]'s Fractal Noise, the shader world's Perlin and value noise) and what people make
        with it. Fractal Ridges keeps its own 'fractal noise' alias, so typing that finds both. Not 'clouds' (the Clouds effect's name) */
     fractalnoise:      ['fractal noise', 'fractal', 'noise', 'perlin', 'perlin noise', 'value noise', 'turbulent', 'turbulence', 'ridged', 'smoke', 'marble', 'organic', 'texture'],
     /* #966 B53: what someone types to get rid of flicker. Not bare 'flicker' (the Flicker effect's own name — the label finds this one
@@ -749,7 +749,7 @@ window.FM = window.FM || {};
     /* ═══ #954: FORTY NAMES THAT WERE [THE REFERENCE APP]'S, AND STILL FIND THEIR EFFECT ═══════════════════════════════════════════
        His words, 1 Sep: *"i want every effect to be named different to what it is in [the reference app] and also have different
        ordering to avoid getting taken down by [the reference app] for copying"*. The 26 Sep sheet (tools/design/954-options.html, the
-       record with ids in tools/design/954-effect-names.md) found 40 labels that were distinctly AM's and drew a new name for each;
+       record with ids in tools/design/954-effect-names.md) found 40 labels that were distinctly [the reference app]'s and drew a new name for each;
        decided 11 Oct (#1130): the 40 renames as drawn, the 70 plain craft names (Gaussian Blur, Vignette, Chroma Key…) kept.
        LABELS ONLY: every type id is unchanged, so a saved project opens exactly as before. The old name stays a search word, so
        typing the name he knows still finds the effect; four of the forty already had an alias line above (Smooth Edges,

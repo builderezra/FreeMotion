@@ -1,0 +1,22 @@
+# tools/.names-allow — lines where two capital initials are NOT the name of another app (a variable, a codec).
+# One fingerprint a line, then where it was when it was added. Made by:  python3 tools/names-gate.py allow <file>:<line>
+6e1b3932af09182a  fx-pics/tiles-c10.js
+7a7f111480fd5fe4  fx-pics/tiles-c10.js
+f25eeffa4a612c04  fx-pics/tiles-c10.js
+491d0bff9d03dae8  fx-pics/tiles-c10.js
+122287468698b6cf  fx-pics/tiles-c10.js
+85c8cc16cbcda274  fx-pics/tiles-c10.js
+b1b2d0aca52e3acf  fx-pics/tiles-fix-2.js
+a0da295bccd893f8  fx-pics/tiles-fix-2.js
+ef1b01addf43dab7  fx-pics/tiles-fix-2.js
+51f6e225fc897d4c  fx-pics/tiles-fix-2.js
+84023616b0700b05  fx-pics/tiles-fix-3.js
+5b5c55439a99936c  fx-pics/tiles-fix-3.js
+4653c5eee3484a83  tests/_audiocodecs.html
+28e522d55c881957  tests/_audiocodecs.html
+599f97b921648c49  tests/_audiocodecs.html
+93b506f423e9c5ae  tests/_audiocodecs.html
+f7f8195f43b67444  tests/tests.js
+84f69fadf15337fd  tests/tests.js
+98672e9f9c74f64e  tests/tests.js
+d02bcd9eb9d51f1d  tests/tests.js

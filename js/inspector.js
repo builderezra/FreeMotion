@@ -222,7 +222,7 @@ window.FM = window.FM || {};
    * that declare a plain numeric param — and until now every one of them was a raw
    * <input type="range">. Two of Ezra's reports are the same complaint about that: "the width and
    * height in here actually need their own sliders" (queue 67) and "some effects use raw sliders"
-   * (queue 31). A browser range input in an app whose every other number is an AM-style ruler is not
+   * (queue 31). A browser range input in an app whose every other number is a ruler is not
    * a slider, it is the absence of one.
    * So this renders the SAME tickStrip the effect params and keyframe rows use: notched, snapping,
    * with the momentum glide, and it is fixed here rather than at 37 call sites so they cannot drift
@@ -562,7 +562,7 @@ window.FM = window.FM || {};
   // The mutation trio every effect change must run (canvas + timeline keyframes + undo).
   function afterFx() { FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); }
 
-  // ---- LAYER presets: the whole look + its animations (AM presets), not just the effect stack.
+  // ---- LAYER presets: the whole look + its animations (presets), not just the effect stack.
   // Captures effects, fill/gradient/stroke/shadow/blend/grade and the transform's keyframes.
   // Position keyframes are stored as DELTAS from their first key, then re-based onto the target
   // layer's current position on apply — so a preset animates the layer from where it already is
@@ -717,7 +717,7 @@ window.FM = window.FM || {};
     remove(name) { FM.presetTags.forget('lp:' + name); this._write(this.list().filter(p => p.name !== name)); },
   };
 
-  // ===== AM-style ruler scrubber (ONE implementation shared by fxScrubber + kfNumRow) =====
+  // ===== Ruler scrubber (ONE implementation shared by fxScrubber + kfNumRow) =====
   // A FINITE ruler of tick notches (one per TICK px) scrolls under the fixed green centre line.
   // Notches are REAL snap points: a drag lands on min + n*q (like timeline frame-snap — typed values
   // in the box stay free-form), and the ruler physically ends at min/max so a drag can never leave
@@ -1044,7 +1044,7 @@ window.FM = window.FM || {};
     let drag = null, pend = null, cur = o.read(), lastApplied = null;
     // Push dx SCREEN px through the ruler. `cur` carries the un-quantised position so a slow drag or a
     // decaying glide accumulates sub-notch movement instead of losing it to rounding every frame.
-    // REVERSED (AM): you grab the ruler and push it — drag LEFT to raise the value (a right-side tick
+    // REVERSED: you grab the ruler and push it — drag LEFT to raise the value (a right-side tick
     // slides under the fixed centre line), drag RIGHT to lower it, hence the minus.
     /* `fine` is the second half of queue 253, and the half that actually matters. Slowing the drag
      * rate alone changes nothing you can land on: the applied value snaps to a multiple of the NOTCH
@@ -1207,7 +1207,7 @@ window.FM = window.FM || {};
     return isAudio === !!audio ? fx : null;
   }
 
-  // AM signature control: the ruler scrubber + an editable value box.
+  // Signature control: the ruler scrubber + an editable value box.
   function fxScrubber(fx, p, layer, fxIdx) {
     const row = el('div', 'fx-scrub-row');
     /* Decimals follow the step, and the third tier is not decoration: queue 559 takes the wipes to a
@@ -1246,7 +1246,7 @@ window.FM = window.FM || {};
       eb.addEventListener('click', () => { FM._fxEasing = { fx: fx, at: fxPathOf(layer, fx), fxIdx: fxIdx, key: p.key, label: p.label }; FM.inspector.refresh(); });
       row.appendChild(eb);
     }
-    // The NAME selects the row (AM): tap it and this parameter's keyframes become the live ones on
+    // The NAME selects the row: tap it and this parameter's keyframes become the live ones on
     // the timeline. Only offered where it can mean something — kfScope covers the OPEN effect of the
     // Effects panel, so audio-effect rows (which share this builder) render a plain label.
     const nameEl = paramName('fx-scrub-label', p.label, layer, 'fx:' + p.key);
@@ -1291,7 +1291,7 @@ window.FM = window.FM || {};
     return row;
   }
 
-  // AM segmented control (e.g. Mirror direction) — no slider, no keyframe.
+  // Segmented control (e.g. Mirror direction) — no slider, no keyframe.
   // A tick box for a param that switches a whole behaviour on, rather than picking between two equal
   // options. `note` explains what it does to the controls under it — which is the point of using a
   // tick box here at all: a segmented control implies "one of these two", a tick implies "this takes over".
@@ -1917,7 +1917,7 @@ window.FM = window.FM || {};
     head.addEventListener('touchmove', e => { if (mode === 'reorder' && e.cancelable) e.preventDefault(); }, { passive: false });
   }
 
-  // One effect row (AM): collapsed = ▸ name … eye; expanded = ▾ name … ⋯ + delete, then its editor.
+  // One effect row: collapsed = ▸ name … eye; expanded = ▾ name … ⋯ + delete, then its editor.
   // Reorder = press-hold + drag; delete = swipe left (see attachFxGestures).
   function fxRow(layer, fx, idx, stack) {
     const reg = FM.fxRegistry.get(fx.type) || { label: fx.type, params: [] };
@@ -3996,7 +3996,7 @@ window.FM = window.FM || {};
   }
   FM._styleBlockedReason = styleBlockedReason;   // the suite drives this directly
 
-  // The AM-style picker popup: toggle which style aspects to paste, then Paste.
+  // The picker popup: toggle which style aspects to paste, then Paste.
   FM.openPasteStyle = function (target) {
     document.querySelectorAll('.ps-overlay').forEach(o => o.remove());   // never stack overlays (#10)
     target = target || FM.selectedLayer(FM.scene);
@@ -4064,7 +4064,7 @@ window.FM = window.FM || {};
     document.body.appendChild(overlay);
   };
 
-  // AM-style clip-action quick-row (matches [the reference app]'s selected-layer panel):
+  // Clip-action quick-row (matches [the reference app]'s selected-layer panel):
   // speed/timing · split · trim-start-to-playhead · trim-end-to-playhead · mute.
   // What the clip-action row was last BUILT for. Null until a row exists, so syncPlayhead can't fire
   // before there is anything to keep in sync. Everything that changes which buttons appear (or which
@@ -4129,8 +4129,8 @@ window.FM = window.FM || {};
       return b;
     }
     const onClip = FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4;   // playhead inside the clip
-    // AM's media row order: Speed | trim-in | trim-out | Volume. Split keeps a slot between the
-    // trims (AM parks split in its timeline bar; we keep it here so it stays one tap away).
+    // [the reference app]'s media row order: Speed | trim-in | trim-out | Volume. Split keeps a slot between the
+    // trims ([the reference app] parks split in its timeline bar; we keep it here so it stays one tap away).
     // …except Speed and Volume are CARDS now, on every layer kind (queue 45). Ezra, with two
     // screenshots: "some layers look like the first image with the button option layout and some look
     // like the second image. I want them both to look like the second image." A video was the odd one
@@ -4224,7 +4224,7 @@ window.FM = window.FM || {};
     return FM.timeline.clipOp(name);
   }
 
-  // Multi-select bar (AM): Group leads; then trim/split/delete acting on EVERY selected clip; then
+  // Multi-select bar: Group leads; then trim/split/delete acting on EVERY selected clip; then
   // TIMELINE alignment — moves clips in time only (canvas position untouched), keyframes ride along.
   // (The old canvas align/distribute buttons lived here — Ezra: gone, this is about the timeline.)
   function alignRow() {
@@ -4264,7 +4264,7 @@ window.FM = window.FM || {};
       });
     };
 
-    /* ---- clip actions on the whole selection (AM bottom-left) ----
+    /* ---- clip actions on the whole selection (bottom-left) ----
      * PHONE ONLY from v7.74 (queue 169). Ezra: "in the left massive area where its currently got the
      * six small buttons, just get rid of the buttons that are near the play head and then with the
      * align buttons just make them big and fill up the whole section."
@@ -4342,7 +4342,7 @@ window.FM = window.FM || {};
        380px with four layers selected). Both buttons live in the top bar now, on both layouts, so this
        row would be a third door to the same two actions rather than the only one. */
 
-    /* ---- timeline alignment (AM bottom-right): time only, never canvas position ----
+    /* ---- timeline alignment (bottom-right): time only, never canvas position ----
      * "with the align buttons just make them big and fill up the whole section" — the .align-big class
      * is what styles.css hangs that on, desktop only. It is worth being precise about what "the whole
      * section" is here: with a multi-selection this panel holds NOTHING else. Measured at 1440x900
@@ -4575,7 +4575,7 @@ window.FM = window.FM || {};
     return CATEGORIES.some(c => c.key === v);   // color/border/blend/transform/presets/effects apply broadly
   }
   function categoryGrid(layer) {
-    // AM lays the cards out 3-then-rest: Color/Border/Blending on top, the rest in a tighter row below.
+    // [the reference app] lays the cards out 3-then-rest: Color/Border/Blending on top, the rest in a tighter row below.
     const cats = catsFor(layer);
     const wrap = el('div', 'cat-wrap');
     const top = el('div', 'cat-grid cat-grid-top');
@@ -4759,7 +4759,7 @@ window.FM = window.FM || {};
   function fillColorKey(layer) { return layer.type === 'text' ? 'color' : 'fill'; }
   function fillColorGet(layer) { return FM.evalProp(layer[fillColorKey(layer)], FM.time) || (layer.type === 'text' ? '#ffffff' : '#3a7bd5'); }
   function fillColorSet(layer, v) { FM.setProp(layer, fillColorKey(layer), v, FM.time); }
-  // Exposed so the AM-style text-edit overlay (text-edit.js) can drive the text fill through the same
+  // Exposed so the text-edit overlay (text-edit.js) can drive the text fill through the same
   // keyframe-aware accessors instead of clobbering an animated colour.
   FM._fillGet = fillColorGet; FM._fillSet = fillColorSet;
   const FILL_SWATCHES = ['#ffffff', '#000000', '#7c4dff', '#8a8f98', '#e53935', '#ff1744', '#ff4dd2', '#ff6e40', '#ffd740', '#00e5c0', '#18c8ff', '#2979ff', '#00c853', '#b0ff57', '#a1887f', '#5d4037'];
@@ -4869,7 +4869,7 @@ window.FM = window.FM || {};
     if (mode === 'solid') {
       const head = el('div', 'fill-readout');
       head.appendChild(el('span', 'fill-hex', normHex(fillColorGet(layer)).toUpperCase() + '   ' + Math.round((layer.fillOpacity != null ? layer.fillOpacity : 1) * 100) + '%'));
-      // Keyframe diamond — animate the colour over time (AM). Filled when a keyframe sits at the
+      // Keyframe diamond — animate the colour over time. Filled when a keyframe sits at the
       // playhead; toggling on/off converts static ↔ animated exactly like the transform props.
       const ckey = fillColorKey(layer);
       const kfBtn = el('button', 'fill-kf');
@@ -5068,11 +5068,11 @@ window.FM = window.FM || {};
     if (Number.isFinite(opts.min)) val.setAttribute('aria-valuemin', String(opts.min));
     if (Number.isFinite(opts.max)) val.setAttribute('aria-valuemax', String(opts.max));
     const lab = el('div', 'mt-vbox-lab', labelText);
-    // Move mode's X / Y / Z boxes double as the pad's mode switch (v5.43, AM): the label under the
+    // Move mode's X / Y / Z boxes double as the pad's mode switch (v5.43): the label under the
     // number is the target, NOT the number itself — tapping the number already opens the type-in
     // editor, and taking that over would trade one thing for another.
     //
-    // That same name is now also the ROW SELECTOR (AM): tapping it picks which property's keyframes
+    // That same name is now also the ROW SELECTOR: tapping it picks which property's keyframes
     // you are editing. The two live on one tap because they never disagree — the pad axis and the
     // selection are both "this is the channel I'm working on". Where a tap ALSO changes the axis it
     // selects rather than toggles, because that tap is unambiguously "I want this one".
@@ -5081,7 +5081,7 @@ window.FM = window.FM || {};
     if (opts.axis) {
       lab.classList.add('mt-vbox-axis');
       const axisOn = (FM._mtAxis || 'xy') === opts.axis;
-      box.classList.add(axisOn ? 'mt-axis-on' : 'mt-axis-off');   // the VALUE follows the axis too (AM)
+      box.classList.add(axisOn ? 'mt-axis-on' : 'mt-axis-off');   // the VALUE follows the axis too
       if (axisOn) lab.classList.add('on');
     }
     if (selectable) {
@@ -5324,8 +5324,8 @@ window.FM = window.FM || {};
     return strip;
   }
 
-  // ===== AM "Edit Shape" for media (photo/video) = a Size editor =====
-  // AM "Edit Shape" for media = a CROP editor. Width/Height are the crop-frame size in SOURCE pixels;
+  // ===== "Edit Shape" for media (photo/video) = a Size editor =====
+  // "Edit Shape" for media = a CROP editor. Width/Height are the crop-frame size in SOURCE pixels;
   // shrinking them crops the photo/video (the content is NOT scaled — you just see less of it). The two
   // top-right controls (aspect-ratio lock + size-from-edge/center) and a keyframe + easing rail that
   // keyframes the crop. Both toggle states are session tools (like the MT mode), not saved.
@@ -5348,7 +5348,7 @@ window.FM = window.FM || {};
   }
 
   // The two top-right controls (aspect lock + size origin). Built here so the inspector header can
-  // place them at the far top-right, matching AM. Toggling re-renders the panel + canvas.
+  // place them at the far top-right. Toggling re-renders the panel + canvas.
   function cropToggles(layer) {
     const top = el('div', 'es-toprow');
     const aspectBtn = el('button', 'es-toggle' + (_szLock ? ' on' : ''));
@@ -5467,7 +5467,7 @@ window.FM = window.FM || {};
     }
     center.appendChild(control);
 
-    // Free crop (not in AM) — drag a box right on the playback area, iPhone-style.
+    // Free crop (not in [the reference app]) — drag a box right on the playback area, iPhone-style.
     const tools = el('div', 'es-crop-tools');
     const freeBtn = el('button', 'btn es-freecrop'); freeBtn.innerHTML = ES_ICONS.crop + '<span>Free crop</span>';
     freeBtn.title = 'Drag a crop box directly on the video';
@@ -5511,7 +5511,7 @@ window.FM = window.FM || {};
     body.appendChild(panel);
   }
 
-  // ===== AM "Edit Points" panel — edits the point selected on the canvas overlay =====
+  // ===== "Edit Points" panel — edits the point selected on the canvas overlay =====
   // Tap a point on the canvas to select it (green); drag it there, or nudge it here with the X/Y
   // boxes / trackpad. Tap a hollow ring to ADD a point on the curve; ⊖ (or double-tap) deletes.
   // Curve/Corner set whether the outline flows through the point or bends hard at it.
@@ -5646,7 +5646,7 @@ window.FM = window.FM || {};
      * now honours it — with a row selected it keys that row alone, and the button's own lit state
      * follows the same scope so it cannot claim a keyframe that belongs to a different channel.
      * Deliberately ADDITIVE: with nothing selected every mode behaves exactly as before, so a plain
-     * position keyframe still keys x and y together, which is right and is what AM does. */
+     * position keyframe still keys x and y together, which is right and is what [the reference app] does. */
     const _selK = (kfSel && kfSel.layerId === layer.id && /^tf:/.test(kfSel.key || '')) ? kfSel.key.slice(3) : null;
     const scoped = (_selK && props.indexOf(_selK) >= 0) ? [_selK] : null;
     const stateProps = scoped || props;
@@ -5749,9 +5749,9 @@ window.FM = window.FM || {};
       const bz = mtVBox('Z', () => mtEval(layer, 'z'), v => mtSet(layer, 'z', Math.round(v)), { dp: 1, scrub: 2, kfKey: 'z', layer: layer, axis: 'z' });
       refreshables.push(bx, by, bz); values.append(bx, by, bz);
 
-      // ---- Z sub-mode (v5.43, AM): tap the Z label and the same pad becomes a depth slider ----
+      // ---- Z sub-mode (v5.43): tap the Z label and the same pad becomes a depth slider ----
       // Ezra: "you just tap on z and then it switches to this version." It is a sub-mode of the move
-      // pad rather than a fifth button on the mode rail, exactly as AM has it — Z is still position.
+      // pad rather than a fifth button on the mode rail, exactly as [the reference app] has it — Z is still position.
       // VERTICAL only, and the sign is chosen so the pad drags the OBJECT and not the number: pushing
       // your finger DOWN pushes the layer back into the scene (z grows = further away, which is the
       // same direction the fog and focus maths already read it), so it shrinks under a camera; pulling
@@ -6328,7 +6328,7 @@ window.FM = window.FM || {};
     return s;
   }
 
-  // ===== Volume panel — keyframeable audio level + easing (AM-style left rail: ◆ + curve) =====
+  // ===== Volume panel — keyframeable audio level + easing (left rail: ◆ + curve) =====
   /* Volume ceiling (queue 195). Ezra: "I want to be able adjust the volume up to like 1000%." Above
    * unity is Web Audio only — `el.volume` cannot exceed 1 — and the boost stage in audio-fx-live.js
    * clamps to the same number, so the UI cannot ask for a gain the audio path will not honour. */
@@ -6579,7 +6579,7 @@ window.FM = window.FM || {};
     return panel;
   }
 
-  // Advanced text options — everything AM's focused text bar leaves out. Surfaced as the editor's "Aa"
+  // Advanced text options — everything [the reference app]'s focused text bar leaves out. Surfaced as the editor's "Aa"
   // sheet (FM._textExtras) so all text controls live WITH text editing, not scattered. Outline lives in
   // Border & Shadow; text fill lives in Color & Fill — this is Style / Spacing / Line height / Curve /
   // Animate / Captions only. `rerender` rebuilds the host (the inspector, or the editor's Aa popover).
@@ -6857,7 +6857,7 @@ window.FM = window.FM || {};
       body.appendChild(volumePanel(layer));
     } else if (key === 'speed') {
       if (layer.speed == null) layer.speed = 1;
-      // AM-style left rail (◆ keyframe + easing curve) beside the speed control — keyframed speed
+      // Left rail (◆ keyframe + easing curve) beside the speed control — keyframed speed
       // = SPEED RAMPING: playback accelerates/decelerates along the eased curve between keyframes.
       const spRow = el('div', 'mt-panel spd-panel');
       const rail = el('div', 'mt-rail mt-rail-left');
@@ -6882,7 +6882,7 @@ window.FM = window.FM || {};
        * T with its start fixed? The new duration is T − start, so the new speed is span / (T − start).
        * One divide; the value of this feature is that you never work it out yourself.
        *
-       * Above the slider, matching where AM puts them. Two buttons, one per edge, because those are
+       * Above the slider, matching where [the reference app] puts them. Two buttons, one per edge, because those are
        * the two things that can actually be solved — see the note in REQUESTS #184 about the four in
        * his screenshot. Deliberately NOT disabled when the playhead is out of range: the panel does
        * not rebuild while you scrub, so a button greyed out at build time would still be grey after
@@ -7035,7 +7035,7 @@ window.FM = window.FM || {};
         } else {
         head.innerHTML = '<span class="blend-arrow">' + (open ? '▾' : '▸') + '</span><span class="blend-cat-name">' + name + '</span>' +
           (curIn ? '<span class="blend-cur">' + curIn[1] + '</span><span class="blend-check">✓</span>' : '');
-        head.addEventListener('click', () => { const was = !!FM._blendOpen[name]; FM._blendOpen = {}; if (!was) { FM._blendOpen[name] = true; pendingReveal = { sel: '.blend-list' }; } FM.inspector.refresh(); });   // accordion: only ONE dropdown open at a time (AM)
+        head.addEventListener('click', () => { const was = !!FM._blendOpen[name]; FM._blendOpen = {}; if (!was) { FM._blendOpen[name] = true; pendingReveal = { sel: '.blend-list' }; } FM.inspector.refresh(); });   // accordion: only ONE dropdown open at a time
         }
         row.appendChild(head);
         if (open) {
@@ -7211,7 +7211,7 @@ window.FM = window.FM || {};
         return row;
       }
 
-      // LAYER presets first (look + animations — the AM-style ones saved via "Save Preset")
+      // LAYER presets first (look + animations — the ones saved via "Save Preset")
       const lps = byTag(FM.layerPresets.list().map(p => { p._k = 'lp:' + p.name; return p; }))
                     .filter(p => passes(p.name, p._k));
       /* THE SAVE ACTION LEADS ITS SECTION (queue 331 clauses 1-2). Ezra: *"Get rid of explanation and
@@ -7394,7 +7394,7 @@ window.FM = window.FM || {};
         rep.addEventListener('click', () => FM.replaceMedia(layer.id));
         body.appendChild(rep);
       }
-      // EVERY layer gets AM's fill selector (None / Solid / Gradient / Media). On a video/image/
+      // EVERY layer gets [the reference app]'s fill selector (None / Solid / Gradient / Media). On a video/image/
       // group, picking Solid (etc.) fully overwrites the content with that fill; None shows the
       // content as-is. A solid colour fills flat — gradients are their own tab, never an accident.
       fillPanel(layer, body);
@@ -7432,7 +7432,7 @@ window.FM = window.FM || {};
       const bsKinds = [];   // what this layer offers, in tile order: { kind, label, on, set, wide }
       const bsRows = el('div', 'bs-page-rows');   // the open page's rows (the blocks below fill it only for their own page)
       const bsGrid = el('div', 'bs-tiles');
-      // ===== BORDER (AM parity, keyframeable) =====
+      // ===== BORDER (parity, keyframeable) =====
       // Reuses layer.stroke as the single border. position = inside/center/outside. Group border = silhouette
       // dilation → outside only. size + colour are keyframeable (◆); position is a plain choice.
       // OPEN KINDS (line / arc / spiral / open pen path) GET THE TOGGLE TOO (queue 780). The renderer's stroke
@@ -7499,7 +7499,7 @@ window.FM = window.FM || {};
           if (!hasStroke) bsRows.appendChild(el('div', 'insp-hint', 'Dashes show on the stroke — turn on Outline too.'));
         }
       }
-      // ===== SHADOW (AM parity, keyframeable) =====
+      // ===== SHADOW (parity, keyframeable) =====
       /* dx/dy DEFAULT TO 0 (queue 386 clause 2). Ezra: "there needs to be a normal shadow not just the
          long drop one". Nothing was missing from the renderer — a shadow hugging the layer has always
          been one offset away — the problem was that every shadow anyone switched on STARTED at 8/8, so
@@ -7603,7 +7603,7 @@ window.FM = window.FM || {};
         sel.addEventListener('change', () => { layer.parent = sel.value || null; FM.requestRender(); FM.inspector.refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); commitH(); });
         row.appendChild(sel); body.appendChild(row);
         if (layer.parent) {
-          // AM parenting rotation mode: how the child responds to the parent's rotation.
+          // Parenting rotation mode: how the child responds to the parent's rotation.
           if (!layer.parentMode) layer.parentMode = 'normal';
           const mr = el('div', 'prop-row'); mr.appendChild(el('label', null, 'Link rotation'));
           const msel = document.createElement('select');
@@ -7624,7 +7624,7 @@ window.FM = window.FM || {};
         buildTextExtras(layer, body);
       }
       if (layer.type === 'shape' && FM.isPointShape && FM.isPointShape(layer)) {
-        // ===== Edit Points (AM) — point shapes replace Edit Shape with this =====
+        // ===== Edit Points — point shapes replace Edit Shape with this =====
         // Auto-enter point editing: overlay on the canvas + this panel edits the selected point.
         if (FM.pointEdit && (!FM.pointEdit.isActive() || FM.pointEdit.layerId() !== layer.id)) FM.pointEdit.start(layer.id, { embedded: true });
         editPointsTools(layer, body);
@@ -7659,7 +7659,7 @@ window.FM = window.FM || {};
         ksel.addEventListener('change', () => { layer.shape = ksel.value; FM.requestRender(); FM.inspector.refresh(); commitH(); });
         kr.appendChild(ksel); body.appendChild(kr);
         const openStroke = isOpenStroke(layer);   // stroked, never filled — queue 759: this list omitted spiral and open paths, so Spiral got mislabelled Stroke controls
-        // Fill/colour now lives in its own "Color & Fill" panel (AM parity) — Edit Shape is geometry + stroke.
+        // Fill/colour now lives in its own "Color & Fill" panel — Edit Shape is geometry + stroke.
         body.appendChild(rangeRow('Width', () => layer.shapeW, v => { layer.shapeW = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.width), 1));
         body.appendChild(rangeRow('Height', () => layer.shapeH, v => { layer.shapeH = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.height), 1));
         if (layer.shape === 'rect') body.appendChild(rangeRow('Corner radius', () => layer.cornerRadius || 0, v => { layer.cornerRadius = Math.max(0, v); }, 0, Math.round(Math.min(layer.shapeW, layer.shapeH) / 2), 1));
@@ -7695,11 +7695,11 @@ window.FM = window.FM || {};
         }
       }
       if (layer.type === 'video' || layer.type === 'image') {
-        // Media has no path/points to edit — AM's "Edit Shape" for a photo/video is the SIZE editor.
+        // Media has no path/points to edit — [the reference app]'s "Edit Shape" for a photo/video is the SIZE editor.
         mediaSizePanel(layer, body);
       }
       // (Motion blur, Wiggle, Mask and the Start/Duration rows were removed from Edit Shape to match
-      // [the reference app] — none of those live in AM's Edit Shape. Any layer that still carries those
+      // [the reference app] — none of those live in [the reference app]'s Edit Shape. Any layer that still carries those
       // fields from an older save keeps rendering them; there's just no longer UI to add them here.
       // Timing is set on the timeline; masking lives in Blending (mask modes) and masking groups.)
     }
@@ -7708,7 +7708,7 @@ window.FM = window.FM || {};
   // ===== WHICH property am I editing? — panel scope + an optional tapped row ======================
   //
   // v5.42 made keyframe diamonds inert outlines unless their property's editor is open, so "focus"
-  // was implied by which PANEL you had open. Ezra (AM): "to tell what slider you have selected —
+  // was implied by which PANEL you had open. Ezra: "to tell what slider you have selected —
   // hence forth what key frames ur gonna be editing, it shows by making the item ur changing have a
   // different colour on the name of it, you can also tap on the name to select the row." In his
   // screenshot the Offset effect's X was green and its Y was not, so the unit is ONE PROPERTY, not
@@ -7996,7 +7996,7 @@ window.FM = window.FM || {};
       return true;
     },
     // Step BACK one level (Esc / click-off): easing sub-view → its category, category → the grid,
-    // grid → deselect. Returns true if it did something. (AM: Esc doesn't nuke the layer outright.)
+    // grid → deselect. Returns true if it did something. (Esc doesn't nuke the layer outright.)
     back() {
       const layer = FM.selectedLayer(FM.scene);
       if (!layer) return false;
@@ -8101,7 +8101,7 @@ window.FM = window.FM || {};
         return;
       }
       if (!layer) {
-        // AM model: nothing selected → show the Add menu (same one the mobile + button opens).
+        // Model: nothing selected → show the Add menu (same one the mobile + button opens).
         // Selecting a clip swaps this for the property editor (refresh() re-runs on select).
         // Clearing lastLayerId means re-selecting a layer (even the SAME one) reopens at the category
         // GRID, not the sub-menu you last had open — deselecting is a clean reset (Ezra).
@@ -8245,7 +8245,7 @@ window.FM = window.FM || {};
         const backLabel = (view === 'element') ? elementLabel(layer) : (cat ? cat.label : 'Back');
         const back = el('button', 'cat-back', '‹  ' + backLabel);
         back.addEventListener('click', () => { view = 'home'; clearFilterPreview(); FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh(); });
-        // AM shows the crop controls (aspect lock + size origin) at the top-RIGHT of the Edit Shape
+        // [the reference app] shows the crop controls (aspect lock + size origin) at the top-RIGHT of the Edit Shape
         // header — put them on the header row for media so they sit far right, not buried in the body.
         if (view === 'element' && (layer.type === 'video' || layer.type === 'image') && FM._inspectorCropToggles) {
           const head = el('div', 'cat-head-row');

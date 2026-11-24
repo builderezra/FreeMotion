@@ -371,7 +371,7 @@ window.FM = window.FM || {};
     return Math.max(1, Math.floor(fair / 4), Math.min(share, room));
   };
 
-  // Small filmstrip of DISTINCT frames for a clip's timeline bar (AM-style). Cheap + cached on the
+  // Small filmstrip of DISTINCT frames for a clip's timeline bar. Cheap + cached on the
   // media record (m.stripFrames). Video: seek to `count` evenly-spaced times. Image: a single frame.
   // SERIALIZED through one global queue so a project with many video clips doesn't seek N <video>s at
   // once (that storm spikes CPU/memory + fights the preview compositor for each element).

@@ -268,7 +268,7 @@ invariant. Highest-stakes uncovered names I noticed but never opened: `FM.alignL
 - **A new group starts CLOSED** (queue 192/193) — an expanded group looked like the layers had been copied
   and left outside it.
 - **He removed six entries from the layer menu** in v5.91 and the "Duplicate in place" variant with them.
-- **The UI is modelled on Alight Motion and must be made visually our own before any public release.** See
+- **The UI is modelled on [another app] and must be made visually our own before any public release.** See
   `BEFORE-PUBLISHING.md`. Raise it whenever he mentions publishing/launching/App Store/demo — do not
   silently start the redesign.
 - **Do NOT move the repo into iCloud Drive.** iCloud syncs `.git` non-atomically and can corrupt it.

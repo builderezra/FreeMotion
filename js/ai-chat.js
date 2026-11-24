@@ -1,6 +1,6 @@
 /* FreeMotion — the AI you can TALK TO (queue 856 clause 1).
  *
- * Ezra, 10 Sep: "we probably should make that more like CapCut one where you can just talk to her and
+ * Ezra, 10 Sep: "we probably should make that more like [another app] one where you can just talk to her and
  * say what you want and then it goes and does it for you inside the edit". The Director (ai.js) builds
  * a WHOLE SCENE from one prompt and then stops. This is the other half — a conversation that edits the
  * project you already have, one sentence at a time, remembering what you said before it.
@@ -9,7 +9,7 @@
  * closed, validated op vocabulary the Director uses, which ai-ops.js's own header calls "the ONLY code
  * that turns AI output into FM.scene mutations". The tempting shortcut was to let this file call
  * FM.deleteLayer / FM.cloneLayer straight from model output, because the op list has no word for
- * "delete that" and "delete that" is exactly what people say to CapCut. That would put a second,
+ * "delete that" and "delete that" is exactly what people say to [another app]. That would put a second,
  * UNVALIDATED path around the safety boundary — raw ids, no clamping, no cascade rules — and "an AI
  * wrecked my project, how do I undo it" is a question he has already had to ask once. So the four verbs
  * a conversation needs and a scene BUILDER never did — delete, duplicate, select, move the playhead —
