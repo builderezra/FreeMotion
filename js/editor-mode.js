@@ -390,7 +390,7 @@ window.FM = window.FM || {};
      every item's tools, FM.editor.splitHere): a selected item that is not a main clip is split
      itself ("split the item"); a main clip is split when the playhead is inside it; otherwise the main clip under the playhead is
      selected and split. The ✂ used to hand the selection straight to split, so with clip A selected and the playhead over B it
-     refused "Move the playhead onto the clip to split" while S split B — a beginner taps the ✂, and CapCut splits what is under
+     refused "Move the playhead onto the clip to split" while S split B — a beginner taps the ✂, and expects it to split what is under
      the line. */
   function splitHere() {
     const S = FM.spine;

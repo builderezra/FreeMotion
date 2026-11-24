@@ -236,7 +236,7 @@ window.FM = window.FM || {};
       mirror: 'Mirror', mirrorTitle: 'Mirror side to side', flipV: 'Flip', flipVTitle: 'Flip upside down', turn: 'Turn', turnTitle: 'Turn a quarter clockwise',
       size: 'Size', sizeLabel: 'Size in percent', centre: 'Centre', centreTitle: 'Put it in the middle of the picture',
       reset: 'Reset', resetTitle: 'Back to its first size, centred, no turn or flip', mute: 'Mute',
-      /* #1243 R release 8b: S33's look and sound doors (our own names, 1243-F S33's table: not CapCut's) */
+      /* #1243 R release 8b: S33's look and sound doors (our own names, 1243-F S33's table: not another editor's) */
       motionBlur: 'Motion blur', motionBlurTitle: 'Blur what moves, as a camera does',
       smoothSkin: 'Smooth skin', smoothSkinTitle: 'Soften skin and small marks, keep the edges sharp',
       quieter: 'Quieter background', quieterTitle: 'Turn down the hiss, hum and room noise behind a voice',

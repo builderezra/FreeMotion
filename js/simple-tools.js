@@ -7,7 +7,7 @@
  *   sub     — a row that replaces the bar (#sm-tray again): a ‹ back one level, then that row's choices (Clips, Sound,
  *             Captions, the effects pickers, Speed, Volume, Opacity, Transform, Fade, Strength, Transition — the SUBS table);
  *   panel   — a panel is up (a text's Style, Edit lines, Extras, and Look, the project's since #1243 S12; Export, from the Export button, since #1243 S6): the bar hides, the panel has the room.
- * Every row is one strip that scrolls sideways with fades at the edge that hides tools (S15: "make it like CapCut where you
+ * Every row is one strip that scrolls sideways with fades at the edge that hides tools (S15: "make it like [another editor] where you
  * can scroll it"), never squeezed. Simple's spoken lines float as a 44 px strip just above the bar (#sm-say), so nothing moves.
  * #1243 R release 8 (THE TRAYS): one tray order with section lines between its groups and Delete last, scrolling with the rest (S31);
  * no More (S4); a PC shows the same single strip (R decision 6: the two-row grid and its › cue are gone).
@@ -481,7 +481,7 @@ window.FM = window.FM || {};
     });
   }
   /* THE PROJECT ROW (§8.5) is one strip that scrolls sideways (#1243 S15, his words: "don't just keep condensing it, like make it like
-     CapCut where you can scroll it"): every tool at least 64 px, spreading when they all fit, a fade on the edge that hides more. Built
+     [another editor] where you can scroll it"): every tool at least 64 px, spreading when they all fit, a fade on the edge that hides more. Built
      once, so its scroll is kept across the trips to the other modes. */
   function buildTools() {
     const w = W();
@@ -1418,7 +1418,7 @@ window.FM = window.FM || {};
       edges(run);
       return;
     }
-    /* ONE STRIP, ON A PHONE AND A PC ALIKE (#1243 R decision 6, S15's "make it like CapCut where you can scroll it"): the tools scroll in their
+    /* ONE STRIP, ON A PHONE AND A PC ALIKE (#1243 R decision 6, S15's "make it like [another editor] where you can scroll it"): the tools scroll in their
        strip with a fade on the edge that hides tools (SU1 #15) and a wheel moves it; Delete is the strip's last tool, after a line (S31), and
        scrolls with the rest. (Until release 8 a PC laid six or more on two rows, his pick B of 6 Oct, and More and 🗑 were a pinned end
        beside the strip; S4 took More away, S31 unpinned 🗑, and S33's lines do not read in a grid.) */
