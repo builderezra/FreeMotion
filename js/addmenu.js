@@ -545,9 +545,12 @@ window.FM = window.FM || {};
         /* templateId: WHICH template, a read-only fact for Simple's Clips › Extras (queue 980), which inserts it its own way; Full's tap
            is the add below, unchanged */
         return { label: t.name, thumb: t.thumb || null, templateId: t.id,
-          // #1255: the tab's own drawing, his Stacked cards (FM.ICON.template), for a template with no picture (saved before
-          // thumbs existed, a capture that failed, an imported file whose picture was refused). It was the old frame with a
-          // crossbar, a third Templates icon beside the tab's and Home's ("I just want them to be consistent").
+          // the SAME shape queue 375 replaced on the tab — it lives here too, as the fallback for a
+          // template saved before thumbs existed, and changing only one of the two would have left [the reference app]'s
+          // glyph on screen while the entry claimed it was gone.
+          // #1255: so it is the tab's drawing now, his Stacked cards (FM.ICON.template), for any template with no picture (also a
+          // capture that failed, or an imported file whose picture was refused). It was still the old frame with a crossbar, a third
+          // Templates icon beside the tab's and Home's ("I just want them to be consistent").
           icon: ico((FM.ICON && FM.ICON.template) || ''),
           add: async function () { const ok = await FM.templates.insertInto(t.id); if (FM.toast) FM.toast(ok === false ? 'Template data missing \u2014 re-save it from a project' : 'Inserted \u201c' + t.name + '\u201d'); } };   // await the result \u2014 insertInto returns false when the IDB pack was evicted; the toast used to lie
       });
