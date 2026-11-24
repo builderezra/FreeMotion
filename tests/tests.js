@@ -208480,7 +208480,7 @@
             if (!askUp()) fails.push('a press on Custom asked nothing');
             else {
               const i = askIn();
-              if (!i || (i.getAttribute('inputmode') || '') !== 'decimal') fails.push('the question’s field asks for the ' + ((i && i.getAttribute('inputmode')) || 'letter') + ' keyboard, want the number pad (inputmode decimal)');
+              if (!i || (i.getAttribute('inputmode') || '') !== 'numeric') fails.push('the question’s field asks for the ' + ((i && i.getAttribute('inputmode')) || 'letter') + ' keyboard, want the digits pad (inputmode numeric)');
               await answer('500', v); await askNo();
               if (r12On('fps') !== '30 fps' || custom().textContent !== 'Custom') fails.push('500 typed into Custom left “' + r12On('fps') + '” picked and the button reading “' + custom().textContent + '”, want nothing changed (30 fps, Custom)');
               if (!/1 to 120/.test(v.say())) fails.push('500 was refused with “' + v.say() + '”, want a line that says 1 to 120');
@@ -208488,9 +208488,9 @@
               await answer('0', v); await askNo();
               if (r12On('fps') !== '30 fps') fails.push('0 typed into Custom left “' + r12On('fps') + '” picked, want 30 fps still');
               custom().click(); await r4Settle(200);
-              await answer('48', v);
+              await answer('47.6', v);   /* whole frames a second: 47.6 is taken as 48 */
               if (askUp()) { fails.push('the question stayed up after 48'); await askNo(); }
-              if (r12On('fps') !== '48 fps' || custom().textContent !== '48') fails.push('48 typed into Custom leaves “' + r12On('fps') + '” picked and the button reading “' + custom().textContent + '”, want 48 on the button, picked');
+              if (r12On('fps') !== '48 fps' || custom().textContent !== '48') fails.push('47.6 typed into Custom (48 in whole frames) leaves “' + r12On('fps') + '” picked and the button reading “' + custom().textContent + '”, want 48 on the button, picked');
               got = null;
               r12Box().querySelector('.sm-exp-go').click();
               for (let k = 0; k < 60 && !got; k++) await v.sleep(20);

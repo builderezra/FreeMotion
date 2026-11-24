@@ -1261,7 +1261,7 @@ window.FM = window.FM || {};
   /* Smoothness's row (#1261, his words: "Just do 30, 60, 120 or custom"): three rates and the Custom button, in the row's own look
      (exportSeg's classes, so the panel's keys and the suite find them). The Custom button shows the rate it holds. A press on it picks
      that rate; a press when it is already the pick, or holds none, asks for a number from 1 to 120 in the app's own question box
-     (FM.ask, on the phone's number pad). A number that is one of the three presses that button instead. A press keeps focus on the
+     (FM.ask, on the phone's digits pad; whole numbers). A number that is one of the three presses that button instead. A press keeps focus on the
      button pressed (the row is drawn again in place). */
   function exportFpsRow(box) {
     const w = W(), fpsName = f => typeof w.exportFps === 'function' ? w.exportFps(f) : expRound(f) + ' fps';
@@ -1277,9 +1277,9 @@ window.FM = window.FM || {};
     const ask = () => {
       if (!FM.ask) return;
       FM.ask({ title: w.exportFpsAsk || 'Frames a second', message: w.exportFpsHint || 'From 1 to 120', ok: w.exportFpsSet || 'Set',
-        input: { value: String(expRound(expCustom || expFps)), inputmode: 'decimal' } }).then(ans => {
+        input: { value: String(expRound(expCustom || expFps)), inputmode: 'numeric' } }).then(ans => {
         if (ans == null) return;
-        const n = expRound(parseFloat(String(ans).replace(',', '.')));
+        const n = Math.round(parseFloat(String(ans)));   // whole frames a second, as the Full editor's Exact fps box takes them and as a project's rate is stored
         if (!expFpsOk(n)) { if (FM.spine && FM.spine.say) FM.spine.say(w.exportFpsBad || 'Type a number from 1 to 120'); return; }
         if (!expIsRate(n)) expCustom = n;
         pick(n, expIsRate(n) ? 'fps-' + n : 'fps-custom');
