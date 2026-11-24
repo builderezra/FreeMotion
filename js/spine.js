@@ -1,7 +1,7 @@
 /* FreeMotion — FM.spine, the Simple editor's engine: READ SIDE ONLY (Simple mode Phase 1, DESIGN.md §2, §5.2, §14.1).
  *
  * WHAT THIS IS. The Simple editor is a second VIEW over the same {project, layers} document. This file answers one
- * question, purely: "drawn the way CapCut shows a project, what is this document?" — which clips make the main track,
+ * question, purely: "drawn as one row of clips with everything else riding on them, what is this document?" — which clips make the main track,
  * in what order, with what seams between them, what every other item is (text, captions, overlay, sound, effect, a
  * block), which clip it follows, and which lane it sits in. It never writes the document, never reads FM.scene inside
  * classify (it is handed a scene), and has no DOM, so the suite drives it headless.

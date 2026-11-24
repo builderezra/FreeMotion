@@ -68388,16 +68388,10 @@
     } finally { fe.style.height = h0; window.dispatchEvent(new Event('resize')); await settle(120); }
   });
 
-  /* 2A, row 13 (the first ten seconds): SIMPLE'S FIRST-RUN HINT (DESIGN §7.3 step 4, §8.9) — while nothing is selected, only with a main
-     clip on the track, at most once per device (fm.sm.hint = '1' once the first tap anywhere takes it away), in the phone words at a phone
-     width (max-width 700 px, the test Full uses) and the PC words otherwise; while it shows, the play bar's ✂ wears the clip's selection
-     outline. Since #1243 S3 it floats just above the bar (#sm-bar > .sm-hint), the project row being just the tools, and the quiet line
-     it used to replace is retired. Every test saves and puts back this device's fm.sm.hint (smP2 restores only fm.editor.last /
-     fm.editor.hint). Red on c41-p27: no hint is ever drawn. */
-  /* #1243 S5: Split is the first of a clip's tools now (the play row's ✂ and its outline went), and Look left the clip (R decision 1) */
-  const SM_HINT_PHONE = 'Tap a clip to split it or change its speed';
-  const SM_HINT_PC = 'Click a clip to split it or change its speed · S splits at the line';
-  const smHintWords = () => window.matchMedia('(max-width: 700px)').matches ? SM_HINT_PHONE : SM_HINT_PC;
+  /* 2A, row 13 (the first ten seconds): SIMPLE'S FIRST-RUN HINT (DESIGN §7.3 step 4, §8.9) WENT with #1255's 20:53 follow-up. His words:
+     "I'm also noticing a pop-up that says tap a clip to split or change its speed. There shouldn't be any explanations like that. We
+     have tutorials for a reason". The '1255 hints' tests check that it never shows. The helpers stay: other tests still put this
+     device's fm.sm.hint aside and back (an older version's page may have written it). */
   async function smHintKeep(v0, fn) {
     let had = null; try { had = localStorage.getItem('fm.sm.hint'); } catch (e) {}
     try {
@@ -68405,91 +68399,13 @@
       return await fn();
     } finally { try { if (had === null) localStorage.removeItem('fm.sm.hint'); else localStorage.setItem('fm.sm.hint', had); } catch (e) {} }
   }
-  /* the probe: the hint floating above the bar (#sm-bar > .sm-hint, #1243 S3), its words and whether it is laid out */
+  /* the probe: anything floating above the bar where the hint was (#sm-bar > .sm-hint, #1243 S3), its words and whether it is laid out */
   const smHintRow = () => { const h = document.querySelector('#sm-bar > .sm-hint'); return { text: h ? h.textContent.trim() : '', shown: !!(h && h.getClientRects().length) }; };
   const smHintFresh = async v => { FM.selectLayer(null); FM.simpleTools._reset(); FM.simpleTools.sync(); await v.sleep(60); };
-
-  test('simple P2.7 · the first-run hint shows above the bar with a main clip and nothing selected, in the phone words at a phone width and the PC words otherwise', { item: '980', budgetMs: 60000 }, async function () {
-    smNeedP2();
-    await smHintKeep(null, () => smP2(smClips3, async function (v) {
-      await smHintFresh(v);
-      const check = (where) => {
-        const row = smHintRow(), want = smHintWords(), fails = [];
-        if (row.text !== want) fails.push(where + ' with three clips and nothing selected the hint above the bar reads “' + row.text + '”, want the first-run hint “' + want + '”');
-        else if (!row.shown) fails.push(where + ' the hint is not on screen');
-        else { const hr = document.querySelector('#sm-bar > .sm-hint').getBoundingClientRect(), top = document.getElementById('sm-bar').getBoundingClientRect().top; if (Math.abs(hr.bottom - top) > 1) fails.push(where + ' the hint’s bottom is ' + Math.round(hr.bottom - top) + ' px from the bar’s top, want 0 (it floats just above the bar)'); }
-        if (fails.length) throw new Error(fails.join(' · '));
-      };
-      check(innerWidth + ' px:');
-      let flag = localStorage.getItem('fm.sm.hint');
-      if (flag !== null) throw new Error('showing the hint wrote fm.sm.hint = ' + JSON.stringify(flag) + ' — only dismissing it may');
-      /* the desktop pass also proves the phone words: the width's own change redraws the row */
-      if (!window.matchMedia('(max-width: 700px)').matches) await atPhoneWidth(async function () { await v.sleep(60); check('at 380 px:'); }, 380);
-      flag = localStorage.getItem('fm.sm.hint');
-      if (flag !== null) throw new Error('a width change wrote fm.sm.hint = ' + JSON.stringify(flag) + ' — only a tap dismisses the hint');
-    }));
-  });
-
-  test('simple P2.7 · the first-run hint goes on the first tap anywhere: fm.sm.hint is then 1, nothing takes its place and a redraw does not bring it back', { item: '980', budgetMs: 60000 }, async function () {
-    smNeedP2();
-    await smHintKeep(null, () => smP2(smClips3, async function (v) {
-      await smHintFresh(v);
-      const row0 = smHintRow();
-      if (row0.text !== smHintWords() || !row0.shown) throw new Error('before any tap the hint above the bar reads “' + row0.text + '” (on screen: ' + row0.shown + '), want the first-run hint “' + smHintWords() + '”');
-      /* a tap where the hint floats, on whatever lies under it (the hint takes no pointer events): "anywhere" includes a dead spot */
-      const r = document.querySelector('#sm-bar > .sm-hint').getBoundingClientRect(), x = r.left + 10, y = r.top + r.height / 2, at = document.elementFromPoint(x, y) || document.body;
-      const ev = { bubbles: true, cancelable: true, pointerId: 31, pointerType: 'touch', isPrimary: true, clientX: x, clientY: y };
-      at.dispatchEvent(new PointerEvent('pointerdown', Object.assign({ buttons: 1 }, ev)));
-      at.dispatchEvent(new PointerEvent('pointerup', ev));
-      await v.sleep(60);
-      const fails = [], row = smHintRow(), flag = localStorage.getItem('fm.sm.hint');
-      if (row.shown || row.text) fails.push('after the first tap the hint is still above the bar (“' + row.text + '”)');
-      if (document.getElementById('sm-tray').getClientRects().length) fails.push('after the hint went a tray row came up in its place (nothing replaces it: the bar is the project row)');
-      if (flag !== '1') fails.push('fm.sm.hint is ' + JSON.stringify(flag) + ' after the tap took the hint away, want "1"');
-      FM.selectLayer(v.L('B').id); await v.sleep(60);
-      FM.selectLayer(null); await smHintFresh(v);
-      if (smHintRow().shown) fails.push('the hint came back after a select, a deselect and a redraw — it shows once per device');
-      if (fails.length) throw new Error(fails.join(' · '));
-    }));
-  });
-
-  test('simple P2.7 · the first-run hint never shows once fm.sm.hint is 1 and nothing takes its place (CONTROL: the probe sees the hint once the flag is cleared, and Clip 2’s Split on show once it is selected)', { item: '980', budgetMs: 60000 }, async function () {
-    smNeedP2();
-    await smHintKeep('1', () => smP2(smClips3, async function (v) {
-      await smHintFresh(v);
-      const row = smHintRow();
-      if (row.shown || row.text) throw new Error('with fm.sm.hint = "1" the first-run hint still shows (“' + row.text + '”)');
-      if (document.getElementById('sm-tray').getClientRects().length) throw new Error('with nothing selected and no hint a tray row is on screen (nothing takes the hint’s place: the bar is the project row)');
-      // CONTROL: with Clip 2 selected its Split is on show in the tray, so the empty probe above is not a broken page (#1243 S4: More went)
-      FM.selectLayer(v.L('B').id); await v.sleep(60);
-      const more = document.querySelector('#sm-tray .sm-tool[data-tool="split"]');
-      if (!more || !more.getClientRects().length) throw new Error('CONTROL: with Clip 2 selected no Split is on show in the tray');
-      // CONTROL: the same probe sees the hint as soon as this device has not dismissed it
-      localStorage.removeItem('fm.sm.hint');
-      await smHintFresh(v);
-      const back = smHintRow();
-      if (back.text !== smHintWords() || !back.shown) throw new Error('CONTROL: with fm.sm.hint cleared the hint reads “' + back.text + '” (on screen: ' + back.shown + '), want the first-run hint “' + smHintWords() + '” — the probe cannot see the hint');
-    }));
-  });
-
-  test('simple P2.7 · the first-run hint does not show with no main clip on the track (CONTROL: the same probe shows it once there are clips)', { item: '980', budgetMs: 60000 }, async function () {
-    smNeedP2();
-    await smHintKeep(null, async function () {
-      await smP2(() => [], async function (v) {
-        await smHintFresh(v);
-        const row = smHintRow();
-        if (row.shown || row.text === SM_HINT_PHONE || row.text === SM_HINT_PC) throw new Error('with no clip on the track the first-run hint shows above the bar');
-      });
-      const flag = localStorage.getItem('fm.sm.hint');
-      if (flag !== null) throw new Error('an empty project wrote fm.sm.hint = ' + JSON.stringify(flag) + ' — the hint was never shown, so it was never dismissed');
-      // CONTROL: the same probe, a project with clips: the hint shows
-      await smP2(smClips3, async function (v) {
-        await smHintFresh(v);
-        const t = smHintRow();
-        if (t.text !== smHintWords() || !t.shown) throw new Error('CONTROL: with three clips the hint above the bar reads “' + t.text + '” (on screen: ' + t.shown + '), want the first-run hint “' + smHintWords() + '”');
-      });
-    });
-  });
+  /* RETIRED (#1255 20:53, DROPS TEST): 'simple P2.7 · the first-run hint shows above the bar with a main clip and nothing selected, in the phone words at a phone width and the PC words otherwise' — the hint went; '1255 hints · at 380 and 1280 with clips and nothing selected…' checks that nothing shows there. */
+  /* RETIRED (#1255 20:53, DROPS TEST): 'simple P2.7 · the first-run hint goes on the first tap anywhere: fm.sm.hint is then 1, nothing takes its place and a redraw does not bring it back' — there is no hint to take away, and fm.sm.hint is no longer written. */
+  /* RETIRED (#1255 20:53, DROPS TEST): 'simple P2.7 · the first-run hint never shows once fm.sm.hint is 1 and nothing takes its place (CONTROL: the probe sees the hint once the flag is cleared, and Clip 2’s Split on show once it is selected)' — it never shows at all now, with or without the flag ('1255 hints'). */
+  /* RETIRED (#1255 20:53, DROPS TEST): 'simple P2.7 · the first-run hint does not show with no main clip on the track (CONTROL: the same probe shows it once there are clips)' — its CONTROL needed the hint. */
 
   /* ═══ E1: six new effects (Colour Cycle, Soften Skin, Oil Paint, Glitter, Censor, Pop Art) ═══ */
   const E1 = (function () {
@@ -140049,6 +139965,36 @@
     });
   });
 
+  /* #1255 (his 23 Nov 20:53 note: "no emojis on text or buttons anywhere in the app. Design our own icons instead"), the Simple editor's
+     part: the overlap chip on a cut wore a typed warning sign, which a phone draws as an emoji. CONTROL: the gap chip on the same row,
+     which never had a sign, holds its seconds and no drawing, so the probe tells the two chips apart. */
+  test('1255 emoji · in the Simple editor an overlap chip wears a drawn warning sign beside its seconds, with no emoji and no typed sign in its words, the drawing inside the chip and nothing cut at 380, and its name for a screen reader is the same (CONTROL: the gap chip on the same row holds its seconds and no drawing)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const fails = [], PIC = /[←-⇿⌀-⏿①-➿⤀-⯿︎️]|\p{Extended_Pictographic}/u;
+    await r4At(380, 0, async function () {
+      await smP2((W, H) => [smV('C', 8.6, 3.4, W, H), smV('B', 5.2, 3.8, W, H), smV('A', 0, 4, W, H)], async function (v) {
+        FM.time = 0; FM.refreshAll(); await v.sleep(80);
+        const gap = document.querySelector('#sm-main .sm-chip-gap'), ov = document.querySelector('#sm-main .sm-chip-overlap');
+        if (!gap || !ov) throw new Error('setup: the row should hold a gap chip (A to B, 1.2 s) and an overlap chip (B over C, 0.4 s): gap ' + !!gap + ', overlap ' + !!ov);
+        if (gap.querySelector('svg') || gap.textContent.trim() !== '1.2s') throw new Error('CONTROL: the gap chip holds “' + gap.textContent + '”' + (gap.querySelector('svg') ? ' and a drawing' : '') + ', want its seconds only (1.2s)');
+        const txt = ov.textContent, ic = ov.querySelector('svg'), c = ov.getBoundingClientRect();
+        if (PIC.test(txt)) fails.push('the overlap chip’s words are “' + txt + '”: a typed sign or an emoji is still in them — his words: “no emojis on text or buttons anywhere in the app”');
+        if (txt.trim() !== '0.4s') fails.push('the overlap chip says “' + txt.trim() + '”, want its seconds, 0.4s');
+        if (!ic || !ic.querySelector('path')) fails.push('the overlap chip has no drawn sign — “Design our own icons instead”');
+        else {
+          const r = ic.getBoundingClientRect();
+          if (!(r.width >= 10 && r.height >= 10)) fails.push('the drawn sign is ' + r.width.toFixed(1) + ' × ' + r.height.toFixed(1) + ' px, too small to read (want 10 or more each way)');
+          if (r.left < c.left - 0.5 || r.right > c.right + 0.5 || r.top < c.top - 0.5 || r.bottom > c.bottom + 0.5) fails.push('the drawn sign lies outside its chip (sign ' + [r.left, r.top, r.right, r.bottom].map(Math.round).join(', ') + '; chip ' + [c.left, c.top, c.right, c.bottom].map(Math.round).join(', ') + ')');
+          if (ic.getAttribute('aria-hidden') !== 'true') fails.push('the drawn sign is not hidden from a screen reader, which already hears the chip’s name');
+        }
+        if (!(c.width >= 31.5 && c.height >= 31.5)) fails.push('the overlap chip is ' + c.width.toFixed(1) + ' × ' + c.height.toFixed(1) + ' px, under the 32 a chip is');
+        if (ov.scrollWidth > ov.clientWidth + 1) fails.push('the overlap chip’s contents are wider than the chip (' + ov.scrollWidth + ' px in ' + ov.clientWidth + ')');
+        if ((ov.getAttribute('aria-label') || '') !== 'Overlap 0.4 s, Fix') fails.push('the overlap chip’s name for a screen reader is “' + ov.getAttribute('aria-label') + '”, want “Overlap 0.4 s, Fix” as before');
+      });
+    });
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
   test('simple P2.1 · ⌘D duplicates a main clip right after itself with its keys; what follows moves along; one undo removes it', { item: '980', budgetMs: 60000 }, async function () {
     await smP2((W, H) => [smV('B', 3, 3, W, H), (() => { const a = smV('A', 0, 3, W, H); a.transform.x = smKf([[1, 160], [2, 170]]); return a; })()], async function (v) {
       const A = v.L('A'), B = v.L('B'), doc0 = v.doc(), n0 = v.steps();
@@ -141668,7 +141614,7 @@
 
   /* #1243 S3: the tray is the bar's one row now (with nothing selected the bar is the project row and the tray is hidden), so the two
      rows are the bar's own height: 104 px and its 1 px edge only while it holds two, the one row 56 */
-  test('1243 R8 · decision 6 at 1280×800 on PC a clip’s tray, a title’s and two selected each lie on ONE 56 px row in the band, every tool on it pressable once the strip is scrolled to it, Delete last after a section line, no › cue, and the band says Its tools are below (CONTROL: nothing selected, the bar is the 57 px project row)', { item: '980', budgetMs: 90000 }, async function () {
+  test('1243 R8 · decision 6 at 1280×800 on PC a clip’s tray, a title’s and two selected each lie on ONE 56 px row in the band, every tool on it pressable once the strip is scrolled to it, Delete last after a section line, no › cue, and the band above it shows no how-to words (CONTROL: nothing selected, the bar is the 57 px project row)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smTrayBAt(1280, 800, async function () {
       await smP2((W, H) => [smT('On A', 0.5, 1, W, H), smV('C', 5, 3, W, H), smV('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
@@ -141690,8 +141636,11 @@
           if (bad.length) fails.push(who + ': ' + bad.join(' · '));
         }
         FM.selectLayer(null); FM.selectLayer(v.L('B').id); await v.sleep(150);
+        /* #1255 20:53 (his words: "There shouldn't be any explanations like that"): the band said Its tools are below; it says nothing now,
+           and its empty line takes no room */
         const hint = document.querySelector('#inspector .sm-band-hint');
-        if (!hint || hint.textContent !== 'Its tools are below' || FM.spineWords.tools.bandHintSel !== 'Its tools are below') fails.push('the band’s words are “' + (hint && hint.textContent) + '”, want “Its tools are below” from the words file');
+        if (!hint) fails.push('CONTROL: the band’s line is not drawn for Clip 2, so the probe below reads nothing');
+        else if (hint.textContent || hint.getClientRects().length) fails.push('the band’s line says “' + hint.textContent + '”' + (hint.getClientRects().length ? ' and takes room' : '') + ', want no words and no room');
         FM.selectLayer(null); await v.sleep(150);
         if (Math.abs(barH() - 57) > 0.5 || tray.getClientRects().length) fails.push('nothing selected again: the bar stays at ' + barH() + ' px, want the 57 px project row');
         if (fails.length) throw new Error('1280×800: ' + fails.join(' · '));
@@ -141758,7 +141707,7 @@
     }, 1280);
   });
 
-  test('simple P2.2 · tray B at 1280×800, 1280×720 and 960×700 a picture clip’s one-row tray brings every tool into reach by scrolling and nothing in the band above it is cut off — the title and Its tools are below show whole — and a band dragged to 200 px keeps the bar whole (#1243 R decision 6: one strip on a PC)', { item: '980', budgetMs: 120000 }, async function () {
+  test('simple P2.2 · tray B at 1280×800, 1280×720 and 960×700 a picture clip’s one-row tray brings every tool into reach by scrolling and nothing in the band above it is cut off — the title shows whole and the band holds no how-to words — and a band dragged to 200 px keeps the bar whole (#1243 R decision 6: one strip on a PC)', { item: '980', budgetMs: 120000 }, async function () {
     smNeedP2();
     const out = [];
     for (const [w, h] of [[1280, 800], [1280, 720], [960, 700]]) {
@@ -141774,11 +141723,10 @@
           if (bad.length) throw new Error(at + bad.join(' · '));
           const insp = document.getElementById('inspector'), ib = insp.getBoundingClientRect(), hint = insp.querySelector('.sm-band-hint');
           const title = document.querySelector('#inspector-panel .panel-title'), tb = title.getBoundingClientRect();
-          if (!hint || hint.textContent !== 'Its tools are below') throw new Error(at + 'the band says “' + (hint && hint.textContent) + '”');
-          const hb = hint.getBoundingClientRect();
-          if (hb.top < ib.top - 0.5 || hb.bottom > ib.bottom + 0.5) throw new Error(at + 'Its tools are below is cut off: ' + Math.round(hb.top) + '–' + Math.round(hb.bottom) + ' in ' + Math.round(ib.top) + '–' + Math.round(ib.bottom));
+          /* #1255 20:53: the band's Its tools are below went; its line is drawn (CONTROL) but empty and takes no room */
+          if (!hint) throw new Error('CONTROL: ' + at + 'the band’s line is not drawn');
+          if (hint.textContent || hint.getClientRects().length) throw new Error(at + 'the band says “' + hint.textContent + '”, want no how-to words');
           if (insp.scrollHeight > insp.clientHeight + 1) throw new Error(at + 'the band above the tools has to scroll (' + insp.scrollHeight + ' in ' + insp.clientHeight + ')');
-          if (hint.scrollWidth > hint.clientWidth + 1) throw new Error(at + 'Its tools are below runs out sideways');
           if (tb.height < 20 || tb.bottom > ib.top + 0.5 || tb.top < document.getElementById('inspector-panel').getBoundingClientRect().top - 0.5) throw new Error(at + 'the title row is cut: ' + JSON.stringify([tb.top, tb.bottom, ib.top]));
           out.push(at + Math.round(ib.height) + ' px above the tools');
           /* THE DIVIDER DRAGS THE BAND DOWN (remembered as fm_tl_h): the bar stays whole in it, its one row the same */
@@ -141801,7 +141749,7 @@
      panel takes the whole band and the bar hides (#1243 S9), so there is no tray under it to go to one row; the real-input double click on
      More at 1280×720 is now part of 'simple P2.7 · 2A row 16 … a REAL double click on More …', and 1243 R4's rule 3 PC test measures the room. */
 
-  test('simple P2.2 · tray B at 380 the phone keeps its one row: a picture’s tools scroll in one strip that ends with Delete after a section line, Split pressable at the start and Delete once scrolled, and the words say Its tools are below (#1243 S4, S31: no More, no pinned end)', { item: '980', budgetMs: 60000 }, async function () {
+  test('simple P2.2 · tray B at 380 the phone keeps its one row: a picture’s tools scroll in one strip that ends with Delete after a section line, Split pressable at the start and Delete once scrolled, and the words file holds no Its tools are below (#1243 S4, S31: no More, no pinned end; #1255: no how-to words)', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
       await smP2((W, H) => [smV('C', 6, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
@@ -141822,7 +141770,9 @@
         smMustHit(smTool('split'), '380: Split at the strip’s start');
         sc.scrollLeft = sc.scrollWidth; await v.sleep(30);
         smMustHit(smTool('delete'), '380: Delete at the strip’s end');
-        if (FM.spineWords.tools.bandHintSel !== 'Its tools are below') throw new Error('380: the words are “' + FM.spineWords.tools.bandHintSel + '”, want Its tools are below (no More to open the rest)');
+        /* #1255 20:53: the band's how-to words went from the words file (CONTROL: the file is read: it names Split) */
+        if (FM.spineWords.tools.split !== 'Split') throw new Error('CONTROL: the words file does not name Split, so it is not the one read here');
+        if (FM.spineWords.tools.bandHintSel || FM.spineWords.tools.bandHint) throw new Error('380: the words file still holds the band’s how-to words “' + (FM.spineWords.tools.bandHintSel || FM.spineWords.tools.bandHint) + '”');
       });
     }, 380);
   });
@@ -141881,7 +141831,7 @@
   });
 
 
-  test('simple P2.2 · tray B at 1280×720 after the window was once 500 px tall the band is left at 230 px, and a picture clip’s one-row tray and the words above it still show whole in it, every tool in reach by scrolling (checker finding 2, one row since #1243 R decision 6)', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P2.2 · tray B at 1280×720 after the window was once 500 px tall the band is left at 230 px, and a picture clip’s one-row tray still shows whole in it with nothing above it to scroll, every tool in reach by scrolling (checker finding 2, one row since #1243 R decision 6)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await smTrayBAt(1280, 720, async function () {
       await smP2((W, H) => [smV('C', 5, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
@@ -141898,18 +141848,20 @@
         const bad = await smTrayReach();
         if (bad.length) throw new Error('a band left at ' + tl + ' px: ' + bad.join(' · '));
         const insp = document.getElementById('inspector'), ib = insp.getBoundingClientRect(), hint = insp.querySelector('.sm-band-hint'), tb = document.getElementById('sm-bar').getBoundingClientRect();
-        if (!hint) throw new Error('CONTROL: the band shows no words');
-        const hb = hint.getBoundingClientRect();
-        if (hb.top < ib.top - 0.5 || hb.bottom > ib.bottom + 0.5 || insp.scrollHeight > insp.clientHeight + 1) throw new Error('a band at ' + tl + ' px cuts its words: ' + Math.round(hb.top) + '–' + Math.round(hb.bottom) + ' in ' + Math.round(ib.top) + '–' + Math.round(ib.bottom) + ' (scroll ' + insp.scrollHeight + ' in ' + insp.clientHeight + ')');
+        /* (#1255 20:53: the band's words went, so its line is drawn empty: nothing in the band may need a scroll) */
+        if (!hint) throw new Error('CONTROL: the band’s line is not drawn');
+        if (insp.scrollHeight > insp.clientHeight + 1) throw new Error('a band at ' + tl + ' px has to scroll above the tools (' + insp.scrollHeight + ' in ' + insp.clientHeight + ', the band ' + Math.round(ib.top) + '–' + Math.round(ib.bottom) + ')');
         if (tb.top < band().top - 0.5 || tb.bottom > band().bottom + 0.5) throw new Error('a band at ' + tl + ' px pushes the bar out of it');
       });
     }, 1280);
   });
 
-  test('simple P2.2 · tray B on PC the band says Its tools are below for a selected clip or title at the band’s own height, with the band dragged to 192 px and on a landscape phone at 844×390, never · More opens the rest, and Tap a clip to see its tools with nothing selected (#1243 S4 step 4)', { item: '980', budgetMs: 120000 }, async function () {
+  /* #1255 20:53, his words: "There shouldn't be any explanations like that. We have tutorials for a reason". The band said Its tools are
+     below for a selection and Tap a clip to see its tools with nothing selected, every time; it says nothing now. WANT is the empty
+     line; words() is null when the band's line is not drawn at all, so a missing line can never pass for an empty one (CONTROL). */
+  test('simple P2.2 · tray B on PC the band shows no how-to words for a selected clip or title at the band’s own height, with the band dragged to 192 px and on a landscape phone at 844×390, nor with nothing selected (#1255: no Its tools are below, no Tap a clip to see its tools; CONTROL: the band’s line is drawn each time)', { item: '980', budgetMs: 120000 }, async function () {
     smNeedP2();
-    const WANT = 'Its tools are below';
-    if (FM.spineWords.tools.bandHintSel !== WANT) throw new Error('the words file says “' + FM.spineWords.tools.bandHintSel + '” for a selected item, want “' + WANT + '”');
+    const WANT = '';
     const words = () => { const h = document.querySelector('#inspector .sm-band-hint'); return h ? h.textContent : null; };
     await smTrayBAt(1280, 720, async function () {
       await smP2((W, H) => [smT('On A', 0.5, 1, W, H), smV('C', 5, 3, W, H), smPic('B', 3, 2, W, H), smV('A', 0, 3, W, H)], async function (v) {
@@ -141923,7 +141875,7 @@
         FM.selectLayer(v.L('On A').id); await v.sleep(150);
         if (words() !== WANT) throw new Error('a title: the band says “' + words() + '”');
         FM.selectLayer(null); await v.sleep(150);
-        if (words() !== (FM.spineWords.tools.bandHint || 'Tap a clip to see its tools')) throw new Error('nothing selected: the band says “' + words() + '”');
+        if (words() !== WANT) throw new Error('nothing selected: the band says “' + words() + '”' + (words() === null ? ' (CONTROL: its line is not drawn)' : ''));
       });
     }, 1280);
     await smTrayBAt(844, 390, async function () {
@@ -142197,7 +142149,7 @@
     if (fails.length) throw new Error(fails.join(' ¦ '));
   });
 
-  test('simple P2.2 · review entering Simple clears Full’s left panel from Simple’s band at once: no Add menu under the rows with nothing selected, no layer editor with a clip open in Colouring, only Simple’s own words (verify high-inspector, the way in)', { item: '980', budgetMs: 150000 }, async function () {
+  test('simple P2.2 · review entering Simple clears Full’s left panel from Simple’s band at once: no Add menu under the rows with nothing selected, no layer editor with a clip open in Colouring, only Simple’s own band line (verify high-inspector, the way in)', { item: '980', budgetMs: 150000 }, async function () {
     /* The reverse of the leaving case round one fixed: nothing on the switch redrew #inspector, so entering Simple kept Full's Add
        menu (nothing selected) or Full's layer editor (a clip selected) in the band under Simple's rows until the selection
        changed. Round two moves that redraw before the timeline rebuild and stops the band forgetting the clip; this holds the
@@ -142208,7 +142160,8 @@
     const settle = async ms => { await sleep(ms); document.getAnimations().forEach(a => { try { a.finish(); } catch (e) {} }); };
     const look = function () {
       const i = document.getElementById('inspector'), h = i.querySelector('.sm-band-hint'), t = document.querySelector('#inspector-panel .panel-title-label');
-      return { hint: h ? h.textContent : '', add: !!i.querySelector('.addmenu'), editor: !!i.querySelector('.quick-row, .cat-wrap, .cat-back, .cat-body'),
+      /* the band's line, drawn: its words in brackets (since #1255 20:53 it holds none, '[]'); '' when it is not drawn at all */
+      return { hint: h ? '[' + h.textContent + ']' : '', add: !!i.querySelector('.addmenu'), editor: !!i.querySelector('.quick-row, .cat-wrap, .cat-back, .cat-body'),
         title: t ? t.textContent : '', open: document.getElementById('inspector-panel').classList.contains('open') };
     };
     const differ = (a, b) => Object.keys(a).filter(k => a[k] !== b[k]);
@@ -201430,15 +201383,15 @@
   const smCpMeta = () => FM.history._metaHere() || {};
   const smCpStop = () => { try { if (FM.textEdit && FM.textEdit.isActive && FM.textEdit.isActive()) FM.textEdit.stop(); } catch (e) {} };
 
-  test('simple P3 · Captions at 380 the project row is Clips · Text · Captions · Sound · Overlay · Look · Effects, Captions opens a row of Type captions, Find speech, Caption looks and Style, and a selected caption track’s tray is Edit lines · Style · Find speech · Follows the clips · Stays with the sound | Delete — the last two one two-way choice, ONE step each, their faces one word each on a phone (Follows · Stays) with the five on show and Delete at the strip’s end after its line (#1243 S31)', { item: '980', budgetMs: 90000 }, async function () {
+  test('simple P3 · Captions at 380 the project row is Ask & edit · Clips · Text · Captions · Sound · Overlay · Look · Effects, Captions opens a row of Type captions, Find speech, Caption looks and Style, and a selected caption track’s tray is Edit lines · Style · Find speech · Follows the clips · Stays with the sound | Delete — the last two one two-way choice, ONE step each, their faces one word each on a phone (Follows · Stays) with the five on show and Delete at the strip’s end after its line (#1243 S31)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     await atPhoneWidth(async function () {
       await smP2((W, H) => [smCap('Caps', 0, 6, [[0.5, 1.5], [3, 4]], W, H)].concat(smClips3(W, H)), async function (v) {
         const fails = [];
         const tools = Array.from(document.querySelectorAll('#sm-tools .sm-tool')).map(b => b.dataset.tool).join(',');
         /* the stack (sm3-stack): Phase 3 · Effect segments put Effects after Overlay, DESIGN §8.5's order; #1243 S12 put Look (for the whole
-           video) before Effects, R (a)'s order (Ask is not built) */
-        if (tools !== 'clips,text,captions,sound,overlay,look,effects') throw new Error('380: the project tools are ' + tools + ', want clips,text,captions,sound,overlay,look,effects');
+           video) before Effects, R (a)'s order; #1243 S14 put Ask & edit first */
+        if (tools !== 'ai,clips,text,captions,sound,overlay,look,effects') throw new Error('380: the project tools are ' + tools + ', want ai,clips,text,captions,sound,overlay,look,effects');
         const ct = smTool('captions').getBoundingClientRect();
         if (ct.width < 44 || ct.right > innerWidth + 0.5) fails.push('Captions is ' + Math.round(ct.width) + ' px wide or off screen');
         smTool('captions').click(); await v.sleep(80);
@@ -205200,9 +205153,10 @@
 
   /* N5 · S15 IN THE PC BAND. Red on v18.36: the six tools share the 371 px band at about 62 px each, never scrolling. #1243 S12 (R9) put Look
      on the row: seven tools of at least 64 px (448) never fit the band, which is at most 420 px (styles.css --insp-w), so the old 1680×1050
-     half (six tools spread to 70 px with no fade) has nothing left to measure, and both windows must now scroll. CONTROL: the band at
-     1680×1050 is wider than at 1280×800, so the two halves measure two different bands. */
-  test('1243 R4 · S15 in the PC band the project row scrolls when its tools overflow: with Look on it its seven tools overflow the band at 1280×800 and at 1680×1050, every tool at least 64 px, the end fade on, and the last pressable once the row is scrolled to its end (CONTROL: the band at 1680×1050 is wider than at 1280×800)', { item: '1243', budgetMs: 90000 }, async function () {
+     half (six tools spread to 70 px with no fade) has nothing left to measure, and both windows must now scroll. #1243 S14 put Ask & edit
+     first on the row: eight tools (512 px). CONTROL: the band at 1680×1050 is wider than at 1280×800, so the two halves measure two
+     different bands. */
+  test('1243 R4 · S15 in the PC band the project row scrolls when its tools overflow: with Ask & edit and Look on it its eight tools overflow the band at 1280×800 and at 1680×1050, every tool at least 64 px, the end fade on, and the last pressable once the row is scrolled to its end (CONTROL: the band at 1680×1050 is wider than at 1280×800)', { item: '1243', budgetMs: 90000 }, async function () {
     smNeedP2();
     const got = {};
     await smHintKeep('1', async function () {
@@ -205223,15 +205177,418 @@
     if (!a || !b) throw new Error('setup: a window did not run: ' + JSON.stringify(got));
     if (!(b.band > a.band + 20)) throw new Error('CONTROL: the band at 1680×1050 (' + Math.round(b.band) + ' px) is not wider than at 1280×800 (' + Math.round(a.band) + ' px), so the two windows measure one band');
     for (const [at, g] of [['1280×800', a], ['1680×1050', b]]) {
-      if (g.n !== 7 || g.tools.split(',').indexOf('look') < 0) fails.push(at + ': the project row holds ' + g.tools + ', want seven tools with Look');
+      if (g.n !== 8 || g.tools.split(',').indexOf('look') < 0 || g.tools.split(',')[0] !== 'ai') fails.push(at + ': the project row holds ' + g.tools + ', want eight tools, Ask & edit first, with Look');
       if (g.ws.some(x => x < 63.5)) fails.push(at + ': the project tools are squeezed to ' + f(g.ws) + ' px, under 64');
       if (!g.run) { fails.push(at + ': the project row has no strip of its own to scroll'); continue; }
-      if (!(g.over > 1)) fails.push(at + ': the seven tools fit the band (' + Math.round(g.over) + ' px over), so nothing is cut');
+      if (!(g.over > 1)) fails.push(at + ': the eight tools fit the band (' + Math.round(g.over) + ' px over), so nothing is cut');
       if (g.fades.indexOf('sm-more-e') < 0) fails.push(at + ': no end fade while tools lie past the band’s edge (' + g.fades.join(',') + ')');
       if (!g.last) fails.push(at + ': scrolled to its end, the last tool is not pressable');
     }
     if (fails.length) throw new Error(fails.join(' · '));
   });
+
+  /* ═══ #1243 S14 — ASK & EDIT FROM SIMPLE'S BAR (R's release 14; plan 1243-A S14, R decision 9) ═════════════════════════════════════════
+     His words (8 Nov): "There's also no way to use the AI… a button in that bottom row at the start that has like the AI option."
+     The first tool of Simple's project row opens Full's own assistant (FM.aiChat, his key; #1243 F2 named it Ask & edit). In Simple it is a
+     panel: the bar hides under it; on a phone it is the sheet from the sheet line (js/ai-chat.js place(), #1243 F3), on a PC it lies
+     over the left band's own box and does not slide. Each test fails on v18.51 by its own sentence: the row's first tool is Clips. */
+
+  /* S14 a · THE BUTTON. CONTROL: Effects, the tool whose sparkle an AI drawing could be taken for, is on the same row with a drawing. */
+  test('1243 S14 · at 380 and 1280 the first tool of Simple’s project row is Ask & edit, at the row’s own left edge with a drawing of its own and its name whole; a press opens the assistant once and the bar gives its place to it, and when the assistant closes the project row is back (CONTROL: Effects is on the same row and its drawing is not the same one)', { item: '980', budgetMs: 90000 }, async function () {
+    smNeedP2();
+    if (!FM.aiChat || !FM.aiChat.show) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
+    const showOwn = Object.getOwnPropertyDescriptor(FM.aiChat, 'show'), fails = [];
+    try {
+      await smHintKeep('1', async function () {
+        for (const width of [380, 1280]) {
+          await r4At(width, width > 700 ? 800 : 0, async function () {
+            await smP2(smClips3, async function () {
+              FM.selectLayer(null); await r4Settle(150);
+              const at = width + ': ', all = Array.from(document.querySelectorAll('#sm-tools .sm-tool')), first = all[0], fx = smTool('effects');
+              const d = b => (b && b.querySelector('svg')) ? b.querySelector('svg').innerHTML : '';
+              if (!fx || !d(fx)) throw new Error('CONTROL ' + at + 'Effects is not on the project row with a drawing, so nothing here compares two drawings (' + all.map(b => b.dataset.tool).join(',') + ')');
+              if (!first || first.dataset.tool !== 'ai') { fails.push(at + 'the first tool of the project row is ' + (first ? first.dataset.tool : 'nothing') + ', want Ask & edit — his words: “a button in that bottom row at the start that has like the AI option”'); return; }
+              const run = document.querySelector('#sm-tools > .sm-runbox > .sm-run'), rr = run.getBoundingClientRect(), fr = first.getBoundingClientRect();
+              if (run.scrollLeft > 0.5 || Math.abs(fr.left - rr.left) > 1) fails.push(at + 'Ask & edit starts at ' + fr.left.toFixed(1) + ' px with the row at ' + rr.left.toFixed(1) + ' (scrolled ' + run.scrollLeft + '): it is not at the start of the row');
+              if (!(fr.width >= 63.5)) fails.push(at + 'Ask & edit is ' + fr.width.toFixed(1) + ' px wide, under the row’s 64');
+              const fl = first.querySelector('.sm-tool-l'), face = fl ? fl.textContent : '';
+              if (face !== 'Ask & edit') fails.push(at + 'its face says “' + face + '”, want Ask & edit, the name #1243 F2 gave the assistant');
+              /* (a label in this column sizes to its own words, so its scroll width never differs from its width: the one thing that can
+                 show is the words being wider than the tool; the 24 Nov review, S14T-4) */
+              if (fl && fl.getBoundingClientRect().width > fr.width + 0.5) fails.push(at + 'its name runs out of the tool (' + fl.getBoundingClientRect().width.toFixed(1) + ' px of words, the tool is ' + fr.width.toFixed(1) + ')');
+              if (!d(first)) fails.push(at + 'Ask & edit has no drawing');
+              else if (d(first) === d(fx)) fails.push(at + 'Ask & edit wears Effects’ drawing: two tools in one row would look the same');
+              if (!r4Hits(first)) fails.push(at + 'Ask & edit is not pressable at its centre');
+              /* a press opens the assistant, once (a stand-in for show: the real panel is the next test's) */
+              let n = 0;
+              FM.aiChat.show = function () { n++; document.body.classList.add('aic-open'); };
+              first.click(); await r4Settle(200);
+              if (n !== 1) fails.push(at + 'a press on Ask & edit opened the assistant ' + n + ' times, want once');
+              if (r4Mode() !== 'panel') fails.push(at + 'with the assistant up the bar is in mode “' + r4Mode() + '”, want panel — his words: “I don’t want two menus at once”');
+              const tl = document.getElementById('sm-tools');
+              if (tl.getClientRects().length) fails.push(at + 'the project row still shows under the assistant');
+              document.body.classList.remove('aic-open'); await r4Settle(200);
+              if (r4Mode() !== 'project') fails.push(at + 'after the assistant closed the bar is in mode “' + r4Mode() + '”, want the project row back');
+              if (!smTool('ai') || !r4Hits(smTool('ai'))) fails.push(at + 'after the assistant closed Ask & edit is not back and pressable');
+            });
+          });
+        }
+      });
+    } finally {
+      if (showOwn) Object.defineProperty(FM.aiChat, 'show', showOwn); else delete FM.aiChat.show;
+      document.body.classList.remove('aic-open');
+      if (FM.simpleTools && FM.simpleTools._reset) FM.simpleTools._reset();
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* S14 b · WHERE THE REAL PANEL STANDS. No network: opening the assistant sends nothing (it only sends when he does). CONTROL: in Full
+     at 1280 the same assistant stands in Full's right-hand column and carries none of Simple's properties, so the Simple halves
+     measure Simple's place and not a page where it always stands there. */
+  test('1243 S14 · opened from Simple the assistant stands where a Simple panel stands: at 380 from the sheet line to the bottom of the screen with the picture not moved or resized, at 1280 over the left band’s own box, not over the picture and with no slide, its box taking the focus; closed, the project row is back and nothing of Simple’s is left on it (CONTROL: in Full at 1280 the same assistant stands in Full’s right-hand column)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    if (!FM.aiChat || !FM.aiChat.show || !FM.aiChat.hide) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
+    const fails = [], VARS = ['--sm-ai-l', '--sm-ai-t', '--sm-ai-w', '--sm-ai-b'];
+    const chat = () => document.getElementById('ai-chat'), carried = () => VARS.filter(p => chat() && chat().style.getPropertyValue(p));
+    const box = r => '[' + [r.left, r.top, r.right, r.bottom].map(Math.round).join(', ') + ']';
+    try {
+      await smHintKeep('1', async function () {
+        await r4At(380, 0, async function () {
+          await smP2(smClips3, async function () {
+            FM.selectLayer(null); await r4Settle(150);
+            const st0 = document.getElementById('stage').getBoundingClientRect();
+            const b = smTool('ai');
+            if (!b) { fails.push('380: the project row has no Ask & edit'); return; }
+            b.click(); await r4Settle(450);
+            const c = chat();
+            if (!c || !c.classList.contains('open')) { fails.push('380: a press on Ask & edit did not open the assistant'); return; }
+            const r = c.getBoundingClientRect(), line = FM.mobile.sheetLine(), st1 = document.getElementById('stage').getBoundingClientRect();
+            if (!(line > 100)) throw new Error('CONTROL 380: the sheet line reads ' + line + ', so this is not a phone layout with a picture above the timeline');
+            if (Math.abs(r.top - line) > 1.5) fails.push('380: the assistant’s top is at ' + r.top.toFixed(1) + ' px, want the sheet line at ' + line + ' (the picture’s bottom edge), where every Simple panel starts');
+            if (Math.abs(r.bottom - innerHeight) > 1.5 || r.left > 0.5 || Math.abs(r.right - innerWidth) > 0.5) fails.push('380: the assistant is ' + box(r) + ', want the whole width down to the bottom of a ' + innerWidth + ' × ' + innerHeight + ' screen');
+            if (Math.abs(st1.height - st0.height) > 0.5 || Math.abs(st1.top - st0.top) > 0.5) fails.push('380: the picture moved or changed size when the assistant opened (top ' + Math.round(st0.top) + ', ' + Math.round(st0.height) + ' tall → top ' + Math.round(st1.top) + ', ' + Math.round(st1.height) + ' tall): rule 3, the stage never shrinks');
+            if (r4Mode() !== 'panel') fails.push('380: with the assistant up the bar is in mode “' + r4Mode() + '”, want panel');
+            if (carried().length) fails.push('380: on a phone the assistant carries the PC band’s properties (' + carried().join(', ') + ')');
+            if (getComputedStyle(c).boxShadow !== 'none') fails.push('380: the open assistant casts a shadow (' + getComputedStyle(c).boxShadow + ') up over the foot of the picture; a Simple sheet has none');
+            FM.aiChat.hide(); await r4Settle(400);
+            if (r4Mode() !== 'project') fails.push('380: after the assistant closed the bar is in mode “' + r4Mode() + '”, want the project row');
+          });
+        });
+        await r4At(1280, 800, async function () {
+          await smP2(smClips3, async function () {
+            FM.selectLayer(null); await r4Settle(150);
+            const band = document.getElementById('inspector-panel').getBoundingClientRect(), stage = document.getElementById('stage').getBoundingClientRect();
+            const b = smTool('ai');
+            if (!b) { fails.push('1280: the project row has no Ask & edit'); return; }
+            b.click();
+            const c = chat();
+            /* no slide: read before anything settles */
+            const dur = c ? getComputedStyle(c).transitionDuration : '';
+            await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+            if (!c || !c.classList.contains('open')) { fails.push('1280: a press on Ask & edit did not open the assistant'); return; }
+            const r = c.getBoundingClientRect();
+            if (dur.split(',').some(t => parseFloat(t) > 0)) fails.push('1280: the assistant slides in over ' + dur + ': in Simple it is simply there, as its other panels are');
+            if ([r.left - band.left, r.top - band.top, r.right - band.right, r.bottom - band.bottom].some(x => Math.abs(x) > 1.5)) fails.push('1280: two frames after the press the assistant is ' + box(r) + ', want the left band’s own box ' + box(band) + ' (his D20 A: a Simple tool’s panel opens in the band)');
+            const ox = Math.min(r.right, stage.right) - Math.max(r.left, stage.left), oy = Math.min(r.bottom, stage.bottom) - Math.max(r.top, stage.top);
+            if (ox > 1 && oy > 1) fails.push('1280: the assistant covers ' + Math.round(ox) + ' × ' + Math.round(oy) + ' px of the picture');
+            if (r4Mode() !== 'panel') fails.push('1280: with the assistant up the bar is in mode “' + r4Mode() + '”, want panel');
+            if (parseFloat(getComputedStyle(c).borderTopWidth) !== 1) fails.push('1280: the assistant’s top edge is ' + getComputedStyle(c).borderTopWidth + ' wide: it lies over the band’s 1 px line and must draw it');
+            await r4Settle(300);
+            const inp = c.querySelector('.aic-input'), ae = document.activeElement;
+            if (!inp) fails.push('1280: the assistant has no box to type in (.aic-input)');
+            else if (ae !== inp) fails.push('1280: the assistant’s box did not take the focus: it is on ' + ((ae && (ae.id || ae.className || ae.tagName)) || 'nothing'));
+            FM.aiChat.hide(); await r4Settle(250);
+            if (carried().length) fails.push('1280: closed, the assistant still carries ' + carried().join(', '));
+            if (r4Mode() !== 'project') fails.push('1280: after the assistant closed the bar is in mode “' + r4Mode() + '”, want the project row');
+          });
+        });
+      });
+      await atWideWidth(async function () {
+        if (FM.editor && FM.editor.isSimple && FM.editor.isSimple()) throw new Error('CONTROL: the page is still in Simple after the Simple halves · ' + fails.join(' · '));
+        FM.aiChat.show(); await r4Settle(400);
+        const c = chat(), r = c.getBoundingClientRect(), had = carried();
+        FM.aiChat.hide(); await r4Settle(350);
+        if (!(Math.abs(r.right - innerWidth) <= 1.5 && r.left > innerWidth / 2) || had.length) throw new Error('CONTROL: in Full at 1280 the assistant is ' + box(r) + ' carrying ' + (had.join(', ') || 'nothing of Simple’s') + ', want Full’s right-hand column untouched · ' + fails.join(' · '));
+      }, 1280);
+    } finally {
+      try { FM.aiChat.hide(); } catch (e) {}
+      if (FM.simpleTools && FM.simpleTools._reset) FM.simpleTools._reset();
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* S14 c · ONE MENU AT A TIME, AND THE WAY OUT. CONTROL: the Text row was really open before the assistant took its place. */
+  test('1243 S14 · at 1280 the assistant opened over a row of Simple’s bar closes that row, so one menu is up; Escape closes the assistant and the focus goes back to Ask & edit on the project row; and leaving Simple with it open hands it to Full’s right-hand column with nothing of Simple’s on it (CONTROL: the Text row was open first)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    if (!FM.aiChat || !FM.aiChat.show || !FM.aiChat.hide) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
+    const fails = [], VARS = ['--sm-ai-l', '--sm-ai-t', '--sm-ai-w', '--sm-ai-b'];
+    const chat = () => document.getElementById('ai-chat'), carried = () => VARS.filter(p => chat() && chat().style.getPropertyValue(p));
+    const box = r => '[' + [r.left, r.top, r.right, r.bottom].map(Math.round).join(', ') + ']';
+    try {
+      await smHintKeep('1', async function () {
+        await r4At(1280, 800, async function () {
+          await smP2(smClips3, async function () {
+            FM.selectLayer(null); await r4Settle(150);
+            FM.simpleTools.openSub('text'); await r4Settle(200);
+            if (r4Mode() !== 'sub' || !FM.simpleTools.subFor() || FM.simpleTools.subFor().key !== 'text') throw new Error('CONTROL: the Text row did not open (mode “' + r4Mode() + '”), so nothing was there for the assistant to close');
+            if (!FM.simpleTools.openAi || !FM.simpleTools.openAi()) { fails.push('FM.simpleTools.openAi did not open the assistant from Simple'); return; }
+            await r4Settle(250);
+            if (FM.simpleTools.subFor()) fails.push('with the assistant up the Text row is still open under it (' + FM.simpleTools.subFor().key + '): two menus at once');
+            if (r4Mode() !== 'panel') fails.push('with the assistant up the bar is in mode “' + r4Mode() + '”, want panel');
+            /* Escape: js/ai-chat.js answers it itself; Simple puts the focus back on the tool that opened it */
+            const c = chat(), inp = c && c.querySelector('.aic-input');
+            if (inp) inp.focus({ preventScroll: true });
+            (document.activeElement || document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+            await r4Settle(250);
+            if (!c || c.classList.contains('open')) fails.push('Escape left the assistant open');
+            if (r4Mode() !== 'project') fails.push('after Escape the bar is in mode “' + r4Mode() + '”, want the project row (the Text row was closed for good)');
+            const ae = document.activeElement;
+            if (!ae || !ae.dataset || ae.dataset.tool !== 'ai') fails.push('after Escape the focus is on ' + ((ae && ((ae.dataset && ae.dataset.tool) || ae.id || ae.className || ae.tagName)) || 'nothing') + ', want Ask & edit, the tool that opened it');
+            /* leaving Simple with it open */
+            FM.simpleTools.openAi(); await r4Settle(250);
+            if (carried().length !== 4) fails.push('open over the band the assistant carries ' + (carried().join(', ') || 'none') + ' of its four place properties');
+            FM.editor.set('full'); FM.refreshAll(); await r4Settle(400);
+            if (FM.editor.isSimple()) { fails.push('the switch to Full did not happen'); return; }
+            const r = c.getBoundingClientRect();
+            if (!c.classList.contains('open')) fails.push('leaving Simple closed the assistant: in Full it stays up, as Full’s own does');
+            else if (!(Math.abs(r.right - innerWidth) <= 1.5 && r.left > innerWidth / 2)) fails.push('in Full after the switch the assistant is ' + box(r) + ', want Full’s right-hand column');
+            if (carried().length) fails.push('in Full the assistant still carries Simple’s ' + carried().join(', '));
+            FM.aiChat.hide(); await r4Settle(300);
+          });
+        });
+      });
+    } finally {
+      try { FM.aiChat.hide(); } catch (e) {}
+      if (FM.simpleTools && FM.simpleTools._reset) FM.simpleTools._reset();
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* S14 d · SOMEBODY WHO CANNOT EDIT. In Full a Viewer has no door to the assistant (the + and the layer's menu are hidden for them);
+     Simple's first tool must not be one. CONTROLS: with the role back the same press opens it once, and API key over an open assistant
+     really did open Settings. */
+  test('1243 S14 · a Viewer’s press on Ask & edit opens nothing and says View only, a Commenter’s says You can comment here, and the bar keeps its project row; and at 1280 the assistant’s API key button, which closes it and opens Settings, leaves the focus off the bar behind Settings (CONTROLS: with the role back the same press opens the assistant once; Settings really opened)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    if (!FM.aiChat || !FM.aiChat.show || !FM.aiChat.hide) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
+    const showOwn = Object.getOwnPropertyDescriptor(FM.aiChat, 'show'), fails = [];
+    let n = 0;
+    try {
+      await smHintKeep('1', async function () {
+        await r4At(380, 0, async function () {
+          await smP2(smClips3, async function (v) {
+            FM.selectLayer(null); await r4Settle(150);
+            FM.aiChat.show = function () { n++; document.body.classList.add('aic-open'); };
+            for (const [role, want] of [['viewer', 'View only'], ['commenter', 'You can comment here']]) {
+              n = 0;
+              await smWithRole(role, async function () {
+                const b = smTool('ai');
+                if (!b) { fails.push('the project row has no Ask & edit for a ' + role + ' to press'); return; }
+                b.click(); await r4Settle(250);
+                if (n || document.body.classList.contains('aic-open')) fails.push('a ' + role + '’s press on Ask & edit opened the assistant (' + n + ' time(s)): it writes edits, and a ' + role + ' changes nothing');
+                if (r4Mode() !== 'project') fails.push('after a ' + role + '’s press the bar is in mode “' + r4Mode() + '”, want the project row still');
+                if (v.say() !== want) fails.push('a ' + role + '’s press said “' + v.say() + '”, want “' + want + '”, the line every Simple command gives them');
+              });
+              document.body.classList.remove('aic-open'); await r4Settle(120);
+            }
+            n = 0;
+            const b = smTool('ai');
+            if (!b) throw new Error('the project row has no Ask & edit · ' + fails.join(' · '));
+            b.click(); await r4Settle(250);
+            if (n !== 1) throw new Error('CONTROL: with the role back a press on Ask & edit opened the assistant ' + n + ' times, want once, so the two refusals above were not the role’s · ' + fails.join(' · '));
+            document.body.classList.remove('aic-open'); await r4Settle(150);
+            if (showOwn) Object.defineProperty(FM.aiChat, 'show', showOwn); else delete FM.aiChat.show;
+          });
+        });
+        /* the real assistant at 1280: its API key button */
+        await r4At(1280, 800, async function () {
+          await smP2(smClips3, async function () {
+            FM.selectLayer(null); await r4Settle(150);
+            if (!FM.simpleTools.openAi()) { fails.push('1280: FM.simpleTools.openAi did not open the assistant'); return; }
+            await r4Settle(300);
+            const c = document.getElementById('ai-chat'), key = c && c.querySelector('.aic-keybtn');
+            if (!key) throw new Error('setup: the assistant has no API key button (.aic-keybtn)');
+            try {
+              key.focus({ preventScroll: true }); key.click();
+              /* read after the bar's body-class observer has run (a microtask queued by the press) and before any frame or timer:
+                 Settings takes the focus itself a frame later on a fine pointer, which would hide where the bar had put it */
+              await Promise.resolve(); await Promise.resolve();
+              if (!FM.settings.isOpen()) throw new Error('CONTROL: API key did not open Settings, so nothing here was behind it · ' + fails.join(' · '));
+              const ae = document.activeElement, bar = document.getElementById('sm-bar');
+              if (ae && bar && bar.contains(ae)) fails.push('1280: with Settings up after API key, the focus is on Simple’s bar behind it (' + ((ae.dataset && ae.dataset.tool) || ae.className || ae.tagName) + '): Enter there would open the assistant over Settings');
+              if (c.classList.contains('open')) fails.push('1280: API key left the assistant open under Settings');
+            } finally {
+              if (FM.settings.isOpen()) FM.settings.close({ handBack: false });
+              await r4Settle(350);
+            }
+            if (c.classList.contains('open')) fails.push('1280: Settings closed without a hand back, and the assistant came back anyway');
+          });
+        });
+      });
+    } finally {
+      if (showOwn) Object.defineProperty(FM.aiChat, 'show', showOwn); else delete FM.aiChat.show;
+      document.body.classList.remove('aic-open');
+      try { if (FM.settings && FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close({ handBack: false }); } catch (e) {}
+      try { FM.aiChat.hide(); } catch (e) {}
+      if (FM.simpleTools && FM.simpleTools._reset) FM.simpleTools._reset();
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* S14 e · ONE MENU AT A TIME FROM OUTSIDE THE BAR, AND WHAT THE ASSISTANT MUST NOT HIDE (the 24 Nov review of S14: AI-SM1, AI-SM2,
+     SEE-2, AI-SM4, and a role that drops while it is up). With the assistant up, the Export button (both widths) and a cut's ◇ (a PC,
+     where the timeline is beside it) can still be pressed: what they open takes its place. A line Simple says floats above it. Escape
+     with a clip selected leaves the focus on that clip's tools. CONTROLS: Export and the ◇ open the same things with it closed. */
+  test('1243 S14 · with the assistant up, Export takes its place at 380 and 1280 and at 1280 a cut’s ◇ opens its Transition row in its place, so one menu is up; at 1280 a line Simple says floats just above the assistant, readable and its button pressable; Escape with a clip selected puts the focus on that clip’s tools; and a role that drops to view-only closes it and says View only (CONTROLS: Export and the ◇ open the same things with the assistant closed)', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    if (!FM.aiChat || !FM.aiChat.show || !FM.aiChat.hide) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
+    const fails = [];
+    const chat = () => document.getElementById('ai-chat'), up = () => !!(chat() && chat().classList.contains('open'));
+    const exportBtn = () => ['m-export', 'btn-export'].map(id => document.getElementById(id)).filter(x => x && x.getClientRects().length)[0] || null;
+    const chip = () => document.querySelector('.sm-chip-tr[data-tr]');
+    try {
+      await smHintKeep('1', async function () {
+        for (const width of [380, 1280]) {
+          await r4At(width, width > 700 ? 800 : 0, async function () {
+            await smP2(smClips3, async function (v) {
+              const at = width + ': ', S = FM.spine;
+              FM.selectLayer(null); await r4Settle(150);
+              /* Export */
+              if (!exportBtn()) throw new Error('setup ' + at + 'no Export button on show');
+              exportBtn().click(); await r4Settle(450);
+              if (!FM.simpleTools.exportOpen()) throw new Error('CONTROL ' + at + 'with the assistant closed a press on Export did not open Simple’s Export panel');
+              FM.simpleTools.closePanel(); await r4Settle(350);
+              if (!FM.simpleTools.openAi()) { fails.push(at + 'FM.simpleTools.openAi did not open the assistant'); return; }
+              await r4Settle(400);
+              exportBtn().click(); await r4Settle(500);
+              if (up()) fails.push(at + 'Export was pressed with the assistant up and the assistant stayed: its panel is under it, and a second press closes it unseen');
+              if (!FM.simpleTools.exportOpen()) fails.push(at + 'Export was pressed with the assistant up and no Export panel is open');
+              else { const b = document.querySelector('#inspector [data-exp]'); if (!b || !r4Hits(b)) fails.push(at + 'the Export panel that took the assistant’s place is not on top where its first button is'); }
+              if (r4Mode() !== 'panel') fails.push(at + 'with Export up the bar is in mode “' + r4Mode() + '”, want panel');
+              FM.simpleTools.closePanel(); await r4Settle(350);
+              try { FM.aiChat.hide(); } catch (e) {}
+              await r4Settle(200);
+              if (width < 701) return;
+              /* a cut's ◇, on the timeline beside the assistant */
+              FM.selectLayer(null); await r4Settle(200);
+              if (!chip()) throw new Error('setup 1280: the clip row shows no ◇ over a cut');
+              chip().click(); await r4Settle(300);
+              if (r4Mode() !== 'sub' || !FM.simpleTools.subFor() || FM.simpleTools.subFor().key !== 'transition') throw new Error('CONTROL 1280: with the assistant closed a press on a ◇ did not open the Transition row (mode “' + r4Mode() + '”)');
+              FM.simpleTools._reset(); FM.selectLayer(null); FM.simpleTools.sync(); await r4Settle(250);
+              if (!FM.simpleTools.openAi()) { fails.push('1280: the assistant did not open a second time'); return; }
+              await r4Settle(350);
+              if (!chip()) throw new Error('setup 1280: with the assistant up the clip row shows no ◇');
+              chip().click(); await r4Settle(400);
+              if (up()) fails.push('1280: a ◇ was pressed with the assistant up and the assistant stayed, the Transition row under it');
+              if (r4Mode() !== 'sub' || !FM.simpleTools.subFor() || FM.simpleTools.subFor().key !== 'transition') fails.push('1280: a ◇ pressed with the assistant up left the bar in mode “' + r4Mode() + '”, want its Transition row');
+              FM.simpleTools._reset(); FM.selectLayer(null); FM.simpleTools.sync(); await r4Settle(250);
+              /* a line Simple says while the assistant is up */
+              if (!FM.simpleTools.openAi()) { fails.push('1280: the assistant did not open a third time'); return; }
+              await r4Settle(350);
+              let pressed = 0;
+              S.say('A line with a button', { buttons: [{ label: 'Do it', fn: () => { pressed++; } }] });
+              /* a line's button arms about 0.4 s after the line shows (rule 5: a tap already on its way presses nothing) */
+              const armed = () => { const q = document.querySelector('#sm-say .sm-say-b'); return !!q && q.getAttribute('aria-disabled') === 'false'; };
+              for (let i = 0; i < 40 && !armed(); i++) await v.sleep(40);
+              const say = document.getElementById('sm-say'), cr = chat().getBoundingClientRect(), sr = say.getBoundingClientRect(), btn = say.querySelector('.sm-say-b');
+              if (!(sr.height >= 43.5) || !btn) throw new Error('setup 1280: Simple’s line did not show with its button (' + Math.round(sr.height) + ' px tall)');
+              if (!armed()) throw new Error('setup 1280: the line’s button did not arm within 1.6 s');
+              if (sr.bottom > cr.top + 1.5 || sr.top < 0) fails.push('1280: with the assistant up Simple’s line is at ' + Math.round(sr.top) + ' to ' + Math.round(sr.bottom) + ' and the assistant starts at ' + Math.round(cr.top) + ': want the line just above it, not under it');
+              if (Math.abs(sr.left - cr.left) > 1.5 || Math.abs(sr.width - cr.width) > 1.5) fails.push('1280: the line is ' + Math.round(sr.width) + ' px wide from ' + Math.round(sr.left) + ', the assistant ' + Math.round(cr.width) + ' from ' + Math.round(cr.left));
+              if (!r4Hits(btn)) fails.push('1280: the line’s button is not on top where it is drawn');
+              else { btn.click(); await r4Settle(120); if (pressed !== 1) fails.push('1280: a press on the line’s button ran it ' + pressed + ' times, want once'); }
+              /* Escape with a clip selected */
+              FM.selectLayer(v.L('B').id); await r4Settle(250);
+              if (!up()) fails.push('1280: selecting a clip on the timeline closed the assistant (its greeting says tap a layer first)');
+              else {
+                const inp = chat().querySelector('.aic-input');
+                if (inp) inp.focus({ preventScroll: true });
+                (document.activeElement || document.body).dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }));
+                await r4Settle(300);
+                const ae = document.activeElement, tray = document.getElementById('sm-tray');
+                if (up()) fails.push('1280: Escape left the assistant open');
+                if (r4Mode() !== 'item') fails.push('1280: after Escape with Clip 2 selected the bar is in mode “' + r4Mode() + '”, want its tray');
+                if (!ae || ae === document.body || !tray || !tray.contains(ae)) fails.push('1280: after Escape with a clip selected the focus is on ' + ((ae && ae !== document.body && (ae.id || ae.className || ae.tagName)) || 'nothing') + ', want that clip’s tools');
+              }
+              /* a role that drops while it is up */
+              FM.selectLayer(null); await r4Settle(200);
+              if (!FM.simpleTools.openAi()) { fails.push('1280: the assistant did not open a fourth time'); return; }
+              await r4Settle(350);
+              try {
+                await smWithRole('viewer', async function () {
+                  document.body.classList.add('collab-ro'); await r4Settle(300);
+                  if (up()) fails.push('1280: his role dropped to view-only with the assistant up and it stayed open: it writes edits');
+                  else if (v.say() !== 'View only') fails.push('1280: the assistant closed for a viewer and Simple said “' + v.say() + '”, want View only');
+                });
+              } finally { document.body.classList.remove('collab-ro'); await r4Settle(150); }
+            });
+          });
+        }
+      });
+    } finally {
+      document.body.classList.remove('collab-ro');
+      try { FM.aiChat.hide(); } catch (e) {}
+      if (FM.simpleTools && FM.simpleTools._reset) FM.simpleTools._reset();
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* S14 f · THE ASSISTANT'S SHEET GOING AWAY HOLDS THE SECOND TAP (the 24 Nov review, AI-SM3; N15's twin). On a phone the assistant
+     stands at the sheet line, so its grab bar lies over the play row's Link, a switch for the whole project. A real mouse double-clicks
+     the grab bar over Link at 380×800, 120 and 300 ms apart: the assistant closes and linking stays as it was. CONTROL: one real click
+     on that same spot 0.1 s after the assistant is closed from script switches linking, so the spot is Link, the pointer reaches it,
+     and a close with no finger on the assistant holds no press. */
+  test('1243 S14 · at 380×800 a REAL double click on the assistant’s grab bar over Link closes the assistant and presses nothing it uncovered: linking stays as it was, nothing changes, nothing plays (CONTROL: one real click on that spot 0.1 s after the assistant is closed with no finger on it switches linking)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    if (!window.frameElement) throw new Error('this test needs run.html’s iframe');
+    if (!FM.aiChat || !FM.aiChat.show || !FM.aiChat.hide) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
+    const fails = [];
+    try {
+      await onScreen924(async function () {
+        await r4At(380, 800, async function () {
+          for (const gap of [120, 300]) {
+            await smP2(smClips3, async function (v) {
+              const S = FM.spine, at = '380×800, ' + gap + ' ms apart: ';
+              FM.simpleTools._reset();   // no press the last half made on a sheet carries into this one
+              FM.selectLayer(null); await r4Settle(200);
+              if (!FM.simpleTools.openAi || !FM.simpleTools.openAi()) throw new Error('the assistant did not open from Simple’s bar (FM.simpleTools.openAi)');
+              await r4Settle(500);
+              const c = document.getElementById('ai-chat'), grab = c && c.querySelector('.aic-grab'), lk = document.getElementById('btn-sm-link');
+              if (!grab || !lk || !grab.getClientRects().length || !lk.getClientRects().length) throw new Error('setup: the assistant has no grab bar on show, or the play row no Link');
+              const g = grab.getBoundingClientRect(), l = lk.getBoundingClientRect();
+              const y0 = Math.max(g.top, l.top) + 2, y1 = Math.min(g.bottom, l.bottom) - 2;
+              if (!(y1 > y0) || l.left < g.left || l.right > g.right) throw new Error('380×800: the assistant’s grab bar (' + Math.round(g.top) + '–' + Math.round(g.bottom) + ') does not lie over Link (' + Math.round(l.top) + '–' + Math.round(l.bottom) + '): the assistant does not start at the play row');
+              const p = { x: Math.round(l.left + l.width / 2), y: Math.round((y0 + y1) / 2) };
+              await r4Lift(p.y);
+              /* CONTROL: the spot with the assistant down is Link, pressed 0.1 s after a close that no finger made */
+              FM.aiChat.hide(); await r4Settle(60);
+              const m0 = S.linkMode();
+              await realInput924([{ t: 'mouseMove', x: p.x, y: p.y, ms: 30 }, { t: 'mouseDown', x: p.x, y: p.y, ms: 40 }, { t: 'mouseUp', x: p.x, y: p.y, ms: 0 }], 'one click on Link');
+              await r4Settle(300); await v.idle();
+              if (S.linkMode() === m0) throw new Error('CONTROL at ' + at + 'one real click at (' + p.x + ', ' + p.y + ') 0.1 s after the assistant was closed from script did not switch linking: the spot is not Link, or a close with no finger on the assistant held the press · ' + fails.join(' · '));
+              S.cmd.link(m0); await v.idle(); await r4Settle(200);
+              if (S.linkMode() !== m0) throw new Error('setup: linking could not be put back');
+              if (!FM.simpleTools.openAi()) throw new Error('setup: the assistant did not open again');
+              await r4Settle(600);
+              const s1 = v.steps(), doc1 = v.doc();
+              await realInput924([{ t: 'mouseDown', x: p.x, y: p.y, ms: 40 }, { t: 'mouseUp', x: p.x, y: p.y, ms: gap }, { t: 'mouseDown', x: p.x, y: p.y, ms: 40 }, { t: 'mouseUp', x: p.x, y: p.y, ms: 0 }], 'a double click on the assistant’s grab bar (' + gap + ' ms apart)');
+              await r4Settle(500); await v.idle();
+              const under = document.elementFromPoint(p.x, p.y), what = under ? (under.closest('button') || under).id || String(under.getAttribute('class') || under.tagName) : 'nothing';
+              if (c.classList.contains('open')) fails.push(at + 'the double click left the assistant up (now under the pointer: ' + what + ')');
+              if (S.linkMode() !== m0) { fails.push(at + 'the second click pressed Link, which the assistant uncovered: linking switched for the whole project'); S.cmd.link(m0); await v.idle(); }
+              if (v.steps() !== s1 || v.doc() !== doc1) fails.push(at + 'the second click changed the project: ' + (v.steps() - s1) + ' steps (now under the pointer: ' + what + ')');
+              if (FM.playing) { fails.push(at + 'the second click started playback'); if (FM.pause) FM.pause(); }
+            });
+            window.frameElement.style.top = '0px';
+          }
+        });
+      });
+    } finally {
+      try { FM.aiChat.hide(); } catch (e) {}
+      if (FM.simpleTools && FM.simpleTools._reset) FM.simpleTools._reset();
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
   /* N6 · THE FLOATING LINE (A COMBINED point 5). Red on v18.36: the line is the tray row inside the bar, its bottom 52 px below the bar's
      top, and the tray's tools go while it shows. CONTROL: a live-only line takes no strip (its words go to #sm-live), and a real line's
      words are in .sm-line. */
@@ -205432,9 +205789,11 @@
     if (fails.length) throw new Error(fails.join(' · '));
   });
 
-  /* N10 · THE FIRST-RUN HINT FLOATS (S3: the project row is just the tools) AND LETS THE FIRST TAP THROUGH. Red on v18.36: the hint is a
-     row inside the tray, nothing floats above the bar. CONTROL: a tap on Clip 2 away from the hint selects it too, so the tap is a tap. */
-  test('1243 R4 · the first-run hint at 380 floats just above the bar, and a tap on the clip under it reaches the clip: Clip 2 is selected, the hint goes and fm.sm.hint is 1 (CONTROL: a tap on the clip away from the hint selects it too)', { item: '1243', budgetMs: 60000 }, async function () {
+  /* N10 · THE FIRST TAP REACHES THE CLIP. Until #1255's 20:53 follow-up a first-run hint floated in the 44 px just above the bar and let
+     the first tap through (S3); the hint went (his words: "There shouldn't be any explanations like that"), so nothing floats there and a
+     tap in that strip lands on Clip 2 itself. Red on the hint's tree (v18.50): the hint floats above the bar. CONTROL: a tap on Clip 2
+     away from that strip selects it too, so the tap is a tap. */
+  test('1243 R4 · at 380 with a main clip and nothing selected nothing floats above the bar where the first-run hint was, and a tap on Clip 2 in that strip selects it (CONTROL: a tap on the clip away from the strip selects it too)', { item: '1243', budgetMs: 60000 }, async function () {
     smNeedP2();
     await smHintKeep(null, async function () {
       await atPhoneWidth(async function () {
@@ -205442,9 +205801,8 @@
           FM.time = 3; FM.simpleTimeline.updatePlayhead();
           await smHintFresh(v); await r4Settle(100);
           const h = document.querySelector('#sm-bar > .sm-hint');
-          if (!r4Shown(h)) throw new Error('380: no first-run hint floats above the bar (#sm-bar > .sm-hint); it is ' + (document.querySelector('#sm-tray .sm-hint') ? 'a row inside the tray' : 'nowhere'));
-          const fails = [], hr = h.getBoundingClientRect(), top = r4Bar().getBoundingClientRect().top;
-          if (Math.abs(hr.bottom - top) > 1) fails.push('the hint’s bottom is ' + Math.round(hr.bottom - top) + ' px from the bar’s top, want 0');
+          if (r4Shown(h)) throw new Error('380: a first-run hint still floats above the bar: “' + h.textContent.trim() + '”');
+          const fails = [], top = r4Bar().getBoundingClientRect().top, hr = { top: top - 44, bottom: top };   /* the strip the hint took */
           const node = document.querySelector('#sm-main .sm-item[data-id="' + v.L('B').id + '"]');
           if (!node) throw new Error('setup: Clip 2 is not drawn');
           const nr = node.getBoundingClientRect(), x = Math.max(nr.left, 0) + Math.min(nr.right, innerWidth) > 0 ? (Math.max(nr.left, 0) * 3 + Math.min(nr.right, innerWidth)) / 4 : NaN;
@@ -205460,11 +205818,8 @@
             return t;
           };
           const hit = tapAt(x, y); await r4Settle(200);
-          if (FM.scene.selectedId !== v.L('B').id) fails.push('a tap on Clip 2 under the hint did not select it (it landed on ' + (hit ? String(hit.className || hit.tagName) : 'nothing') + ')');
-          let flag = null; try { flag = localStorage.getItem('fm.sm.hint'); } catch (e) {}
-          if (flag !== '1') fails.push('fm.sm.hint is ' + JSON.stringify(flag) + ' after the first tap, want 1');
-          if (r4Shown(document.querySelector('#sm-bar > .sm-hint'))) fails.push('the hint is still up after the first tap');
-          /* CONTROL: the same clip away from the hint, from nothing selected */
+          if (FM.scene.selectedId !== v.L('B').id) fails.push('a tap on Clip 2 in the strip just above the bar did not select it (it landed on ' + (hit ? String(hit.className || hit.tagName) : 'nothing') + ')');
+          /* CONTROL: the same clip away from that strip, from nothing selected */
           FM.selectLayer(null); await r4Settle(150);
           const nr2 = node.isConnected ? node.getBoundingClientRect() : document.querySelector('#sm-main .sm-item[data-id="' + v.L('B').id + '"]').getBoundingClientRect();
           tapAt(x, nr2.top + 8); await r4Settle(200);
@@ -206937,7 +207292,9 @@
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
   });
 
-  test('1243 R9 · S12 review at 380 with no look yet the Adjust tab says Let go to see it above the sliders inside the panel, and once a slider has made the look the note is gone (CONTROL: the Brightness slider is there)', { item: '980', budgetMs: 90000 }, async function () {
+  /* #1255 20:53 (his words: "There shouldn't be any explanations like that"): the R9 review's note "Let go to see it" stood over the
+     sliders every time Adjust opened with no look yet. It went: the sliders come straight under the tabs, and letting go still makes the look. */
+  test('1243 R9 · S12 review at 380 with no look yet the Adjust tab shows its sliders straight under the tabs with no note above them, and letting go of a slider makes the look (CONTROL: the Brightness slider is there)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     const fails = [];
     await r4At(380, 0, async function () {
@@ -206946,17 +207303,13 @@
         const tab = smLookTab((FM.spineWords.tools || {}).lookAdjust || 'Adjust');
         if (!tab) throw new Error('setup: the Look panel has no Adjust tab');
         tab.click(); await r4Settle(150);
-        if (!document.querySelector('#inspector .sm-look-r[data-key="bright"]')) throw new Error('CONTROL: the Adjust tab has no Brightness slider');
-        const note = document.querySelector('#inspector .sm-look-letgo'), want = (FM.spineWords.tools || {}).lookLetGo;
-        if (!note) fails.push('with no look yet the Adjust tab says nothing about the picture changing only on release');
-        else {
-          if (note.textContent !== want) fails.push('the note reads “' + note.textContent + '”, want “' + want + '”');
-          const r = note.getBoundingClientRect(), p = document.querySelector('#inspector .sm-look').getBoundingClientRect();
-          if (!r.width || r.left < p.left - 1 || r.right > p.right + 1 || r.right > innerWidth) fails.push('the note is not inside the panel at 380 (' + Math.round(r.left) + ' to ' + Math.round(r.right) + ', the panel ' + Math.round(p.left) + ' to ' + Math.round(p.right) + ')');
-        }
+        const sl = document.querySelector('#inspector .sm-look-r[data-key="bright"]');
+        if (!sl) throw new Error('CONTROL: the Adjust tab has no Brightness slider');
+        const box = document.querySelector('#inspector .sm-look'), kids = box ? Array.from(box.children) : [], first = kids[1] || null;
+        if (document.querySelector('#inspector .sm-look-letgo') || /let go/i.test(box ? box.textContent : '')) fails.push('with no look yet the Adjust tab still says “' + ((document.querySelector('#inspector .sm-look-letgo') || {}).textContent || 'Let go') + '” over the sliders');
+        if (!first || !first.contains(sl)) fails.push('with no look yet the first thing under the tabs is ' + (first ? '“' + first.textContent.trim().slice(0, 40) + '”' : 'nothing') + ', want the Brightness row');
         await smLookSlide(v, 'bright', 30); await r4Settle(150);
-        if (!smLookLayers().length) fails.push('CONTROL: letting go of Brightness made no look');
-        else if (document.querySelector('#inspector .sm-look-letgo')) fails.push('with a look the note still shows, though the sliders now show the picture as they move');
+        if (!smLookLayers().length) fails.push('letting go of Brightness made no look');
       });
     });
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
@@ -207369,6 +207722,57 @@
       });
     });
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  /* #1243 S28's Volume row, his words of 24 Nov: "I feel like volume should be able to go up to like 10 times." The row's slider stopped at
+     200 %; Full's has gone to 1000 % since queue 195 and Simple's command never clamped below that. The slider is in two halves: 0–100 %
+     as it was, then 100 % to 1000 % in equal steps of loudness. Driven as he does it (the slider's input and change), the level read
+     from the clip. CONTROLS: 50 on the slider is still 50 %, and a level of 350 % set in Full shows where it is. */
+  test('1243 S28 · Simple’s Volume goes up to ten times: the slider’s end writes 1000 % in one step and says so, half way up its right half is about 316 %, a level of 350 % set in Full shows at its own place and reads 350%, the left half is 0 to 100 % as before and still rests on 100 %, and at 380 the row’s number is whole on screen at 1000% (CONTROLS: 50 on the slider writes 50 %; before any press the clip is at 100 %)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await r4At(380, 0, async function () {
+      await smFakeLoad(() => smP2((W, H) => [smV('B', 3, 3, W, H, { muted: false, volume: 3.5 }), smV('A', 0, 3, W, H, { muted: false })], async function (v) {
+        const lvl = n => { const L = v.L(n), x = L.volume == null ? 1 : FM.evalProp(L.volume, FM.time); return Math.round(x * 100); };
+        const row = async n => {
+          FM.selectLayer(null); FM.selectLayer(v.L(n).id); await r4Settle(150);
+          if (!smTool('volume')) throw new Error('setup: ' + n + '’s tray has no Volume (' + Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool) + ')');
+          smTool('volume').click(); await r4Settle(150);
+          const rng = document.querySelector('#sm-tray .sm-vol-r:not(.sm-opa-r)'), val = document.querySelector('#sm-tray .sm-vol-v:not(.sm-opa-v)');
+          if (!rng || !val) throw new Error('setup: ' + n + '’s Volume row has no slider or no number');
+          return { rng: rng, val: val };
+        };
+        const set = async (r, p) => { r.rng.value = String(p); r.rng.dispatchEvent(new Event('input', { bubbles: true })); const said = r.val.textContent; r.rng.dispatchEvent(new Event('change', { bubbles: true })); await v.idle(); await r4Settle(80); return said; };
+        FM.time = 0;
+        if (lvl('A') !== 100) throw new Error('CONTROL: before any press clip A is at ' + lvl('A') + ' %, not 100');
+        let r = await row('A');
+        if (+r.rng.max !== 200 || r.rng.value !== '100') fails.push('at 100 % the slider stands at ' + r.rng.value + ' of ' + r.rng.max + ', want the middle (100 of 200)');
+        const n0 = v.steps();
+        let said = await set(r, 50);
+        if (lvl('A') !== 50 || said !== '50%') throw new Error('CONTROL: 50 on the slider wrote ' + lvl('A') + ' % and said “' + said + '”, want 50 % · ' + fails.join(' · '));
+        r = await row('A');
+        said = await set(r, 200);
+        if (lvl('A') !== 1000) fails.push('the slider’s end wrote ' + lvl('A') + ' %, want 1000 % — his words: “volume should be able to go up to like 10 times”');
+        if (said !== '1000%') fails.push('at its end the row says “' + said + '”, want 1000%');
+        if (v.steps() !== n0 + 2) fails.push('two changes of volume took ' + (v.steps() - n0) + ' undo steps, want one each');
+        r = await row('A');
+        if (r.rng.value !== '200') fails.push('at 1000 % the slider stands at ' + r.rng.value + ', want its end (200)');
+        const vr = r.val.getBoundingClientRect();
+        if (r.val.scrollWidth > r.val.clientWidth + 1 || vr.right > innerWidth + 0.5 || vr.left < -0.5) fails.push('at 380 the number “' + r.val.textContent + '” is cut or off screen (' + Math.round(vr.left) + '–' + Math.round(vr.right) + ' of ' + innerWidth + ')');
+        if ((r.rng.getAttribute('aria-valuetext') || '') !== '1000%') fails.push('a screen reader hears “' + r.rng.getAttribute('aria-valuetext') + '” for the slider at its end, want 1000%');
+        said = await set(r, 150);
+        if (!(lvl('A') >= 310 && lvl('A') <= 322)) fails.push('half way up the right half wrote ' + lvl('A') + ' %, want about 316 % (equal steps of loudness from 100 to 1000)');
+        if (said !== lvl('A') + '%') fails.push('the row said “' + said + '” and wrote ' + lvl('A') + ' %: what it shows is not what it writes');
+        r = await row('A');
+        r.rng.value = '97'; r.rng.dispatchEvent(new Event('input', { bubbles: true })); await r4Settle(40);
+        if (r.rng.value !== '100' || r.val.textContent !== '100%') fails.push('97 on the slider did not rest on 100 % (it stands at ' + r.rng.value + ' and says “' + r.val.textContent + '”)');
+        /* a level Full set above 200 %: shown where it is, not pinned to an end */
+        r = await row('B');
+        if (r.val.textContent !== '350%') fails.push('a clip Full set to 350 % reads “' + r.val.textContent + '” in Simple’s row');
+        if (!(+r.rng.value >= 152 && +r.rng.value <= 156)) fails.push('a clip at 350 % stands at ' + r.rng.value + ' on the slider, want about 154 (its own place in the right half), not an end');
+      }));
+    });
+    if (fails.length) throw new Error(fails.join(' · '));
   });
 
   /* ═══ #1243 R RELEASE 8b · THE REST OF S33's FIRST WAVE (1243-R (c) row 8b; R (a)'s trays) ═══
@@ -207923,12 +208327,14 @@
   const r12Btn = () => ['m-export', 'btn-export'].map(id => document.getElementById(id)).find(b => b && b.getClientRects().length) || document.getElementById('btn-export');
   const r12Box = () => document.querySelector('#inspector .sm-exp');
   const r12Row = k => Array.from(document.querySelectorAll('#inspector .sm-exp .sm-exp-row[data-row="' + k + '"] .sm-exp-b'));
-  const r12Words = k => r12Row(k).map(b => b.textContent).join(', ');
-  const r12On = k => r12Row(k).filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.textContent).join(', ');
+  /* #1261: Smoothness's buttons are bare numbers (the unit is under the row's name), so a rate reads back as “30 fps” here */
+  const r12Face = (k, b) => (k === 'fps' && /^[\d.]+(\s*fps)?$/.test(b.textContent)) ? b.textContent.replace(/\s*fps$/, '') + ' fps' : b.textContent;   /* (review R13-4: a face that already says fps is read once, so the old faces fail by the test’s own sentence; 24 Nov: the Custom button's word is read as it is) */
+  const r12Words = k => r12Row(k).map(b => r12Face(k, b)).join(', ');
+  const r12On = k => r12Row(k).filter(b => b.getAttribute('aria-pressed') === 'true').map(b => r12Face(k, b)).join(', ');
   /* Full's Export card's rounding (js/export-card.js mb): KB under 1 MB, one decimal under 10 MB */
   const r12Mb = bytes => { const n = bytes / 1e6; return !(n > 0) ? '0 KB' : n < 1 ? Math.max(1, Math.round(n * 1000)) + ' KB' : (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10) + ' MB'; };
 
-  test('1243 R12 · S6 Export at 380 and 1280 opens a panel (the sheet from the stage’s bottom edge on a phone, the left band on a PC) with the frame, the length, Quality 720p · 1080p and Smoothness 30 fps · 60 fps, its size and Save video all on screen, and starts nothing until Save video; picking 60 fps changes the size to what the exporter is then given, Save video exports the clips only at 1080p and 60 fps and closes the panel, the pick is there next time, and Export pressed again closes it (CONTROL: before the press no panel is up and the bar is the project row)', { item: '980', budgetMs: 150000 }, async function () {
+  test('1243 R12 · S6 Export at 380 and 1280 opens a panel (the sheet from the stage’s bottom edge on a phone, the left band on a PC) with the frame, the length, Quality 720p · 1080p · 4K and Smoothness 30 · 60 · 120 and Custom, its size and Save video all on screen, and starts nothing until Save video; picking 60 fps changes the size to what the exporter is then given, Save video exports the clips only at 1080p and 60 fps and closes the panel, the pick is there next time, and Export pressed again closes it (CONTROL: before the press no panel is up and the bar is the project row)', { item: '980', budgetMs: 150000 }, async function () {
     smNeedP2();
     const ex = FM.exporter, run0 = ex.run, dlg = document.getElementById('export-dialog'), fails = [], put = r12Mem();
     let got = null;
@@ -207967,8 +208373,8 @@
               else if (e.tagName === 'BUTTON' && !r4Hits(e)) fails.push(at + p[0] + ' is covered at its centre');
             });
             /* what it says, simply */
-            if (r12Words('q') !== '720p, 1080p' || r12On('q') !== '1080p') fails.push(at + 'Quality reads “' + r12Words('q') + '” with “' + r12On('q') + '” picked, want 720p, 1080p with 1080p picked (a 1920×1080 frame: no 4K)');
-            if (r12Words('fps') !== '30 fps, 60 fps' || r12On('fps') !== '30 fps') fails.push(at + 'Smoothness reads “' + r12Words('fps') + '” with “' + r12On('fps') + '” picked, want 30 fps, 60 fps with the project’s 30 picked');
+            if (r12Words('q') !== '720p, 1080p, 4K' || r12On('q') !== '1080p') fails.push(at + 'Quality reads “' + r12Words('q') + '” with “' + r12On('q') + '” picked, want 720p, 1080p, 4K with 1080p picked (a 1920×1080 frame opens on its own size, 4K is there to press: his words, 24 Nov, “just put the option there”)');
+            if (r12Words('fps') !== '30 fps, 60 fps, 120 fps, Custom' || r12On('fps') !== '30 fps') fails.push(at + 'Smoothness reads “' + r12Words('fps') + '” with “' + r12On('fps') + '” picked, want 30, 60, 120 and Custom with the project’s 30 picked (#1261, his words: “Just do 30, 60, 120 or custom”)');
             const len = box.querySelector('.sm-exp-len');
             if (!len || len.textContent !== '0:06') fails.push(at + 'the length reads “' + (len && len.textContent) + '”, want 0:06 (the clips, not the song’s 9 s)');
             const pic = box.querySelector('.sm-exp-pic');
@@ -208007,17 +208413,20 @@
     if (fails.length) throw new Error(fails.join(' · '));
   });
 
-  test('1243 R12 · S6 Export never offers more than the frame: a 3840×2160 frame offers 720p · 1080p · 4K and opens on 4K, a 2560×1440 one offers 720p · 1080p and its own 1440p and opens on it, a 1920×1080 one stops at 1080p, a 1600×900 one offers 720p and its own 900p, a 320×240 one only its own 240p; Smoothness adds a 25 fps project’s own rate beside 30 and 60 and opens on it, and Save video on 4K exports the frame at its own size at 25 fps (CONTROL: a 30 fps project offers just 30 fps and 60 fps)', { item: '980', budgetMs: 120000 }, async function () {
+  test('1243 R12 · S6 Export always offers 720p · 1080p · 4K and the frame’s own size, and opens on the frame’s own: a 3840×2160 frame opens on 4K, a 2560×1440 one on its own 1440p with 4K above it, a 1920×1080 one on 1080p, a 1600×900 one on its own 900p, a 320×240 one on its own 240p; a 24 fps project’s own rate is on the Custom button and is picked; Save video on a 4K frame exports it at its own size at 24 fps, and 4K pressed on a 1920×1080 frame exports it enlarged twice over and is remembered as an enlargement (CONTROLS: a 30 fps project’s fourth button reads Custom; the 1080p frame opens on 1080p before 4K is pressed)', { item: '980', budgetMs: 150000 }, async function () {
     smNeedP2();
     const ex = FM.exporter, run0 = ex.run, fails = [], put = r12Mem();
     let got = null;
     ex.run = async o => { got = o; };
     const cases = [
-      { W: 3840, H: 2160, fps: 25, q: '720p, 1080p, 4K', on: '4K', f: '25 fps, 30 fps, 60 fps', fon: '25 fps', save: true },
-      { W: 2560, H: 1440, fps: 30, q: '720p, 1080p, 1440p', on: '1440p' },
-      { W: 1920, H: 1080, fps: 30, q: '720p, 1080p', on: '1080p', f: '30 fps, 60 fps', fon: '30 fps', control: true },
-      { W: 1600, H: 900, fps: 30, q: '720p, 900p', on: '900p' },
-      { W: 320, H: 240, fps: 30, q: '240p', on: '240p' }
+      /* #1261: 30 · 60 · 120 and Custom (24 Nov: "Just do 30, 60, 120 or custom"); a 24 fps project's own rate is on the Custom button.
+         Quality (24 Nov: "just put the option there"): 720p · 1080p · 4K always, the frame's own size
+         when it is none of them, opening on the frame's own. */
+      { W: 3840, H: 2160, fps: 24, q: '720p, 1080p, 4K', on: '4K', f: '30 fps, 60 fps, 120 fps, 24 fps', fon: '24 fps', save: true },
+      { W: 2560, H: 1440, fps: 30, q: '720p, 1080p, 1440p, 4K', on: '1440p' },
+      { W: 1920, H: 1080, fps: 30, q: '720p, 1080p, 4K', on: '1080p', f: '30 fps, 60 fps, 120 fps, Custom', fon: '30 fps', control: true, up: true },
+      { W: 1600, H: 900, fps: 30, q: '720p, 900p, 1080p, 4K', on: '900p' },
+      { W: 320, H: 240, fps: 30, q: '240p, 720p, 1080p, 4K', on: '240p' }
     ];
     try {
       for (const c of cases) {
@@ -208034,7 +208443,31 @@
             if (go) go.click();
             for (let i = 0; i < 60 && !got; i++) await v.sleep(20);
             if (!got) fails.push(at + 'Save video did not start an export');
-            else if (got.scale !== 1 || got.fps !== 25) fails.push(at + 'Save video exported scale ' + got.scale + ' at ' + got.fps + ' fps, want the frame’s own size (scale 1) at 25 fps');
+            else if (got.scale !== 1 || got.fps !== 24) fails.push(at + 'Save video exported scale ' + got.scale + ' at ' + got.fps + ' fps, want the frame’s own size (scale 1) at 24 fps');
+          }
+          if (c.up) {
+            /* 4K pressed on the 1080p frame: the size line grows, Save video hands the exporter scale 2, and the pick is remembered AS an
+               enlargement (so it is offered pressed next time here, and never turns a later 4K project's own-size pick into one) */
+            const sz0 = (document.querySelector('#inspector .sm-exp .sm-exp-size') || {}).textContent || '';
+            const b4k = r12Row('q').filter(b => b.textContent === '4K')[0];
+            if (!b4k || !r4Hits(b4k)) { fails.push(at + 'the 4K button is not there to press'); }
+            else {
+              b4k.click(); await r4Settle(80);
+              const sz1 = (document.querySelector('#inspector .sm-exp .sm-exp-size') || {}).textContent || '';
+              if (r12On('q') !== '4K') fails.push(at + 'pressing 4K leaves “' + r12On('q') + '” picked');
+              if (sz1 === sz0) fails.push(at + 'pressing 4K left the size line at “' + sz1 + '”: an enlarged file is bigger');
+              got = null;
+              const go = document.querySelector('#inspector .sm-exp .sm-exp-go');
+              if (go) go.click();
+              for (let i = 0; i < 60 && !got; i++) await v.sleep(20);
+              if (!got) fails.push(at + 'Save video on 4K did not start an export');
+              else if (Math.abs(got.scale - 2) > 1e-9 || got.fps !== 30) fails.push(at + 'Save video on 4K exported scale ' + got.scale + ' at ' + got.fps + ' fps, want the 1080p frame enlarged twice over (scale 2) at 30 fps');
+              let mem = null; try { mem = JSON.parse(localStorage.getItem('fm.sm.export') || 'null'); } catch (e) {}
+              if (!mem || mem.p !== 2160 || mem.up !== true) fails.push(at + 'the 4K pick was kept as ' + JSON.stringify(mem) + ', want p 2160 marked as an enlargement (up)');
+              await r4Settle(150);
+              document.getElementById('btn-export').click(); await r4Settle(300);
+              if (r12On('q') !== '4K') fails.push(at + 'opened again, Quality has “' + r12On('q') + '” picked, not the 4K he pressed last time');
+            }
           }
           FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(100);
         }, { W: c.W, H: c.H, fps: c.fps });
@@ -208046,7 +208479,8 @@
   /* Review R12-1 / R12-C1: the panel's pick was worked out only when Export opened, so a frame size or rate changed under the open panel
      (Canvas from the cog, an undo, Home and another project) left nothing pressed and Save video exported the old 2160 rung over the new
      1080 short side: scale 2, an upscale. The change is made the way Canvas's Apply makes it (the project's numbers, then refreshAll). */
-  test('1243 R12 · S6 Export follows the frame under it: with the panel up on a 3840×2160 25 fps frame, the frame changed to 1920×1080 at 30 fps leaves 1080p and 30 fps pressed, and Save video exports the frame at its own size, never an upscale (CONTROL: before the change 4K and 25 fps are pressed)', { item: '980', budgetMs: 90000 }, async function () {
+  /* #1261: a 24 fps frame, not 25 — 25 is one of Full's rates Smoothness offers on every project now, so a pick of 25 would rightly stay */
+  test('1243 R12 · S6 Export follows the frame under it: with the panel up on a 3840×2160 24 fps frame, the frame changed to 1920×1080 at 30 fps leaves 1080p and 30 fps pressed, and Save video exports the frame at its own size, never an upscale (CONTROL: before the change 4K and 24 fps are pressed)', { item: '980', budgetMs: 90000 }, async function () {
     smNeedP2();
     const ex = FM.exporter, run0 = ex.run, put = r12Mem(), fails = [];
     let got = null;
@@ -208057,9 +208491,17 @@
         got = null;
         document.getElementById('btn-export').click(); await r4Settle(300);
         if (!r12Box()) throw new Error('setup: Export opened no panel');
-        if (r12On('q') !== '4K' || r12On('fps') !== '25 fps') throw new Error('CONTROL: on the 3840×2160 25 fps frame the panel has “' + r12On('q') + '” and “' + r12On('fps') + '” pressed, want 4K and 25 fps');
+        if (r12On('q') !== '4K' || r12On('fps') !== '24 fps') throw new Error('CONTROL: on the 3840×2160 24 fps frame the panel has “' + r12On('q') + '” and “' + r12On('fps') + '” pressed, want 4K and 24 fps');
         const P = FM.scene.project;
-        P.width = 1920; P.height = 1080; P.fps = 30;
+        /* ONE THING AT A TIME, so each rule is seen on its own. Changed together (as this test did until 24 Nov), either rule alone
+           started the panel over, and a mutation that took one of them out passed. First the rate: a rate that was the project's own
+           follows the project, and the size, which is still the frame's, stays. */
+        P.fps = 30;
+        FM.refreshAll(); await r4Settle(200);
+        if (!r12Box()) throw new Error('setup: the panel went when the frame’s rate changed');
+        if (r12On('fps') !== '30 fps' || r12On('q') !== '4K') fails.push('after only the rate changed to 30 fps, Smoothness has “' + r12On('fps') + '” pressed (of ' + r12Words('fps') + ') and Quality “' + r12On('q') + '”, want 30 fps, the project’s own, and 4K still');
+        /* …then the size: 4K was this frame's own size, never an enlargement he pressed, so over a 1080p frame it starts over */
+        P.width = 1920; P.height = 1080;
         FM.refreshAll(); await r4Settle(200);
         if (!r12Box()) throw new Error('setup: the panel went when the frame changed');
         if (r12On('q') !== '1080p' || r12On('fps') !== '30 fps') fails.push('after the frame changed to 1920×1080 at 30 fps, Quality has “' + r12On('q') + '” pressed (of ' + r12Words('q') + ') and Smoothness “' + r12On('fps') + '” (of ' + r12Words('fps') + '), want 1080p and 30 fps');
@@ -208069,7 +208511,7 @@
         if (!got) fails.push('Save video did not start an export');
         else if (got.scale > 1 + 1e-9 || got.fps !== 30) fails.push('Save video exported scale ' + got.scale + ' at ' + got.fps + ' fps, want at most the frame’s own size (scale 1) at 30 fps');
         FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(100);
-      }, { W: 3840, H: 2160, fps: 25 });
+      }, { W: 3840, H: 2160, fps: 24 });
     } finally { ex.run = run0; put(); }
     if (fails.length) throw new Error(fails.join(' · '));
   });
@@ -208138,6 +208580,478 @@
       });
     } finally { put(); }
     if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* ═══ RELEASE 13 · #1259 · SIMPLE'S EFFECT PICTURES ═══
+     His words (23 Nov, REQUESTS.md #1259): "in the simple editor, the effects is just all the same image and they don't really actually show
+     you what it is that is happening. So that obviously will need a lot of work." Every tile of both pickers (an item's Add effect,
+     itemFxFill, and the project row's Effects, fxFill) mounts the drawn picture of the effect it puts on (js/fx-thumbs.js mount: the
+     canvas's _fxPic is that effect's type; a preset through mountPreset never gets a picture, its _fxType is 'p:<id>'), in a SQUARE box,
+     40 px: the largest the fixed 56 px row holds with the name under it, so the row and everything above it stay where they are. And the
+     shipped presets come one per base effect first, so the first screen is not one picture five times. The pictures are loaded and held
+     on their still frame for the measurement; both switches are put back. */
+  const fx1259Pics = async () => {
+    const T = FM.fxThumbs;
+    if (!T || !T._picsLoad || !T._pics) throw new Error('setup: js/fx-thumbs.js has no picture seams (_picsLoad / _pics)');
+    const en = T._picsEnabled ? T._picsEnabled(true) : true, still = T._picsStill ? T._picsStill(true) : false;
+    await T._picsLoad();
+    return () => { if (T._picsEnabled) T._picsEnabled(en); if (T._picsStill) T._picsStill(still); };
+  };
+  const fx1259Has = type => (FM.fxThumbs._pics().ids || []).some(i => i && i.type === type);
+  /* every tile of the open picker, its key (data-tool without 'fx:') and what its canvas was mounted as, read while the strip is walked
+     end to end (the tiles mount as they come into view, #1243 S11) */
+  async function fx1259Walk() {
+    const run = document.querySelector('#sm-tray .sm-run');
+    if (!run) throw new Error('the picker’s strip is not drawn');
+    const seen = new Map(), all = Array.from(run.querySelectorAll('.sm-fx-tile')).map(t => String(t.dataset.tool).slice(3));
+    const look = () => run.querySelectorAll('.sm-fx-tile').forEach(t => { const c = t.querySelector('canvas.sm-fx-th'); if (c && c._fxType) seen.set(String(t.dataset.tool).slice(3), { pic: c._fxPic || null, type: String(c._fxType) }); });
+    const step = Math.max(80, run.clientWidth - 40);
+    for (let x = 0; ; x += step) {
+      run.scrollLeft = x; await r4Settle(60); look();
+      if (run.scrollLeft + run.clientWidth >= run.scrollWidth - 1) break;
+    }
+    run.scrollLeft = 0; await r4Settle(40);
+    return { all: all, seen: seen };
+  }
+  test('1259 · at 380 with the drawn pictures on, every tile of a title’s Add effect and of the project row’s Effects shows its own effect’s drawn picture, a preset its base effect’s, and none is drawn as a preset on the sample photo (CONTROL: the pictures are ready and Beat Slam is a Shake preset)', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    const T = FM.fxThumbs, d0 = Object.getOwnPropertyDescriptor(T, 'mountPreset'), real = T.mountPreset, fails = [];
+    let presetMounts = 0, put = null;
+    Object.defineProperty(T, 'mountPreset', { configurable: true, writable: true, enumerable: d0 ? d0.enumerable : true, value: function () { presetMounts++; return real.apply(this, arguments); } });
+    try {
+      put = await fx1259Pics();
+      if (T._pics().state !== 'ready') throw new Error('CONTROL: the drawn pictures did not load (state ' + T._pics().state + ': ' + (T._pics().error || '') + ')');
+      if ((smIfxPreset('s-beatslam') || {}).fx !== 'shake') throw new Error('CONTROL: the shipped Beat Slam is no longer a Shake preset');
+      await r4At(380, 760, async function () {
+        await smP2(smIfxScene, async function (v) {
+          const check = (who, w, typeOf) => {
+            const miss = w.all.filter(k => !w.seen.has(k));
+            if (miss.length) fails.push(who + ': ' + miss.length + ' of ' + w.all.length + ' tiles were never mounted as the strip was walked (' + miss.slice(0, 4).join(', ') + ')');
+            const bad = [];
+            w.seen.forEach((m, k) => { const t = typeOf(k); if (fx1259Has(t) && m.pic !== t) bad.push(k + ' shows ' + (m.pic ? 'the picture of ' + m.pic : (m.type.indexOf('p:') === 0 ? 'a preset drawn on the sample photo' : 'a live render')) + ', want the picture of ' + t); });
+            if (bad.length) fails.push(who + ': ' + bad.length + ' of ' + w.all.length + ' tiles do not show their effect’s picture: ' + bad.slice(0, 6).join(' · '));
+            if (!w.all.length) fails.push(who + ': the picker has no tiles');
+          };
+          await smIfxOpen(v, v.L('Hi').id);
+          const wi = await fx1259Walk();
+          if (!wi.seen.size || !wi.seen.get(wi.all[0])) throw new Error('CONTROL: the title’s picker mounted no tile at all, so nothing below is measured');
+          check('the title’s Add effect', wi, k => smIfxType(k));
+          if (!wi.all.some(k => k.indexOf('p:') === 0)) fails.push('CONTROL: the title’s picker offers no preset, so the preset tiles are not measured');
+          smTool('fxBack').click(); await r4Settle(120);
+          FM.selectLayer(null); await r4Settle(150);
+          const fx = smTool('effects');
+          if (!fx) throw new Error('setup: the project row has no Effects');
+          fx.click(); await r4Settle(200);
+          check('the project row’s Effects', await fx1259Walk(), k => k);
+          if (presetMounts) fails.push('a picker drew ' + presetMounts + ' tile' + (presetMounts === 1 ? '' : 's') + ' through mountPreset, a live render on the one sample photo');
+        });
+      });
+    } finally {
+      if (d0) Object.defineProperty(T, 'mountPreset', d0); else T.mountPreset = real;
+      if (put) put();
+    }
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  test('1259 · at 380 and 1280 the picture in a title’s Add effect and in the project row’s Effects is a 40 px square with the name under it, the row stays 56 px, and the bar, the timeline and the stage do not move when a picker opens (CONTROL: before it opens the row is 56 px)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    for (const width of [380, 1280]) {
+      await r4At(width, width > 700 ? 800 : 760, async function () {
+        await smP2(smIfxScene, async function (v) {
+          const at = width + ' px: ', box = id => { const e = document.getElementById(id); return e ? r4Box(e) : null; };
+          const where = () => ({ bar: box('sm-bar'), timeline: box('sm-timeline'), stage: box('stage') });
+          const same = (a, b, what) => Object.keys(a).forEach(k => { if (!a[k] || !b[k] || r4Moved(a[k], b[k])) fails.push(at + 'opening ' + what + ' moved the ' + k + ' from ' + JSON.stringify(a[k]) + ' to ' + JSON.stringify(b[k])); });
+          const measure = what => {
+            const tile = document.querySelector('#sm-tray .sm-fx-tile'), th = tile && tile.querySelector('.sm-fx-th'), name = tile && tile.querySelector('.sm-tool-l');
+            if (!th) { fails.push(at + what + ' has no picture box'); return; }
+            const r = th.getBoundingClientRect();
+            if (Math.abs(r.width - r.height) > 0.5 || Math.abs(r.width - 40) > 0.5) fails.push(at + what + '’s picture is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' px, want a 40 px square');
+            if (!name || name.getBoundingClientRect().top < r.bottom - 0.5) fails.push(at + what + '’s name is not under its picture');
+            const tr = document.getElementById('sm-tray').getBoundingClientRect();
+            if (Math.abs(tr.height - 56) > 0.5) fails.push(at + 'with ' + what + ' open the row is ' + tr.height + ' px, want 56');
+            if (r.top < tr.top - 0.5 || r.bottom > tr.bottom + 0.5) fails.push(at + what + '’s picture runs out of the row (' + Math.round(r.top) + '–' + Math.round(r.bottom) + ' in ' + Math.round(tr.top) + '–' + Math.round(tr.bottom) + ')');
+            const bar = document.getElementById('sm-bar').getBoundingClientRect();
+            if (bar.bottom > innerHeight + 0.5) fails.push(at + 'with ' + what + ' open the bar ends at ' + Math.round(bar.bottom) + ', below the screen (' + innerHeight + ')');
+          };
+          FM.selectLayer(v.L('Hi').id); await r4Settle(150);
+          if (Math.abs(document.getElementById('sm-tray').getBoundingClientRect().height - 56) > 0.5) throw new Error('CONTROL ' + at + 'the title’s tray is ' + document.getElementById('sm-tray').getBoundingClientRect().height + ' px before its picker opens, want 56');
+          const w0 = where();
+          await smIfxOpen(v, v.L('Hi').id); await r4Settle(150);
+          measure('the title’s Add effect');
+          same(w0, where(), 'the title’s Add effect');
+          smTool('fxBack').click(); await r4Settle(120);
+          FM.selectLayer(null); await r4Settle(150);
+          const p0 = where();
+          smTool('effects').click(); await r4Settle(200);
+          if (!document.querySelector('#sm-tray .sm-fx-tile')) { fails.push(at + 'the project row’s Effects opened no picker'); return; }
+          measure('the project row’s Effects');
+          same(p0, where(), 'the project row’s Effects');
+        });
+      });
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1259 · a title’s Add effect at 380 shows five different pictures on its first screen: the shipped presets come one per base effect first, then the rest, his own presets still lead and every preset still comes before the stock effects (CONTROL: the shipped list opens with five Shake presets)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const P = FM.effectPresets, d0 = P ? Object.getOwnPropertyDescriptor(P, 'custom') : null, fails = [];
+    const ship = (FM.EFFECT_PRESETS || []).slice(0, 5).map(p => p.fx).join();
+    if (ship !== 'shake,shake,shake,shake,shake') throw new Error('CONTROL: the shipped presets open with ' + ship + ', not five Shake presets, so the order below measures nothing');
+    let put = null;
+    try {
+      put = await fx1259Pics();
+      await r4At(380, 760, async function () {
+        await smP2(smIfxScene, async function (v) {
+          const L = v.L('Hi'), list = () => FM.spine.itemEffects(L);
+          /* the order itself: one per base effect first, then the rest; presets before stock effects */
+          const keys = list().map(p => p.key), pre = list().filter(p => p.preset);
+          const lead = [], seenFx = {};
+          (FM.EFFECT_PRESETS || []).forEach(p => { if (!seenFx[p.fx] && pre.some(q => q.preset === p)) { seenFx[p.fx] = 1; lead.push('p:' + p.id); } });
+          if (keys.slice(0, lead.length).join() !== lead.join()) fails.push('the picker opens with ' + keys.slice(0, lead.length).join(', ') + ', want one shipped preset per base effect first: ' + lead.join(', '));
+          const lastPre = keys.map(k => k.indexOf('p:') === 0).lastIndexOf(true), firstStock = keys.findIndex(k => k.indexOf('p:') !== 0);
+          if (firstStock >= 0 && lastPre > firstStock) fails.push('a preset (' + keys[lastPre] + ') comes after the stock effect ' + keys[firstStock]);
+          ['p:s-quake', 'p:s-handheld', 'p:s-hypex', 'p:s-rumble'].forEach(k => { if (keys.indexOf(k) < 0) fails.push('the picker lost ' + k); });
+          /* his own presets lead, in his order */
+          if (P && d0) {
+            Object.defineProperty(P, 'custom', { configurable: true, writable: true, enumerable: d0.enumerable, value: () => [{ id: 'u1259a', fx: 'shake', name: 'My shake' }, { id: 'u1259b', fx: 'blur', name: 'My blur' }] });
+            try { const k2 = list().map(p => p.key); if (k2[0] !== 'p:u1259a' || k2[1] !== 'p:u1259b') fails.push('with two presets of his own the picker opens with ' + k2.slice(0, 3).join(', ') + ', want his two first, in his order'); }
+            finally { Object.defineProperty(P, 'custom', d0); }
+          }
+          /* what a person sees: the first five tiles on screen, five different pictures */
+          await smIfxOpen(v, L.id); await r4Settle(250);
+          const tr = document.getElementById('sm-tray').getBoundingClientRect();
+          const first = Array.from(document.querySelectorAll('#sm-tray .sm-fx-tile')).filter(t => { const r = t.getBoundingClientRect(); return r.left >= tr.left - 0.5 && r.right <= tr.right + 0.5; }).slice(0, 5);
+          const pics = first.map(t => { const c = t.querySelector('canvas.sm-fx-th'); return c ? (c._fxPic || '(' + c._fxType + ')') : '(not mounted)'; });
+          if (first.length < 5) fails.push('only ' + first.length + ' tiles lie whole on the first screen at 380');
+          else if (new Set(pics).size !== 5) fails.push('the first screen shows ' + first.map((t, i) => t.textContent + ' [' + pics[i] + ']').join(', ') + ': the same picture more than once');
+        });
+      });
+    } finally { if (put) put(); }
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  /* ═══ RELEASE 13 · #1255 (follow-up 23 Nov, 20:53, clauses 6 and 7) · NO STANDING HINTS ═══
+     His words: "I'm also noticing a pop-up that says tap a clip to split or change its speed. There shouldn't be any explanations like
+     that. We have tutorials for a reason, and there could be a tutorial when the first time you load into the app is, but not, you know,
+     constantly there." Gone: the first-run hint over the bar (Tap a clip to split it or change its speed / Click a clip… · S splits at the
+     line), the PC band's Tap a clip to see its tools and Its tools are below, Look's Let go to see it, the first arrival's toast (Switch
+     back any time from the ⚙ cog), and Edit lines' tap to type. Kept: what is said after his action (a refusal, what a step did). */
+  test('1255 hints · at 380 and 1280 on a device that never saw a hint, with clips and nothing selected nothing floats above the bar, no line on screen tells him to tap or click a clip, the PC band holds no how-to words, and the bar does not move from there to a selected clip and back (CONTROL: Delete on a locked clip still floats its refusal above the bar)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [], HOW = /\b(tap|click) a clip\b|its tools are below|S splits at the line/i;
+    for (const width of [380, 1280]) {
+      await r4At(width, width > 700 ? 800 : 760, async function () {
+        await smHintKeep(null, async function () {
+          await smP2(smClips3, async function (v) {
+            const at = width + ' px: ';
+            await smHintFresh(v); await r4Settle(150);
+            const h = document.querySelector('#sm-bar > .sm-hint');
+            if (r4Shown(h)) fails.push(at + 'a hint floats above the bar: “' + h.textContent.trim() + '”');
+            const said = (document.body.innerText.match(HOW) || [])[0];
+            if (said) fails.push(at + 'with nothing selected the screen says “' + said + '…”');
+            if (width > 700) {
+              const bh = document.querySelector('#inspector .sm-band-hint');
+              if (!bh) fails.push('CONTROL ' + at + 'the band’s line is not drawn');
+              else if (bh.textContent) fails.push(at + 'the band says “' + bh.textContent + '” with nothing selected');
+            }
+            const bar0 = r4Box(r4Bar()), tl0 = r4Box(document.getElementById('sm-timeline'));
+            /* a tap anywhere used to take the hint away and write fm.sm.hint: nothing is written now */
+            document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, cancelable: true, pointerId: 51, pointerType: 'touch', isPrimary: true, buttons: 1, clientX: 5, clientY: 5 }));
+            document.body.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, cancelable: true, pointerId: 51, pointerType: 'touch', isPrimary: true, clientX: 5, clientY: 5 }));
+            FM.selectLayer(v.L('B').id); await r4Settle(150);
+            const said2 = (document.body.innerText.match(HOW) || [])[0];
+            if (said2) fails.push(at + 'with Clip 2 selected the screen says “' + said2 + '…”');
+            FM.selectLayer(null); await r4Settle(150);
+            if (r4Moved(bar0, r4Box(r4Bar())) || r4Moved(tl0, r4Box(document.getElementById('sm-timeline')))) fails.push(at + 'the bar or the timeline moved from nothing selected, to Clip 2 and back: bar ' + r4Txt(bar0) + ' → ' + r4Txt(r4Box(r4Bar())));
+            let flag = null; try { flag = localStorage.getItem('fm.sm.hint'); } catch (e) {}
+            if (flag !== null) fails.push(at + 'fm.sm.hint was written (' + JSON.stringify(flag) + ')');
+            /* CONTROL: a refusal after his own press still floats its line just above the bar */
+            v.L('B').locked = true;
+            try {
+              FM.selectLayer(v.L('B').id); await r4Settle(150);
+              const del = smTool('delete');
+              if (!del) throw new Error('CONTROL ' + at + 'Clip 2’s tray has no Delete');
+              del.click(); await v.idle(); await r4Settle(100);
+              const s = document.getElementById('sm-say'), sr = s.getBoundingClientRect(), top = r4Bar().getBoundingClientRect().top;
+              if (!/locked/.test(v.say()) || !s.classList.contains('sm-saying') || Math.abs(sr.bottom - top) > 1) fails.push('CONTROL ' + at + 'Delete on the locked clip said “' + v.say() + '”' + (s.classList.contains('sm-saying') ? ' at ' + Math.round(sr.bottom) + ' (the bar’s top ' + Math.round(top) + ')' : ' nowhere on screen') + ', want its refusal floating just above the bar');
+            } finally { v.L('B').locked = false; FM.simpleTimeline.clearSay(); }
+          });
+        });
+      });
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1255 hints · arriving in Simple from Full on a device that never switched raises no toast explaining the cog (CONTROL: the switch happened and the screen reader line says Simple editor)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const d0 = Object.getOwnPropertyDescriptor(FM, 'toast'), real = FM.toast, said = [];
+    await smP2(smClips3, async function (v) {
+      try { localStorage.removeItem('fm.editor.hint'); } catch (e) {}
+      if (FM.editor.mode() !== 'full') FM.editor.apply('full', { force: true, quiet: true });
+      Object.defineProperty(FM, 'toast', { configurable: true, writable: true, enumerable: d0 ? d0.enumerable : true, value: function (msg) { said.push(String(msg)); return real.apply(this, arguments); } });
+      try {
+        FM.editor.set('simple'); await r4Settle(300);
+      } finally { if (d0) Object.defineProperty(FM, 'toast', d0); else FM.toast = real; }
+      const live = (document.getElementById('ed-live') || {}).textContent || '';
+      if (FM.editor.mode() !== 'simple' || live !== 'Simple editor') throw new Error('CONTROL: the switch left the editor in ' + FM.editor.mode() + ' and the screen reader line says “' + live + '”, want Simple and Simple editor');
+      if (said.length) throw new Error('arriving in Simple raised ' + said.map(t => '“' + t + '”').join(', ') + ', want no toast');
+      let flag = null; try { flag = localStorage.getItem('fm.editor.hint'); } catch (e) {}
+      if (flag !== null) throw new Error('arriving in Simple wrote fm.editor.hint (' + JSON.stringify(flag) + '): nothing is shown, so nothing is remembered');
+    }, { full: true });
+  });
+
+  test('1255 hints · Simple’s words file no longer holds the first-run hint, the band’s how-to words, Let go to see it or the first arrival’s toast, and an empty caption line reads Empty (CONTROL: the file is read: it names Split and Add a line here)', { item: '980' }, function () {
+    const w = FM.spineWords || {}, t = w.tools || {}, e = w.editor || {};
+    if (t.split !== 'Split' || t.capAddLine !== 'Add a line here') throw new Error('CONTROL: the words file does not name Split and Add a line here, so it is not the one read here');
+    const left = ['firstHint', 'firstHintPc', 'bandHint', 'bandHintSel', 'lookLetGo'].filter(k => k in t).concat('firstSimple' in e ? ['editor.firstSimple'] : []);
+    if (left.length) throw new Error('the words file still holds ' + left.map(k => k + ' (“' + (t[k] || e[k.replace('editor.', '')]) + '”)').join(', '));
+    if (t.capEmpty !== 'Empty') throw new Error('an empty caption line reads “' + t.capEmpty + '”, want Empty');
+  });
+
+  /* ═══ RELEASE 13 · #1258 CLAUSE 2 · THE EDITOR CHOICE ON NEW PROJECT ═══
+     His words (23 Nov): "there should be an option when you press create, like when you're in the create menu and creating a new project,
+     there should be an option to, you know, decide whether you're going to use simple editor or not." The plan's K3 (recommended): an
+     Editor switch, Simple | Full, beside Create, put into Home's New project dialog by js/editor-mode.js when it opens, starting at what a
+     new project would get (FM.editor.forNew); a tap writes fm.editor.last as the cog's switch would, and Create hands it to the new card.
+     Driven through the real doors (the + and Create); every project made is removed and fm.editor.last, fm.newproj, the editor and Home
+     are put back (sm2aKeep / sm2aPut). */
+  const np1258Sw = () => document.querySelector('#hm-dialog .hm-dlg-card > .sm-np-ed');
+  const np1258On = () => { const g = np1258Sw(), b = g && g.querySelector('button[aria-checked="true"]'); return b ? b.dataset.ed : ''; };
+  async function np1258Open(last, what) {
+    if (last !== undefined) sm2aLsPut('fm.editor.last', last);   /* undefined: open again on whatever is stored now */
+    if (!FM.home.isOpen()) { FM.home.open(); await sleep(900); }
+    FM.home._render('projects'); await sleep(250);
+    const dlg = document.getElementById('hm-dialog');
+    document.getElementById('hm-new').click();
+    await hcUntil('the New project dialog (' + what + ')', function () { return !dlg.classList.contains('hidden'); }, 4000);
+    await sleep(700);
+    return dlg;
+  }
+  async function np1258Create(st, what) {
+    const before = FM.storage.openProjectId(), n0 = FM.projects.list().length;
+    document.getElementById('hm-create').click();
+    const pid = await sm2aLanded(before, 'the project Create made to open (' + what + ')');
+    st.made.push(pid);
+    const r = sm2aRead(pid);
+    r.made = FM.projects.list().length - n0;
+    return r;
+  }
+  test('1258 · New project at 380 and 1280 shows an Editor switch, Simple or Full, in a row of its own just above Cancel and Create, both sides pressable, starting on what a new project would get: Full on a device that never switched, Simple once fm.editor.last is simple (CONTROL: FM.editor.forNew says the same each time)', { item: '980', budgetMs: 120000 }, async function () {
+    const st = sm2aKeep(), fails = [];
+    try {
+      if (st.wasHome) FM.home.close();
+      await sleep(100);
+      for (const width of [380, 1280]) {
+        const run = async function () {
+          for (const last of [null, 'simple']) {
+            const at = width + ' px, fm.editor.last ' + (last || 'unset') + ': ';
+            const dlg = await np1258Open(last, at);
+            try {
+              const want = FM.editor.forNew();
+              if (want !== (last === 'simple' ? 'simple' : 'full')) throw new Error('CONTROL ' + at + 'FM.editor.forNew() says ' + want);
+              const g = np1258Sw();
+              if (!g) { fails.push(at + 'New project has no Editor switch by Create'); continue; }
+              const rg = g.querySelector('[role="radiogroup"]');
+              if (!rg || !/Editor/.test(rg.getAttribute('aria-label') || '') || !/Editor/.test(g.textContent)) fails.push(at + 'the switch is not a radiogroup named Editor with the name Editor beside it');
+              const ar = dlg.querySelector('.hm-dlg-actions').getBoundingClientRect(), gr0 = g.getBoundingClientRect();
+              if (gr0.bottom > ar.top + 0.5) fails.push(at + 'the switch does not sit above Cancel and Create');
+              if (new Set(Array.from(dlg.querySelectorAll('.hm-dlg-actions > button')).map(b => Math.round(b.getBoundingClientRect().top))).size !== 1) fails.push(at + 'Cancel and Create no longer share one line');
+              const sides = Array.from(g.querySelectorAll('button[data-ed]')).map(b => b.dataset.ed + ':' + b.textContent).join(',');
+              if (sides !== 'simple:Simple,full:Full') fails.push(at + 'the switch offers ' + sides + ', want Simple then Full');
+              if (np1258On() !== want) fails.push(at + 'the switch starts on ' + (np1258On() || 'nothing') + ', want ' + want + ' (what a new project gets)');
+              g.querySelectorAll('button[data-ed]').forEach(b => { if (!r4Hits(b)) fails.push(at + b.textContent + ' is not pressable where it is'); });
+              const cr = document.getElementById('hm-create');
+              if (!r4Hits(cr)) fails.push(at + 'Create is not pressable with the switch beside it');
+              const card = dlg.querySelector('.hm-dlg-card').getBoundingClientRect(), gr = g.getBoundingClientRect();
+              if (gr.left < card.left - 0.5 || gr.right > card.right + 0.5) fails.push(at + 'the switch runs out of the card (' + Math.round(gr.left) + '–' + Math.round(gr.right) + ' in ' + Math.round(card.left) + '–' + Math.round(card.right) + ')');
+              if (sm2aLs('fm.editor.last') !== last) fails.push(at + 'opening New project wrote fm.editor.last (' + sm2aLs('fm.editor.last') + ')');
+            } finally { document.getElementById('hm-cancel').click(); await sleep(250); }
+          }
+        };
+        if (width > 700) await atWideWidth(run, width); else await atPhoneWidth(run, width);
+      }
+    } finally { await sm2aPut(st); }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1258 · at 380 with fm.editor.last full a tap on Simple in New project and then Create opens the new project in Simple, its card says simple and fm.editor.last is simple (CONTROL: Create made exactly one project and opened it)', { item: '980', budgetMs: 90000 }, async function () {
+    const st = sm2aKeep(), fails = [];
+    try {
+      if (st.wasHome) FM.home.close();
+      await sleep(100);
+      if (FM.editor.mode() !== 'full') FM.editor.apply('full', { force: true, quiet: true });
+      await atPhoneWidth(async function () {
+        await np1258Open('full', 'last full');
+        const g = np1258Sw(), b = g && g.querySelector('button[data-ed="simple"]');
+        if (!b) throw new Error('New project has no Editor switch with a Simple side');
+        if (np1258On() !== 'full') fails.push('the switch starts on ' + np1258On() + ', want Full');
+        b.click(); await sleep(120);
+        if (np1258On() !== 'simple') fails.push('after the tap the switch shows ' + np1258On() + ', want Simple');
+        /* review R13-2: the tap only chooses; Create writes it */
+        if (sm2aLs('fm.editor.last') !== 'full') fails.push('the tap alone, before Create, changed fm.editor.last to ' + sm2aLs('fm.editor.last') + ' (want it left full until Create)');
+        const r = await np1258Create(st, 'Simple picked');
+        if (r.made !== 1 || !r.card) throw new Error('CONTROL: Create made ' + r.made + ' project(s) (card ' + (r.card ? 'found' : 'missing') + ')');
+        if (r.mode !== 'simple' || !r.cls) fails.push('the new project opened in ' + r.mode + ', want Simple');
+        if (r.ed !== 'simple') fails.push('the new project’s card says editor ' + r.ed + ', want simple');
+        if (r.last !== 'simple') fails.push('after Create fm.editor.last is ' + r.last + ', want simple');
+      }, 380);
+    } finally { await sm2aPut(st); }
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  /* Review R13-2: a tap on Simple and then Cancel wrote fm.editor.last on the tap, so the next New project (and a template's New
+     project from template, which reads the same forNew()) opened in Simple although he had cancelled. A GUARD more than a proof
+     (review R13-4): on the code before #1258 clause 2 there is no switch, so there it stops at its CONTROL, and its untouched half
+     held then too; its Cancel half has a red of its own sentence only on the code that wrote on the tap. prove.sh may read it as
+     having no red against the release before: that is expected, not a dead test (its mutations are in the release's report). */
+  test('1258 · at 380 an untouched Editor switch, or a tap on Simple and then Cancel, leaves fm.editor.last as it was: unset on a device that never switched and full after Full, New project opens again on Full and the project opens in Full (CONTROL: the switch was on show each time and Create made one project)', { item: '980', budgetMs: 120000 }, async function () {
+    const st = sm2aKeep(), fails = [];
+    try {
+      if (st.wasHome) FM.home.close();
+      await sleep(100);
+      if (FM.editor.mode() !== 'full') FM.editor.apply('full', { force: true, quiet: true });
+      await atPhoneWidth(async function () {
+        for (const last of [null, 'full']) {
+          const at = 'fm.editor.last ' + (last || 'unset') + ': ';
+          await np1258Open(last, at + 'to cancel');
+          const g0 = np1258Sw(), simple = g0 && g0.querySelector('button[data-ed="simple"]');
+          if (!simple || !r4Shown(g0)) throw new Error('CONTROL ' + at + 'New project shows no Editor switch with a Simple side, so a cancelled pick is not measured');
+          simple.click(); await sleep(120);
+          if (np1258On() !== 'simple') throw new Error('CONTROL ' + at + 'a tap on Simple left the switch on ' + np1258On());
+          document.getElementById('hm-cancel').click(); await sleep(300);
+          if (sm2aLs('fm.editor.last') !== last) fails.push(at + 'a tap on Simple and then Cancel left fm.editor.last ' + JSON.stringify(sm2aLs('fm.editor.last')) + ', want ' + JSON.stringify(last));
+          if (FM.editor.forNew() !== 'full') fails.push(at + 'after Cancel a new project would open in ' + FM.editor.forNew() + ', want Full');
+          await np1258Open(undefined, at + 'again after Cancel');
+          const g = np1258Sw();
+          if (!g || !r4Shown(g)) throw new Error('CONTROL ' + at + 'New project shows no Editor switch, so an untouched one is not measured');
+          if (np1258On() !== 'full') fails.push(at + 'the switch starts on ' + np1258On() + ', want Full');
+          const r = await np1258Create(st, at);
+          if (r.made !== 1 || !r.card) throw new Error('CONTROL ' + at + 'Create made ' + r.made + ' project(s)');
+          if (r.last !== last) fails.push(at + 'an untouched switch and Create left fm.editor.last ' + JSON.stringify(r.last) + ', want ' + JSON.stringify(last));
+          if (r.mode !== 'full' || r.ed !== '(none)') fails.push(at + 'the new project opened in ' + r.mode + ' with card editor ' + r.ed + ', want Full and today’s card');
+        }
+      }, 380);
+    } finally { await sm2aPut(st); }
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  /* ═══ RELEASE 13 · #1261 · SIMPLE'S EXPORT, MORE FRAME RATES ═══
+     His words (23 Nov): "The simple export panel is honestly probably too simple. Like, you only have two choices for frames. That's not
+     enough. Like, it should stay simple like that, but it should still have more options." Smoothness offers every rate Full's Export
+     offers (its own list, #exp-fps), in the same row of buttons, the project's own marked, and the rate picked is the one the exporter is
+     handed. FM.exporter.run is stubbed to record what it is given (r12Mem puts his last pick aside and back). */
+  test('1261 · at 380 Simple’s Smoothness is 30 · 60 · 120 and Custom, each pressable and a finger wide: a 30 fps project opens on 30, marked as its own, with the fourth button reading Custom; Custom asks for a number on the phone’s number pad, takes 48, shows it and Save video hands 48 to the export; 0 and 500 are refused with a line and change nothing; a 24 fps project opens with 24 on the fourth button, picked and marked as its own, one press on 60 and one on the 24 button go there and back with no question, and its own 24 is not kept as his pick for the next project (CONTROL: each of the three rates picked reaches the export call)', { item: '980', budgetMs: 180000 }, async function () {
+    smNeedP2();
+    const ex = FM.exporter, run0 = ex.run, put = r12Mem(), fails = [];
+    let got = null;
+    ex.run = async o => { got = o; };
+    const askUp = () => { const s = document.getElementById('fm-ask'); return !!(s && !s.classList.contains('hidden')); };
+    const askIn = () => document.querySelector('#fm-ask .fm-ask-input:not(.hidden)');
+    const askNo = async () => { if (askUp()) { document.querySelector('#fm-ask .fm-ask-cancel').click(); await r4Settle(100); } };
+    const answer = async (text, v) => { const i = askIn(); if (!i) throw new Error('setup: the question has no field'); i.value = text; document.querySelector('#fm-ask .fm-ask-ok').click(); await v.sleep(60); await r4Settle(120); };
+    const custom = () => r12Row('fps').filter(b => b.dataset.exp === 'fps-custom')[0];
+    try {
+      await r4At(380, 800, async function () {
+        await smP2((W, H) => smClips3(W, H), async function (v) {
+          try { localStorage.removeItem('fm.sm.export'); } catch (e) {}
+          const open = async () => { if (!r12Box()) { r12Btn().click(); await r4Settle(300); } return r12Box(); };
+          if (!(await open())) throw new Error('setup: Export opened no panel');
+          if (r12Words('fps') !== '30 fps, 60 fps, 120 fps, Custom') fails.push('Smoothness offers ' + r12Words('fps') + ', want 30, 60, 120 and Custom — his words: “Just do 30, 60, 120 or custom”');
+          if (r12On('fps') !== '30 fps') throw new Error('CONTROL: on a 30 fps project Smoothness opens on ' + r12On('fps') + ', want the project’s own 30 · ' + fails.join(' · '));
+          const own = r12Row('fps').filter(b => b.classList.contains('sm-exp-own'));
+          if (own.length !== 1 || own[0].textContent !== '30' || !/own/.test(own[0].getAttribute('aria-label') || '')) fails.push('the rate marked as the project’s own is ' + (own.map(b => b.textContent + ' (“' + b.getAttribute('aria-label') + '”)').join(', ') || 'none') + ', want 30 alone, named as its own');
+          r12Row('fps').forEach(b => { const wd = b.getBoundingClientRect().width; if (wd < 44 || !r4Hits(b)) fails.push(r12Face('fps', b) + ' is ' + Math.round(wd) + ' px wide' + (r4Hits(b) ? '' : ' and not pressable') + ', under a finger’s 44'); });
+          /* CONTROL: each of the three reaches the export call */
+          for (const f of [60, 120, 30]) {
+            if (!(await open())) throw new Error('setup: Export did not open again for ' + f + ' fps');
+            const b = r12Row('fps').find(x => x.dataset.exp === 'fps-' + f);
+            if (!b) throw new Error('CONTROL: no ' + f + ' fps button · ' + fails.join(' · '));
+            b.click(); await r4Settle(60);
+            if (r12On('fps') !== f + ' fps') fails.push('pressing ' + f + ' leaves ' + r12On('fps') + ' picked');
+            got = null;
+            r12Box().querySelector('.sm-exp-go').click();
+            for (let i = 0; i < 60 && !got; i++) await v.sleep(20);
+            if (!got || got.fps !== f) throw new Error('CONTROL: Save video with ' + f + ' fps picked ' + (got ? 'exported at ' + got.fps + ' fps' : 'started no export') + ' · ' + fails.join(' · '));
+            await r4Settle(150);
+          }
+          /* Custom: a question on the number pad; 500 and 0 are refused; 48 is taken */
+          if (!(await open())) throw new Error('setup: Export did not open again for Custom');
+          if (!custom() || custom().textContent !== 'Custom') fails.push('on a 30 fps project the fourth button reads “' + (custom() ? custom().textContent : 'nothing') + '”, want Custom');
+          else {
+            custom().click(); await r4Settle(200);
+            if (!askUp()) fails.push('a press on Custom asked nothing');
+            else {
+              const i = askIn();
+              if (!i || (i.getAttribute('inputmode') || '') !== 'numeric') fails.push('the question’s field asks for the ' + ((i && i.getAttribute('inputmode')) || 'letter') + ' keyboard, want the digits pad (inputmode numeric)');
+              await answer('500', v); await askNo();
+              if (r12On('fps') !== '30 fps' || custom().textContent !== 'Custom') fails.push('500 typed into Custom left “' + r12On('fps') + '” picked and the button reading “' + custom().textContent + '”, want nothing changed (30 fps, Custom)');
+              if (!/1 to 120/.test(v.say())) fails.push('500 was refused with “' + v.say() + '”, want a line that says 1 to 120');
+              custom().click(); await r4Settle(200);
+              await answer('0', v); await askNo();
+              if (r12On('fps') !== '30 fps') fails.push('0 typed into Custom left “' + r12On('fps') + '” picked, want 30 fps still');
+              custom().click(); await r4Settle(200);
+              await answer('47.6', v);   /* whole frames a second: 47.6 is taken as 48 */
+              if (askUp()) { fails.push('the question stayed up after 48'); await askNo(); }
+              if (r12On('fps') !== '48 fps' || custom().textContent !== '48') fails.push('47.6 typed into Custom (48 in whole frames) leaves “' + r12On('fps') + '” picked and the button reading “' + custom().textContent + '”, want 48 on the button, picked');
+              got = null;
+              r12Box().querySelector('.sm-exp-go').click();
+              for (let k = 0; k < 60 && !got; k++) await v.sleep(20);
+              if (!got || got.fps !== 48) fails.push('Save video with 48 on Custom ' + (got ? 'exported at ' + got.fps + ' fps' : 'started no export') + ', want 48');
+              await r4Settle(150);
+              /* the question box's field goes back to letters for every other question */
+              const done = FM.ask({ title: 'A name', input: { value: 'a' } }); await v.sleep(40);
+              const i2 = askIn();
+              if (i2 && i2.hasAttribute('inputmode')) fails.push('the next question (a name) still asks for the number pad');
+              await askNo(); await done; await v.sleep(30);
+            }
+          }
+          FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
+        }, { W: 1920, H: 1080 });
+        /* a 24 fps project: its own rate is on the fourth button, one press away after another pick, and a second press asks */
+        await smP2((W, H) => smClips3(W, H), async function (v) {
+          try { localStorage.removeItem('fm.sm.export'); } catch (e) {}
+          r12Btn().click(); await r4Settle(300);
+          if (!r12Box()) throw new Error('setup: Export opened no panel on the 24 fps project');
+          if (r12Words('fps') !== '30 fps, 60 fps, 120 fps, 24 fps' || r12On('fps') !== '24 fps') fails.push('a 24 fps project’s Smoothness reads “' + r12Words('fps') + '” with “' + r12On('fps') + '” picked, want 30, 60, 120 and its own 24 on the fourth button, picked');
+          const c = custom();
+          if (!c) throw new Error('setup: the 24 fps project’s row has no fourth button · ' + fails.join(' · '));
+          if (!c.classList.contains('sm-exp-own') || !/own/.test(c.getAttribute('aria-label') || '')) fails.push('the 24 on the fourth button is not marked and named as the project’s own (“' + c.getAttribute('aria-label') + '”)');
+          r12Row('fps').forEach(b => { const wd = b.getBoundingClientRect().width; if (wd < 44 || !r4Hits(b)) fails.push('24 fps project: ' + r12Face('fps', b) + ' is ' + Math.round(wd) + ' px wide' + (r4Hits(b) ? '' : ' and not pressable') + ', under a finger’s 44'); });
+          r12Row('fps').find(x => x.dataset.exp === 'fps-60').click(); await r4Settle(80);
+          if (r12On('fps') !== '60 fps' || custom().textContent !== '24') fails.push('after 60 the row has “' + r12On('fps') + '” picked and the fourth button reads “' + custom().textContent + '”, want 60 fps with 24 still one press away');
+          custom().click(); await r4Settle(150);
+          if (askUp()) { fails.push('a press on the 24 button, not picked, asked a question instead of going back to 24'); await askNo(); }
+          else if (r12On('fps') !== '24 fps') fails.push('a press on the 24 button left “' + r12On('fps') + '” picked');
+          custom().click(); await r4Settle(200);
+          if (!askUp()) fails.push('a second press on the 24 button, now picked, did not ask for another rate');
+          await askNo();
+          FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
+        }, { W: 1920, H: 1080, fps: 24 });
+        /* a rate that was the PROJECT's, not his press, is not kept as his last pick: a 24 fps project saved at its own 24, then a
+           30 fps project, which must open on 30 with the fourth button reading Custom */
+        await smP2((W, H) => smClips3(W, H), async function (v) {
+          try { localStorage.removeItem('fm.sm.export'); } catch (e) {}
+          r12Btn().click(); await r4Settle(300);
+          if (!r12Box() || r12On('fps') !== '24 fps') throw new Error('setup: the 24 fps project’s Export did not open on its own 24 (“' + r12On('fps') + '”)');
+          got = null;
+          r12Box().querySelector('.sm-exp-go').click();
+          for (let k = 0; k < 60 && !got; k++) await v.sleep(20);
+          if (!got || got.fps !== 24) throw new Error('CONTROL: Save video on the 24 fps project ' + (got ? 'exported at ' + got.fps + ' fps' : 'started no export') + ', want its own 24');
+          await r4Settle(150);
+          let mem = null; try { mem = JSON.parse(localStorage.getItem('fm.sm.export') || 'null'); } catch (e) {}
+          if (mem && mem.fps) fails.push('a Save at the project’s own 24 was kept as his pick (' + JSON.stringify(mem) + '): the next project would open on 24');
+          FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
+        }, { W: 1920, H: 1080, fps: 24 });
+        await smP2((W, H) => smClips3(W, H), async function (v) {
+          r12Btn().click(); await r4Settle(300);
+          if (!r12Box()) throw new Error('setup: Export opened no panel on the 30 fps project that followed');
+          if (r12On('fps') !== '30 fps' || !custom() || custom().textContent !== 'Custom') fails.push('after a 24 fps project saved at its own rate, a 30 fps project opens with “' + r12On('fps') + '” picked and the fourth button reading “' + (custom() ? custom().textContent : 'nothing') + '”, want 30 fps and Custom');
+          FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
+        }, { W: 1920, H: 1080 });
+      });
+    } finally { ex.run = run0; put(); try { if (FM.ask.isOpen()) document.querySelector('#fm-ask .fm-ask-cancel').click(); } catch (e) {} }
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
   });
 
   /* ═══ #1253 · THE DRAWN EFFECT PICTURES IN THE APP'S EFFECT MENUS ═══

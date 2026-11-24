@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 24 Nov at v18.51
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Nov at v18.52
 >
-> **State:** v18.51 — **the Assistant does everything now, and three Home fixes from your big list.** The AI Scene button is gone; the Assistant is called Ask & edit and builds a whole scene in the chat, with Stop and one Undo (F2). On your phone its panel stops at the Add menu's line, also while you type (F3): **please try typing in it once on your iPhone**, that case could only be tested with a stand-in. On Templates and Elements the + card builds from four shapes without explaining itself (H3). The Tutorials tab keeps the big + (H4). A profile photo can be framed inside a circle, and reframed later (G5). **Two small picks:** New project's Custom tile still says "Auto adjusts" because you asked for it once; say if it should go. And the Settings fixes are built but not out: their aspect chips carry small TikTok, Instagram, YouTube and Facebook marks, as you asked; the plan suggested plain words because they are other companies' marks. **Still yours to do:** take down the old v2.83 copy in your other repo (Claude-game-2 → the FreeMotion folder → ••• → Delete directory → Commit changes). **From you, most useful first:** **open FreeMotion cold from your Home Screen on your iPhone and say if the intro still lags, and if an empty project's clapper lid still gets cut off as it lifts (#1231, #1232)**; play a project on your iPhone where a clip has an effect on its sound, for a minute, then paste Settings → Reports → Your last playback (#663); export something short with sound on your iPhone, save it and play it in Photos: is there sound? (#215); open a project on your iPhone and paste Settings → Reports → Your last project open, or say it is smooth (#508); if a video has landed with no picture, paste Settings → Reports → A clip with no picture (#129); play a slideshow of about 20 photos once and say if the app reloads (#1057); and go through the 26 Sep question page in your other Claude account, or say it is out of date (#956). **One question that had gone missing since August:** should the finished requests move out of this file into a second one, or stay here? I would leave the file whole (#352).
+> **State:** v18.52 — **Four of your notes about the Simple editor.** Every effect in Simple now shows its own picture, square and bigger, and the first ones you see are all different. The "tap a clip to split or change its speed" pop-up is gone, with the other how-to lines Simple showed by itself. New project has an Editor row, Simple or Full, just above Create. Simple's Export offers 30, 60, 120 or Custom frames a second, and always 720p, 1080p and 4K: it opens on your project's own size, and a bigger one is an enlargement you press yourself. And the AI button you asked for: Simple's bottom row now starts with Ask & edit. Volume in Simple goes up to ten times now (the right half of its slider runs from 100 % to 1000 %). **One pick for you:** what else Simple's Export should offer. I would add one row, Video · GIF · Sound; say if you want something else. Still to come from the same note: the Full editor's own how-to lines (Drag to crop and a few more). **Still yours to do:** take down the old v2.83 copy in your other repo (Claude-game-2 → the FreeMotion folder → ••• → Delete directory → Commit changes). **From you, most useful first:** **open FreeMotion cold from your Home Screen on your iPhone and say if the intro still lags, and if an empty project's clapper lid still gets cut off as it lifts (#1231, #1232)**; play a project on your iPhone where a clip has an effect on its sound, for a minute, then paste Settings → Reports → Your last playback (#663); export something short with sound on your iPhone, save it and play it in Photos: is there sound? (#215); open a project on your iPhone and paste Settings → Reports → Your last project open, or say it is smooth (#508); if a video has landed with no picture, paste Settings → Reports → A clip with no picture (#129); play a slideshow of about 20 photos once and say if the app reloads (#1057); and go through the 26 Sep question page in your other Claude account, or say it is out of date (#956). **One question that had gone missing since August:** should the finished requests move out of this file into a second one, or stay here? I would leave the file whole (#352).
+>
+> v18.51 — **the Assistant does everything now, and three Home fixes from your big list.** The AI Scene button is gone; the Assistant is called Ask & edit and builds a whole scene in the chat, with Stop and one Undo (F2). On your phone its panel stops at the Add menu's line, also while you type (F3): **please try typing in it once on your iPhone**, that case could only be tested with a stand-in. On Templates and Elements the + card builds from four shapes without explaining itself (H3). The Tutorials tab keeps the big + (H4). A profile photo can be framed inside a circle, and reframed later (G5). **Two small picks:** New project's Custom tile still says "Auto adjusts" because you asked for it once; say if it should go. And the Settings fixes are built but not out: their aspect chips carry small TikTok, Instagram, YouTube and Facebook marks, as you asked; the plan suggested plain words because they are other companies' marks.
 >
 > v18.50 — **four more Full-editor fixes from your big list, and new projects open on 60 fps.** Tap to add a layer: the dashed bar itself grows into the Add menu (G8). Outline & Shadows opens one feature at a time, with a back arrow, an on/off switch and the five pictures along the bottom (F7). Filters opens tall from Add effect and small from the Effects card, and grows when you swipe (F9). Every effects menu on your phone stops at the play row (F10). New project opens on 60 fps; your phone remembered 30, so it switches to 60 once and then remembers whatever you pick. **One question:** the Simple editor's Style → Outline & Shadows now opens the same one-feature pages, because both editors share that panel. I would keep it; say if you want Simple held on the old card. **Still waiting for your eyes from v18.49:** Settings → Appearance → Sharp top buttons (does it take the blur off the top buttons?), and whether the top still glitches when a project opens.
 >
@@ -35093,6 +35095,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **v18.44 (19 Nov): R's release 8b shipped** — the first part of #1243 S33: Motion blur and Smooth skin beside Opacity, and Quieter background, Sound styles and Clear voice in a sound group before Delete (the details are in #1243's note of the same day). Full measured unchanged (the lock run passed). Next in R's order: release 10 (Slide).
       📍 **v18.45 (19 Nov): R's release 10 shipped** — #1243 S27, Slide: a button in a video clip's row that lets a clip play another part of its video without moving or resizing it (the details are in #1243's note of the same day). Full measured unchanged (the lock run passed). Next in R's order: release 12 (the export menu).
       📍 **v18.46 (20 Nov): R's release 12 shipped** — #1243 S6, Simple's export menu: a card with a picture, the length, Quality, Smoothness, the size and Save video (the details are in #1243's note of the same day). Full measured unchanged (the lock run passed). R's first chain (8, 8b, 10, 12) is done.
+      📍 **v18.52 (24 Nov): Simple release 13 shipped** — #1259 (each effect its own picture), #1258 clause 2 (the Editor row in New project), #1261 (30, 60, 120 or Custom frames a second in Export, and 4K always on offer), Simple's part of his 20:53 note under #1255 (no standing how-to lines, no emoji) and #1243 S14 (Ask & edit, the first button of the bottom row). Full measured unchanged (the lock run passed). Details are in those entries' notes of the same day.
 - [x] **981 — Empty project: the add menu pops up STRAIGHT AWAY when he taps “Tap here to start creating” (no wait — the menu is see-through, so the animation still shows underneath), and the glowing white border lines appear on the add menu's edges as it opens** (29 Sep, in the builder chat — his words)
       **His words (verbatim):** *"I actually have a problem with every animation when you press on the tap here to start creating area, that being the menu takes too long to pop up - since the menu is clear anyways, it doesnt matter if it pops up straight away as you can see the animations underneath. Maybe when u fix this make sure the white lines on the borders that glow, appear on the edges of the add menu as it loads up"*
       Clauses (his):
@@ -39375,7 +39378,7 @@ re-opened #480, which I had marked done and had not fixed.
       - S11 🐞 [ ] 🛡 v18.32 GUARD (only tiles in view render), cause unmeasured; he can test later whether it freezes again, and a screen recording would help — "my thing is completely glitched right now… stuck on one frame and… nothing is like really working cleanly… And I just added like an effect." (Reproduce: Simple, one project, add an effect from the Effects menu.)
       - S12 ✏️ [x] ✅ v18.42 (Look is on Simple's main row, before Effects, and off every clip's tray; one tap puts a look over the whole video and one Undo takes it off; chips jump to his looks, his favourites and each section of the library) "the look menu is good… it's just not organized at all… the look menu should be what the effects menu is, and you shouldn't have the look menu on each layer… you want to press add and it goes over your entire project immediately… consistent color correction over your project."
       - S13 [ ] "there is literally like not really any effects at all. Like CapCut has like a laundry list… you just basically call it filters… you just gave me a notification saying it's done, but it's definitely not done."
-      - S14 [ ] "There's also no way to use the AI… a button in that bottom row at the start that has like the AI option."
+      - S14 [x] ✅ v18.52 (Ask & edit is the first button of Simple's bottom row; it opens the assistant from the picture's bottom edge on a phone and over the left band on a PC; a view-only friend gets View only) "There's also no way to use the AI… a button in that bottom row at the start that has like the AI option."
       - S15 [x] ✅ v18.39 (the bottom row scrolls like CapCut, every tool 64 px) — "it should be like scrollable. Like don't just keep condensing it, like make it like CapCut where you can scroll it." (the bottom row)
       - S16 🧠 [ ] "CapCut has like a stickers menu… all of the Giphy stickers… if like that's free… that would be great." (Check: GIPHY API terms, key handling — no hardcoded secret, BYOK, local-only app.)
       - S17 🧠 [ ] "in the text menu… you can draw. They also have text templates, text to audio, auto lyrics… if we can, we should."
@@ -39632,7 +39635,7 @@ re-opened #480, which I had marked done and had not fixed.
       **His words (verbatim):** I feel like volume should be able to go up to like 10 times.
 
       **His clauses:**
-      1. [ ] Volume should go up to about ten times (1000%).
+      1. [x] ✅ v18.52 (Simple's Volume goes to 1000 %: the left half of the track is 0 to 100 %, the right half 100 to 1000 %) Volume should go up to about ten times (1000%).
 
       **Facts (read from the app, logger's, not his words):** the Full editor already goes to 1000%: his queue 195, "I want to be able adjust the volume up to like 1000%" (js/inspector.js about line 6322). A limiter at −1.5 dBFS keeps a boosted clip from crackling, in the preview and in the file (js/audio-play.js, js/exporter.js). Simple's Volume row stops at 200% (js/simple-tools.js about line 744: max 200).
 
@@ -40344,6 +40347,7 @@ re-opened #480, which I had marked done and had not fixed.
       5. [ ] "Don't take a shortcut to making it look like that. Do it the proper way."
       6. [ ] Remove pop-ups that explain things, like "tap a clip to split or change its speed". There shouldn't be explanations like that.
       7. [ ] Tutorials exist for that. A tutorial the first time you load the app is fine, but no hints that keep showing.
+      📍 **v18.52 (24 Nov): the Simple editor's part of clauses 6 and 7 shipped; both stay OPEN.** Gone from Simple: the first-run pop-up ("Tap a clip to split it or change its speed"), the PC band's "Tap a clip to see its tools" and "Its tools are below", the first-arrival note about the cog, "Let go to see it", and "tap to type" on an empty caption line. Kept: refusals after his own action, what an action just did, facts about the project, the empty Elements panel's explanation. STILL TO DO, in an ordinary release (they are the Full editor's files): Crop's "Drag to crop", Draw's "Swipe here to move the point", the caption typing sheet's "Empty, tap to type", the empty Templates panel's text, and a sweep of the Full editor for any other line that explains itself unasked. No first-load tutorial was built (his "there could be"). **Clauses 1 and 2 (no emoji), the Simple editor's part:** the overlap chip on a cut wears a drawn warning sign in place of the typed one; Simple has no emoji left. Detect speech (clause 1) and the Full editor's other emoji are built and come in the next ordinary release, so both clauses stay OPEN.
 
       **Logger's notes (not his words):**
       - The emoji is at js/captions.js:555: `el('button', 'btn cap-detect-btn', '🎙 Detect speech')`.
@@ -41445,6 +41449,89 @@ re-opened #480, which I had marked done and had not fixed.
         - nothing ships with a known issue.
       - Tonight's redraws join the list as he picks them.
       📌 **Builder, 24 Nov 16:32:** the 96 follow-ups above are logged word for word, with one change that his own instruction of 24 Nov 15:39 asks for (#1264): where he or the logger named another editing app, the name reads [another app] or [another editor] here, and the logging chat has the words as he said them. They are his answers and picks of 24 Nov from the decisions chat with the logger, 11:53 to 16:31 (they waited in the inbox while v18.51's third ship ran: the tree must not change under a ship). HIS "READY" IS THE LAST OF THEM (16:31): "Yeah, hand it my pics and just whatever as soon as possible. Make sure that it actually does an accurate job. There's no bugs. It's all integrated properly. All of it works. And it's just, done perfectly. No issues. Take as long as it needs to take just to iron out every issue that gets spotted." ORDER OF WORK, his words of 16:29: "I would prefer that your main project thing that you work on next is making sure like all the new looks and stuff I added": this entry is the main project next, and the effects pass (#1263) waits behind it. WHAT HAPPENS NOW: the logger compiles ONE complete picks list (his pick or the recommended option for every surface, the board files, the rules for the whole design, the drawings still due and the questions still open), checked line by line against his own words, and keeps it in tools/design/plans/1255-open-items.md; the builder then plans the integration (the order, the releases, which parts need the Simple editor's lock run) and builds it surface by surface, each compared with its picked board at 380 and on a PC, dark and light, with review agents on every cut, and nothing ships with a known issue (his clauses 2 to 5). Until that list is in hand nothing of the new look is built; tonight's two releases carry only his direct instructions (below). What they change for the builder NOW: (1) 11:53 clause 4, the aspect chips are LOGOS: built as #1243 ST7 on the next ordinary release's branch; (2) 11:53 clause 5, the Simple editor's Outline & Shadows gets its OWN Simple-styled version: the logger draws it and nothing is built before he picks; (3) 11:55 and 11:57, the drag control is the RULER, going much further on a hard swipe and finer than a slider on a slow drag: it is for settings and the Full editor; in the Simple editor he has since picked a slider twice (SSP2 at 14:03, SOP1 at 14:06), so the Simple editor's new sliders (#1243 S19 and S18, on the branch after tonight's Simple release) stay sliders, and the logger raises the ruler-or-slider rule once in the decisions chat; (4) 12:43 and 12:44, the cog is FC3 (on PC a left panel: the list of settings first, then each its own page): #1243's ST6, ST9, the rest of ST1, and ST2, ST3, ST4 are held to be built INTO FC3; (5) 12:21, the Create sheet is K3: #1258 clause 2 ships in today's look first and K3's layout comes with the switch-over; (6) 12:29, "it just looks written by AI": no long dash in new on-screen words from here on (the logger checks every new screen's copy at integration); (7) 12:16 clause 4, animated tutorials are his LATER ask ("we'll get to that another time"): it stays an open clause here so it cannot be lost; (8) 12:07 clause 3: today's app has no "Saved on this device, nothing is uploaded" line (searched index.html, js/ and styles.css on 24 Nov), so that one is the redesign board's only; (9) 13:41, the Detect speech drawing is DS3, his pick ("DS3."): it is DS3 on the next ordinary release's branch; (10) 13:42 and 13:45, the drawn icon set: "the pen could definitely be different. The rest are fine" and "Just like redesign the pen, but actually do a good job": the first drawings of the set replace typed symbols in today's app as a cut of their own on the next ordinary release (the logger's go-ahead, with his veto), no pen is drawn anywhere new, and today's pen stays until he picks; (11) 12:07, 12:12, 12:13 and 14:10, ONE Templates icon, option 1 "Stacked cards", everywhere: built in that same cut (Home's tab, the Add menu's tab and Home's empty mark); (12) 15:26, the camera's paragraphs are behind a "?" that opens the camera lesson; and 15:27 with the logger's 15:43 decisions, the edit-together card carries no small lines and a "?" opens its lesson, "Keep FreeMotion open" is said once when sharing starts on a phone, and Sharing settings' descriptions are in the lesson: all built on the next ordinary release's branch (land/e1a: 8504b0a8, 0af0b9d3, 92433fbf; the logger's block names an earlier id of the same cut). ONE line is kept on the card, the #1090 warning that everyone who joins, viewers too, also gets his notes and reminders: it is a decided privacy fix, the logger has put it to him (keep, recommended, or move it behind the "?"), and it moves only on his word; (13) 15:28, "Auto adjusts" stays under the Custom tile: it is left out of every hint cut; (14) 13:26 then 15:25, the Full editor's text menu is TF2 exactly as drawn, all four tabs: the 13:26 rethink plan is dropped; (15) 13:44, 14:12 and 14:21: on the Simple, Menus and Settings pages anything he did not mention takes the recommended option or stays as it is; (16) 15:30 and 15:35, the fade: he says it is the app's doing. The logger's answer names the three trades in the app's power (the fade, a solid strip, Sharp top) and he is trying Settings › Sharp top buttons, so clause 4 of his first message stays open; (17) 15:29 and 16:29, he cannot find Ask & edit: in the Full editor it is behind + (Add), the Media tab, and in the Simple editor it becomes the first button of the bottom row with tonight's Simple release (#1243 S14); if he still cannot find it after that, its door in the Full editor is the thing to move, and that is a pick for the decisions chat. Follow-ups filed under other entries in the same drain: #1261 (3), #1243 (2), #1262 (1). New entries from the same drain: #1263, #1264. His 11:02 clause (the glitch) is still open, waiting for his eyes on the live version.
+      📥 **Follow-up, via INBOX — 24 Nov 2026, about 22:38 AWST: #1255 the effects panel animation (MO2): the right flow is Effects, then the layer's effects, then Add effect, then the browser**
+      **His words (verbatim):** I'm noticing in MO2 that when it's basically goes from pressing the effects button straight to the effects browser, which it isn't supposed to do that. It's supposed to be you press the effects button and then it takes you to the effects settings area where you've got all of your effects already on that layer, and then you press add effects and then it takes you to the effects menu. But the animation looks good though.
+
+      **His clauses:**
+      1. [ ] MO2 (on the new animation board, page BX) goes from pressing Effects straight to the effects browser. That is wrong.
+      2. [ ] The right flow:
+         - press Effects;
+         - the layer's effects area opens, with every effect already on that layer;
+         - press Add effect;
+         - the effects menu (the browser) opens.
+      3. [ ] The animation itself looks good.
+
+      **Logger's note (not his words):**
+      - Redraw the MO boards (simple4/menus/MO1-3, MO-REC-*) with the right two-step flow, keeping MO2's motion: the panel rises as the canvas shrinks.
+      - The middle step is the inspector's Effects page: his IF2 (Recents in reach) when the layer has no effects yet, the layer's effect list otherwise. Add effect then opens B1r on the phone and B4r on PC.
+      - The same flow applies to whichever MO option he picks. It belongs in the next design gap after his reset.
+      📥 **Follow-up, via INBOX — 24 Nov 2026, about 22:38 AWST: #1255 the PC effects-panel animation still shows the old PC editor he dislikes**
+      **His words (verbatim):** I'm looking at the PC version of the animation now. I know it's probably just because you made this ages ago, but it's still got the old version of the editor that I hate. I think you know that though, and I think you know which one that I liked and how to fix it, so I'm not going to stress that too much.
+
+      **His clauses:**
+      1. [ ] The PC version of the effects-panel animation (simple4/menus/MO-REC-dark-desk and light) still shows the old PC editor, which he dislikes.
+      2. [ ] He trusts the logger to use the PC editor he liked.
+
+      **Logger's note (not his words):** in the MO redraw (his 22:38 note), build every PC board on tonight's combined PC Full editor (pcfull/PCF-*, his 12:46 list: the big white play button, the colourful switch, the detached A2r Add menu, the docked playhead, FT3 opening upward). Keep MO2's motion and use the right flow: Effects, then the layer's effects, then Add effect, then the browser.
+      📥 **Follow-up, via INBOX — 24 Nov 2026, about 22:39 AWST: #1255 the effects-panel animation must work when the project has been moved or zoomed on the canvas**
+      **His words (verbatim):** See, the animations for PC look good, and for mobile, I just hope that you make it actually work when the person has like actually moved the project around on the canvas, because the thing on the canvas is movable. So, you know, just make sure that that actually is all thought of.
+
+      **His clauses:**
+      1. [ ] The PC animations look good.
+      2. [ ] On the phone, the animation (the panel rises, the canvas shrinks) must work when the person has moved the project around on the canvas: the view can be panned and zoomed.
+      3. [ ] Make sure all of that is thought through.
+
+      **Logger's note for the builder (not his words):** build the shrink from the stage's CURRENT pan and zoom, not from a centred default.
+      - Measure the visible picture's rect as it is.
+      - Animate the stage with one transform (FLIP) to the rect the smaller stage will show, keeping the person's framing: the same part of the project stays in view, in proportion.
+      - Commit the real layout at the end.
+      - On close, return to exactly the pan and zoom they had.
+      - Test with the project panned to a corner and zoomed in and out, at 380 and on PC, and with a pinch in progress when Effects is tapped.
+      📥 **Follow-up, via INBOX — 24 Nov 2026, about 22:42 AWST: #1255 his pick for the effects panel's opening motion: MO1**
+      **His words (verbatim):** mo1
+
+      **His clauses:**
+      1. [ ] The effects panel's opening motion: MO1 (simple4/menus/MO1-dark-phone), one smooth move of about 320 ms with a gentle ease-out. The panel rises while the canvas shrinks and moves up in step.
+
+      **Logger's note (not his words):** MO1 with his three notes of 22:38-22:39:
+      - the flow is Effects, then the layer's effects, then Add effect, then the browser;
+      - on PC it is built on the combined PC editor (PCF);
+      - the shrink starts from the canvas's current pan and zoom and puts them back on close.
+      📥 **Follow-up, via INBOX — 24 Nov 2026, about 23:12 AWST: #1255 motion: O2 for the three-dot menu, the same care for every pop-up, and the logger decides the rest**
+      **His words (verbatim):** Honestly, I'm going through it, and every single animation all looks the exact fucking same to me, like it all just pops in. I don't know if that's because you just had another glitch in showing me the animations or what, but honestly, they can all pretty much just be similar anyways. They don't need to be anything too crazy. Like, just do what you think is best, really. I mean, the only one that kind of has some nuance to it that I'm actually interested in picking is like the drop down menus, like when you press on the 3 dots. I like O2, your recommended one. I mean, all the others are very similar, but I just like that one. And I think you should put that sort of level of effort into like all of those drop down, like sort of pop-up ones. Like, they should all be kind of similar, but just good and still thought out. Shouldn't be too much vary between them, and some shouldn't look really boring and bland. Just anything that pops up should, you know, look thought out and good. But you just decide. Honestly, I don't think I want to make any more choices on that. Your scrub options look good as well.
+
+      **His clauses:**
+      1. [ ] On the animation board every animation looks the same to him, as if it just pops in (a display glitch, or not).
+      2. [ ] They can all be similar; nothing too crazy; the logger decides what is best.
+      3. [ ] The three-dot dropdown menu: O2 (the recommended, "pointer first", menus/O2-dark-phone).
+      4. [ ] Give every dropdown and pop-up that level of care: all similar and well thought out, not too varied, none boring or bland.
+      5. [ ] He wants to make no more choices on motion: the logger decides.
+      6. [ ] The scrub row options (S1-S3, the colour scrub row in the layer menu) look good.
+
+      **Logger's note (not his words):** a whole-design MOTION RULE for the builder:
+      - every dropdown, menu and pop-up opens with O2's motion family: the pointer first, then the panel, short and calm, with a reduced-motion fade;
+      - the effects panel uses MO1;
+      - the logger owns any other motion choice; nothing more goes to him.
+      📥 **Follow-up, via INBOX — 24 Nov 2026, about 23:13 AWST: the cut-paper category animations look clean; the intro still stutters on his phone and wants upgraded versions in the new colours [builder: filed under #1255, the new look's intro and category animations; its clause 3 answers #1232's ask: the intro still stutters on his phone]**
+      **His words (verbatim):** I'm looking at the cut paper animations, and they look super clean. Hopefully it actually runs smoothly, because the intro still does not run very smoothly on my phone. Honestly, that intro as well, we could probably do a bunch of different versions of that intro, similar but upgraded. It'll need a redo anyways to fit the color scheme a bit better. But yeah, we could just probably spend a lot of time on polishing that one up.
+
+      **His clauses:**
+      1. [ ] The cut-paper category animations (C2, the effect category buttons) look super clean.
+      2. [ ] They must actually run smoothly in the app.
+      3. [ ] BUG: the app's intro still does not run smoothly on his phone.
+      4. [ ] Make several versions of the intro, similar to today's but upgraded.
+      5. [ ] It needs a redo anyway to fit the new colour scheme.
+      6. [ ] Spend real time polishing it.
+
+      **Logger's plan (not his words):**
+      - BUILDER (bug, clause 3): measure today's intro, his take 13 "Exploded Stack", at a phone's size under a CPU throttle and in the WebKit pass. Find the dropped frames (layout or paint work per frame, filters, large layers) and fix them with transforms and opacity only.
+      - BUILDER (clause 2): the C2 category animations get the same frame budget check when they are built.
+      - LOGGER (clauses 4-6, after his reset, in a design gap):
+        - 3-4 upgraded intros in Cutline, built on take 13 (and the runner-up 14 "Timeline Zoom-Out" as one direction);
+        - each shown MOVING on the board, one recommended;
+        - the 25 takes in tools/design/intro-takes/ are the base and are never deleted.
+      - Part of #1255, since it is the new look.
+      📌 **Builder, 24 Nov 23:23:** the 6 follow-ups above are logged word for word (24 Nov, after the lock run's PASS and before v18.52's ship; new entries: none; other entries: none). They are his direction for the redesign's MOTION, and nothing of them is built yet: the effects panel opens with MO1, through the right flow (Effects, then the layer's effects, then Add effect, then the browser), on a computer on the combined editor, and from the canvas's own pan and zoom, which it gives back on close; every dropdown and pop-up opens in O2's family (the pointer first, then the panel, short and calm, a fade under reduced motion); he makes no more motion choices, the logger decides them. One of them is a BUG for the builder: the intro still stutters on his phone, which answers #1232's ask. To do: measure today's intro at a phone's size under a CPU throttle and in a WebKit pass, find the dropped frames, and fix them with transforms and opacity only; the category animations get the same frame check when they are built. The upgraded intros in the new colours are the logger's to draw.
 - [ ] **1256 — The light Home: the strip under the clock is a little lighter than the page under it, with nothing open and under every dim (hunt MEDIUM #1256)** (21 Nov, found by the review inside v18.48's build of #1255 clause 4; not his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       🔎 **What was measured (v18.48's build, a phone-width run on the laptop):** every top-edge tab on the light Home is the screen's BACKGROUND colour (#920's rule): #fafdff with nothing open, #acb4bb under a dim, #f4f6f9 under Settings. But the page really paints a tint there (#hm-bleed's gradient and the glows of #home-screen::before, which drift) and its dims blur what is under them. Under a dim the real pixels at the top centre read about #94a8b6, 10 to 24 levels darker than the tab. With nothing open the page paints about #d6eef5 against the #fafdff tab, about 20 levels: an ESTIMATE worked back from the dims' pixels, not measured with nothing open.
@@ -41461,12 +41548,12 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **v18.51's first ship was refused by the new check, and its cause is not proven (24 Nov)** — in the full pass one value of the page's clock held two pictures' steps (Soften Skin and Sharpen), once in 130; alone, in slices and slowed down it never came back (72 rounds). In the app there is one place that runs a step, so the fix closes the two ways a frame could reach it twice, and the check now places each step by the builder's own call, names a step from anywhere else, and prints the clock as a number on every pass. If it ever goes red again it will say which of the three it was.
       📍 **v18.51's second ship was refused by the 40 ms check itself (24 Nov)** — test 1253 read 66.6 ms in one frame of the full pass (67 ms on 21 Nov; 11 to 18 ms alone, also with 400 MB held in the page: the browser's memory is ruled out). Not heat (the pass took its usual 75 minutes) and nothing on the Windows side. THE CAUSE IS STILL NOT KNOWN. The check now measures three openings, judges the middle one against the same 40 ms, lets no frame pass 150 ms, and names the slow picture and step in the speed report every time one happens: read that line after each pass ('1253 Blur pictures built at 380 · slowest frame of the three openings') until it says what stalls. One more reading from the same day: at half speed one opening read 34.3 ms (the others 15 to 19), so the heavy steps are close to the limit on a slow device. Finer steps remain the fix on the app's side.
 - [ ] **1258 — New projects default to 60 FPS, and the Create menu lets him choose the Simple editor or not** (23 Nov 2026, about 16:36 AWST, his words, via the logging chat)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 📌 NOTE — nothing to build**
       **His words (verbatim):** Just logging this now, by default, 60 FPS should be selected. And also there should be an option when you press create, like when you're in the create menu and creating a new project, there should be an option to, you know, decide whether you're going to use simple editor or not.
 
       **His clauses:**
       1. [x] ✅ v18.50 (New project opens on 60 fps; a 30 remembered from before opens on 60 once, then his pick is remembered; projects that exist keep theirs) 60 FPS is selected by default.
-      2. [ ] When creating a new project (the Create menu), there is an option to choose whether to use the Simple editor or not.
+      2. [x] ✅ v18.52 (New project has an Editor row, Simple or Full, just above Create; only Create writes the pick) When creating a new project (the Create menu), there is an option to choose whether to use the Simple editor or not.
 
       **Logger's plan (not his words):**
       - Not a #1255 redesign item, so it can ship in today's look when its turn comes.
@@ -41501,13 +41588,14 @@ re-opened #480, which I had marked done and had not fixed.
         - The control's first value equals FM.editor.forNew().
       - He has not picked K1-K3 yet. The logger is asking him. Since 21 Oct the rule is to ship the recommended pick and let him correct it.
       📍 **v18.50 (23 Nov): clause 1 shipped** — New project opens on 60 fps (the one-time move from a remembered 30 is the flag fm.newproj.fps60, device only). Clause 2, the Simple or Full choice on the Create sheet, is open: it needs Simple's own names on a shared screen (the lock gate) and his pick of K1, K2 or K3 (K3, a switch beside Create, is recommended). It goes with the next Simple work.
+      📍 **v18.52 (24 Nov): every clause shipped.** Clause 2 came in Simple release 13 (the recommended K3: a row of its own, since beside Create it pushed Create onto a second line at 380). K1 and K2 were not built. The Create sheet's redesign is #1255. This entry no longer holds the queue. The box in its heading is ticked when the oldest open item (#980) is: the order gate ticks nothing behind it.
 - [ ] **1259 — The Simple editor's effects all show the same picture, so they don't show what each one does** (23 Nov 2026, about 16:50 AWST, his words, via the logging chat)
-      **STATUS: 🟢 READY — nothing is stopping this**
+      **STATUS: 📌 NOTE — nothing to build**
       **His words (verbatim):** Also in the simple editor, the effects is just all the same image and they don't really actually show you what it is that is happening. So that obviously will need a lot of work. I don't know if you've had time to get to that yet.
 
       **His clauses:**
-      1. [ ] In the Simple editor, every effect shows the same image.
-      2. [ ] They don't show what each effect actually does. This needs a lot of work.
+      1. [x] ✅ v18.52 (every tile shows its own effect's drawn picture; a ready-made move shows its base effect's, and the first screen is one of each kind) In the Simple editor, every effect shows the same image.
+      2. [x] ✅ v18.52 (the picture is square, 40 px, no longer squashed to 40 by 24; the bigger hold-to-play sheet is #1255 design) They don't show what each effect actually does. This needs a lot of work.
 
       **Logger's plan (not his words):**
       - The Full editor has had its own animated picture for every effect since v18.40 (fx-pics, #1243).
@@ -41530,6 +41618,7 @@ re-opened #480, which I had marked done and had not fixed.
         - Mount a preset tile with pictures enabled and assert cv._fxPic === preset.fx.
         - Assert the .sm-fx-th box is square.
       - The bigger hold-to-play effects sheet (Q2, recommended) is #1255 redesign and waits for his decisions chat.
+      📍 **v18.52 (24 Nov): every clause shipped.** Simple release 13: each effect its own picture, square; the first screen one of each kind. What is left belongs to #1255's design: pictures of the ready-made moves' own combinations, and the hold-to-play sheet. This entry no longer holds the queue. The box in its heading is ticked when the oldest open item (#980) is: the order gate ticks nothing behind it.
 - [ ] **1260 — GO HARD this week. He has a free usage reset, so use it fully, but don't waste it on pointless work** (23 Nov 2026, 20:56 AWST, his words, via the logging chat)
       **STATUS: 📌 NOTE — nothing to build**
       **His words (verbatim):** Boy, I want to see progress like going hard this week. Like, I do not care about storage being used up because I've literally got a free reset. So I can literally reset all usage. So you can just like absolutely smash all the stuff out that needs to be done. Obviously don't waste usage on pointless stuff, but like, you know, just don't slow down.
@@ -41553,8 +41642,8 @@ re-opened #480, which I had marked done and had not fixed.
       **His words (verbatim):** The simple export panel is honestly probably too simple. Like, you only have two choices for frames. That's not enough. Like, it should stay simple like that, but it should still have more options.
 
       **His clauses:**
-      1. [ ] The Simple Export panel offers only two frame-rate choices. That's not enough.
-      2. [ ] It should stay simple like it is.
+      1. [x] ✅ v18.52 (30, 60, 120 and Custom now (any rate from 1 to 120): his answer of 24 Nov; the project's own rate is on one of the three or on Custom) The Simple Export panel offers only two frame-rate choices. That's not enough.
+      2. [x] ✅ v18.52 (the same one row of buttons, no new kind of control) It should stay simple like it is.
       3. [ ] But it should still have more options.
 
       **Logger's plan (not his words):**
@@ -41565,9 +41654,9 @@ re-opened #480, which I had marked done and had not fixed.
       **His words (verbatim):** for sex. Why can you only choose 720p or 180p? For the recommended one. Or like, you know, you can only go up to 60 FPS. You can't get any more than 60. And why would you be able to choose between 24 and 25? Like, that's just one difference./
 
       **His clauses:**
-      1. [ ] In the recommended SEX option, why can you only choose 720p or 1080p ("180p" = 1080p)?
-      2. [ ] You can only go up to 60 fps; why can't you get more than 60?
-      3. [ ] Why offer a choice between 24 and 25 fps? They are only one apart.
+      1. [x] ✅ v18.52 (answered by the panel: it always offers 720p, 1080p and 4K now, and the project's own size when it is none of those) In the recommended SEX option, why can you only choose 720p or 1080p ("180p" = 1080p)?
+      2. [x] ✅ v18.52 (120 is a button, and Custom takes any whole rate from 1 to 120) You can only go up to 60 fps; why can't you get more than 60?
+      3. [x] ✅ v18.52 (neither is a button now: a 24 or 25 fps project's own rate stands on the Custom button) Why offer a choice between 24 and 25 fps? They are only one apart.
 
       **Facts (read from the app, logger's, not his words):**
       - Sizes (js/simple-tools.js, exportRungs): Simple never makes the file bigger than the project, because an upscale adds no detail, only a bigger file. The drawing used a 1080p project, so it showed 720p and 1080p. A 4K project shows 4K, and a project of another size also offers its own size.
@@ -41585,20 +41674,21 @@ re-opened #480, which I had marked done and had not fixed.
       **His words (verbatim):** Yeah, just put the option there because lots of noobs will not understand and think, oh, why the hell can't I export in 4K? This is shit.
 
       **His clauses:**
-      1. [ ] Simple's Export panel always shows a 4K choice, even when the project is smaller than 4K (an upscale).
-      2. [ ] Why: new users who don't see 4K will think the app can't do it.
+      1. [x] ✅ v18.52 (4K is always on offer; on a smaller project it is an enlargement he presses himself) Simple's Export panel always shows a 4K choice, even when the project is smaller than 4K (an upscale).
+      2. [x] ✅ v18.52 (his reason, met by the same button) Why: new users who don't see 4K will think the app can't do it.
 
       **Logger's note (not his words):** his answer to the logger's question at 13:58 (a 4K choice on a 1080p project looks the same, only a bigger file). Passed to the builder at about 14:00 for #1261 in tonight's Simple release, if the exporter takes a size above the project's in a Simple release and a phone has the memory for it (a 4K render is heavy); otherwise the next release. Redraw the SEX boards with 4K always shown.
       📥 **Follow-up, via INBOX — 24 Nov 2026, about 14:12 AWST: #1261 Simple's Export frame rates: just 30, 60, 120 or Custom**
       **His words (verbatim):** Just do 30, 60, 120 or custom.
 
       **His clauses:**
-      1. [ ] Simple's Export offers four frame-rate choices: 30, 60, 120 and Custom.
+      1. [x] ✅ v18.52 (exactly these four) Simple's Export offers four frame-rate choices: 30, 60, 120 and Custom.
 
       **Logger's note (not his words):** his answer to the logger's question at 14:10 (all six rates, or a shorter list). Passed to the builder at about 14:12, before tonight's 18:30 pre-pass.
       - Custom takes any rate from 1 to 120, as the Full editor's "Exact fps…" does.
       - When the project's own rate is none of the three (25, 24, 50…), Custom opens already set to it, so no fifth chip is needed.
       📌 **Builder, 24 Nov 16:32:** logged word for word from the inbox (3 follow-ups): HE ANSWERED the logger's two questions in them (13:59: always offer 4K; 14:12: "Just do 30, 60, 120 or custom."), and both are built on tonight's Simple release's branch (land/s13: Smoothness is 30 · 60 · 120 and Custom, where Custom takes any whole rate from 1 to 120 on the digits pad and opens on the project's own rate; Quality always offers 4K). His third question (why both 24 and 25) is answered by the row itself: neither is a button now. They are ticked when that release ships.
+      📍 **v18.52 (24 Nov):** the frame rates shipped in Simple release 13, and (his 24 Nov words) 4K is always on offer: Quality shows 720p · 1080p · 4K and the project's own size, opens on the project's own, and a bigger size is an enlargement he presses himself. Clause 3 stays OPEN for his pick. What Full's Export has that Simple's does not: an exact rate, more sizes and an exact size, High / Medium / Low file size, Format (GIF, PNG frames, one frame, sound only), a see-through background, a part of the video, one layer only. RECOMMENDED next: one more row of the same buttons, Video · GIF · Sound (it lets him make something he cannot make from Simple today, one tap deep). The design job draws the options. The rates are 30 · 60 · 120 · Custom by his answer of 24 Nov ("Just do 30, 60, 120 or custom"); a 24 or 25 fps project's own rate stands on the Custom button, so 24 and 25 are never two buttons (his words the same day: that is just one difference).
 - [ ] **1262 — Measure the testing properly and change to a better way if there is one; the overheating was probably his games** (23 Nov 2026, 21:33 AWST, his words, via the logging chat)
       **STATUS: 🟠 NEEDS YOU — waiting on your answer**
       **His words (verbatim):** Yeah, of course, I want you to measure it properly. If there's any better way for us to do it, we should be doing it. And when it was overheating, that probably was because I was playing games at the same time.
@@ -41746,3 +41836,8 @@ re-opened #480, which I had marked done and had not fixed.
       - Once it lands, the site goes within a few minutes. His phone may still show a saved copy for a while.
       - Do NOT tell him to clear Safari's website data for builderezra.github.io: the real FreeMotion lives on the same address, and its projects could go with it.
       📌 **Builder, 24 Nov 16:32:** logged with the name itself written [another app], as this entry asks; the logging chat has his words as he said them. PART 1 (every current file of this repo: code comments, docs, test titles, the research file's name, BEFORE-PUBLISHING.md and the project notes reworded, then a ship.sh gate that refuses a commit adding one of the names) is the builder's, as a release of its own behind the usual gates; from this drain on, no new line of this file names another editor. PART 2 (the names in old commit messages and old file versions: rewriting the repos' history and force-pushing) is NOT started and is not done on a relayed word: this repo's rules forbid a force-push, every commit id would change, and it needs his own yes to the builder for that step, a full mirror backup first and every lane stopped. The old copy on the other repository (his follow-up above) is his to finish on GitHub: one press, and the logger told him which.
+      📍 **v18.52 (24 Nov): Part 1, the lines only a Simple release may change, shipped.** Nine comment lines in the Simple editor's own files (js/spine.js, js/spine-words.js, js/simple-tools.js, js/editor-mode.js, and three lines Simple releases wrote in js/storage.js and styles.css) no longer name another editing app. STILL TO DO in Part 1: every other file (about 1,350 lines in 120 files: comments in the scripts and the stylesheet, test titles, the logs and plans), by a script, with a gate in ship.sh that refuses a new one; an ordinary release. Part 2 (the names inside old commits, which means rewriting the history on GitHub) is NOT started: it waits for his own yes.
+- [ ] **1265 — Test 947 (the New project card puts the + back where it was) is red when it is run by itself, on the live release too (hunt LOW #1265)** (24 Nov, the loop; not his words)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      🔎 **What was seen:** building Simple release 13, the slice '947 ' was red at 380 and 1280 with "phone: after the card closed the + is [171, 690, 48, 48], not the [172, 694, 47, 47] it was". The same red on v18.50 exported to a scratch folder, so it is not that release's. In every full pass the test is green. The + is measured while its press animation is still running.
+      🛠 **To do:** make the test wait for the + to come to rest before it measures (or measure it with its animations finished), prove it red on a + that really moved, and run it alone and in a pass. Nothing is asked of him.

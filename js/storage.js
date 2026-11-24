@@ -1246,7 +1246,7 @@ window.FM = window.FM || {};
       /* …EXCEPT A PROJECT THAT OPENS IN SIMPLE, which opens with nothing selected (SU1 #12). The selection he left behind is
          usually the last clip he touched, off the right of the screen when the playhead comes back to 0:00 — and Simple's tray,
          🗑 included, acted on it while a different clip sat under the playhead. With nothing selected the tray shows the quiet
-         "clips · length" line instead (DESIGN §8.2), as CapCut opens a project. Full restores the selection exactly as before
+         "clips · length" line instead (DESIGN §8.2), as a phone editor opens a project. Full restores the selection exactly as before
          (§0.4): homeFor is the same answer editor-mode.js uses to choose the editor this project opens in. */
       if (FM.editor && FM.editor.homeFor && FM.editor.homeFor(boundId) === 'simple') { FM.scene.selectedId = null; FM.scene.selectedIds = []; }
       await hydrateSceneMedia();

@@ -129,6 +129,10 @@ window.FM = window.FM || {};
     input = multi ? area : line;
     input.value = withInput && opts.input.value != null ? String(opts.input.value) : '';
     input.placeholder = withInput && opts.input.placeholder ? String(opts.input.placeholder) : '';
+    /* `input: { inputmode: 'numeric' }` (#1261, the Simple editor's Custom frame rate): the phone's digits pad for a question whose answer
+       is a number. Set before the focus below, because a phone picks its keyboard at the focus; taken off for every other question, so
+       each of those is exactly as it was. */
+    if (withInput && !multi && opts.input.inputmode) line.setAttribute('inputmode', String(opts.input.inputmode)); else line.removeAttribute('inputmode');
     input.setAttribute('aria-label', opts.message || opts.title || 'Name');
     cancelBtn.textContent = opts.cancel || 'Cancel';
     /* `single: true` (queue 921 S7 review): a notice has one answer. "Exporting is turned off" drew Close

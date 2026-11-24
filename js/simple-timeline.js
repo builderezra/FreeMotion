@@ -684,7 +684,11 @@ window.FM = window.FM || {};
         if (!s || (s.kind !== 'gap' && s.kind !== 'overlap') || s.covered) return;
         const prev = i > 0 ? R.main[i - 1] : null;
         const cutT = s.kind === 'gap' ? ((prev ? prev.end : 0) + e.start) / 2 : e.start + s.amt / 2;
-        const chip = el('button', 'sm-chip sm-chip-' + s.kind, (s.kind === 'overlap' ? '⚠ ' : '') + s.amt.toFixed(1) + 's');
+        const chip = el('button', 'sm-chip sm-chip-' + s.kind, s.amt.toFixed(1) + 's');
+        /* #1255 (his words, 23 Nov: "no emojis on text or buttons anywhere in the app. Design our own icons instead"): an overlap wore a
+           typed warning sign, which a phone draws as an emoji. It wears the design board's drawn one now (EM-icons "warn"), in the
+           chip's own red, a little heavier than the board's 1.6 so it reads at 13 px; a screen reader hears the chip's name, as before */
+        if (s.kind === 'overlap') chip.insertAdjacentHTML('afterbegin', '<svg class="sm-chip-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.27 4.4 3.1 17a2 2 0 0 0 1.73 3h14.34a2 2 0 0 0 1.73-3L13.73 4.4a2 2 0 0 0-3.46 0z"/><path d="M12 9.5v4"/><circle fill="currentColor" stroke="none" cx="12" cy="16.9" r="1.05"/></svg>');
         chip.type = 'button';
         chip.style.left = xOf(cutT) + 'px';
         const words = W().a11y || {};

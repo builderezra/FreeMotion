@@ -287,7 +287,9 @@ window.FM = window.FM || {};
        asked for: the sheet still docks in the same place and covers the same area, with more of the
        cards visible inside it. A stale row from a previous session is removed on sight. */
     /* #1243 rule 3: THE SHEET LINE. On a phone every Simple panel runs from the stage's bottom edge to the bottom of the screen. Read off the
-       page, as syncAddSheetTop reads the Add sheet's top. Only Simple calls it (dockSheet's smDock branch and js/simple-tools.js). */
+       page, as syncAddSheetTop reads the Add sheet's top. Simple calls it (dockSheet's smDock branch and js/simple-tools.js), and since
+       v18.50 Full's effects sheets do too (#1243 F9 / F10: fltApply below, the Filters sheet that grows to it, and js/fx-browser.js, the
+       visual effects menu whose top it is). */
     function sheetLine() { if (!isPhone()) return 0; var st = document.getElementById('stage'); return st ? Math.max(0, Math.round(st.getBoundingClientRect().bottom)) : 0; }
     function dockSheet() {
       /* SIMPLE MODE (#1243 rule 3, his words 8 Nov: "when you open up any of these sub menus, I want the first menu to go away"): in Simple
@@ -1050,7 +1052,7 @@ window.FM = window.FM || {};
     window.addEventListener('resize', function () { if (!isPhone()) { close(); closeAdd(); document.body.classList.remove('m-editing'); insp.style.top = ''; insp.style.maxHeight = ''; } else { syncAddSheetTop(); } });
 
     FM.mobile = { open: open, close: close, toggle: toggle, isPhone: isPhone, openAdd: openAdd, closeAdd: closeAdd, syncAddSheetTop: syncAddSheetTop,
-      sheetLine: sheetLine,   // #1243 rule 3: read only by Simple (js/simple-tools.js); Full never calls it
+      sheetLine: sheetLine,   /* #1243 rule 3: read by Simple (js/simple-tools.js), and since v18.50 by Full's effects sheets too (fltApply here, js/fx-browser.js) */
       /* Simple's More only (js/simple-tools.js openPanel): a deliberate ask for the panel undoes an earlier swipe-away of it, which
          otherwise held for that selection and left More dead (980 review finding 20). Full never calls it. */
       unlatch: function () { userClosed = false; } };
