@@ -1413,7 +1413,7 @@ window.FM = window.FM || {};
     c.appendChild(head);
     const body = el('div', 'cs-body cs-helpbody');
     const art = el('div', 'cs-lesson');
-    art.appendChild(howItWorks(!U.labsOn()));   // at once, and the offline answer
+    art.appendChild(howItWorks(!U.labsOn() ? 'off' : C.session ? 'live' : 'idle'));   // at once, and the offline answer
     body.appendChild(art);
     body.appendChild(privacyBlock());
     c.appendChild(body);
@@ -1494,9 +1494,13 @@ window.FM = window.FM || {};
      'How it works' sits"). The numbers are drawn, not typed into the text, so the line reads as the step.
      With the feature off there is no Start sharing to tap yet — the one thing that moves him on is the switch at the foot —
      so step 1 names that first (review: a first-timer following "Tap Start sharing" found nothing to tap). */
-  function howItWorks(off) {
+  /* #1243 ST8 review (E1-R7): the steps are drawn on the "?" page, where the switch is NOT below them (it is at the foot of the block
+     behind the ‹), and in a live session he is already sharing — so off names where the switch is, and live starts at the link. */
+  function howItWorks(state) {
     const ol = el('ol', 'cs-how');
-    [['1', off ? 'Turn on Work with friends below, then tap Start sharing' : 'Tap Start sharing'], ['2', 'Send your friend the link'], ['3', 'They tap it — you’re both editing']].forEach(function (x) {
+    const steps = ['Send your friend the link', 'They tap it — you’re both editing'];
+    if (state !== 'live') steps.unshift(state === 'off' ? 'Go back (‹) and turn on Work with friends at the foot of the block, then tap Start sharing' : 'Tap Start sharing');
+    steps.map(function (t, i) { return [String(i + 1), t]; }).forEach(function (x) {
       const li = el('li');
       li.appendChild(el('b', null, x[0]));
       li.appendChild(document.createTextNode(x[1]));

@@ -121634,8 +121634,9 @@
        said it in steps, Comments sat between the people and the invite, and the keep-open toast landed over the short code. */
     const C = need921S7('how it works');
     const STEPS = [/^1\s*Tap Start sharing$/, /^2\s*Send your friend the link$/, /^3\s*They tap it — you’re both editing$/];
-    /* Review fix: off, there is no Start sharing to tap — step 1 names the switch that IS there, then Start sharing. */
-    const STEP1_OFF = /^1\s*Turn on Work with friends below, then tap Start sharing$/;
+    /* Review fix: off, there is no Start sharing to tap — step 1 names the switch that IS there, then Start sharing. (#1243 ST8 review
+       E1-R7: on the ? page the switch is not below the steps, so it says where it is.) */
+    const STEP1_OFF = /^1\s*Go back \(‹\) and turn on Work with friends at the foot of the block, then tap Start sharing$/;
     await withFakeNet921(async function () {
       await withLabs921(async function (ui) {
         await with945(async function () {
@@ -128425,7 +128426,8 @@
         const cancel = $('cv-cancel'), p = backdropPoint($('canvas-dialog')), app = [$('cv-app-bar')].find(reach);   // #1132: the App settings BAR, the cog's one door to Settings in every state (#cv-appset and #cv-mini-app are gone)
         if (reach(cancel)) add('canvas shut', 'Canvas settings → Cancel', () => tapEl(cancel, 'Canvas settings → Cancel', { closes: ['canvas'] }));
         if (p) add('canvas shut', 'a tap outside Canvas settings', () => tapAt(p[0], p[1], { closes: ['canvas'] }));
-        if (app) add('app settings', 'the cog → App settings', () => tapEl(app, 'the App settings bar', { closes: ['canvas'], opens: ['settings'], settle: 380 }));
+        /* settle 450 (#1243 ST5 review E1-R1): the cog's blocks leave first, and a page with no frames puts it away on a 400 ms backstop */
+        if (app) add('app settings', 'the cog → App settings', () => tapEl(app, 'the App settings bar', { closes: ['canvas'], opens: ['settings'], settle: 450 }));
         /* #1132 (the refuter's N1): the cog opens ALL CLOSED, so without these the walk never opened a block — and "Canvas settings →
            Cancel" above could never be reached. Each closed block's ⤢ opens it; the open block's ⤡ closes it to all closed, the cog
            staying up either way (the cog's own close is the walk's other edges). */
@@ -128444,7 +128446,9 @@
       }
       if (is('settings')) {
         const scrim = document.querySelector('.set-scrim.open'), x = scrim && scrim.querySelector('.set-close'), p = scrim && backdropPoint(scrim);
-        if (reach(x)) add('settings shut', 'Settings → ✕', () => tapEl(x, 'Settings → ✕', { closes: ['settings'] }));
+        /* #1243 ST5 (review E1-R1): opened from the cog, the ✕ is ‹ (.set-back) and takes him BACK to the cog, all closed, 200 ms after
+           Settings shuts — so that press opens Canvas settings on purpose. A tap outside and Escape still just shut Settings. */
+        if (reach(x)) add('settings shut', 'Settings → ✕', () => tapEl(x, 'Settings → ✕', x.classList.contains('set-back') ? { closes: ['settings'], opens: ['canvas'], settle: 360 } : { closes: ['settings'] }));
         if (p) add('settings shut', 'a tap outside Settings', () => tapAt(p[0], p[1], { closes: ['settings'] }));
       }
       if (phone) {
@@ -208953,6 +208957,16 @@
                     const head = body.querySelector('.cs-head'), t0 = head.getBoundingClientRect().top;
                     s.scrollTop = 120; await sleep(30);
                     if (!(head.getBoundingClientRect().top < t0 - 60)) throw new Error('live, scrolling the block left its head pinned (' + Math.round(t0) + ' → ' + Math.round(head.getBoundingClientRect().top) + ') — the whole block should move');
+                    /* review E1-R7: live, the ? page's steps start at the link — he is already sharing. Read in the same task as the
+                       tap: the lesson, once loaded, takes the short steps' place. */
+                    s.scrollTop = 0;
+                    const lq = body.querySelector('.cs-help');
+                    if (!lq) throw new Error('live, the Share panel has no ? to open the steps behind');
+                    lq.click();
+                    const lli = [].map.call(body.querySelectorAll('.cs-how li'), function (x) { return x.textContent.replace(/\s+/g, ' ').trim(); });
+                    if (!lli.length) throw new Error('live, the ? page drew no steps');
+                    if (lli.some(function (t) { return /Start sharing/.test(t); }) || !/^1\s*Send your friend the link$/.test(lli[0])) throw new Error('live, the ? page says ' + JSON.stringify(lli) + ' to someone who is already sharing — its first step should be Send your friend the link');
+                    const lb = body.querySelector('.cs-backbtn'); if (lb) { lb.click(); await settle921(60); }
                   } finally { FM.closeCanvasDialog(); await settle921(60); }
                 });
               });
