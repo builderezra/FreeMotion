@@ -12746,6 +12746,8 @@ body.ed-simple #sm-timeline { display: flex; }
 }
 .sm-chip-gap { background: #2a1f14; color: #ffb454; border: 1.5px solid #ffb454; }
 .sm-chip-overlap { background: #2a1418; color: #ff6b6b; border: 1.5px solid #ff6b6b; }
+/* #1255: the overlap chip's drawn warning sign (the design board's "warn"), where a typed sign stood: beside the chip's 10 px figures */
+.sm-chip-ic { width: 13px; height: 13px; vertical-align: -3px; margin-right: 2px; }
 /* 2.7 THE TRANSITION MARKER (#1122 clause 2, his pick A: a marker at each cut, the Transition row in the tray). #1243 S1 OPTION A (his
    words: "that blue thing clips with whatever is on the above layer, like if you have text… a pretty shitty spot to put your… transition
    thing"): it sits ON ITS CUT INSIDE THE CLIP ROW (#sm-main, js/simple-timeline.js), centred both ways, never in the lanes above, so a

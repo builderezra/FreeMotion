@@ -139965,6 +139965,36 @@
     });
   });
 
+  /* #1255 (his 23 Nov 20:53 note: "no emojis on text or buttons anywhere in the app. Design our own icons instead"), the Simple editor's
+     part: the overlap chip on a cut wore a typed warning sign, which a phone draws as an emoji. CONTROL: the gap chip on the same row,
+     which never had a sign, holds its seconds and no drawing, so the probe tells the two chips apart. */
+  test('1255 emoji · in the Simple editor an overlap chip wears a drawn warning sign beside its seconds, with no emoji and no typed sign in its words, the drawing inside the chip and nothing cut at 380, and its name for a screen reader is the same (CONTROL: the gap chip on the same row holds its seconds and no drawing)', { item: '980', budgetMs: 60000 }, async function () {
+    smNeedP2();
+    const fails = [], PIC = /[←-⇿⌀-⏿①-➿⤀-⯿︎️]|\p{Extended_Pictographic}/u;
+    await r4At(380, 0, async function () {
+      await smP2((W, H) => [smV('C', 8.6, 3.4, W, H), smV('B', 5.2, 3.8, W, H), smV('A', 0, 4, W, H)], async function (v) {
+        FM.time = 0; FM.refreshAll(); await v.sleep(80);
+        const gap = document.querySelector('#sm-main .sm-chip-gap'), ov = document.querySelector('#sm-main .sm-chip-overlap');
+        if (!gap || !ov) throw new Error('setup: the row should hold a gap chip (A to B, 1.2 s) and an overlap chip (B over C, 0.4 s): gap ' + !!gap + ', overlap ' + !!ov);
+        if (gap.querySelector('svg') || gap.textContent.trim() !== '1.2s') throw new Error('CONTROL: the gap chip holds “' + gap.textContent + '”' + (gap.querySelector('svg') ? ' and a drawing' : '') + ', want its seconds only (1.2s)');
+        const txt = ov.textContent, ic = ov.querySelector('svg'), c = ov.getBoundingClientRect();
+        if (PIC.test(txt)) fails.push('the overlap chip’s words are “' + txt + '”: a typed sign or an emoji is still in them — his words: “no emojis on text or buttons anywhere in the app”');
+        if (txt.trim() !== '0.4s') fails.push('the overlap chip says “' + txt.trim() + '”, want its seconds, 0.4s');
+        if (!ic || !ic.querySelector('path')) fails.push('the overlap chip has no drawn sign — “Design our own icons instead”');
+        else {
+          const r = ic.getBoundingClientRect();
+          if (!(r.width >= 10 && r.height >= 10)) fails.push('the drawn sign is ' + r.width.toFixed(1) + ' × ' + r.height.toFixed(1) + ' px, too small to read (want 10 or more each way)');
+          if (r.left < c.left - 0.5 || r.right > c.right + 0.5 || r.top < c.top - 0.5 || r.bottom > c.bottom + 0.5) fails.push('the drawn sign lies outside its chip (sign ' + [r.left, r.top, r.right, r.bottom].map(Math.round).join(', ') + '; chip ' + [c.left, c.top, c.right, c.bottom].map(Math.round).join(', ') + ')');
+          if (ic.getAttribute('aria-hidden') !== 'true') fails.push('the drawn sign is not hidden from a screen reader, which already hears the chip’s name');
+        }
+        if (!(c.width >= 31.5 && c.height >= 31.5)) fails.push('the overlap chip is ' + c.width.toFixed(1) + ' × ' + c.height.toFixed(1) + ' px, under the 32 a chip is');
+        if (ov.scrollWidth > ov.clientWidth + 1) fails.push('the overlap chip’s contents are wider than the chip (' + ov.scrollWidth + ' px in ' + ov.clientWidth + ')');
+        if ((ov.getAttribute('aria-label') || '') !== 'Overlap 0.4 s, Fix') fails.push('the overlap chip’s name for a screen reader is “' + ov.getAttribute('aria-label') + '”, want “Overlap 0.4 s, Fix” as before');
+      });
+    });
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
   test('simple P2.1 · ⌘D duplicates a main clip right after itself with its keys; what follows moves along; one undo removes it', { item: '980', budgetMs: 60000 }, async function () {
     await smP2((W, H) => [smV('B', 3, 3, W, H), (() => { const a = smV('A', 0, 3, W, H); a.transform.x = smKf([[1, 160], [2, 170]]); return a; })()], async function (v) {
       const A = v.L('A'), B = v.L('B'), doc0 = v.doc(), n0 = v.steps();
