@@ -13,7 +13,7 @@ You'll be able to add timed words to your video, one caption at a time.
 
 On a computer: click an empty spot in the timeline so nothing is selected. The Add panel is at the bottom left. <!-- not walked: the walk was the 380 px phone layout only -->
 
-Tip: **🎙 Detect speech**, at the top of that captions list, finds where someone talks and replaces your captions with new ones timed to the speech, all on your device. Use it **before** you type: it doesn't write the words for you, and words that don't line up with speech are dropped. If you lose words, tap undo straight away.
+Tip: **Detect speech**, at the top of that captions list, finds where someone talks and replaces your captions with new ones timed to the speech, all on your device. Use it **before** you type: it doesn't write the words for you, and words that don't line up with speech are dropped. If you lose words, tap undo straight away.
 
 If it doesn't work: Detect speech is greyed out until the project has a video or audio clip to listen to.
 
