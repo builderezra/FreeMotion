@@ -260,6 +260,9 @@ window.FM = window.FM || {};
       /* #1261 (his words: "you only have two choices for frames. That's not enough… it should stay simple like that"): Smoothness offers
          every rate Full's Export does, as bare numbers, the unit once under the row's name, the project's own rate marked and named */
       exportFpsUnit: 'fps', exportFpsOwn: 'the project’s own',
+      /* #1261 (his words, 24 Nov: "Just do 30, 60, 120 or custom"): the fourth button and its question */
+      exportCustom: 'Custom', exportCustomTitle: 'Custom: type a rate', exportCustomSaid: 'your own rate',
+      exportFpsAsk: 'Frames a second', exportFpsHint: 'From 1 to 120', exportFpsSet: 'Set', exportFpsBad: 'Type a number from 1 to 120',
       exportLen: s => { s = Math.max(0, +s || 0); if (s > 0 && s < 1) return (Math.round(s * 10) / 10) + ' s'; s = Math.round(s); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); },
       music: 'Music from your files', sfx: 'Sound effects', voice: 'Record voice', closeAll: 'Close all gaps',   // (moreOpts went with Simple's ⋯, #1243 S5; review L3-10)
       /* #1255's 20:53 follow-up, his words: "I'm also noticing a pop-up that says tap a clip to split or change its speed. There shouldn't

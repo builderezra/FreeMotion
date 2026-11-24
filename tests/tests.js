@@ -207833,13 +207833,13 @@
   const r12Box = () => document.querySelector('#inspector .sm-exp');
   const r12Row = k => Array.from(document.querySelectorAll('#inspector .sm-exp .sm-exp-row[data-row="' + k + '"] .sm-exp-b'));
   /* #1261: Smoothness's buttons are bare numbers (the unit is under the row's name), so a rate reads back as “30 fps” here */
-  const r12Face = (k, b) => k === 'fps' ? b.textContent.replace(/\s*fps$/, '') + ' fps' : b.textContent;   /* (review R13-4: a face that already says fps is read once, so the old faces fail by the test’s own sentence) */
+  const r12Face = (k, b) => (k === 'fps' && /^[\d.]+(\s*fps)?$/.test(b.textContent)) ? b.textContent.replace(/\s*fps$/, '') + ' fps' : b.textContent;   /* (review R13-4: a face that already says fps is read once, so the old faces fail by the test’s own sentence; 24 Nov: the Custom button's word is read as it is) */
   const r12Words = k => r12Row(k).map(b => r12Face(k, b)).join(', ');
   const r12On = k => r12Row(k).filter(b => b.getAttribute('aria-pressed') === 'true').map(b => r12Face(k, b)).join(', ');
   /* Full's Export card's rounding (js/export-card.js mb): KB under 1 MB, one decimal under 10 MB */
   const r12Mb = bytes => { const n = bytes / 1e6; return !(n > 0) ? '0 KB' : n < 1 ? Math.max(1, Math.round(n * 1000)) + ' KB' : (n >= 10 ? Math.round(n) : Math.round(n * 10) / 10) + ' MB'; };
 
-  test('1243 R12 · S6 Export at 380 and 1280 opens a panel (the sheet from the stage’s bottom edge on a phone, the left band on a PC) with the frame, the length, Quality 720p · 1080p · 4K and Smoothness 15 · 25 · 30 · 50 · 60 · 120 fps, its size and Save video all on screen, and starts nothing until Save video; picking 60 fps changes the size to what the exporter is then given, Save video exports the clips only at 1080p and 60 fps and closes the panel, the pick is there next time, and Export pressed again closes it (CONTROL: before the press no panel is up and the bar is the project row)', { item: '980', budgetMs: 150000 }, async function () {
+  test('1243 R12 · S6 Export at 380 and 1280 opens a panel (the sheet from the stage’s bottom edge on a phone, the left band on a PC) with the frame, the length, Quality 720p · 1080p · 4K and Smoothness 30 · 60 · 120 and Custom, its size and Save video all on screen, and starts nothing until Save video; picking 60 fps changes the size to what the exporter is then given, Save video exports the clips only at 1080p and 60 fps and closes the panel, the pick is there next time, and Export pressed again closes it (CONTROL: before the press no panel is up and the bar is the project row)', { item: '980', budgetMs: 150000 }, async function () {
     smNeedP2();
     const ex = FM.exporter, run0 = ex.run, dlg = document.getElementById('export-dialog'), fails = [], put = r12Mem();
     let got = null;
@@ -207879,7 +207879,7 @@
             });
             /* what it says, simply */
             if (r12Words('q') !== '720p, 1080p, 4K' || r12On('q') !== '1080p') fails.push(at + 'Quality reads “' + r12Words('q') + '” with “' + r12On('q') + '” picked, want 720p, 1080p, 4K with 1080p picked (a 1920×1080 frame opens on its own size, 4K is there to press: his words, 24 Nov, “just put the option there”)');
-            if (r12Words('fps') !== '15 fps, 25 fps, 30 fps, 50 fps, 60 fps, 120 fps' || r12On('fps') !== '30 fps') fails.push(at + 'Smoothness reads “' + r12Words('fps') + '” with “' + r12On('fps') + '” picked, want Full’s 15, 25, 30, 50, 60 and 120 with the project’s 30 picked (#1261)');
+            if (r12Words('fps') !== '30 fps, 60 fps, 120 fps, Custom' || r12On('fps') !== '30 fps') fails.push(at + 'Smoothness reads “' + r12Words('fps') + '” with “' + r12On('fps') + '” picked, want 30, 60, 120 and Custom with the project’s 30 picked (#1261, his words: “Just do 30, 60, 120 or custom”)');
             const len = box.querySelector('.sm-exp-len');
             if (!len || len.textContent !== '0:06') fails.push(at + 'the length reads “' + (len && len.textContent) + '”, want 0:06 (the clips, not the song’s 9 s)');
             const pic = box.querySelector('.sm-exp-pic');
@@ -207918,18 +207918,18 @@
     if (fails.length) throw new Error(fails.join(' · '));
   });
 
-  test('1243 R12 · S6 Export always offers 720p · 1080p · 4K and the frame’s own size, and opens on the frame’s own: a 3840×2160 frame opens on 4K, a 2560×1440 one on its own 1440p with 4K above it, a 1920×1080 one on 1080p, a 1600×900 one on its own 900p, a 320×240 one on its own 240p; a 24 fps project’s own rate stands where 25 did and is picked; Save video on a 4K frame exports it at its own size at 24 fps, and 4K pressed on a 1920×1080 frame exports it enlarged twice over and is remembered as an enlargement (CONTROLS: a 30 fps project offers just Full’s six; the 1080p frame opens on 1080p before 4K is pressed)', { item: '980', budgetMs: 150000 }, async function () {
+  test('1243 R12 · S6 Export always offers 720p · 1080p · 4K and the frame’s own size, and opens on the frame’s own: a 3840×2160 frame opens on 4K, a 2560×1440 one on its own 1440p with 4K above it, a 1920×1080 one on 1080p, a 1600×900 one on its own 900p, a 320×240 one on its own 240p; a 24 fps project’s own rate is on the Custom button and is picked; Save video on a 4K frame exports it at its own size at 24 fps, and 4K pressed on a 1920×1080 frame exports it enlarged twice over and is remembered as an enlargement (CONTROLS: a 30 fps project’s fourth button reads Custom; the 1080p frame opens on 1080p before 4K is pressed)', { item: '980', budgetMs: 150000 }, async function () {
     smNeedP2();
     const ex = FM.exporter, run0 = ex.run, fails = [], put = r12Mem();
     let got = null;
     ex.run = async o => { got = o; };
     const cases = [
-      /* #1261: Full's six rates (15, 25, 30, 50, 60, 120); a 24 fps project's own rate stands where 25 did (24 Nov: "why would you be able
-         to choose between 24 and 25?"). Quality (24 Nov: "just put the option there"): 720p · 1080p · 4K always, the frame's own size
+      /* #1261: 30 · 60 · 120 and Custom (24 Nov: "Just do 30, 60, 120 or custom"); a 24 fps project's own rate is on the Custom button.
+         Quality (24 Nov: "just put the option there"): 720p · 1080p · 4K always, the frame's own size
          when it is none of them, opening on the frame's own. */
-      { W: 3840, H: 2160, fps: 24, q: '720p, 1080p, 4K', on: '4K', f: '15 fps, 24 fps, 30 fps, 50 fps, 60 fps, 120 fps', fon: '24 fps', save: true },
+      { W: 3840, H: 2160, fps: 24, q: '720p, 1080p, 4K', on: '4K', f: '30 fps, 60 fps, 120 fps, 24 fps', fon: '24 fps', save: true },
       { W: 2560, H: 1440, fps: 30, q: '720p, 1080p, 1440p, 4K', on: '1440p' },
-      { W: 1920, H: 1080, fps: 30, q: '720p, 1080p, 4K', on: '1080p', f: '15 fps, 25 fps, 30 fps, 50 fps, 60 fps, 120 fps', fon: '30 fps', control: true, up: true },
+      { W: 1920, H: 1080, fps: 30, q: '720p, 1080p, 4K', on: '1080p', f: '30 fps, 60 fps, 120 fps, Custom', fon: '30 fps', control: true, up: true },
       { W: 1600, H: 900, fps: 30, q: '720p, 900p, 1080p, 4K', on: '900p' },
       { W: 320, H: 240, fps: 30, q: '240p, 720p, 1080p, 4K', on: '240p' }
     ];
@@ -208438,64 +208438,95 @@
      enough. Like, it should stay simple like that, but it should still have more options." Smoothness offers every rate Full's Export
      offers (its own list, #exp-fps), in the same row of buttons, the project's own marked, and the rate picked is the one the exporter is
      handed. FM.exporter.run is stubbed to record what it is given (r12Mem puts his last pick aside and back). */
-  test('1261 · at 380 Simple’s Export offers every rate Full’s Export offers in its one Smoothness row, each pressable and at least 44 px wide (on a 24 fps project its own 24 stands where 25 did, so no two rates are one frame apart), the project’s own marked and named, and every rate picked reaches the export call (CONTROL: a 30 fps project opens on 30, the rate marked as its own)', { item: '980', budgetMs: 150000 }, async function () {
+  test('1261 · at 380 Simple’s Smoothness is 30 · 60 · 120 and Custom, each pressable and a finger wide: a 30 fps project opens on 30, marked as its own, with the fourth button reading Custom; Custom asks for a number on the phone’s number pad, takes 48, shows it and Save video hands 48 to the export; 0 and 500 are refused with a line and change nothing; a 24 fps project opens with 24 on the fourth button, picked and marked as its own, and one press on 60 and one on the 24 button go there and back with no question (CONTROL: each of the three rates picked reaches the export call)', { item: '980', budgetMs: 150000 }, async function () {
     smNeedP2();
     const ex = FM.exporter, run0 = ex.run, put = r12Mem(), fails = [];
     let got = null;
     ex.run = async o => { got = o; };
+    const askUp = () => { const s = document.getElementById('fm-ask'); return !!(s && !s.classList.contains('hidden')); };
+    const askIn = () => document.querySelector('#fm-ask .fm-ask-input:not(.hidden)');
+    const askNo = async () => { if (askUp()) { document.querySelector('#fm-ask .fm-ask-cancel').click(); await r4Settle(100); } };
+    const answer = async (text, v) => { const i = askIn(); if (!i) throw new Error('setup: the question has no field'); i.value = text; document.querySelector('#fm-ask .fm-ask-ok').click(); await v.sleep(60); await r4Settle(120); };
+    const custom = () => r12Row('fps').filter(b => b.dataset.exp === 'fps-custom')[0];
     try {
-      const full = Array.from(document.querySelectorAll('#exp-fps option')).map(o => +o.value).filter(f => f > 0).sort((a, b) => a - b);
-      if (full.length < 6) throw new Error('CONTROL: Full’s Export lists only ' + full.join(', ') + ' as rates');
       await r4At(380, 800, async function () {
         await smP2((W, H) => smClips3(W, H), async function (v) {
           try { localStorage.removeItem('fm.sm.export'); } catch (e) {}
           const open = async () => { if (!r12Box()) { r12Btn().click(); await r4Settle(300); } return r12Box(); };
           if (!(await open())) throw new Error('setup: Export opened no panel');
-          if (r12On('fps') !== '30 fps') throw new Error('CONTROL: on a 30 fps project Smoothness opens on ' + r12On('fps') + ', want the project’s own 30');
-          const offered = r12Row('fps').map(b => +b.textContent);
-          if (offered.join() !== full.join()) fails.push('Smoothness offers ' + offered.join(', ') + ', Full’s Export offers ' + full.join(', '));
+          if (r12Words('fps') !== '30 fps, 60 fps, 120 fps, Custom') fails.push('Smoothness offers ' + r12Words('fps') + ', want 30, 60, 120 and Custom — his words: “Just do 30, 60, 120 or custom”');
+          if (r12On('fps') !== '30 fps') throw new Error('CONTROL: on a 30 fps project Smoothness opens on ' + r12On('fps') + ', want the project’s own 30 · ' + fails.join(' · '));
           const own = r12Row('fps').filter(b => b.classList.contains('sm-exp-own'));
           if (own.length !== 1 || own[0].textContent !== '30' || !/own/.test(own[0].getAttribute('aria-label') || '')) fails.push('the rate marked as the project’s own is ' + (own.map(b => b.textContent + ' (“' + b.getAttribute('aria-label') + '”)').join(', ') || 'none') + ', want 30 alone, named as its own');
-          if (r12Row('fps').some(b => b !== own[0] && /own/.test(b.getAttribute('aria-label') || ''))) fails.push('a rate that is not the project’s is named as its own');
-          for (const f of full) {
-            if (!(await open())) { fails.push('Export did not open again for ' + f + ' fps'); break; }
-            const b = r12Row('fps').find(x => +x.textContent === f);
-            if (!b) { fails.push('no ' + f + ' fps button'); continue; }
-            if (!r4Hits(b)) fails.push(f + ' fps is not pressable where it is (' + r4Txt(r4Box(b)) + ')');
-            if (b.getBoundingClientRect().width < 44) fails.push(f + ' fps is ' + Math.round(b.getBoundingClientRect().width) + ' px wide, under a finger’s 44');
+          r12Row('fps').forEach(b => { const wd = b.getBoundingClientRect().width; if (wd < 44 || !r4Hits(b)) fails.push(r12Face('fps', b) + ' is ' + Math.round(wd) + ' px wide' + (r4Hits(b) ? '' : ' and not pressable') + ', under a finger’s 44'); });
+          /* CONTROL: each of the three reaches the export call */
+          for (const f of [60, 120, 30]) {
+            if (!(await open())) throw new Error('setup: Export did not open again for ' + f + ' fps');
+            const b = r12Row('fps').find(x => x.dataset.exp === 'fps-' + f);
+            if (!b) throw new Error('CONTROL: no ' + f + ' fps button · ' + fails.join(' · '));
             b.click(); await r4Settle(60);
             if (r12On('fps') !== f + ' fps') fails.push('pressing ' + f + ' leaves ' + r12On('fps') + ' picked');
             got = null;
             r12Box().querySelector('.sm-exp-go').click();
             for (let i = 0; i < 60 && !got; i++) await v.sleep(20);
-            if (!got) fails.push('Save video at ' + f + ' fps started no export');
-            else if (got.fps !== f) fails.push('Save video with ' + f + ' fps picked exported at ' + got.fps + ' fps');
+            if (!got || got.fps !== f) throw new Error('CONTROL: Save video with ' + f + ' fps picked ' + (got ? 'exported at ' + got.fps + ' fps' : 'started no export') + ' · ' + fails.join(' · '));
             await r4Settle(150);
+          }
+          /* Custom: a question on the number pad; 500 and 0 are refused; 48 is taken */
+          if (!(await open())) throw new Error('setup: Export did not open again for Custom');
+          if (!custom() || custom().textContent !== 'Custom') fails.push('on a 30 fps project the fourth button reads “' + (custom() ? custom().textContent : 'nothing') + '”, want Custom');
+          else {
+            custom().click(); await r4Settle(200);
+            if (!askUp()) fails.push('a press on Custom asked nothing');
+            else {
+              const i = askIn();
+              if (!i || (i.getAttribute('inputmode') || '') !== 'decimal') fails.push('the question’s field asks for the ' + ((i && i.getAttribute('inputmode')) || 'letter') + ' keyboard, want the number pad (inputmode decimal)');
+              await answer('500', v); await askNo();
+              if (r12On('fps') !== '30 fps' || custom().textContent !== 'Custom') fails.push('500 typed into Custom left “' + r12On('fps') + '” picked and the button reading “' + custom().textContent + '”, want nothing changed (30 fps, Custom)');
+              if (!/1 to 120/.test(v.say())) fails.push('500 was refused with “' + v.say() + '”, want a line that says 1 to 120');
+              custom().click(); await r4Settle(200);
+              await answer('0', v); await askNo();
+              if (r12On('fps') !== '30 fps') fails.push('0 typed into Custom left “' + r12On('fps') + '” picked, want 30 fps still');
+              custom().click(); await r4Settle(200);
+              await answer('48', v);
+              if (askUp()) { fails.push('the question stayed up after 48'); await askNo(); }
+              if (r12On('fps') !== '48 fps' || custom().textContent !== '48') fails.push('48 typed into Custom leaves “' + r12On('fps') + '” picked and the button reading “' + custom().textContent + '”, want 48 on the button, picked');
+              got = null;
+              r12Box().querySelector('.sm-exp-go').click();
+              for (let k = 0; k < 60 && !got; k++) await v.sleep(20);
+              if (!got || got.fps !== 48) fails.push('Save video with 48 on Custom ' + (got ? 'exported at ' + got.fps + ' fps' : 'started no export') + ', want 48');
+              await r4Settle(150);
+              /* the question box's field goes back to letters for every other question */
+              const done = FM.ask({ title: 'A name', input: { value: 'a' } }); await v.sleep(40);
+              const i2 = askIn();
+              if (i2 && i2.hasAttribute('inputmode')) fails.push('the next question (a name) still asks for the number pad');
+              await askNo(); await done; await v.sleep(30);
+            }
           }
           FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
         }, { W: 1920, H: 1080 });
-        /* review R13-5: a 24 fps project's own rate; beside the row's name the buttons were 31 px wide at 380.
-           24 Nov, his words on the Export drawings: "why would you be able to choose between 24 and 25? Like, that's just one difference."
-           Its own 24 takes 25's place: six buttons, none one frame from its neighbour (it used to be ADDED beside 25: seven). */
-        await smP2((W, H) => smClips3(W, H), async function () {
+        /* a 24 fps project: its own rate is on the fourth button, one press away after another pick, and a second press asks */
+        await smP2((W, H) => smClips3(W, H), async function (v) {
           try { localStorage.removeItem('fm.sm.export'); } catch (e) {}
           r12Btn().click(); await r4Settle(300);
           if (!r12Box()) throw new Error('setup: Export opened no panel on the 24 fps project');
-          const row = r12Row('fps');
-          if (!row.length) throw new Error('CONTROL: a 24 fps project’s Export has no Smoothness buttons at all');
-          const rates24 = row.map(b => +b.textContent), own24 = row.filter(b => b.classList.contains('sm-exp-own'));
-          if (rates24.join() !== '15,24,30,50,60,120') fails.push('a 24 fps project’s Smoothness offers ' + r12Words('fps') + ', want 15, 24, 30, 50, 60 and 120: its own 24 where 25 stood — his words: “why would you be able to choose between 24 and 25?”');
-          if (rates24.some((f, i) => i > 0 && f - rates24[i - 1] <= 1)) fails.push('two of a 24 fps project’s rates are one frame apart: ' + rates24.join(', '));
-          if (own24.length !== 1 || own24[0].textContent !== '24') fails.push('on a 24 fps project the rate marked as its own is ' + (own24.map(b => b.textContent).join(', ') || 'none') + ', want 24 alone');
-          if (r12On('fps') !== '24 fps') fails.push('a 24 fps project’s Smoothness opens on ' + r12On('fps') + ', want its own 24');
-          row.forEach(b => {
-            const w = b.getBoundingClientRect().width;
-            if (w < 44 || !r4Hits(b)) fails.push('24 fps project: ' + r12Face('fps', b) + ' is ' + Math.round(w) + ' px wide' + (r4Hits(b) ? '' : ' and not pressable') + ', under a finger’s 44');
-          });
+          if (r12Words('fps') !== '30 fps, 60 fps, 120 fps, 24 fps' || r12On('fps') !== '24 fps') fails.push('a 24 fps project’s Smoothness reads “' + r12Words('fps') + '” with “' + r12On('fps') + '” picked, want 30, 60, 120 and its own 24 on the fourth button, picked');
+          const c = custom();
+          if (!c) throw new Error('setup: the 24 fps project’s row has no fourth button · ' + fails.join(' · '));
+          if (!c.classList.contains('sm-exp-own') || !/own/.test(c.getAttribute('aria-label') || '')) fails.push('the 24 on the fourth button is not marked and named as the project’s own (“' + c.getAttribute('aria-label') + '”)');
+          r12Row('fps').forEach(b => { const wd = b.getBoundingClientRect().width; if (wd < 44 || !r4Hits(b)) fails.push('24 fps project: ' + r12Face('fps', b) + ' is ' + Math.round(wd) + ' px wide' + (r4Hits(b) ? '' : ' and not pressable') + ', under a finger’s 44'); });
+          r12Row('fps').find(x => x.dataset.exp === 'fps-60').click(); await r4Settle(80);
+          if (r12On('fps') !== '60 fps' || custom().textContent !== '24') fails.push('after 60 the row has “' + r12On('fps') + '” picked and the fourth button reads “' + custom().textContent + '”, want 60 fps with 24 still one press away');
+          custom().click(); await r4Settle(150);
+          if (askUp()) { fails.push('a press on the 24 button, not picked, asked a question instead of going back to 24'); await askNo(); }
+          else if (r12On('fps') !== '24 fps') fails.push('a press on the 24 button left “' + r12On('fps') + '” picked');
+          custom().click(); await r4Settle(200);
+          if (!askUp()) fails.push('a second press on the 24 button, now picked, did not ask for another rate');
+          await askNo();
           FM.simpleTools._reset(); FM.refreshAll(); await r4Settle(60);
         }, { W: 1920, H: 1080, fps: 24 });
       });
-    } finally { ex.run = run0; put(); }
+    } finally { ex.run = run0; put(); try { if (FM.ask.isOpen()) document.querySelector('#fm-ask .fm-ask-cancel').click(); } catch (e) {} }
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
   });
 

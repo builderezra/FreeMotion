@@ -1120,7 +1120,7 @@ window.FM = window.FM || {};
      MP4, never saved as the dialog's defaults) — js/exporter.js and js/app.js are not touched, so Full's Export is exactly today's. */
   const EXPORT_Q = 0.18;                 // Full's High quality, the one Simple has always used (2.7, SU1 #20)
   const EXPORT_KEY = 'fm.sm.export';     // his last pick on this device ({p, fps}); never the dialog's own memory (fm.exportPrefs)
-  let expP = 0, expFps = 0, expUp = false, posterAt = NaN, posterCv = null;   // expUp: the size picked is ABOVE the frame because he pressed it (an enlargement he asked for)
+  let expP = 0, expFps = 0, expUp = false, expFpsOwn = true, expCustom = 0, posterAt = NaN, posterCv = null;   // expUp: the size picked is ABOVE the frame because he pressed it (an enlargement he asked for); expFpsOwn: the rate is the project's, not his press; expCustom: the rate the Custom button holds (0: none)
   const exportUp = () => {
     if (panelFor !== PROJECT || panelKind !== 'export' || (FM.selectionIds ? FM.selectionIds() : []).length) return false;
     if (!phone.matches) return true;
@@ -1145,23 +1145,17 @@ window.FM = window.FM || {};
     return out.sort((a, b) => a - b);
   }
   /* Smoothness. #1261, his words (23 Nov): "The simple export panel is honestly probably too simple. Like, you only have two choices for
-     frames. That's not enough. Like, it should stay simple like that, but it should still have more options." It offered 30 and 60 (and
-     the project's own rate when neither). It now offers every rate Full's Export offers — read from Full's own list (index.html #exp-fps,
-     the numbered rungs: 15 · 25 · 30 · 50 · 60 · 120), so the two can never drift apart — and the project's own rate when it is none of
-     them (48, …), or in the place of a listed rate one frame away (24 for 25): every one a rate the exporter already takes. Same row,
-     same buttons; the project's own is marked (exportSeg). */
-  const FULL_RATES = [15, 25, 30, 50, 60, 120];   // what #exp-fps lists today, if it cannot be read
-  function exportRates() {
-    const pf = +(FM.scene.project || {}).fps || 30;
-    let out = Array.from(document.querySelectorAll('#exp-fps option')).map(o => +o.value).filter(f => f > 0 && isFinite(f));
-    if (!out.length) out = FULL_RATES.slice();
-    /* HIS WORDS, 24 Nov, on the Export drawings: "why would you be able to choose between 24 and 25? Like, that's just one difference."
-       (and #118, of Full's own list: "Just make 25 only"). So a project's own rate that is not on the list TAKES THE PLACE of a listed
-       rate within one frame of it (a 24 fps project gets 24 where 25 stood, a 29.97 one where 30 stood) and is only ADDED when no listed
-       rate is that near (48 fps). No two buttons are ever one frame apart, and his project's own rate is always there. */
-    if (!out.some(f => Math.abs(f - pf) < 1e-6)) { out = out.filter(f => Math.abs(f - pf) > 1 + 1e-6); out.push(pf); }
-    return out.sort((a, b) => a - b);
-  }
+     frames. That's not enough. Like, it should stay simple like that, but it should still have more options." And, asked on 24 Nov
+     whether the row should hold all six of the Full editor's rates or fewer: "Just do 30, 60, 120 or custom."
+     So the row is THREE RATES AND CUSTOM (exportFpsRow). The fourth button holds any other rate from 1 to 120, the exporter's own range
+     (js/app.js, #exp-fps-num): it SHOWS the rate it holds (the project's own when that is none of the three, or the one he typed) and
+     reads "Custom" when it holds none. The project's own rate is marked wherever it stands. (An hour before this the row read the
+     Full editor's own list of six and put a 24 fps project's rate in 25's place: 4127ef31, never shipped.) */
+  const EXP_RATES = [30, 60, 120], EXP_FPS_LO = 1, EXP_FPS_HI = 120;
+  const expRound = f => Math.round(f * 100) / 100;
+  const expIsRate = f => EXP_RATES.some(r => Math.abs(r - f) < 1e-6);
+  const expFpsOk = f => typeof f === 'number' && isFinite(f) && f >= EXP_FPS_LO && f <= EXP_FPS_HI;
+  const expPf = () => { const f = expRound(+(FM.scene.project || {}).fps || 30); return expFpsOk(f) ? f : 30; };   // the project's own rate, as the row can hold it
   /* 0 to the end of the last clip (and an end card after them: #1243 S37 review, it is content and his timeline says it is kept), so the
      black a song or a title runs on into is never in the file — what Simple's export has always covered (2.7) */
   function exportEnd() {
@@ -1179,16 +1173,21 @@ window.FM = window.FM || {};
     return (br + snd) * Math.max(0, len) / 8;
   }
   /* what the panel starts on: his last pick on this device when this project offers it, else the frame's own size (the biggest rung
-     that is not above the frame) and the project's own rate. A remembered size ABOVE the frame is taken only if he picked it as an
+     that is not above the frame) and the project's own rate (on one of the three buttons, or on Custom). A remembered size ABOVE the frame is taken only if he picked it as an
      enlargement (mem.up): "4K" pressed on a 4K project means its own size, and must not enlarge the next, smaller project unasked. */
   function exportInit() {
     let mem = null;
     try { mem = JSON.parse(localStorage.getItem(EXPORT_KEY) || 'null'); } catch (e) { mem = null; }
-    const rungs = exportRungs(), rates = exportRates(), pf = +(FM.scene.project || {}).fps || 30, short = expShort();
+    const rungs = exportRungs(), pf = expPf(), short = expShort();
     const own = Math.max.apply(null, rungs.filter(p => p <= short));
     expP = (mem && rungs.indexOf(+mem.p) >= 0 && (+mem.p <= short || mem.up === true)) ? +mem.p : own;
     expUp = expP > short;
-    expFps = (mem && rates.some(f => Math.abs(f - +mem.fps) < 1e-6)) ? +mem.fps : pf;
+    /* the rate: his last PRESS on this device (exportKeep keeps a rate only when he pressed it), else the project's own; the Custom button
+       holds the rate in use when it is none of the three, else the project's own when that is none of the three, else nothing */
+    const mf = mem ? expRound(+mem.fps) : NaN;
+    expFpsOwn = !expFpsOk(mf);
+    expFps = expFpsOwn ? pf : mf;
+    expCustom = !expIsRate(expFps) ? expFps : (!expIsRate(pf) ? pf : 0);
   }
   /* review R12-1 / R12-C1: the pick is checked against the project as it is NOW wherever it is used (the panel drawn again, Save video):
      a panel left up while the frame size or rate changed under it (Canvas from the cog, an undo, Home and another project) kept the old
@@ -1196,9 +1195,10 @@ window.FM = window.FM || {};
   /* (24 Nov) …and so does a size above the frame that he did not pick as an enlargement: with 4K always on offer, the 4K pressed on a
      4K frame would otherwise stay pressed over a frame that turned 1080p under the panel, and Save video would enlarge it twice over. */
   function exportCheck() {
-    if (exportRungs().indexOf(expP) < 0 || !exportRates().some(f => Math.abs(f - expFps) < 1e-6) || (expP > expShort() && !expUp)) exportInit();
+    /* …and a rate that was the project's own (not his press) follows the project: a 24 fps frame that turned 30 fps under the open panel */
+    if (exportRungs().indexOf(expP) < 0 || !expFpsOk(expFps) || (expFpsOwn && Math.abs(expFps - expPf()) > 1e-6) || (expP > expShort() && !expUp)) exportInit();
   }
-  function exportKeep() { try { localStorage.setItem(EXPORT_KEY, JSON.stringify({ p: expP, fps: expFps, up: expP > expShort() })); } catch (e) {} }
+  function exportKeep() { try { localStorage.setItem(EXPORT_KEY, JSON.stringify({ p: expP, fps: expFpsOwn ? 0 : expFps, up: expP > expShort() })); } catch (e) {} }
   /* THE PICTURE: the frame at the playhead as the FILE will hold it, rendered (never copied off #preview, which carries guides and the
      isolate) the way Full's Export card draws its own (js/export-card.js drawThumb): the isolate, the crop tool's whole-frame view and the
      effects sheet's preview held aside for the one render and put back. Drawn again only when the playhead has moved (or the project or
@@ -1258,6 +1258,59 @@ window.FM = window.FM || {};
     row.appendChild(seg);
     box.appendChild(row);
   }
+  /* Smoothness's row (#1261, his words: "Just do 30, 60, 120 or custom"): three rates and the Custom button, in the row's own look
+     (exportSeg's classes, so the panel's keys and the suite find them). The Custom button shows the rate it holds. A press on it picks
+     that rate; a press when it is already the pick, or holds none, asks for a number from 1 to 120 in the app's own question box
+     (FM.ask, on the phone's number pad). A number that is one of the three presses that button instead. A press keeps focus on the
+     button pressed (the row is drawn again in place). */
+  function exportFpsRow(box) {
+    const w = W(), fpsName = f => typeof w.exportFps === 'function' ? w.exportFps(f) : expRound(f) + ' fps';
+    const row = el('div', 'sm-exp-row'); row.dataset.row = 'fps';
+    const lab = el('span', 'sm-exp-l', w.exportSmooth || 'Smoothness');
+    lab.appendChild(el('span', 'sm-exp-unit', w.exportFpsUnit || 'fps'));
+    row.appendChild(lab);
+    const seg = el('div', 'sm-exp-seg'); seg.setAttribute('role', 'group'); seg.setAttribute('aria-label', w.exportSmooth || 'Smoothness');
+    const pick = (f, focus) => {
+      expFps = f; expFpsOwn = false; exportKeep(); paint(focus);
+      const sz = box.querySelector('.sm-exp-size'); if (sz) sz.textContent = exportSizeText();
+    };
+    const ask = () => {
+      if (!FM.ask) return;
+      FM.ask({ title: w.exportFpsAsk || 'Frames a second', message: w.exportFpsHint || 'From 1 to 120', ok: w.exportFpsSet || 'Set',
+        input: { value: String(expRound(expCustom || expFps)), inputmode: 'decimal' } }).then(ans => {
+        if (ans == null) return;
+        const n = expRound(parseFloat(String(ans).replace(',', '.')));
+        if (!expFpsOk(n)) { if (FM.spine && FM.spine.say) FM.spine.say(w.exportFpsBad || 'Type a number from 1 to 120'); return; }
+        if (!expIsRate(n)) expCustom = n;
+        pick(n, expIsRate(n) ? 'fps-' + n : 'fps-custom');
+      });
+    };
+    function paint(focus) {
+      const pf = expPf(), a = document.activeElement, keep = focus || (a && seg.contains(a) ? a.dataset.exp : '');
+      seg.textContent = '';
+      EXP_RATES.forEach(f => {
+        const b = el('button', 'sm-exp-b', String(f)); b.type = 'button'; b.dataset.exp = 'fps-' + f;
+        const own = Math.abs(f - pf) < 1e-6, said = fpsName(f) + (own ? ', ' + (w.exportFpsOwn || 'the project’s own') : '');
+        if (own) b.classList.add('sm-exp-own');
+        b.setAttribute('aria-label', said); b.title = said;
+        b.setAttribute('aria-pressed', Math.abs(f - expFps) < 1e-6 ? 'true' : 'false');
+        b.addEventListener('click', e => { e.stopPropagation(); pick(f); });
+        seg.appendChild(b);
+      });
+      const on = !expIsRate(expFps), own = expCustom > 0 && Math.abs(expCustom - pf) < 1e-6;
+      const c = el('button', 'sm-exp-b sm-exp-custom', expCustom ? String(expRound(expCustom)) : (w.exportCustom || 'Custom')); c.type = 'button'; c.dataset.exp = 'fps-custom';
+      if (own) c.classList.add('sm-exp-own');
+      const said = expCustom ? fpsName(expCustom) + ', ' + (own ? (w.exportFpsOwn || 'the project’s own') : (w.exportCustomSaid || 'your own rate')) : (w.exportCustomTitle || 'Custom: type a rate');
+      c.setAttribute('aria-label', said); c.title = said;
+      c.setAttribute('aria-pressed', on ? 'true' : 'false');
+      c.addEventListener('click', e => { e.stopPropagation(); if (expCustom && !on) pick(expCustom); else ask(); });
+      seg.appendChild(c);
+      if (keep) { const k = seg.querySelector('.sm-exp-b[data-exp="' + keep + '"]'); if (k) k.focus({ preventScroll: true }); }
+    }
+    paint('');
+    row.appendChild(seg);
+    box.appendChild(row);
+  }
   /* Save video: the panel goes, focus goes back to the Export button, and the export runs through FM.exportSimple — the dialog's gates
      (pause, the owner's export switch, the notepad, clips still arriving), then an MP4 at this size and smoothness. With nothing to export
      it says so in Simple's line instead (runExport's own refusal is a browser alert). */
@@ -1283,10 +1336,7 @@ window.FM = window.FM || {};
     top.append(panelBack(), exportPoster(), what);
     box.appendChild(top);
     exportSeg(box, 'q', w.exportQuality || 'Quality', exportRungs(), expP, p => typeof w.exportRung === 'function' ? w.exportRung(p) : p + 'p', v => { expP = v; expUp = v > expShort(); });
-    /* #1261: every rate Full's Export offers, as bare numbers under "Smoothness · fps", the project's own marked */
-    const pf = +(FM.scene.project || {}).fps || 30, fpsName = f => typeof w.exportFps === 'function' ? w.exportFps(f) : (Math.round(f * 100) / 100) + ' fps';
-    exportSeg(box, 'fps', w.exportSmooth || 'Smoothness', exportRates(), expFps, f => String(Math.round(f * 100) / 100), v => { expFps = v; },
-      { unit: w.exportFpsUnit || 'fps', own: pf, spoken: (f, own) => fpsName(f) + (own ? ', ' + (w.exportFpsOwn || 'the project’s own') : '') });
+    exportFpsRow(box);   // #1261: 30 · 60 · 120 and Custom, bare numbers under "Smoothness · fps", the project's own marked
     /* the size, then Save video: stacked on a phone, side by side in the PC band (styles.css), so the whole card fits its ~206 px at 1280 × 800 */
     const foot = el('div', 'sm-exp-foot');
     const go = el('button', 'sm-exp-go', w.exportGo || 'Save video'); go.type = 'button'; go.dataset.exp = 'go';

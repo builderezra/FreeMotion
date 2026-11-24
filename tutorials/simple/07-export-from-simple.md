@@ -6,7 +6,7 @@ Before you start: a project in Simple with a clip in it.
 
 1. Tap the **up-arrow** at the top right. The Export panel opens, with a picture of your video and its length. <!-- js/simple-tools.js openExport, exportPanel -->
 2. Under **Quality**, pick a size. It starts on your project's own size. <!-- js/simple-tools.js exportRungs, exportInit -->
-3. Under **Smoothness**, pick the frames a second. It starts on your project's own rate, the one with a dot under it. <!-- js/simple-tools.js exportRates, exportSeg (.sm-exp-own) -->
+3. Under **Smoothness**, pick 30, 60 or 120 frames a second, or tap **Custom** to type your own. It starts on your project's own rate, the one with a dot under it. <!-- js/simple-tools.js exportFpsRow (.sm-exp-own, .sm-exp-custom) -->
 4. Read the line above the button: it says about how big the file will be. Then tap **Save video**. <!-- js/simple-tools.js exportSizeText, exportGo -->
 5. A bar shows progress. When it finishes, an **Export ready** card shows the first frame and the file name, with **Discard** and **Save**. Tap **Save** and choose where it goes (on an iPhone: Save Video or Save to Files). <!-- js/app.js showExportReady; NOT WALKED: this laptop's browser cannot encode H.264 video -->
 
@@ -19,6 +19,6 @@ If it doesn't work: If a message says the size is too big for an MP4 on this dev
 |---|---|---|
 | 1 | the Export button opens Simple's own panel, not the Full editor's dialog | js/simple-tools.js openExport, exportPanel |
 | 2 | Quality: 720p, 1080p, 4K and the project's own size; it opens on the project's own | js/simple-tools.js exportRungs, exportInit |
-| 3 | Smoothness: the Full editor's rates and the project's own, marked | js/simple-tools.js exportRates, exportSeg |
+| 3 | Smoothness: 30, 60, 120 and Custom (any rate from 1 to 120); the project's own rate marked | js/simple-tools.js exportFpsRow |
 | 4 | the size line, Save video | js/simple-tools.js exportSizeText, exportGo |
 | 5 | the ready card with Discard and Save | js/app.js showExportReady |
