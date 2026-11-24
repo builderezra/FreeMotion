@@ -23349,7 +23349,8 @@
         if (Math.min(ha.w, ha.h) < 30) throw new Error('#cv-app-bar is ' + ha.w + 'x' + ha.h + ' — too small to press');
       }
       appSet.click();
-      await sleep(120);
+      /* #1243 ST5: the cog's blocks now leave with an animation under Settings before it is put away (about 250 ms; a 400 ms backstop) */
+      for (let i = 0; i < 20 && !cvDlg.classList.contains('hidden'); i++) await sleep(30);
       if (!FM.settings.isOpen()) throw new Error('"App settings…" did not open the settings panel');
       if (!cvDlg.classList.contains('hidden')) throw new Error('the canvas dialog is still up behind the panel');
 
@@ -210126,21 +210127,36 @@
   /* #1243 ST5 — his words: "when you're in that menu and you press app settings, like, it's fine that the app settings is like on the left,
      but I think you should make it have like an animation, because all the others have like an animation when you open them, except for
      app settings. It kind of just boots you out of it. So change that." */
-  test('1243 ST5 · App settings opens with an animation — Settings dims over the cog from its first frame, the cog’s blocks leave one after another instead of vanishing, then the cog is put away, and Settings’ ‹ brings the cog back all closed, at 380 and 1280 (CONTROL: with reduced motion the cog goes at once)', { item: '1243', budgetMs: 90000 }, async function () {
+  test('1243 ST5 · App settings opens with an animation — Settings dims over the cog from its first frame, the cog’s blocks leave one after another instead of vanishing while its own dim fades out and, on a PC, its tail goes at once, then the cog is put away, and Settings’ ‹ brings the cog back all closed, at 380 and 1280 (CONTROL: with reduced motion the cog goes at once, and before the tap the PC reading sees the tail)', { item: '1243', budgetMs: 90000 }, async function () {
     await editorWithShape(async function () {
       await with945(async function () {
         const dlg = document.getElementById('canvas-dialog');
-        const alpha = function (el) { const m = /rgba?\(([^)]+)\)/.exec(getComputedStyle(el).backgroundColor || ''); const p = m ? m[1].split(',').map(parseFloat) : []; return p.length > 3 ? p[3] : (p.length ? 1 : 0); };
+        const alphaOf = function (s) { const m = /rgba?\(([^)]+)\)/.exec(String(s || '')); const p = m ? m[1].split(',').map(parseFloat) : []; return p.length > 3 ? p[3] : (p.length ? 1 : (/transparent/.test(String(s || '')) ? 0 : 1)); };
+        const alpha = function (el) { return alphaOf(getComputedStyle(el).backgroundColor); };
+        /* the cog's tails, read off its blocks (a tail leaked by another test would answer a document query) */
+        const tailsShown = function () {
+          return [dlg.querySelector('.export-card'), document.getElementById('cv-friends'), document.getElementById('cv-editor'), document.getElementById('cv-app')]
+            .filter(function (b) { return b && b._popTail && b._popTail.isConnected && b._popTail.getClientRects().length && getComputedStyle(b._popTail).visibility !== 'hidden'; });
+        };
         let unMM = null;
         const run = async function (label) {
           window.__fmStep = '1243 ST5: ' + label;
           FM.openCanvasDialog({ block: 'none' }); await entranceDone(dlg); await land945();
+          const pc = document.body.classList.contains('cv-anchored');
           try {
+            if (pc && !tailsShown().length) throw new Error(label + ': CONTROL: before the tap the reading sees no tail at the cog, so it could not see one left over Settings either');
             document.getElementById('cv-app-bar').click();
             const scrim = document.querySelector('.set-scrim');
             if (!scrim) throw new Error(label + ': the App settings bar opened no Settings');
             if (alpha(scrim) < 0.55) throw new Error(label + ': on its first frame Settings’ dim is ' + alpha(scrim).toFixed(2) + ' — the editor shows through as the cog goes (his words: “It kind of just boots you out of it”)');
             if (dlg.classList.contains('hidden')) throw new Error(label + ': the cog vanished in the same frame — it should leave with an animation');
+            if (pc && tailsShown().length) throw new Error(label + ': as the cog leaves, its tail still points at the cog above Settings’ dim (' + tailsShown().map(function (b) { return b.id || 'the canvas card'; }).join(', ') + ')');
+            /* the cog's own dim fades out under Settings' (a CSS transition on its background), not held at full strength and dropped in one frame */
+            const dimFade = dlg.getAnimations().filter(function (a) { return window.CSSTransition && a instanceof CSSTransition && a.transitionProperty === 'background-color'; })[0];
+            if (!dimFade) throw new Error(label + ': the cog’s own dim (' + alpha(dlg).toFixed(2) + ') does not fade as it leaves, so it drops away in one frame when the cog is put away');
+            const dimKf = dimFade.effect.getKeyframes();
+            const dimEnd = dimKf.length ? alphaOf(dimKf[dimKf.length - 1].backgroundColor) : 1;
+            if (!(dimEnd < 0.02)) throw new Error(label + ': the cog’s own dim fades to ' + dimEnd.toFixed(2) + ', not to clear, so it still drops away in one frame at the end');
             const leaving = dlg.getAnimations({ subtree: true }).filter(function (a) { return /^cv-leave/.test(a.animationName || ''); });
             if (leaving.length < 3) throw new Error(label + ': ' + leaving.length + ' of the cog’s blocks animate as it goes');
             const delays = leaving.map(function (a) { return a.effect.getTiming().delay; }).sort(function (a, b) { return a - b; });
@@ -210175,7 +210191,7 @@
   /* #1243 ST1 — his words: "the animation for in the settings, how we've got the four different settings options, how you've got app settings,
      canvas, friends, and then the editor mode. Basically, make it so that the animation is just a bit better, like improve it a bit. Like,
      just put some polish and effort into it." Pick A (recommended): cascade and unfold. */
-  test('1243 ST1 · the cog’s blocks swing in one after another in the order they stand (each at least 30 ms after the last), at 380 and 1280 (CONTROL: the first block does not wait at all)', { item: '1243', budgetMs: 90000 }, async function () {
+  test('1243 ST1 · the cog’s blocks swing in one after another in the order they stand (each at least 30 ms after the last), and each waits unseen until its turn, at 380 and 1280 (CONTROL: the first block does not wait at all, and a landed block reads as seen)', { item: '1243', budgetMs: 90000 }, async function () {
     await editorWithShape(async function () {
       await with945(async function () {
         const dlg = document.getElementById('canvas-dialog');
@@ -210197,12 +210213,58 @@
             for (let i = 1; i < read.length; i++) {
               if (!(read[i].d - read[i - 1].d >= 30)) throw new Error(label + ': the blocks do not swing in one after another in the order they stand (delays ' + read.map(function (x) { return (x.b.id || 'canvas') + ' ' + x.d; }).join(', ') + ' ms) — his words: “put some polish and effort into it”');
             }
+            /* A block waiting for its turn is not drawn yet. Read in the same task as the open, before any frame: every block after the
+               first is still in its delay. With no backwards fill (a PC's cv-grow had none) it shows at rest, then blinks out, then grows. */
+            const seenEarly = read.slice(1).filter(function (x) { return parseFloat(getComputedStyle(x.b).opacity) > 0.05; });
+            if (seenEarly.length) throw new Error(label + ': before its turn a block is already drawn (' + seenEarly.map(function (x) { return (x.b.id || 'canvas') + ' at ' + getComputedStyle(x.b).opacity + ' after a ' + x.d + ' ms wait'; }).join(', ') + '), so it shows, blinks out, then swings in');
+            /* CONTROL: the same reading sees a block once it has landed */
+            await land945();
+            const last = read[read.length - 1];
+            if (!(parseFloat(getComputedStyle(last.b).opacity) > 0.95)) throw new Error(label + ': CONTROL: landed, ' + (last.b.id || 'canvas') + ' reads ' + getComputedStyle(last.b).opacity + ', so this reading could not tell a drawn block from a waiting one');
           } finally { FM.closeCanvasDialog(); await sleep(40); }
         };
         try {
           await atPhoneWidth(function () { return run('380'); }, 380);
           await atWideWidth(function () { return run('1280'); }, 1280);
         } finally { if (unMM) unMM(); try { FM.closeCanvasDialog(); } catch (e) {} await sleep(40); }
+      });
+    });
+  });
+
+  /* #1243 ST1 (the review's finding the reviewer missed): the cascade's steps (--cv-i) were left on the blocks after the open, so an
+     entrance that starts again while the cog is open (a window crossing the phone breakpoint swaps fm-hinge-panel for cv-grow) waited
+     its 45 ms steps again, unseen. The restart here is the same mechanism: a block off the page for one style pass, then back. */
+  test('1243 ST1 · once the cog’s entrance has played its cascade is cleared, so a block whose entrance starts again while the cog is open swings in at once, at 380 and 1280 (CONTROL: on the open a block waits its turn)', { item: '1243', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        const entrance = function (b) { return b.getAnimations().filter(function (x) { return window.CSSAnimation && x instanceof CSSAnimation; })[0] || null; };
+        const run = async function (label) {
+          window.__fmStep = '1243 ST1 cleared: ' + label;
+          FM.openCanvasDialog({ block: 'none' });
+          let bs = [], keep = [];
+          try {
+            bs = [dlg.querySelector('.export-card'), document.getElementById('cv-friends'), document.getElementById('cv-editor'), document.getElementById('cv-app')].filter(function (b) { return b && b.getClientRects().length; });
+            const d0 = bs.map(function (b) { const a = entrance(b); return a ? a.effect.getTiming().delay : 0; });
+            if (!(Math.max.apply(null, d0) >= 40)) throw new Error(label + ': CONTROL: on the open no block waits its turn (delays ' + d0.join(', ') + ' ms), so this reading could not see a cascade left behind either');
+            await land945();
+            for (let i = 0; i < 20 && bs.some(function (b) { return b.style.getPropertyValue('--cv-i') !== ''; }); i++) await sleep(30);
+            /* start every block's entrance again, with the cog still open */
+            keep = bs.map(function (b) { return b.style.display; });
+            bs.forEach(function (b) { b.style.display = 'none'; });
+            bs.forEach(function (b) { void getComputedStyle(b).display; });
+            bs.forEach(function (b, i) { b.style.display = keep[i]; });
+            keep = [];
+            const d1 = bs.map(function (b) { const a = entrance(b); return { id: b.id || 'canvas', d: a ? a.effect.getTiming().delay : null }; });
+            if (d1.some(function (x) { return x.d === null; })) throw new Error(label + ': setup: a block’s entrance did not start again (' + d1.map(function (x) { return x.id + ' ' + x.d; }).join(', ') + ')');
+            const late = d1.filter(function (x) { return x.d !== 0; });
+            if (late.length) throw new Error(label + ': with the cog open, an entrance that starts again still waits its turn (' + late.map(function (x) { return x.id + ' ' + x.d + ' ms'; }).join(', ') + '): the open’s cascade was never cleared');
+          } finally { if (keep.length) bs.forEach(function (b, i) { b.style.display = keep[i]; }); FM.closeCanvasDialog(); await sleep(40); }
+        };
+        try {
+          await atPhoneWidth(function () { return run('380'); }, 380);
+          await atWideWidth(function () { return run('1280'); }, 1280);
+        } finally { try { FM.closeCanvasDialog(); } catch (e) {} await sleep(40); }
       });
     });
   });

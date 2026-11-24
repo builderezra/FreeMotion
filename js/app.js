@@ -10204,12 +10204,21 @@ window.FM = window.FM || {};
       /* #1243 ST1: the order of the entrance's cascade (styles.css --cv-i) is the order the blocks STAND in: top to bottom on a phone, and
          on a PC from the cog outward (bottom up when the column grows up from it). Read from their resting offsets (an entrance's
          transform does not move those), right after the dialog is shown and before a frame is drawn, so every swing starts on time. */
-      const cvStagger = () => {
+      let cvStaggerN = 0;
+      const cvStagger = (leaving) => {
         const up = document.body.classList.contains('cv-anchored') && document.body.classList.contains('cv-up');
         [cvEd, cvFr, cvCard, cvApp].filter(b => b && b.getClientRects().length)
           .map(b => ({ b: b, t: b.offsetTop, e: b.offsetTop + b.offsetHeight }))
           .sort((x, y) => up ? y.e - x.e : x.t - y.t)
           .forEach((x, i) => x.b.style.setProperty('--cv-i', String(i)));
+        /* The cascade is for the entrance only. Left on, an entrance that starts again while the cog is open (a window crossing the
+           phone breakpoint swaps the blocks' fm-hinge-panel for cv-grow) waits its turn again, unseen. So once this open's entrances
+           have played (or were cut off), --cv-i goes. The leave sets its own and keeps it; a later open or leave outdates this one. */
+        const n = ++cvStaggerN;
+        if (leaving) return;
+        const kids = Array.from(cvDialog.children);
+        const clear = () => { if (n === cvStaggerN && !cvDialog.classList.contains('cv-leaving')) kids.forEach(b => b.style.removeProperty('--cv-i')); };
+        Promise.all(kids.reduce((all, b) => all.concat(b.getAnimations ? b.getAnimations() : []), []).map(a => a.finished)).then(clear, clear);
       };
       /* #1243 ST5: the App settings bar's way out. Settings is already opening over the cog (its dim at full strength from the first
          frame); the blocks leave one after another (styles.css cv-leave), and only then is the cog put away. Reduced motion, or a page
@@ -10220,7 +10229,7 @@ window.FM = window.FM || {};
         cvPairSettle();
         if (reduce || !cvDialog.getAnimations) { cvClose(); return; }
         try { cvDialog.getAnimations({ subtree: true }).forEach(a => { const t = a.effect && a.effect.getComputedTiming ? a.effect.getComputedTiming() : null; if (t && isFinite(t.endTime)) a.finish(); }); } catch (e) {}
-        cvStagger();
+        cvStagger(true);
         cvDialog.classList.add('cv-leaving');
         const mine = cvDialog.getAnimations({ subtree: true }).filter(a => a.animationName === 'cv-leave' || a.animationName === 'cv-leave-app');
         let done = false;

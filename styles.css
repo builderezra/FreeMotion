@@ -12304,9 +12304,10 @@ body.text-editing .collab-cmt, #stage:has(> #collab-people.cp-hidden) > .collab-
    bit. Like, just put some polish and effort into it." Pick A (recommended), cascade and unfold. THE ENTRANCE CASCADES: each block
    swings in 45 ms after the one before it, in the order the blocks stand (js/app.js cvStagger writes --cv-i: top to bottom on a phone,
    from the cog outward on a PC), the scrim leading. Was: all at one instant. Reduced motion: the delays are only set when motion is
-   welcome. */
+   welcome. A block waits UNSEEN for its turn (fill backwards): a PC's cv-grow has no fill of its own, so a late block was drawn at
+   rest, blinked out when its turn came, then grew. The phone's swing already filled backwards. */
 @media (prefers-reduced-motion: no-preference) {
-  body #canvas-dialog#canvas-dialog.cv-pair.cv-pair.cv-pair > * { animation-delay: calc(var(--cv-i, 0) * 45ms); }
+  body #canvas-dialog#canvas-dialog.cv-pair.cv-pair.cv-pair > * { animation-delay: calc(var(--cv-i, 0) * 45ms); animation-fill-mode: backwards; }
 }
 /* ═══ #1243 ST5 — his words: "when you're in that menu and you press app settings, like, it's fine that the app settings is like on the
    left, but I think you should make it have like an animation, because all the others have like an animation when you open them, except
@@ -12318,7 +12319,10 @@ body.text-editing .collab-cmt, #stage:has(> #collab-people.cp-hidden) > .collab-
 @keyframes cv-leave-app { to { opacity: 0; transform: translateX(-32px) scale(.97); } }
 body #canvas-dialog#canvas-dialog.cv-leaving.cv-leaving.cv-leaving > * { animation: cv-leave 190ms cubic-bezier(.4, 0, 1, 1) forwards; animation-delay: calc(var(--cv-i, 0) * 20ms); pointer-events: none; }
 body #canvas-dialog#canvas-dialog.cv-leaving.cv-leaving.cv-leaving > #cv-app { animation-name: cv-leave-app; }
-#canvas-dialog.cv-leaving { pointer-events: none; }
+/* The cog's own dim and blur fade out with the blocks, under Settings' dim (already at full strength), so the editor does not brighten
+   and sharpen in one frame when the cog is put away. On a PC its tail goes as the leave starts: it sits above Settings' dim. */
+#canvas-dialog.cv-leaving { pointer-events: none; background-color: transparent; backdrop-filter: blur(0px); transition: background-color 190ms linear, backdrop-filter 190ms linear; }
+body:has(> #canvas-dialog.cv-leaving) > .pop-tail { visibility: hidden; }
 .set-scrim.set-from-cog { transition: none; background: rgba(4, 6, 10, .62); }
 .set-close.set-back { font-size: 26px; line-height: 1; padding: 0 0 3px; }
 
