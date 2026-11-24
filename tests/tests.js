@@ -111560,8 +111560,10 @@
           ['case', 'move'].forEach(k => { if (Math.abs(T[k].rot - rWant) > 2) bad.push('the rotation ring, ' + RF690B_HOW[k] + ' at 9 o’clock: the rotation is ' + r1(T[k].rot) + ', not about ' + rWant + ' — the second finger restarted the turn from its own angle'); });
           /* 3. THE ANCHOR PAD: 260 px of swipe crosses the layer; the second finger lands 150 px to the right */
           FM._mtMode = 'anchor'; FM.inspector.openCategory('transform'); await hb4Wait(400);
-          const apad = () => { const p = document.querySelector('.mt-trackpad'); return p && /anchor/i.test(p.textContent || '') ? p : null; };
-          if (!apad()) throw new Error('setup: Move and Transform has no anchor pad in its anchor mode');
+          /* v18.53 (#1255): the pad's sentence is its NAME now (aria-label, js/inspector.js padMark) and a drawn mark stands where the
+             words stood, so the pad is found by its name; its words are still read, for a build that prints them. */
+          const apad = () => { const p = document.querySelector('.mt-trackpad'); return p && /anchor/i.test((p.getAttribute('aria-label') || '') + ' ' + (p.textContent || '')) ? p : null; };
+          if (!apad()) throw new Error('setup: Move and Transform has no anchor pad in its anchor mode (no .mt-trackpad named or worded for the anchor)');
           /* (F2) the second finger's own move has a y part, as on the other pads. 16 px, not 12: the pad snaps within 0.045 of a
              quarter point (11.7 px of swipe), so 12 px would sit 0.3 px from being snapped back to 0.5; 16 px is 0.062 */
           const A = await rf690bThree({
