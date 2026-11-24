@@ -184,8 +184,10 @@ window.FM = window.FM || {};
       if (s && ai !== wasAi) {
         lastSig = ''; FM.simpleTools.sync();
         /* …and on a PC the focus goes back to the tool that opened it once it closes (its ✕, or Escape, which js/ai-chat.js answers
-           itself): only when the focus is on nothing, or still inside the panel that has just gone */
-        if (!ai && !phone.matches) {
+           itself): only when the focus is on nothing, or still inside the panel that has just gone, and never while Settings is up:
+           its API key button closes it and opens Settings in one press, and the focus must not go behind Settings (which hands
+           the assistant back when it closes) */
+        if (!ai && !phone.matches && !(FM.settings && FM.settings.isOpen && FM.settings.isOpen())) {
           const a = document.activeElement, c = document.getElementById('ai-chat'), n = tools.querySelector('[data-tool="ai"]');
           if (n && (!a || a === document.body || (c && c.contains(a)))) n.focus({ preventScroll: true });
         }
@@ -2389,9 +2391,15 @@ window.FM = window.FM || {};
     subFor: () => subFor && { key: subFor.key, id: subFor.id, from: subFor.from, of: subFor.of || null },
     /* #1243 S14: Ask & edit, the project row's first tool. Only while Simple is on screen (in Full this opens nothing: Full has its own
        door in the Add menu). One menu at a time: a sub-row, Extras and Look's panel close first. The pressed tool lets the focus go, so the
-       assistant's own box may take it (js/ai-chat.js canTakeFocus: only when the focus is on nothing). True when the assistant is up. */
+       assistant's own box may take it (js/ai-chat.js canTakeFocus: only when the focus is on nothing). True when the assistant is up;
+       false, with Simple's line said, for somebody who cannot edit. */
     openAi() {
       if (!isSimple() || !mount() || !FM.aiChat || !FM.aiChat.show) return false;
+      /* A VIEWER OR A COMMENTER CHANGES NOTHING, and the assistant writes edits: it does not open for them (nor while a full offline
+         outbox takes nothing more). Simple's own line says why, as every Simple command does (FM.spine.roReason, the runner's first
+         gate). In Full their two doors to it, the + and the layer's menu, are hidden (styles.css body.collab-ro): this was a third. */
+      const ro = FM.spine && FM.spine.roReason ? FM.spine.roReason() : '';
+      if (ro) { if (FM.spine.explain) FM.spine.explain(ro); else if (FM.spine.say) FM.spine.say(ro); return false; }
       if (subFor) { subFor = null; segUndrag(); }
       if (extrasUp()) this.closeExtras();
       if (panelFor) dropPanel();

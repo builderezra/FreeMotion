@@ -205330,6 +205330,76 @@
     if (fails.length) throw new Error(fails.join(' · '));
   });
 
+  /* S14 d · SOMEBODY WHO CANNOT EDIT. In Full a Viewer has no door to the assistant (the + and the layer's menu are hidden for them);
+     Simple's first tool must not be one. CONTROLS: with the role back the same press opens it once, and API key over an open assistant
+     really did open Settings. */
+  test('1243 S14 · a Viewer’s press on Ask & edit opens nothing and says View only, a Commenter’s says You can comment here, and the bar keeps its project row; and at 1280 the assistant’s API key button, which closes it and opens Settings, leaves the focus off the bar behind Settings (CONTROLS: with the role back the same press opens the assistant once; Settings really opened)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    if (!FM.aiChat || !FM.aiChat.show || !FM.aiChat.hide) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
+    const showOwn = Object.getOwnPropertyDescriptor(FM.aiChat, 'show'), fails = [];
+    let n = 0;
+    try {
+      await smHintKeep('1', async function () {
+        await r4At(380, 0, async function () {
+          await smP2(smClips3, async function (v) {
+            FM.selectLayer(null); await r4Settle(150);
+            FM.aiChat.show = function () { n++; document.body.classList.add('aic-open'); };
+            for (const [role, want] of [['viewer', 'View only'], ['commenter', 'You can comment here']]) {
+              n = 0;
+              await smWithRole(role, async function () {
+                const b = smTool('ai');
+                if (!b) throw new Error('setup: the project row has no Ask & edit');
+                b.click(); await r4Settle(250);
+                if (n || document.body.classList.contains('aic-open')) fails.push('a ' + role + '’s press on Ask & edit opened the assistant (' + n + ' time(s)): it writes edits, and a ' + role + ' changes nothing');
+                if (r4Mode() !== 'project') fails.push('after a ' + role + '’s press the bar is in mode “' + r4Mode() + '”, want the project row still');
+                if (v.say() !== want) fails.push('a ' + role + '’s press said “' + v.say() + '”, want “' + want + '”, the line every Simple command gives them');
+              });
+              document.body.classList.remove('aic-open'); await r4Settle(120);
+            }
+            n = 0;
+            const b = smTool('ai');
+            if (!b) throw new Error('setup: the project row lost Ask & edit');
+            b.click(); await r4Settle(250);
+            if (n !== 1) throw new Error('CONTROL: with the role back a press on Ask & edit opened the assistant ' + n + ' times, want once, so the two refusals above were not the role’s · ' + fails.join(' · '));
+            document.body.classList.remove('aic-open'); await r4Settle(150);
+            if (showOwn) Object.defineProperty(FM.aiChat, 'show', showOwn); else delete FM.aiChat.show;
+          });
+        });
+        /* the real assistant at 1280: its API key button */
+        await r4At(1280, 800, async function () {
+          await smP2(smClips3, async function () {
+            FM.selectLayer(null); await r4Settle(150);
+            if (!FM.simpleTools.openAi()) { fails.push('1280: FM.simpleTools.openAi did not open the assistant'); return; }
+            await r4Settle(300);
+            const c = document.getElementById('ai-chat'), key = c && c.querySelector('.aic-keybtn');
+            if (!key) throw new Error('setup: the assistant has no API key button (.aic-keybtn)');
+            try {
+              key.focus({ preventScroll: true }); key.click();
+              /* read after the bar's body-class observer has run (a microtask queued by the press) and before any frame or timer:
+                 Settings takes the focus itself a frame later on a fine pointer, which would hide where the bar had put it */
+              await Promise.resolve(); await Promise.resolve();
+              if (!FM.settings.isOpen()) throw new Error('CONTROL: API key did not open Settings, so nothing here was behind it · ' + fails.join(' · '));
+              const ae = document.activeElement, bar = document.getElementById('sm-bar');
+              if (ae && bar && bar.contains(ae)) fails.push('1280: with Settings up after API key, the focus is on Simple’s bar behind it (' + ((ae.dataset && ae.dataset.tool) || ae.className || ae.tagName) + '): Enter there would open the assistant over Settings');
+              if (c.classList.contains('open')) fails.push('1280: API key left the assistant open under Settings');
+            } finally {
+              if (FM.settings.isOpen()) FM.settings.close({ handBack: false });
+              await r4Settle(350);
+            }
+            if (c.classList.contains('open')) fails.push('1280: Settings closed without a hand back, and the assistant came back anyway');
+          });
+        });
+      });
+    } finally {
+      if (showOwn) Object.defineProperty(FM.aiChat, 'show', showOwn); else delete FM.aiChat.show;
+      document.body.classList.remove('aic-open');
+      try { if (FM.settings && FM.settings.isOpen && FM.settings.isOpen()) FM.settings.close({ handBack: false }); } catch (e) {}
+      try { FM.aiChat.hide(); } catch (e) {}
+      if (FM.simpleTools && FM.simpleTools._reset) FM.simpleTools._reset();
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
   /* N6 · THE FLOATING LINE (A COMBINED point 5). Red on v18.36: the line is the tray row inside the bar, its bottom 52 px below the bar's
      top, and the tray's tools go while it shows. CONTROL: a live-only line takes no strip (its words go to #sm-live), and a real line's
      words are in .sm-line. */
