@@ -16,6 +16,12 @@ On a computer: click the cog (Canvas settings) in the row with the time counter,
 
 Tip: Nothing is shared until you tap **Start sharing**. To keep Work with friends out of the way altogether, turn it off in Settings.
 
+Note: Everyone who joins sees the whole project, its notes and reminders included, whatever they join as. Up to 12 people can be in a project shared from a computer and 6 from a phone, counting you. <!-- the second sentence was a small line in Sharing settings until #1255: js/collab-ui.js drawSettingsStep -->
+
+Note: A friend who types the short code always has to be let in by you. With the link you choose, under **When someone uses the link**: **Ask me first** or **Let them in**. <!-- was the line under that switch: js/collab-ui.js askRow -->
+
+Note: In a project a friend shared with you, **Watch along** on someone's row makes your screen follow theirs: where they are in the video, and what they play. Tap it again to stop. <!-- was the line under the people of a friend's panel: js/collab-ui.js drawGuestPanel -->
+
 If it doesn't work: If the link won't connect, tap **Link not working? Swap codes instead** and follow the two steps it shows.
 
 ### Verification (checked against the code at b46b47d, v17.23)

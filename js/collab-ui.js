@@ -1682,8 +1682,8 @@ window.FM = window.FM || {};
       /* S7 (§17.1 entry points): the comments, one tap from the people — the same row the guest panel has. Below the
          invite since #967 batch 2 (J1-6): he opens this panel to get somebody in. */
       if (C.comments && C.comments.installed && C.comments.installed()) body.appendChild(commentsRow());
-      /* §14.9's privacy line wherever the online helpers are in use — one plain sentence, every service named behind the tap. */
-      if (relayOn) body.appendChild(privacyBlock());
+      /* (#1255 (24 Nov, his words on this card: "as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page that explains it all there"): §14.9's privacy sentence and its "What gets sent? ›" stood here. They are at the foot of the "?" page, one tap
+         from this card's head (drawFriendsHelp), in Settings, and beside the switch when Work with friends is off.) */
     }
     /* #967 batch 2: the switch that stays — on the Share panel and the gear's Sharing settings alike. Not in the code step,
        whose one lit button ("They match") has to keep the room above the pinned foot (967 2). */
@@ -1865,7 +1865,7 @@ window.FM = window.FM || {};
     /* #1090 (hunt HIGH, decided 20 Oct from #987, his words: “there should be a colour indicator based on who left the
        note”): the Notes pad and its reminders travel to everyone in the session, Viewers included, because notes are
        what the people in a shared edit leave each other. Nothing said so; it is said where a newcomer’s role is picked. */
-    row.appendChild(el('div', 'cs-rowhint', 'Everyone who joins — Viewers too — sees the whole project, its notes and reminders included.'));
+    row.appendChild(el('div', 'cs-rowhint', 'Everyone who joins, viewers too, sees the whole project, including your notes and reminders.'));   // #1090's warning, kept on the card on purpose (#1255); no dashes, his rule for app text
     return row;
   }
 
@@ -1912,7 +1912,6 @@ window.FM = window.FM || {};
     yr.appendChild(dot);
     const yt = el('div', 'cs-stext');
     yt.appendChild(el('div', 'cs-slabel', cleanName(me.name) || 'You'));
-    yt.appendChild(el('div', 'cs-shint', 'Your name and colour, as the others see them'));
     yr.appendChild(yt);
     yr.appendChild(btn('cs-role cs-profile', 'Change…', function () {
       U.profile({ force: true }).then(function (p) {
@@ -1950,7 +1949,7 @@ window.FM = window.FM || {};
     const mr = el('div', 'cs-srow');
     const mt = el('div', 'cs-stext');
     mt.appendChild(el('div', 'cs-slabel', 'Most people at once'));
-    mt.appendChild(el('div', 'cs-shint', 'Counting you. Up to 12 from a computer, 6 from a phone.'));
+    /* (#1255 (24 Nov, his words on this card: "as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page that explains it all there"): the line "Counting you. Up to 12 from a computer, 6 from a phone." stood here; lesson 17 says it, behind the card's "?") */
     mr.appendChild(mt);
     const mb = btn('cs-role cs-max', String(maxPeople()) + ' \u25be', function (e) {
       const r = mb.getBoundingClientRect();
@@ -1995,9 +1994,7 @@ window.FM = window.FM || {};
     ev.appendChild(el('span', 'cs-add-sub', 'Save points from while you shared — any one comes back as a new project'));
     body.appendChild(ev);
 
-    /* Only where the online helpers are in use — the main view has always guarded it, and under Swap codes only it said the
-       opposite of the "no online helpers" line just above it (S7 review). */
-    if (!C.signal.codesOnly()) body.appendChild(privacyBlock());
+    /* (#1255 (24 Nov, his words on this card: "as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page that explains it all there"): the privacy sentence stood here too; it is behind the card's "?") */
     const ver = document.querySelector('.ver');
     body.appendChild(el('div', 'cs-ver', 'FreeMotion ' + (ver ? ver.textContent.trim() : '')));
   }
@@ -2091,7 +2088,7 @@ window.FM = window.FM || {};
       seg.appendChild(b);
     });
     row.appendChild(seg);
-    row.appendChild(el('div', 'cs-rowhint', 'The short code always asks you first.'));
+    /* (#1255 (24 Nov, his words on this card: "as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page that explains it all there"): "The short code always asks you first." stood here; lesson 17 says it) */
     return row;
   }
 
@@ -2212,8 +2209,6 @@ window.FM = window.FM || {};
     if (cl) cl.classList.toggle('accent', !down);
     const add = root.querySelector(':scope > .cs-add');   // the main view's Connect with a code, never a row's sub-line
     if (add) add.classList.toggle('accent', down);
-    const how = root.querySelector('.cs-invite .cs-codehow');
-    if (how) how.style.display = down ? 'none' : '';
   }
 
   function inviteBlock() {
@@ -2253,11 +2248,8 @@ window.FM = window.FM || {};
     const cc = btn('cs-copycode', 'Copy', function () { copyPlain(code, 'Short code copied', cc); });
     codeRow.appendChild(cc);
     box.appendChild(codeRow);
-    /* #967 batch 2 (J5-4, the owner's half): what the friend DOES with the code, right under it.
-       Home's profile menu offers Join whether or not their feature is on yet. */
-    box.appendChild(el('div', 'cs-relay cs-codehow', 'That’s the short code — they open FreeMotion, tap profile, choose Join a friend’s project, and type it in.'));
-    /* The relay line's own style (spacing, size, light-Home ink), so the hint needs no CSS of its own. */
-    box.appendChild(el('div', 'cs-relay cs-codehint', 'The short code stops working ' + Math.round(codeTtlMs() / 60000) + ' minutes after you close this.'));
+    /* (#1255 (24 Nov, his words on this card: "as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page that explains it all there"): two lines stood under the short code, what a friend does with it (#967 J5-4) and that it stops working some
+       minutes after this closes. Both are in lesson 17, behind the card's "?".) */
     const st = el('div', 'cs-relay', relayLine());
     st.id = 'collab-relay-status';
     if (relayWarn()) st.classList.add('warn');
@@ -3251,6 +3243,7 @@ window.FM = window.FM || {};
     const c = host ? mountHost(host) : openCard('collab-share', { label: 'This shared project' });
     const head = el('div', 'cs-head');
     head.appendChild(el('h2', 'fm-ask-title', 'Shared with you'));
+    if (host) { head.classList.add('cs-head-q'); head.appendChild(helpButton(host)); }   // #1255: the card's "?" for a friend too, as #1243 ST8 gave the owner's
     head.appendChild(el('div', 'cs-state', s.ended ? (C.watchOnly && C.watchOnly(s.gpid) ? 'Ended — it was shared with you to watch only, so no copy is kept' : 'Ended — your copy stays on this device')
       : s.online === false ? 'Offline — the live link dropped; your changes are kept here' : 'Live'));
     /* #967: an ended copy is nobody's room — "You're an Editor" under "Ended" was a contradiction. */
@@ -3289,8 +3282,8 @@ window.FM = window.FM || {};
       });
       if (list.children.length) {
         body.appendChild(list);
-        /* #967 B4 (J5-9): what Watch along does, where it is picked — it moves your playhead, which nothing said. */
-        body.appendChild(el('div', 'collab-sub cs-watchhint', 'Watch along: your screen follows theirs — where they are in the video, and what they play.'));
+        /* (#1255 (24 Nov, his words on this card: "as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page that explains it all there"): the line that said what Watch along does stood here (#967 J5-9). The owner's menu entry still reads
+           "Watch along — your screen follows theirs", the banner says whom he is watching, and lesson 17 says the rest.) */
       }
     }
     /* S7 (§17.1): the comments, from the guest's side too. */

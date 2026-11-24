@@ -40908,7 +40908,10 @@
           if (S.normRoomCode(code.textContent) !== H.rec.code) throw new Error('the code on screen is not the room’s code');
           if (!document.querySelector('.cs-copylink')) throw new Error('there is no [Copy link]');
           /* S6 review: every third party by name, and what anybody watching can see — not "the free relay". */
-          const priv = (document.querySelector('.cs-privacy') || {}).textContent || '';
+          /* #1255 (24 Nov, his words on this card: “as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page”): the sentence and its list left the Share panel. They are at the foot of the page
+             behind the card's ?, in Settings and beside the switch when the feature is off, all drawn by the one block read here. */
+          if (document.querySelector('#collab-share .cs-privacy')) throw new Error('the Share panel still prints the privacy sentence; it is behind the card’s ? now (#1255)');
+          const priv = (ui.privacyBlock && ui.privacyBlock().textContent) || '';
           /* #967 B4: behind “What gets sent? ›” now, and with no “relay” in it — still every service by name, and who sees what. */
           ['PeerJS', 'EMQX', 'HiveMQ', 'Google', 'Cloudflare', 'anyone watching those services', 'Anyone with your link or short code', 'never see your project'].forEach(function (w) {
             if (priv.indexOf(w) < 0) throw new Error('the privacy line does not say “' + w + '”: "' + priv + '" — it names one relay and understates who sees what');
@@ -42698,7 +42701,10 @@
         await withCollab921([layer921('A')], async function () {
           await ui.share();
           document.querySelector('#collab-share .cs-gear').click();
-          if (!document.querySelector('#collab-share .cs-privacy')) throw new Error('CONTROL: with the relay on, the settings do not name the relays');
+          /* #1255 (24 Nov, his words on this card: “as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page”): Sharing settings prints the privacy sentence in NO state now, so what was this
+             test's control, that it is there with the helpers on, is its first check the other way round. */
+          if (!document.querySelector('#collab-share .cs-sstatus')) throw new Error('CONTROL: the open step is not Sharing settings (no Connection line)');
+          if (document.querySelector('#collab-share .cs-privacy')) throw new Error('with the online helpers on, Sharing settings still prints the privacy sentence; it is behind the card’s ? now (#1255)');
           FM.settings.set('collabCodesOnly', true);
           ui.share({ keepStep: true });
           if (!/Swap codes only/.test(document.querySelector('#collab-share .cs-sstatus').textContent)) throw new Error('CONTROL: the Connection line does not say Swap codes only');
@@ -121643,7 +121649,7 @@
   /* #1243 ST8 REWROTE THIS — it was '967 B2 8 the Friends block says how it works in three steps, off and on; Start sharing says what he will
      get; …'. His #1243 words: "it shouldn't show you how to use it every single time… bare bones… and then have a question mark button
      … that'll take you to another menu… the steps." The three steps moved behind the block's ?, and the line under Start sharing went. */
-  test('967 B2 8 the Friends block keeps how it works behind its ? — three steps there, off and on, and none on the block itself; the short code says what the friend does; and in the Share panel the invite comes straight under the people, Comments after it, and “Keep FreeMotion open” is in the panel, not a toast', { item: '967', budgetMs: 120000 }, async function () {
+  test('967 B2 8 the Friends block keeps how it works behind its ? — three steps there, off and on, and none on the block itself; nothing stands under the short code; and in the Share panel the invite comes straight under the people, Comments after it, and “Keep FreeMotion open” is in the panel, not a toast', { item: '967', budgetMs: 120000 }, async function () {
     /* R5 / J5-2, J1-8, J5-4 (owner half); J1-6, J1-12, J1-13 (order half), J5-8 — his pick A. Measured at v17.06: nothing
        said it in steps, Comments sat between the people and the invite, and the keep-open toast landed over the short code. */
     const C = need921S7('how it works');
@@ -121693,9 +121699,12 @@
               if (!people || people.nextElementSibling !== invite) throw new Error('the invite is not straight under the people — the job comes first (J1-6)');
               if (!comments) throw new Error('setup: no Comments row to place');
               if (!(invite.compareDocumentPosition(comments) & Node.DOCUMENT_POSITION_FOLLOWING)) throw new Error('Comments sits above the invite');
+              /* #1255 (24 Nov, his words on this card: “as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page”): the two lines under the short code (what a friend
+                 does with it, J5-4; when it stops working) went to lesson 17, behind the card's ?. */
               const code = fr.querySelector('.cs-roomrow');
-              const how2 = code && code.nextElementSibling;
-              if (!how2 || how2.textContent.trim() !== 'That’s the short code — they open FreeMotion, tap profile, choose Join a friend’s project, and type it in.') throw new Error('under the short code: “' + (how2 && how2.textContent) + '” — it should say what the friend does (J5-4)');
+              if (!code) throw new Error('setup: the invite has no short code row');
+              const under = fr.querySelector('.cs-invite .cs-codehow, .cs-invite .cs-codehint');
+              if (under) throw new Error('under the short code a line still stands: “' + under.textContent + '” (#1255: the lesson behind the card’s ? says it)');
             }, 390);
           } finally {
             got.restore();
@@ -121709,7 +121718,7 @@
     });
   });
 
-  test('967 B2 9 with the connection service unreachable the Share panel lights “Connect with a code”, not Copy link — Copy link stops saying just “Link copied”, and “tap Join and type it in” leaves the short code; with it up, Copy link is the lit one', { item: '967', budgetMs: 90000 }, async function () {
+  test('967 B2 9 with the connection service unreachable the Share panel lights “Connect with a code”, not Copy link — Copy link stops saying just “Link copied”; with it up, Copy link is the lit one; and no how-to line stands under the short code either way', { item: '967', budgetMs: 90000 }, async function () {
     /* J5-8 (batch 2 review): "When the relays are unreachable on a real network, make the code swap the lit button and stop
        Copy link claiming success." Measured on the builder's commit: every relay refused, Copy link was still the only lit
        button and said "Link copied", and the line under the short code told the friend to type a code that could not work.
@@ -121739,12 +121748,12 @@
             if (want === 'unreachable') {
               if (cl.classList.contains('accent')) throw new Error(what + ': Copy link is still the lit button (lit: ' + JSON.stringify(lit) + ') while the link cannot reach him');
               if (!add.classList.contains('accent')) throw new Error(what + ': “Connect with a code” is not lit — it is the one way in that needs no relay (lit: ' + JSON.stringify(lit) + ')');
-              if (how && how.getClientRects().length) throw new Error(what + ': “' + how.textContent + '” still sits under a short code that cannot work right now');
+              if (how) throw new Error(what + ': “' + how.textContent + '” still stands under the short code (#1255: no how-to line there in any state)');
               if (!said || said === 'Link copied' || !/won’t work/.test(said)) throw new Error(what + ': Copy link said “' + said + '” — it has to say the link won’t work until the service is reachable');
             } else {
               if (!cl.classList.contains('accent')) throw new Error(what + ' (control): Copy link is not the lit button (lit: ' + JSON.stringify(lit) + ')');
               if (add.classList.contains('accent')) throw new Error(what + ' (control): “Connect with a code” is lit while the link works');
-              if (!how || !how.getClientRects().length) throw new Error(what + ' (control): the short code has no “tap Join and type it in” line');
+              if (how) throw new Error(what + ' (control): “' + how.textContent + '” still stands under the short code (#1255: the lesson behind the card’s ? says what a friend does with it)');
               if (said !== 'Link copied') throw new Error(what + ' (control): Copy link said “' + said + '”');
             }
             FM.closeCanvasDialog(); await settle921(80);
@@ -122686,8 +122695,12 @@
               if (!fr.querySelector('.cs-stop')) throw new Error('setup: the block is not the live Share panel');
               const lab = fr.querySelector('.cs-invite > .cs-rowlabel');
               if (!lab || lab.textContent !== 'Send your friend the link') throw new Error('the invite is headed “' + (lab && lab.textContent) + '” — “a link or a code” is the short code here and the swap code six rows down');
-              const how = fr.querySelector('.cs-invite .cs-codehow');
-              if (!how || !/^That’s the short code — they open FreeMotion, tap profile, choose Join a friend’s project, and type it in\.$/.test(how.textContent)) throw new Error('under the 9 characters: “' + (how && how.textContent) + '” — it should name them the short code');
+              /* #1255 (24 Nov, his words on this card: “as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page”): the line under the 9 characters went to lesson 17. They are
+                 still NAMED the short code where they stand: to a screen reader, and on the button that resets them. */
+              const how = fr.querySelector('.cs-invite .cs-codehow, .cs-invite .cs-codehint');
+              if (how) throw new Error('under the 9 characters a line still stands: “' + how.textContent + '” (#1255)');
+              const nine = fr.querySelector('#collab-room-code'), rst = fr.querySelector('.cs-invite .cs-reset');
+              if (!nine || !/^Short code /.test(nine.getAttribute('aria-label') || '') || !rst || rst.textContent !== 'Reset link and short code') throw new Error('the 9 characters are not named the short code: “' + (nine && nine.getAttribute('aria-label')) + '” / “' + (rst && rst.textContent) + '”');
               const add = fr.querySelector('.cs-body > .cs-add');
               const main = add && add.firstChild && add.firstChild.nodeType === 3 ? add.firstChild.textContent : '';
               const sub = add && add.querySelector('.cs-add-sub') ? add.querySelector('.cs-add-sub').textContent : '';
@@ -122750,7 +122763,7 @@
     });
   });
 
-  test('967 B4 3 privacy is one plain sentence and “What gets sent? ›” opens the full list, every service named — once on each screen: the Friends block off, the Share panel, Sharing settings, and Settings, whose switch hint is one line', { item: '967', budgetMs: 120000 }, async function () {
+  test('967 B4 3 privacy is one plain sentence and “What gets sent? ›” opens the full list, every service named — once where it is said: the Friends block off, the page behind the Share panel’s ?, and Settings, whose switch hint is one line; the Share panel and Sharing settings themselves print none', { item: '967', budgetMs: 120000 }, async function () {
     /* J1-4, J5-5 (major), J2-12, J4-14: a 68-word paragraph naming PeerJS/EMQX/HiveMQ/Google/Cloudflare led the first card, and a
        57-word variant was the Settings switch's hint. The S6 review rule stays true behind the tap: every service is named. */
     const C = need921S7('the privacy line');
@@ -122797,9 +122810,18 @@
                 const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
                 FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
                 if (!fr.querySelector('.cs-stop')) throw new Error('setup: the block is not the live Share panel');
-                await check(fr, 'the Share panel');
+                /* #1255 (24 Nov, his words on this card: “as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page”): the sentence left the Share panel and Sharing settings;
+                   it is at the foot of the page behind the card's ?, one tap from this head. */
+                if (fr.querySelector('.cs-privacy')) throw new Error('the Share panel still prints the privacy sentence; it is behind its ? now (#1255)');
                 fr.querySelector('.cs-gear').click(); await settle921(100);
-                await check(fr, 'Sharing settings');
+                if (!fr.querySelector('.cs-sstatus')) throw new Error('setup: the gear did not open Sharing settings');
+                if (fr.querySelector('.cs-privacy')) throw new Error('Sharing settings still prints the privacy sentence; it is behind the card’s ? now (#1255)');
+                fr.querySelector('.cs-gear').click(); await settle921(100);
+                const q = fr.querySelector('.cs-head .cs-help');
+                if (!q) throw new Error('the Share panel has no ? to find the privacy sentence behind');
+                q.click(); await settle921(100);
+                await check(fr, 'the page behind the Share panel’s ?');
+                fr.querySelector('.cs-backbtn').click(); await settle921(80);
                 FM.closeCanvasDialog(); await settle921(80);
               }, 390);
             });
@@ -122908,7 +122930,7 @@
     }
   });
 
-  test('967 B4 5 roles and Watch along are explained where they are picked — “Editor — can change anything”, “Commenter — can leave notes only”, “Viewer — can only watch” in every role menu; Follow is “Watch along”, with a line saying your screen follows theirs, and the banner says “Watching along with Sam Lee”', { item: '967', budgetMs: 120000 }, async function () {
+  test('967 B4 5 roles and Watch along are explained where they are picked — “Editor — can change anything”, “Commenter — can leave notes only”, “Viewer — can only watch” in every role menu; Follow is “Watch along”, its menu entry saying your screen follows theirs with no line under the people, and the banner says “Watching along with Sam Lee”', { item: '967', budgetMs: 120000 }, async function () {
     /* J5-9: three bare words in the role menu, and a Follow with no hint of what it does (it drives your playhead to theirs). */
     const C = need921S5('roles and Watch along');
     const ROLES = [/^Editor — can change anything/, /^Commenter — can leave notes only/, /^Viewer — can only watch/];
@@ -122950,8 +122972,10 @@
         if (!mine || mine.textContent !== 'You’re an Editor — you can change anything.') throw new Error('the friend’s role line reads “' + (mine && mine.textContent) + '”');
         const f = card.querySelector('.cs-person[data-mid="m8"] .cs-follow');
         if (!f || f.textContent !== 'Watch along' || f.getAttribute('aria-label') !== 'Watch along with Sam Lee') throw new Error('Sam’s button reads “' + (f && f.textContent) + '” / “' + (f && f.getAttribute('aria-label')) + '”');
+        /* #1255 (24 Nov, his words on this card: “as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page”): the line under the people that said what Watch along does
+           went to lesson 17; the owner's menu entry above still says it, and the banner below says whom he is watching. */
         const hint = card.querySelector('.cs-watchhint');
-        if (!hint || !hint.getClientRects().length || !/your screen follows theirs/.test(hint.textContent)) throw new Error('nothing under the people says what Watch along does (' + (hint ? '“' + hint.textContent + '”' : 'no line') + ')');
+        if (hint) throw new Error('a line still stands under the people: “' + hint.textContent + '” (#1255: no small lines of explanation on the card)');
         f.click(); await settle921(80);
         if (C.presence.following() !== 'm8') throw new Error('setup: Watch along did not start');
         const b = document.getElementById('collab-banner');
@@ -209535,6 +209559,82 @@
     }
     if (fails.length) throw new Error(fails.join(' · '));
     } finally { _isoK.put(); }
+  });
+
+  /* ═══ #1255, THE THIRD HINTS CUT: THE EDIT-TOGETHER CARD HOLDS NO SMALL LINES OF EXPLANATION ═══════════════════════════════════════════
+     His words, 24 Nov: "you can choose whatever you want for the edit together card, having small lines. Just know that my preference
+     is as little as possible, so as clean and simple as possible, with no explanations at all. And just you can have a question mark
+     that takes you to the tutorial page that explains it all there." Gone from the card: the lines under his name and under Most
+     people at once (Sharing settings), under the link's switch, the two under the short code, the one under a friend's people, and
+     the privacy sentence with its list on the Share panel and in Sharing settings. The "?" in the card's head shows lesson 17, which
+     says what they said, with "What gets sent?" at its foot.
+     ONE LINE IS KEPT ON PURPOSE and checked here: under New people join as, that everyone who joins, Viewers too, sees his notes and
+     reminders. It is the fix of a privacy finding (#1090), a warning about his own project where he picks a role, not a how-to. */
+  test('1255 hints · the edit-together card holds no small lines of explanation: nothing under the short code or the link’s switch on the Share panel, nothing under his name or under Most people at once in Sharing settings, and the privacy sentence on neither; the one ? in the card’s head shows the lesson, which says what those lines said, with What gets sent? at its foot, and back gives the Share panel again; the warning that everyone who joins sees his notes stays under New people join as; and a friend’s panel has the one ? too, with no line under its people (CONTROLS: the block is the live Share panel with its invite; the gear opened Sharing settings; the lesson’s steps were drawn; the friend’s block is the friend’s panel)', { item: '1255', budgetMs: 120000 }, async function () {
+    const C = need921S7('the bare edit-together card');
+    const fails = [];
+    await withFakeNet921(async function () {
+      await withLabs921(async function () {
+        await with945(async function () {
+          await withCollab921([layer921('A')], async function () {
+            await atPhoneWidth(async function () {
+              const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+              FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+              if (!fr.querySelector('.cs-stop') || !fr.querySelector('.cs-invite #collab-room-code')) throw new Error('CONTROL: the block is not the live Share panel with its invite and short code');
+              const seen = function () { return seen967b4(fr); };
+              [['That’s the short code', 'what a friend does with the short code'], ['stops working', 'when the short code stops working'], ['always asks you first', 'that the short code always asks first'], ['goes straight from phone to phone', 'the privacy sentence']].forEach(function (p) { if (seen().indexOf(p[0]) >= 0) fails.push('the Share panel still says ' + p[1]); });
+              const join = fr.querySelector('.cs-joinrow .cs-rowhint');
+              if (!join || !/notes/i.test(join.textContent) || !join.getClientRects().length) fails.push('the line that everyone who joins sees his notes and reminders is gone from under New people join as: it is a warning about his own project (#1090), not a how-to');
+              if (fr.querySelectorAll('.cs-head .cs-help').length !== 1) fails.push('the Share panel’s head has ' + fr.querySelectorAll('.cs-head .cs-help').length + ' ? buttons, want one');
+              fr.querySelector('.cs-gear').click(); await settle921(100);
+              if (!fr.querySelector('.cs-sstatus') || !fr.querySelector('.cs-max')) throw new Error('CONTROL: the gear did not open Sharing settings with its Most people at once control · ' + fails.join(' · '));
+              [['as the others see them', 'a line under his name'], ['Counting you', 'a line under Most people at once'], ['goes straight from phone to phone', 'the privacy sentence']].forEach(function (p) { if (seen().indexOf(p[0]) >= 0) fails.push('Sharing settings still shows ' + p[1]); });
+              fr.querySelector('.cs-gear').click(); await settle921(100);
+              const q = fr.querySelector('.cs-head .cs-help');
+              if (!q) throw new Error('back on the Share panel there is no ? · ' + fails.join(' · '));
+              q.click();
+              await until921S6('the lesson behind the ?', function () { return fr.querySelector('.tut-steps li') ? 1 : 0; }, 5000)
+                .catch(function () { throw new Error('CONTROL: the lesson did not draw its steps behind the ? · ' + fails.join(' · ')); });
+              const page = fr.textContent.replace(/\s+/g, ' ');
+              [[/Everyone who joins sees the whole project/, 'that everyone who joins sees the whole project'], [/12 people.{0,60}computer.{0,20}6 from a phone/, 'how many people a project can hold'],
+                [/short code always has to be let in/, 'that the short code always asks him first'], [/stops working 30 minutes/, 'when the short code stops working'],
+                [/type the short code/, 'what a friend does with the short code'], [/Watch along.{0,60}follow/, 'what Watch along does'], [/Nothing is shared until you tap Start sharing/, 'that nothing is shared until Start sharing']
+              ].forEach(function (p) { if (!p[0].test(page)) fails.push('the lesson behind the ? does not say ' + p[1]); });
+              const pv = fr.querySelectorAll('.cs-privacy');
+              if (pv.length !== 1 || !/What gets sent/.test(pv[0].textContent)) fails.push('the page behind the ? has ' + pv.length + ' privacy blocks, want one with What gets sent? at its foot');
+              fr.querySelector('.cs-backbtn').click(); await settle921(80);
+              if (!fr.querySelector('.cs-stop')) fails.push('back from the ? did not give the Share panel again');
+              FM.closeCanvasDialog(); await settle921(80);
+            }, 390);
+          });
+          /* a friend's side of it: the Friends block of someone the project is shared with (the fixture of '967 B4 6') */
+          const fx = guest967(C), wasHome1 = FM.home.isOpen();
+          try {
+            C.attach(fx.G, { autoTick: false });
+            if (wasHome1) FM.home.close();
+            await atPhoneWidth(async function () {
+              const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+              FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+              if (!/Shared with you/.test(fr.textContent)) throw new Error('CONTROL: the friend’s block is not the friend’s panel (“' + fr.textContent.trim().slice(0, 60) + '”) · ' + fails.join(' · '));
+              if (fr.querySelector('.cs-watchhint')) fails.push('a friend’s panel still has a line under its people');
+              const gq = fr.querySelectorAll('.cs-head .cs-help');
+              if (gq.length !== 1) fails.push('a friend’s panel has ' + gq.length + ' ? buttons in its head, want one');
+              else {
+                gq[0].click();
+                await until921S6('the lesson behind a friend’s ?', function () { return fr.querySelector('.tut-steps li') ? 1 : 0; }, 5000)
+                  .catch(function () { fails.push('a friend’s ? did not show the lesson'); });
+                if (!/Watch along/.test(fr.textContent)) fails.push('the page behind a friend’s ? does not say what Watch along does');
+                const bk = fr.querySelector('.cs-backbtn');
+                if (bk) { bk.click(); await settle921(80); }
+                if (!/Shared with you/.test(fr.textContent)) fails.push('back from a friend’s ? did not give the panel again');
+              }
+              FM.closeCanvasDialog(); await settle921(80);
+            }, 390);
+          } finally { await dropFixture967(C, [fx.gpid]); if (wasHome1 && !FM.home.isOpen()) FM.home.open(); }
+        });
+      });
+    });
+    if (fails.length) throw new Error(fails.join(' · '));
   });
 
   /* #1243 F7 — his words: "the outlines and shadows menu… big buttons… opens up below… scroll deep… when you actually press on one
