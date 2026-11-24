@@ -30,7 +30,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.50">
+<meta name="fm-build" content="v18.51">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -47,7 +47,7 @@
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
 <style>html,body{background:#060c0f}</style>
-<link rel="stylesheet" href="styles.css?v=800">
+<link rel="stylesheet" href="styles.css?v=801">
 <link rel="stylesheet" href="theme-glass.css?v=70">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <!-- SHARP TOP (#1255 clause 4, REOPENED 21 Nov). His words: "some fade overlapping the buttons is still there", and on v18.48
      with nothing open, "Fade still there". It is iOS 26's own blur at the top of the screen (UIKit's scroll pocket), which a page
@@ -221,6 +221,13 @@
     .fm-edge[data-edge="editor-panel"] { background-color: #0a141a; }       /* the Elements browser's and the template fill's own ground, each the whole screen */
     .fm-edge[data-edge="home-dark-shortcuts-dim"] { background-color: #060d16; }   /* rgba(4,7,14,.62) over #091823 */
     .fm-edge[data-edge="home-light-settings"] { background-color: #f4f6f9; }       /* the Settings panel's top over the light Home */
+    /* #1243 G5's photo sheet (Move and scale, #hm-reframe, his words 8 Nov: "you should be able to reframe it to decide where the
+       picture lands") is one more dim the size of the screen, so by #1255 clause 4 ("some fade overlapping the buttons") it gets
+       its own tab: the Home's tab stayed over it and iOS faded the undimmed colour down over the dimmed gear, search and avatar.
+       A question over the sheet is two dims at once: on the dark Home that is deep-dim's colour, on the light Home a tab of its own. */
+    .fm-edge[data-edge="home-dark-reframe-dim"] { background-color: #050a10; }     /* rgba(4,6,10,.78) over #091823 */
+    .fm-edge[data-edge="home-light-reframe-dim"] { background-color: #87929c; }    /* rgba(20,38,56,.5) over #fafdff */
+    .fm-edge[data-edge="home-light-reframe-ask"] { background-color: #606d7a; }    /* a question's rgba(20,38,56,.34) over that */
     /* THE ONE TABLE: which tab shows. Exactly one matches in every state.
        The take: bone until the matte lands at 2.14 s, then coal (the still is the end frame, so coal), until the cut. */
     html.splash-kf-on:not(.splash-dark-on):not(.splash-kf-out) .fm-edge[data-edge="bone"] { display: block; }
@@ -271,13 +278,21 @@
     html:is(:not(.splash-kf-on), .splash-kf-out) > body:has(> .ps-overlay):not(:has(> #fm-ask:not(.hidden), > .np-scrim.pb-host-big:not(.np-closing), > #shortcuts-overlay:not(.hidden):not(.pb-closing), > .collab-scrim, > .set-scrim.open, > #el-browser:not(.hidden), > #tpl-fill:not(.hidden), > #export-dialog:not(.hidden), > #canvas-dialog:not(.hidden), > #export-overlay:not(.hidden), > #export-ready:not(.hidden))) > :is(#app ~ #home-screen.hidden, #app.fm-push-in) ~ .fm-edge[data-edge="editor-card-dim"] { display: block; }
     html:is(:not(.splash-kf-on), .splash-kf-out).fm-add-dim > body:not(:has(> #fm-ask:not(.hidden), > .collab-scrim, > .np-scrim:not(.np-closing), > .sfx-scrim, > #shortcuts-overlay.pb-host-big:not(.hidden):not(.pb-closing), > .set-scrim.open, > #vr-overlay:not(.hidden), > #el-browser:not(.hidden), > #tpl-fill:not(.hidden), > #export-dialog:not(.hidden), > #canvas-dialog:not(.hidden), > #export-overlay:not(.hidden), > #export-ready:not(.hidden), > .ps-overlay)) > :is(#app ~ #home-screen.hidden, #app.fm-push-in) ~ .fm-edge[data-edge="editor-thin-dim"] { display: block; }
     /* the dark Home (Settings over it paints #0b1922, within two levels of its own tab, so it keeps it) */
-    html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:not(:has(> #fm-ask:not(.hidden), > .collab-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden), #hm-libnew:not(.hidden))) ~ .fm-edge[data-edge="home-dark"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:not(:has(> #fm-ask:not(.hidden), > .collab-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden), #hm-libnew:not(.hidden), #hm-reframe:not(.hidden))) ~ .fm-edge[data-edge="home-dark"] { display: block; }
+    /* the photo sheet (#1243 G5) takes the plain Home's place exactly: the same conditions, with the sheet up */
+    html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:not(:has(> #fm-ask:not(.hidden), > .collab-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):has(#hm-reframe:not(.hidden)):not(:has(#hm-dialog:not(.hidden), #hm-libnew:not(.hidden))) ~ .fm-edge[data-edge="home-dark-reframe-dim"] { display: block; }
+    /* a question over the photo sheet: its every-width row (home-dark-dim, above) gives way on a phone to the two dims' colour */
+    html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:has(> #fm-ask:not(.hidden)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):has(#hm-reframe:not(.hidden)) ~ .fm-edge[data-edge="home-dark-dim"] { display: none; }
+    html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:has(> #fm-ask:not(.hidden)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):has(#hm-reframe:not(.hidden)) ~ .fm-edge[data-edge="deep-dim"] { display: block; }
     html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:has(> .collab-scrim):not(:has(> #shortcuts-overlay:not(.hidden):not(.pb-closing))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden) ~ .fm-edge[data-edge="home-dark-dim"] { display: block; }
     html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:not(:has(> #shortcuts-overlay:not(.hidden):not(.pb-closing))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):has(#hm-libnew:not(.hidden)) ~ .fm-edge[data-edge="home-dark-dim"] { display: block; }
     html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:has(> #shortcuts-overlay.pb-host-big:not(.hidden):not(.pb-closing)):not(:has(> #fm-ask:not(.hidden))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden))) ~ .fm-edge[data-edge="deep-dim"] { display: block; }
     html:is(:not(.splash-kf-on), .splash-kf-out):not([data-home="light"]) > body:has(> #shortcuts-overlay:not(.hidden):not(.pb-closing)):not(:has(> #fm-ask:not(.hidden), > #shortcuts-overlay.pb-host-big)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden))) ~ .fm-edge[data-edge="home-dark-shortcuts-dim"] { display: block; }
     /* the light Home (its friends card and shortcuts wear the light dialogs' dim) */
-    html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body:not(:has(> #fm-ask:not(.hidden), > .collab-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing), > .set-scrim.open)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden), #hm-libnew:not(.hidden))) ~ .fm-edge[data-edge="home-light"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body:not(:has(> #fm-ask:not(.hidden), > .collab-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing), > .set-scrim.open)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden), #hm-libnew:not(.hidden), #hm-reframe:not(.hidden))) ~ .fm-edge[data-edge="home-light"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body:not(:has(> #fm-ask:not(.hidden), > .collab-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing), > .set-scrim.open)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):has(#hm-reframe:not(.hidden)):not(:has(#hm-dialog:not(.hidden), #hm-libnew:not(.hidden))) ~ .fm-edge[data-edge="home-light-reframe-dim"] { display: block; }
+    html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body:has(> #fm-ask:not(.hidden)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):has(#hm-reframe:not(.hidden)) ~ .fm-edge[data-edge="home-light-dim"] { display: none; }
+    html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body:has(> #fm-ask:not(.hidden)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):has(#hm-reframe:not(.hidden)) ~ .fm-edge[data-edge="home-light-reframe-ask"] { display: block; }
     html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body:has(> .collab-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden) ~ .fm-edge[data-edge="home-light-dim"] { display: block; }
     html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):has(#hm-libnew:not(.hidden)) ~ .fm-edge[data-edge="home-light-dim"] { display: block; }
     html:is(:not(.splash-kf-on), .splash-kf-out)[data-home="light"] > body:has(> .set-scrim.open):not(:has(> #fm-ask:not(.hidden), > .collab-scrim, > #shortcuts-overlay:not(.hidden):not(.pb-closing))) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):not(:has(#hm-dialog:not(.hidden), #hm-libnew:not(.hidden))) ~ .fm-edge[data-edge="home-light-settings"] { display: block; }
@@ -1225,7 +1240,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.50</span></div>
+      <div class="brand">▶ FreeMotion <span class="ver" title="Tap to force-update to the very latest build">v18.51</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row (AM keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -1238,7 +1253,6 @@
              cog (btn-canvas, btn-save-proj, btn-fit, btn-help), the ⛶ view bar (guides), or the Export
              dialog (btn-snapshot). Nothing opens them here. -->
         <div id="topbar-extra" style="display:none">
-          <button id="btn-ai" class="btn btn-ai" title="Generate a scene with AI"><span class="ai-spark">✨</span>Generate</button>
           <button id="btn-import" class="btn"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Import media</button>
           <button id="btn-canvas" class="icon-btn" title="Canvas settings — size, frame rate, background"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3"/></svg></button>
           <button id="btn-guides" class="icon-btn" title="Safe margins & rule-of-thirds overlay"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1"/><path d="M9 3v18M15 3v18M3 9h18M3 15h18"/></svg></button>
@@ -2126,12 +2140,15 @@
   <i class="fm-edge" data-edge="editor-panel" aria-hidden="true"></i>
   <i class="fm-edge" data-edge="home-dark-shortcuts-dim" aria-hidden="true"></i>
   <i class="fm-edge" data-edge="home-light-settings" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="home-dark-reframe-dim" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="home-light-reframe-dim" aria-hidden="true"></i>
+  <i class="fm-edge" data-edge="home-light-reframe-ask" aria-hidden="true"></i>
 
   <script src="vendor/mp4-muxer.js?v=9"></script>
   <script src="js/perf-probe.js?v=15"></script>
   <script src="js/drawn-x.js?v=1"></script>
   <script src="js/variant.js?v=3"></script>   <!-- queue 974: every animation with options plays one AT RANDOM (FM.variant); before timeline/home/app -->
-  <script src="js/settings.js?v=62"></script>
+  <script src="js/settings.js?v=63"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
   <script src="js/collab-core.js?v=70"></script>
@@ -2151,16 +2168,16 @@
   <script src="js/fx-registry.js?v=45"></script>
   <script src="js/filters.js?v=25"></script>
   <script src="js/fx-presets.js?v=14"></script>
-  <script src="js/fx-thumbs.js?v=63"></script>
+  <script src="js/fx-thumbs.js?v=64"></script>
   <script src="js/timeline.js?v=275"></script>
   <script src="js/simple-timeline.js?v=18"></script>   <!-- Simple mode P1: FM.simpleTimeline, read-only; after timeline.js -->
   <script src="js/tilefit.js?v=1"></script>
   <script src="js/rail-arrows.js?v=2"></script>   <!-- queue 976/977: ‹ › for a mouse on sideways rows; before inspector.js and both browsers -->
-  <script src="js/addmenu.js?v=87"></script>
+  <script src="js/addmenu.js?v=88"></script>
   <script src="js/inspector.js?v=449"></script>
   <script src="js/simple-tools.js?v=22"></script>   <!-- Simple mode P2.2: FM.simpleTools, the tray row and the project tools (D10) — after inspector.js -->
   <script src="js/fx-browser.js?v=107"></script>
-  <script src="js/elements-browser.js?v=5"></script>
+  <script src="js/elements-browser.js?v=6"></script>
   <script src="js/color-wheel.js?v=54"></script>
   <script src="js/canvas-edit.js?v=132"></script>
   <script src="js/panelsize.js?v=2"></script>   <!-- queue 927: Notes and Shortcuts/tips grow BIG from a grab corner; before both panels -->
@@ -2189,7 +2206,7 @@
   <script src="js/template-fill.js?v=6"></script>
   <script src="js/home-arrow.js?v=5"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
   <script src="js/tutorials.js?v=1"></script>   <!-- #1082: the lessons in Home's Tutorials tab -->
-  <script src="js/home.js?v=212"></script>
+  <script src="js/home.js?v=213"></script>
   <script src="js/graph-editor.js?v=21"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
@@ -2203,7 +2220,7 @@
   <script src="js/audio-health.js?v=7"></script>
   <script src="js/editor-mode.js?v=11"></script>   <!-- Simple mode P1: FM.editor — the one door the cog uses, the guard, per-device memory; before app.js -->
   <script src="js/editor-morph.js?v=2"></script>   <!-- Simple mode P3: FM.editorMorph — the switch morph (D11 B), played as the cog closes -->
-  <script src="js/app.js?v=528"></script>
+  <script src="js/app.js?v=529"></script>
   <script src="js/audio-tools.js?v=12"></script>
   <script src="js/noise-reduction.js?v=3"></script>   <!-- #966 B24 Reduce noise: after audio-tools.js (FM.layerAudioBuffer, FM.audioBufferToWav) -->
   <script src="js/auto-duck.js?v=1"></script>   <!-- #966 B25 Auto-duck: the music's volume keyframes under speech; the Volume card (inspector.js) reads FM.autoDuck when it draws -->
@@ -2216,11 +2233,11 @@
   <script src="js/ai-ops.js?v=23"></script>
   <script src="js/ai-key.js?v=1"></script>
   <script src="js/ai-budget.js?v=1"></script>
-  <script src="js/ai-mock.js?v=5"></script>
+  <script src="js/ai-mock.js?v=6"></script>
   <script src="js/ai-templates.js?v=3"></script>
-  <script src="js/ai.js?v=14"></script>
-  <script src="js/ai-panel.js?v=8"></script>
-  <script src="js/ai-chat.js?v=6"></script>   <!-- queue 856: the AI you TALK to; after ai-panel (reuses its key form) -->
+  <script src="js/ai.js?v=15"></script>
+  <script src="js/ai-panel.js?v=9"></script>
+  <script src="js/ai-chat.js?v=7"></script>   <!-- queue 856: the AI you TALK to; after ai-panel (reuses its key form) -->
   <!-- queue 921 stage S1 — the pure collaboration core. Path grammar, the diff/apply engine and the
        host sequencer, in dependency order. All three are libraries: they define FM.collab.path /
        .diff / .Host and do nothing else, so with no session running they cost one parse each. -->

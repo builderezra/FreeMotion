@@ -448,23 +448,15 @@ window.FM = window.FM || {};
           '<rect x="3.5" y="9.6" width="17" height="9.9" rx="1.6"/>'
           + '<path d="M3.9 6.6 18.7 4.5a1 1 0 0 1 1.1.85l.3 2.1a1 1 0 0 1-.85 1.13L4.6 10.7a1 1 0 0 1-1.13-.85l-.3-2.1a1 1 0 0 1 .85-1.13Z"/>'
           + '<path d="M4.4 9.6 6.9 6.1M10.1 9.6l2.5-3.5M15.8 9.6l2.5-3.5"/>'), add: function () { FM.addSampleClip && FM.addSampleClip(); } },
-        /* AI SCENE — a drawn mark, not an emoji (queue 543). Ezra: "Create a design for the ai scene
-           button instead of just an emoji". It was the ONLY entry in this menu using `emoji`, so it sat
-           among fourteen line icons as a filled yellow glyph — and an emoji is rendered by the platform,
-           so it looked like a different thing on his phone than on his PC.
-           The four-point sparkle pair is the mark AI has settled on, and its silhouette carries no
-           rectangle, which matters here: almost every neighbour in this grid is box-shaped, so a shape
-           with no box is the one that is easy to find. It is also the closest thing to the ✨ it
-           replaces, so nobody has to re-learn where the button is. */
-        { label: 'AI Scene', icon: ico(
-          '<path d="M10.5 3.8l1.75 4.15 4.15 1.75-4.15 1.75-1.75 4.15-1.75-4.15L4.6 9.7l4.15-1.75Z"/>'
-          + '<path d="M17.4 14.2l.85 2 2 .85-2 .85-.85 2-.85-2-2-.85 2-.85Z"/>'), add: function () { FM.aiPanel && FM.aiPanel.show(); } },
-        /* ASSISTANT (queue 856) — the one you TALK to, as against AI Scene which builds a whole scene
-           from one prompt and stops. A speech bubble, because that is what it is, and because the
-           sparkle pair next door already means "AI makes something": two sparkles here would read as
-           two doors to the same room. No box in the silhouette, same as its neighbour, which is what
-           makes both easy to find in a grid of rectangles. */
-        { label: 'Assistant', icon: ico(
+        /* ASK & EDIT (#1243 F2; it was "Assistant", queue 856). His words, 8 Nov: "we don't really need the AI scene button,
+           because we have the AI assistant button, which the AI assistant button should be able to do everything… think of a
+           better name for it to describe what it actually does, because it's basically going to be able to do anything you
+           want it to do." So AI Scene (the Director's door, queue 543's sparkle pair) is gone and this one tile does both: talk
+           to it to change what is there, or ask it for a whole new video and it runs the scene builder in the chat
+           (js/ai-chat.js build_scene). The name is the plan's RECOMMENDED one (1243-D F2, 1243-R): it says how you use it and
+           what it does, and fits the 78 px tile. It takes AI Scene's yellow with it (BY_LABEL below).
+           The speech bubble stays: it is what it is, and no box in its silhouette keeps it easy to find among rectangles. */
+        { label: 'Ask & edit', icon: ico(
           '<path d="M20.2 11.3c0 3.5-3.4 6.3-7.6 6.3-.9 0-1.8-.13-2.6-.37L5.3 18.8l1.2-3.1A5.9 5.9 0 0 1 5 11.3C5 7.8 8.4 5 12.6 5s7.6 2.8 7.6 6.3Z"/>'
           + '<path d="M9.7 11.3h.01M12.6 11.3h.01M15.5 11.3h.01" stroke-linecap="round" stroke-width="2.2"/>'),
           add: function () { FM.aiChat && FM.aiChat.show(); } },
@@ -774,7 +766,7 @@ window.FM = window.FM || {};
     // "Import media", which already had a key; a dead key outlives everyone who remembers why.)
     'Import audio': '150, 160, 176',
     'Import media': '150, 160, 176',
-    'AI Scene': '240, 200, 90',          // "just a yellow colour for the background that isn't obnoxious"
+    'Ask & edit': '240, 200, 90',        // "just a yellow colour for the background that isn't obnoxious" — AI Scene's, renamed with it (#1243 F2)
     'Sound effects': 'RAINBOW',          // "a rainbow" — handled below; a single triple cannot say it
     'Record voice…': '235, 70, 70',      // "a strong red"
     'Record voice': '235, 70, 70',

@@ -2135,12 +2135,44 @@ window.FM = window.FM || {};
   function picQueueMake(P, cv) {
     if (P.wait.indexOf(cv) < 0) P.wait.push(cv);
     if (!P.queued) { P.queued = true; picMakeQ.push(P); }
-    if (!picMakeRaf) picMakeRaf = requestAnimationFrame(picMakePump);
+    picMakeAsk();
+  }
+  /* #1257 REPAIR (24 Nov). v18.51's ship was refused in its first full pass by the 1257 test: "1 of 130 frames ran a build step
+     of two pictures or more (softskin+sharpen)"; alone and in slices it passed, and 72 rounds made slow on purpose (CPU throttle,
+     busy loops beside the browser and inside the page) never doubled once. A step only runs inside picMakePump, one per call, so
+     the builder was handed one frame's time twice: one callback delivered twice, or a later frame carrying the last one's time.
+     Both are closed here, each in ONE place:
+       · picMakeAsk keeps exactly one frame request out, and a callback that is not that request (a second delivery of it, or one
+         a reset or a stop has let go) does nothing: it cannot run the builder a second time in a frame;
+       · picStepTs is the frame time that has had its build step; picMakePump, handed that time again, takes none this frame and
+         asks for the next one. The 1257 tests place every step by the builder's own calls and the time each was handed (the
+         page's clock, document.timeline, read the same as that time in every one of 34,000 builder frames). */
+  let picStepTs = null;
+  function picMakeAsk() {
+    if (picMakeRaf) return;
+    const id = requestAnimationFrame(function picMakeFrame(ts) {
+      if (picMakeRaf !== id) return;
+      picMakeRaf = 0;
+      picMakePump(ts);
+    });
+    picMakeRaf = id;
   }
   /* make() can prepare a lot (a photograph run through a kernel, a sprite sheet), so a menu's worth of them is spread over
-     frames on the live tiles' budget rather than built inside one: at least one per frame. */
+     frames on the live tiles' budget rather than built inside one: at least one per frame.
+     ONE BUILD STEP A FRAME (#1257, 24 Nov; the loop's finding, not his words: "if two pictures can take a step in the same
+     frame, make it one step a frame"). A staged picture's step runs until its slice is spent plus one more piece, so when
+     the first picture's step ended early (its build finished, or a fresh make() ran one piece) the next one in the queue
+     used to take a step of its own in the same frame: measured at 380 opening the Blur effects, 2 to 3 such frames a run at
+     every speed (1x, 2x and 4x throttle). None of those double frames was the worst frame of its run, though: every run's
+     worst was ONE picture's step (the slice plus its last piece), so this closes a path to a slow frame, it does not make a
+     single step cheaper, and the 67 ms that refused v18.49 was not reproduced. A single step is set by where the pictures'
+     own generators yield (fx-pics/tiles-*.js, byte copies of the design folder): at 4x a Sharpen or Lens Blur step reached
+     40 to 47 ms. Now the first staged step of a frame ends that frame's building; the rest wait their turn (the queue
+     goes round, so each building picture gets its frame in order). His rule for the fix: no retry shortcuts, and the
+     test's number is not loosened. */
   function picMakePump(ts) {
-    picMakeRaf = 0;
+    /* this frame has had its one build step (#1257 repair, above): none now, the next frame carries on */
+    if (ts === picStepTs) { if (picMakeQ.length) picMakeAsk(); return; }
     const t0 = now(), later = [];
     picStagedMs = 0;
     while (picMakeQ.length) {
@@ -2150,7 +2182,9 @@ window.FM = window.FM || {};
       /* scrolled away before its turn: not built now (a half-built one keeps what it has); the observer queues it again
          when it comes back */
       if (!picReady(P) && !ws.some(function (cv) { return cv._fxPic === P.type && picVis.has(cv); })) continue;
-      if (!P.draw && !P.broken) picMake(P);
+      /* this picture takes this frame's one build step (#1257): a build carried on below, or a staged make() (one piece) */
+      let stepped = !!P.draw && !!P.building && !P.broken;
+      if (!P.draw && !P.broken) { picMake(P); stepped = !!P.staged; }
       else if (P.building && !P.broken) {
         /* what is left of this frame's slice (at least one piece: step(0) runs exactly one) */
         const s0 = now();
@@ -2162,10 +2196,11 @@ window.FM = window.FM || {};
         ws.forEach(function (cv) { if (P.wait.indexOf(cv) < 0) P.wait.push(cv); });
         if (!P.queued) { P.queued = true; later.push(P); }
       } else ws.forEach(function (cv) { if (cv._fxPic === P.type && picReady(P)) picShow(cv, P); });
-      if (now() - t0 >= sliceMs()) break;
+      if (stepped) picStepTs = ts;
+      if (stepped || now() - t0 >= sliceMs()) break;
     }
     if (later.length) picMakeQ = picMakeQ.concat(later);
-    if (picMakeQ.length) picMakeRaf = requestAnimationFrame(picMakePump);
+    if (picMakeQ.length) picMakeAsk();
     picWork(ts, now() - t0, picStagedMs);
     picTrim();
     picKick();

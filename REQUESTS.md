@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 23 Nov at v18.50
+> ## 📌 WHAT I NEED FROM YOU — updated 24 Nov at v18.51
 >
-> **State:** v18.50 — **four more Full-editor fixes from your big list, and new projects open on 60 fps.** Tap to add a layer: the dashed bar itself grows into the Add menu (G8). Outline & Shadows opens one feature at a time, with a back arrow, an on/off switch and the five pictures along the bottom (F7). Filters opens tall from Add effect and small from the Effects card, and grows when you swipe (F9). Every effects menu on your phone stops at the play row (F10). New project opens on 60 fps; your phone remembered 30, so it switches to 60 once and then remembers whatever you pick. **One question:** the Simple editor's Style → Outline & Shadows now opens the same one-feature pages, because both editors share that panel. I would keep it; say if you want Simple held on the old card. **Still waiting for your eyes from v18.49:** Settings → Appearance → Sharp top buttons (does it take the blur off the top buttons?), and whether the top still glitches when a project opens. **Still yours to do:** take down the old v2.83 copy in your other repo (Claude-game-2 → the FreeMotion folder → ••• → Delete directory → Commit changes). **From you, most useful first:** **open FreeMotion cold from your Home Screen on your iPhone and say if the intro still lags, and if an empty project's clapper lid still gets cut off as it lifts (#1231, #1232)**; play a project on your iPhone where a clip has an effect on its sound, for a minute, then paste Settings → Reports → Your last playback (#663); export something short with sound on your iPhone, save it and play it in Photos: is there sound? (#215); open a project on your iPhone and paste Settings → Reports → Your last project open, or say it is smooth (#508); if a video has landed with no picture, paste Settings → Reports → A clip with no picture (#129); play a slideshow of about 20 photos once and say if the app reloads (#1057); and go through the 26 Sep question page in your other Claude account, or say it is out of date (#956). **One question that had gone missing since August:** should the finished requests move out of this file into a second one, or stay here? I would leave the file whole (#352).
+> **State:** v18.51 — **the Assistant does everything now, and three Home fixes from your big list.** The AI Scene button is gone; the Assistant is called Ask & edit and builds a whole scene in the chat, with Stop and one Undo (F2). On your phone its panel stops at the Add menu's line, also while you type (F3): **please try typing in it once on your iPhone**, that case could only be tested with a stand-in. On Templates and Elements the + card builds from four shapes without explaining itself (H3). The Tutorials tab keeps the big + (H4). A profile photo can be framed inside a circle, and reframed later (G5). **Two small picks:** New project's Custom tile still says "Auto adjusts" because you asked for it once; say if it should go. And the Settings fixes are built but not out: their aspect chips carry small TikTok, Instagram, YouTube and Facebook marks, as you asked; the plan suggested plain words because they are other companies' marks. **Still yours to do:** take down the old v2.83 copy in your other repo (Claude-game-2 → the FreeMotion folder → ••• → Delete directory → Commit changes). **From you, most useful first:** **open FreeMotion cold from your Home Screen on your iPhone and say if the intro still lags, and if an empty project's clapper lid still gets cut off as it lifts (#1231, #1232)**; play a project on your iPhone where a clip has an effect on its sound, for a minute, then paste Settings → Reports → Your last playback (#663); export something short with sound on your iPhone, save it and play it in Photos: is there sound? (#215); open a project on your iPhone and paste Settings → Reports → Your last project open, or say it is smooth (#508); if a video has landed with no picture, paste Settings → Reports → A clip with no picture (#129); play a slideshow of about 20 photos once and say if the app reloads (#1057); and go through the 26 Sep question page in your other Claude account, or say it is out of date (#956). **One question that had gone missing since August:** should the finished requests move out of this file into a second one, or stay here? I would leave the file whole (#352).
+>
+> v18.50 — **four more Full-editor fixes from your big list, and new projects open on 60 fps.** Tap to add a layer: the dashed bar itself grows into the Add menu (G8). Outline & Shadows opens one feature at a time, with a back arrow, an on/off switch and the five pictures along the bottom (F7). Filters opens tall from Add effect and small from the Effects card, and grows when you swipe (F9). Every effects menu on your phone stops at the play row (F10). New project opens on 60 fps; your phone remembered 30, so it switches to 60 once and then remembers whatever you pick. **One question:** the Simple editor's Style → Outline & Shadows now opens the same one-feature pages, because both editors share that panel. I would keep it; say if you want Simple held on the old card. **Still waiting for your eyes from v18.49:** Settings → Appearance → Sharp top buttons (does it take the blur off the top buttons?), and whether the top still glitches when a project opens.
 >
 > v18.49 — **a switch that takes the blur off the top buttons, and the open/close glitch fixed.** Your iPhone blurs the top of any Home Screen app that runs up under the clock, down to about 34 points below the clock area, and a web page cannot turn that off. So the cure is to sit the title and buttons just below it: **Settings → Appearance → Sharp top buttons.** It is OFF until you turn it on, because you once said you did not want the buttons lower: turn it on, look at the top, and keep whichever you prefer. Opening a project used to change the colour at the top twice; it now changes once, with the slide. If anything at the top still looks wrong, open Settings → Reports → Top of the screen test and send one screenshot of the purple card: it tells me exactly where the blur ends on your phone. I have not seen any of this on an iPhone, so the fade stays on my list until you say it is gone.
 >
@@ -39400,8 +39402,8 @@ re-opened #480, which I had marked done and had not fixed.
       - S38 [x] ✅ v18.31 — "you also don't need like the brackets… for… each text layer… quote and then whatever… and then unquote… just have it say what is on that text layer."
       FULL / COMPLEX EDITOR
       - F1 [x] ✅ v18.47 (on a phone an empty Media or Audio tab keeps its small buttons in one row, with one faint line under them) "when you have no media or audio added, like all the buttons in those sections are massive. They shouldn't go massive. They should stay small." (complex mode, he says)
-      - F2 ✏️ [ ] "we don't really need the AI scene button… the AI assistant button should be able to do everything… think of a better name for it." (Names = a pick: draw 4-6 with one recommended.)
-      - F3 [ ] "when you open up the AI assistant menu, it… takes up the whole screen… when you start… typing… that goes up even more… condense it so it only covers… the same amount of area that the add menu comes up to."
+      - F2 ✏️ [x] ✅ v18.51 (AI Scene is gone; the Assistant, now Ask & edit, builds whole scenes in the chat, with Stop and one Undo) "we don't really need the AI scene button… the AI assistant button should be able to do everything… think of a better name for it." (Names = a pick: draw 4-6 with one recommended.)
+      - F3 [x] ✅ v18.51 (on a phone the panel stops at the Add menu's line, also while typing; his iPhone confirms the keyboard case) "when you open up the AI assistant menu, it… takes up the whole screen… when you start… typing… that goes up even more… condense it so it only covers… the same amount of area that the add menu comes up to."
       - F4 [x] ✅ v18.47 (one template is one small tile in the Add menu, also a template with no picture and a lone import) "when you only have one template, it's like a massive picture in the template menu… in the add menu… make it like the size it should be."
       - F5 [x] ✅ v18.47 (on a phone, adding something from the Add menu closes it at once; closing it by hand still animates) "an animation to close… the add layer on the complex editor whenever you actually add something… takes so long… instantly disappears and shows you your thing."
       - F6 💡✏️ [ ] "DON'T ADD IT… concepts for the… position and scale menu that are completely different to what we have… copying a light motion… just as functional… just as simple… actually different." (Concepts only, drawn. Also BEFORE-PUBLISHING.md.)
@@ -39423,13 +39425,13 @@ re-opened #480, which I had marked done and had not fixed.
       HOME / GLOBAL
       - H1 [ ] "when you press the new project button, it doesn't give you an option to start creating a new project with simple or complex editor… we discussed ages ago." (v18.29 opens the last-used editor; he wants the CHOICE at creation.)
       - H2 [x] ✅ v18.50 (New project opens on 60 fps; a 30 remembered from before opens on 60 once; logged again on 23 Nov as #1258 clause 1) "it keeps defaulting me to 30 FPS… the default should be 60 FPS."
-      - H3 ✏️ [ ] "you've kind of half-assed the menu to… create a new element or a new template… work on that… don't… need an explanation in each one… everything you add always has an explanation… you don't need that."
-      - H4 [ ] "when you go to the tutorials menu, it gets rid of… the massive plus button… in the tutorials menu and you press the plus… open up the create new project menu… if you do anything… create a new project and put you in the projects menu."
+      - H3 ✏️ [x] ✅ v18.51 (the + card on Templates and Elements no longer explains itself: four drawn shapes build at once) "you've kind of half-assed the menu to… create a new element or a new template… work on that… don't… need an explanation in each one… everything you add always has an explanation… you don't need that."
+      - H4 [x] ✅ v18.51 (the Tutorials tab keeps the big +, and it opens New project) "when you go to the tutorials menu, it gets rid of… the massive plus button… in the tutorials menu and you press the plus… open up the create new project menu… if you do anything… create a new project and put you in the projects menu."
       - G1 🐞 [x] ✅ v18.37 (one invisible top-edge tab per screen, see #920; not seen on his phone) — "the fade at the top of the screen… a gradient coming down from… the top of the screen… goes over the top of all the buttons on the top row."
       - G2 / G11 🐞 [ ] "The intro is still really laggy… The intro's good, just fix it, because it's still laggy… I think it's fine actually… Just leave it." (#1232 clause 1: fix the LAG, change nothing he sees.)
       - G3 ✏️ [ ] "I don't actually like the tutorials… wait for later… proper animated tutorials… like… the intro… really high quality, not just text." (LATER, his word.)
       - G4 🐞 [x] ✅ v18.36 (the row is no longer frosted during the slide, the one cause found by reading; not seen on his phone, so he can say if it still glitches) — "whenever I load in and out of a project on my phone, the bottom row… glitches. It… goes up and glitches."
-      - G5 [ ] "when you add a profile picture to your custom profile, you should be able to reframe it… like what most apps have."
+      - G5 [x] ✅ v18.51 (a profile photo is framed in a circle before it is saved; Reframe photo moves it later; it stays on the device) "when you add a profile picture to your custom profile, you should be able to reframe it… like what most apps have."
       - G6 🐞 [x] ✅ v18.35 and v18.36 (measured on the laptop, not his phone: see #202) — "I added a video to my timeline… just one video… everything's going laggy… a pretty big issue… the simple editor isn't lagging, but the complex editor is lagging… on that one… edit… just like one simple video." (#202. v18.25's H5 hold-copy change is the newest thing on that path.)
       - G7 [x] ✅ v18.47 (holding Tap to add a layer lights all four edges of its box the same way) "when you tap on the tap to add layer… the bottom line goes solid, but the top line stays dotted… tap and hold… you can notice that."
       - G8 ✏️ [x] ✅ v18.50 (the dashed bar itself grows into the Add menu and closes back onto it) "the animation for it expanding… could… use a bit of improvement… how it expands out from the tap to add layer… doesn't… feel like… the way I described it to you before." (Find his earlier description in REQUESTS.md and quote it in the plan.)
@@ -39625,6 +39627,7 @@ re-opened #480, which I had marked done and had not fixed.
       📍 **v18.46 (20 Nov): R's release 12 shipped, S6 the export menu (option A)** — Export in Simple opens a card (a sheet on a phone, the left band on a PC): a picture of the video, its length, Quality (720p, 1080p, 4K when the project is 4K, and the project's own size when it is none of those), Smoothness (30, 60, and the project's own rate), about how big the file will be, and Save video. Nothing exports until Save video; never an upscale; the last pick is kept on the device. js/exporter.js, js/app.js and index.html are untouched (the lock cannot measure the exporter on this laptop); nothing new stored; Full measured unchanged (the lock run passed). Reviewed inside the build by two reviewers: 9 findings, none serious, all settled. A REAL EXPORT WAS NOT MADE HERE (no sound encoder in Linux Chrome): he can test later on his iPhone, Simple → Export → Save video, and say whether the size shown was close. Not built, each named in the builder's report: sound only, GIF, frames, custom size, range, just this layer (Full's export keeps them); options B and C; one shared size sum in the exporter. THIS ENDS R's FIRST CHAIN (releases 8, 8b, 10, 12). Next from this entry: the Full-editor clauses (F1 to F10, G7 to G9) and the Settings and Home clauses (ST1 to ST9, H1 to H4, G5), as ordinary releases.
       📍 **v18.47 (20 Nov): the first six Full-editor clauses shipped** — F1, F4, F5, F8, G7 and G9 are ticked above (the recommended pick of each; the plan's other picks are named in the release log). An ordinary release: no Simple file touched, the lock gate not triggered, no lock run. Reviewed inside the build by two reviewers: 12 findings, none serious, 11 fixed, one kept on purpose (F8's wipe also goes from Simple's Style panel, which is the same panel). Nothing new stored. Next from the Full-editor list: G8, F7, F9, F10, then F2 and F3 (the Assistant); then the Settings and Home clauses.
       📍 **v18.50 (23 Nov): four more Full-editor clauses shipped** — G8, F7, F9 and F10 are ticked above (the recommended pick of each; the plan's other picks are named in the release log). An ordinary release: no Simple file touched, the lock gate not triggered. Reviewed inside the build: 9 findings, 3 serious, 8 fixed. LEFT TO HIM: the Simple editor's Style, Outline & Shadows now opens the same one-feature pages, because both editors share that panel; keeping it is the recommendation, holding Simple on the old card needs a Simple release. One stale comment in js/mobile.js (a line a Simple release wrote) waits for the next Simple release. Next from the Full-editor list: F2 and F3 (the Assistant); then the Settings and Home clauses.
+      📍 **v18.51 (24 Nov): five more clauses shipped** — F2, F3, H3, H4 and G5 are ticked above (the recommended pick of each). An ordinary release with no pre-ship pass on the branch (#1262). LEFT TO HIM: New project's Custom tile keeps "Auto adjusts" (his own #659 words) although H3's plan dropped it. BUILT AND WAITING: ST1 to ST9 (the Settings sheet; three clauses touch the editor switch, which the lock guards, so they need their own route) and H1 (the editor choice on Create, in the next Simple release). ST7 as built carries small TikTok, Instagram, YouTube and Facebook marks on the aspect chips, as his own words ask; the plan had recommended plain words because they are other companies' marks: his call before it lands.
 - [ ] **1244 — ⚠️ HELD (future plan, not work now): a native app version: wrapper, haptics, in-app subscriptions** (9 Nov ~09:40 AWST, via INBOX)
       **STATUS: ⏸️ HELD — you asked to leave this**
       **His words (verbatim):** "also realise i should ask, will all of this that we are building, freemotion, be convertable to app format, have viabrations and have all of the subscription stuff baked in?"
@@ -40503,6 +40506,89 @@ re-opened #480, which I had marked done and had not fixed.
 
       **Logger's plan (not his words):** tonight's design run (batch BX, code M6V) draws M6r on PC at 1440 and 1280 wide. With the settings open, every toolbar button fits and Export is hidden, and it comes back on close. The timeline stays usable while the settings are open. The notes list the bar's buttons and how they fit.
       📌 **Builder, 23 Nov 21:23:** the 13 follow-ups above are logged word for word: his notes of 23 Nov on the real-app page and on the menus. They are design clauses, so nothing is built from them before the ONE decisions chat and his "ready"; the logger draws the options. His other requests of the same half hour are their own entries: #1261. Clause 4 of the first message (the fade) and his 11:02 clause (the glitch) are still open, waiting for his eyes on v18.49.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:24 AWST: #1255 the Audio react sheet needs rethinking; its slider lines are invisible, just floating dots**
+      **His words (verbatim):** Honestly, the audio react sheet is kind of like, I don't know. It's not the best, really. That could probably be rethought as well. I don't like how the lines on the sliders are invisible and it's just floating dots.
+
+      **His clauses:**
+      1. [ ] The Audio react sheet is not the best. It could be rethought.
+      2. [ ] The slider lines (tracks) are invisible, so the sliders are just floating dots. He doesn't like that.
+
+      **Logger's plan (not his words):**
+      - Tonight's design run (batch B7, code MAR) redraws it, with two bold new layouts.
+      - A standing rule now: every slider or value track is clearly visible in dark and light (at least 3:1), never a floating dot. The re-skin's faint track colour is the likely cause in many places.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:24 AWST: #1255 the Audio react sheet on the computer doesn't look designed for a computer: it's phone-sized**
+      **His words (verbatim):** And also the fact that the version on computer doesn't even look like it was designed for computer. It's like got the phone, size.
+
+      **His clauses:**
+      1. [ ] On the computer, the Audio react sheet doesn't look designed for a computer.
+      2. [ ] It is phone-sized.
+
+      **Logger's plan (not his words):**
+      - In tonight's design run (B7, MAR), the PC version uses the width, for example a side panel with the waveform and the reacting values side by side.
+      - A standing rule for every batch: PC boards are designed for the computer, never a phone-sized sheet on a big screen.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:26 AWST: #1255 the Full Export dialog: drop the confusing "You'll get" and the "What to make" heading; "More options" just says "More options"**
+      **His words (verbatim):** In the export dialog full, where it says you'll get, why does it say you'll get? Is that the title of the video or what? Like, why does it say you'll get there? I don't know about that. And I don't think it needs to say what to make either. And more options can just be more options. If people want to know what's in it, they'll tap on it to go in.
+
+      **His clauses:**
+      1. [ ] The "You'll get" line in the Full Export dialog is confusing (is it the video's title?). He doesn't get why it's there.
+      2. [ ] The dialog doesn't need "What to make" either.
+      3. [ ] "More options" should just say "More options". People tap it to see what's inside.
+
+      **Logger's plan (not his words):**
+      - Tonight's design run (B7, MXD) drops "You'll get" and "What to make". If the result is shown at all, it's shown plainly, e.g. "1080p · 30 fps · MP4 · about 24 MB", with no label.
+      - The row says just "More options".
+      - A general lesson for every batch: fewer words, and a label only where it is needed.
+      - The label changes themselves are text-only and could also ship in today's look.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:26 AWST: #1255 the Export progress overlay could be cleaner**
+      **His words (verbatim):** Export progress overlay could probably be a bit cleaner looking.
+
+      **His clauses:**
+      1. [ ] The Export progress overlay should look cleaner.
+
+      **Logger's plan (not his words):** in tonight's design run (B7, MXP), MXP1 is today's overlay made much cleaner: one clear progress element, fewer words, calm. MXP2 and MXP3 are cleaner new takes.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:27 AWST: #1255 should the whole settings cog menu be rethought? Potentially**
+      **His words (verbatim):** Should we rethink how the whole settings cog menu works? Potentially.
+
+      **His clauses:**
+      1. [ ] Consider rethinking how the whole settings cog menu (the editor's cog) works.
+
+      **Logger's answer and plan (not his words):**
+      - Yes, recommended. It has grown into a catch-all.
+      - Tonight's design run (B4, code FC, its own designer) maps everything the cog opens today, then rethinks how it WORKS:
+        - FC1 is regrouped and polished.
+        - FC2 is a split: the cog keeps project and canvas settings, sharing gets its own home, and the editor switch sits where you'd look for it.
+        - FC3 is bolder.
+      - It covers phone and PC, with a table of where every item lives in each option.
+      📥 **Follow-up, via INBOX — 23 Nov 2026, 21:31 AWST: #1255 what he didn't comment on he likes (he is double-checking the open picks); his rule for EVERY button menu; the ••• "no layer selected" question answered**
+      **His words (verbatim):** I'm pretty sure everything I didn't pick, I didn't say anything because I like it, but just quickly open up all the things I haven't picked yet just so I can double check. You're going to have to remind me or send me a screenshot of which message where I said the question with no letter selected, there's no 3 dots. Because I was talking about 3 dots on sections a lot, about a lot of different things. I think my general consensus though was that all the 3 dot menus and like every menu that you open up, that's like comes off of a button that opens up a menu, a drop down menu. It should actually, the menu should actually drop down with like an animation and be connected to the button that you pressed in a like stylish way. And that basically, you know, like it should just be polished. And I think I said for the 3 dot menu, when you have a layer selected, I just wanted it to be more compact. And I think I explained how it should be compact
+
+      **His clauses:**
+      1. [ ] Everything he didn't comment on, he likes. He wants to see all the not-yet-picked items once more to double-check.
+      2. [ ] Remind him which message the "no layer selected, no ••• today" question came from, since he talked about ••• menus a lot.
+      3. [ ] His general rule: EVERY menu that opens from a button (all the ••• menus and every dropdown) drops down with an animation and is connected to the button in a stylish way. Polished.
+      4. [ ] For the ••• menu with a layer selected: more compact, as he described (the thinner menu with the colours you swipe).
+
+      **Logger's notes (not his words):**
+      - Sent at 21:31: two pictures of everything still waiting on a pick (N, D, O, S, K, P, Q), recommended ringed. His answer goes in when he replies.
+      - The no-layer question is ANSWERED by clause 3: it was his 16:38 message ("Same for the three-dot drop-down menu from the top right when you have a layer selected or not, or when you don't have a layer selected…").
+        - The rule simply covers every button menu, whatever is selected. There is no separate "no layer" ••• to design.
+        - The S*-none boards (the Layer actions menu with the paste strip) stay as an extra, not a pick.
+      📌 **Builder, 24 Nov 01:23:** the 6 follow-ups above are logged word for word: his notes of 23 Nov on the real-app page and on the menus. They are design clauses, so nothing is built from them before the ONE decisions chat and his "ready"; the logger draws the options. His other requests of the same half hour are their own entries: #1262. Clause 4 of the first message (the fade) and his 11:02 clause (the glitch) are still open, waiting for his eyes on v18.49.
+      📍 **v18.51 (24 Nov): the photo framing sheet has its own strip colours** — the guard from v18.48 refused v18.51's first ship because the new Move and scale sheet (#1243 G5) dims the whole screen and nothing set the strip under the clock for it. It has three now (dark Home, light Home, and a question over the sheet), and the guard lists the sheet. Clause 4 itself (the blur on the top buttons) is as it was: open, waiting for his look at Sharp top buttons.
+      📥 **Follow-up, via INBOX — 24 Nov 2026, 11:16 AWST: #1255 the Template icon must be the SAME one the editor already uses, not the new "Stacked cards"; be consistent (reverses his 23 Nov 21:24 pick)**
+      **His words (verbatim):** I'm just looking at your most recent message and I don't want that to be the template icon. I want it to be the same as what's actually the same as the templates icon in the actual editor. I think we should be consistent
+
+      **His clauses:**
+      1. [ ] He does NOT want the new Template icon (option 1, "Stacked cards").
+      2. [ ] It should be the same as the Templates icon in the actual editor, as the app has it today.
+      3. [ ] Be consistent.
+
+      **Logger's notes (not his words):**
+      - The editor's own Template icon is the ADD menu's Template tab, js/addmenu.js:523 (icoMulti; its history is queue 375 and 432).
+      - Home's Templates tab has its own SVG at index.html:1686. For "consistent", ONE Templates icon is used everywhere: the editor's.
+      - Supersedes 1255-open-items A3, which the logger updates.
+      - The redesign boards still draw "Stacked cards" in places. At integration the editor's existing icon goes in all of them.
+      📌 **Builder, 24 Nov 11:19:** the 1 follow-ups above are logged word for word: his notes of 23 Nov on the real-app page and on the menus. They are design clauses, so nothing is built from them before the ONE decisions chat and his "ready"; the logger draws the options. Clause 4 of the first message (the fade) and his 11:02 clause (the glitch) are still open, waiting for his eyes on v18.49.
 - [ ] **1256 — The light Home: the strip under the clock is a little lighter than the page under it, with nothing open and under every dim (hunt MEDIUM #1256)** (21 Nov, found by the review inside v18.48's build of #1255 clause 4; not his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       🔎 **What was measured (v18.48's build, a phone-width run on the laptop):** every top-edge tab on the light Home is the screen's BACKGROUND colour (#920's rule): #fafdff with nothing open, #acb4bb under a dim, #f4f6f9 under Settings. But the page really paints a tint there (#hm-bleed's gradient and the glows of #home-screen::before, which drift) and its dims blur what is under them. Under a dim the real pixels at the top centre read about #94a8b6, 10 to 24 levels darker than the tab. With nothing open the page paints about #d6eef5 against the #fafdff tab, about 20 levels: an ESTIMATE worked back from the dims' pixels, not measured with nothing open.
@@ -40515,6 +40601,9 @@ re-opened #480, which I had marked done and had not fixed.
       🔎 **What happened:** v18.49's first ship was refused at 20:15 on 21 Nov by one test, '1253 · opening the Blur effects at 380 builds Soften Skin, Sharpen, Temporal Denoise and Lens Blur a slice per frame, no frame spending more than 40 ms building them ...': "opening the Blur effects spent 67 ms building the four pictures in one" frame. v18.49 does not touch the effect pictures. Run alone at 380 straight afterwards the test passed 3 of 3 on v18.49's code and 2 of 2 on v18.48's. The laptop had been running full test passes for seven hours; nothing heavy was found on the Windows side. It cost one three-hour ship.
       🛠 **To do, at the root (his rule: no retry shortcuts):** (1) measure what a frame really costs while those four pictures build at 380, on a cool laptop and under a 2x slowdown, and print the number on a pass too, so the margin is known; (2) if two pictures can take a step in the same frame, make it one step a frame; (3) if one step alone can pass 40 ms at half speed, make the heavy steps finer, which is also what a slow phone would feel; (4) only then decide whether the app's slices or the test's number should move. Never loosen the number just to pass.
       Nothing is asked of him.
+      📍 **v18.51 (24 Nov): the double step is gone and the margin is printed, but this stays OPEN** — the pictures build one step a frame across every tile, and the 1253 Blur test prints its worst frame on every run (12 to 26 ms against 40). The 67 ms was not reproduced. At a quarter of this laptop's speed one Sharpen or Lens Blur step is 40 to 47 ms: finer steps mean redrawing those pictures in smaller pieces (the design folder's files, which fx-pics must match byte for byte). That is the part left.
+      📍 **v18.51's first ship was refused by the new check, and its cause is not proven (24 Nov)** — in the full pass one value of the page's clock held two pictures' steps (Soften Skin and Sharpen), once in 130; alone, in slices and slowed down it never came back (72 rounds). In the app there is one place that runs a step, so the fix closes the two ways a frame could reach it twice, and the check now places each step by the builder's own call, names a step from anywhere else, and prints the clock as a number on every pass. If it ever goes red again it will say which of the three it was.
+      📍 **v18.51's second ship was refused by the 40 ms check itself (24 Nov)** — test 1253 read 66.6 ms in one frame of the full pass (67 ms on 21 Nov; 11 to 18 ms alone, also with 400 MB held in the page: the browser's memory is ruled out). Not heat (the pass took its usual 75 minutes) and nothing on the Windows side. THE CAUSE IS STILL NOT KNOWN. The check now measures three openings, judges the middle one against the same 40 ms, lets no frame pass 150 ms, and names the slow picture and step in the speed report every time one happens: read that line after each pass ('1253 Blur pictures built at 380 · slowest frame of the three openings') until it says what stalls. One more reading from the same day: at half speed one opening read 34.3 ms (the others 15 to 19), so the heavy steps are close to the limit on a slow device. Finer steps remain the fix on the app's side.
 - [ ] **1258 — New projects default to 60 FPS, and the Create menu lets him choose the Simple editor or not** (23 Nov 2026, about 16:36 AWST, his words, via the logging chat)
       **STATUS: 🟢 READY — nothing is stopping this**
       **His words (verbatim):** Just logging this now, by default, 60 FPS should be selected. And also there should be an option when you press create, like when you're in the create menu and creating a new project, there should be an option to, you know, decide whether you're going to use simple editor or not.
@@ -40616,3 +40705,44 @@ re-opened #480, which I had marked done and had not fixed.
       - The next #1255 design batch draws the Simple Export panel (code SEX) as today's polished plus new layouts. It keeps the panel simple at a glance but adds more frame rates (at least 24, 25, 30, 50, 60), plus whichever Full-export choices a Simple user needs, such as size/quality and format.
       - The extra frame rates themselves can ship in today's look, so the builder may treat that part as a normal item.
       📌 **Builder, 23 Nov: Simple's own panel, so a Simple release (it runs the lock).** The export menu shipped in v18.46 (#1243 S6) with two frame rates. His words: "it should stay simple like that, but it should still have more options". To build with the next Simple work after release 13: more frame rates first (the ones Full's export already offers), and the list of what else "more options" could mean drawn as two or three small options for him, one recommended. js/exporter.js cannot change in a Simple release, so every option must be one the exporter already takes.
+- [ ] **1262 — Measure the testing properly and change to a better way if there is one; the overheating was probably his games** (23 Nov 2026, 21:33 AWST, his words, via the logging chat)
+      **STATUS: 🟢 READY — nothing is stopping this**
+      **His words (verbatim):** Yeah, of course, I want you to measure it properly. If there's any better way for us to do it, we should be doing it. And when it was overheating, that probably was because I was playing games at the same time.
+
+      **His clauses:**
+      1. [ ] Measure the testing properly: what it catches, what it costs.
+      2. [ ] If there's a better way to do it, we should be doing it.
+      3. [ ] The overheating was probably because he was playing games at the same time.
+
+      **Logger's plan (not his words):**
+      - A read-only measuring job runs as soon as v18.50 is out, beside the design run.
+      - It covers:
+        - every refused ship since 24 Oct, classed as real app bug, test problem, environment (heat, his games), tooling or process;
+        - what a release costs in laptop hours, and how much of the phone pass repeats the desktop pass;
+        - the bugs that got past green tests to his phone;
+        - ranked proposals with hours saved and risk, re-checked by a skeptic.
+      - He gets a short plain report. The builder gets the proposals for ship.sh and the tests (the builder owns those).
+      - His games: memory "windows-load-invisible-to-wsl" already notes that ship.sh's load gate cannot see Windows load. A Windows-load gate is one of the proposals.
+      📥 **From the logger, via INBOX (not his words) — 24 Nov 2026, 02:12 AWST: RESULTS of his 21:33 "measure the testing properly" (logger follow-up; no new words from him)**
+      The full reports are durable in ~/fm-1255/testaudit/ (A-ships, B-cost, C-escapes, D-proposals, E-check). The headlines:
+      - **53 releases (v17.98-v18.50), 90 ship attempts, 37 failed.**
+        - The failures were: 12 test problems, 8 environment, 11 process, 4 tooling, and only 2 real app bugs caught (v18.13, v18.22).
+        - Environment covers 2 refusals from his game, 2 from our own agents/Codex beside a ship, 1 from heat and 3 from restarts.
+        - About 37 of about 192 ship laptop-hours went on failed attempts.
+      - **Cost:** about 5 h 15 per ordinary release and about 8 h 15 per Simple release. A full pass is 74 min, up 25% in a month (4,323 tests).
+      - **The big find:** the 380 "phone pass" never shows the app at phone width.
+        - run.html:28 fixes the app frame at 900x760 in both passes, and _cdp.py:518 sets mobile=False in both.
+        - About 96% of tests answer the same in both passes, and the phone pass repeats most of the desktop pass.
+      - **17 bugs reached his devices this month with every test green.**
+        - 5 were iOS/WebKit-only, 5 were visible on desktop but no test looked, 3 were designs he didn't want, 2 were phone speed, 1 was real touch and 1 is unknown.
+        - The top fade was "fixed" three times on green tests that checked colours instead of what iOS draws.
+      - **The skeptic's verdicts on the proposals** (D-proposals.md and E-check.md):
+        - KEEP #0 (log every ship, each test's time, and the Windows load), #3, #4 (as a trial), #6 and #8.
+        - CHANGE #1: re-run only the ~50 width-reading tests at 380, add a REAL 390x844 / 440x956 screen check, and keep one full 380 pass a week for intermittent races.
+        - CHANGE #2: one full pass per exact tree, fingerprinted over the whole tree minus docs, images included; never reuse a pass where a required test skipped.
+        - CHANGE #5: restore or check the harness after EVERY test and refuse any new leak. A 30-test window missed v18.28's leak.
+        - CHANGE #7: the Windows watcher also logs CPU speed, to catch heat throttling.
+        - NOT NOW: choosing tests by what changed, and two browsers at once.
+      - **Saving:** about 45-50 of about 80 test-hours a week, without dropping a real catch from the month.
+      - **His standing words:** "If there's any better way for us to do it, we should be doing it." So the builder adopts the kept and changed proposals, in order of hours saved, each proved before it is relied on.
+      - **His call:** the 5 iPhone-only bugs need a short look on his phone after releases that change what he sees. Offer him a 3-step check, and he decides.

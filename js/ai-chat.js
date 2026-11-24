@@ -65,7 +65,48 @@ window.FM = window.FM || {};
     'change over five timid ones. When they ask for a feeling ("make it pop", "calmer") pick concrete ' +
     'values and tell them what you picked, so they can ask for more or less.\n\n' +
     'Times are seconds. Colours are #rrggbb. z is the stacking index and 0 is the FRONT. A layer\'s `animated` lists its ' +
-    'keyframed transform channels and what each reads at the playhead.';
+    'keyframed transform channels and what each reads at the playhead.\n\n' +
+    /* #1243 F2 — "the AI assistant button should be able to do everything". The one line that hands a whole scene to the builder. */
+    'A WHOLE NEW VIDEO OR SCENE ("make me a 6 second product reel", "an intro for my channel") → call build_scene with their brief ' +
+    '(and aspect, duration, pacing or style only when they said one). It plans, builds and reviews the whole scene in this project. ' +
+    'Use emit_ops for changes to what is already there.';
+
+  /* #1243 F2: the scene builder as a tool of the chat. Its fields are the Director's own chips (Style · Pacing · Duration · Aspect,
+     js/ai-panel.js), so a scene asked for here is the same build the Director made. */
+  var BUILD_SCENE = {
+    name: 'build_scene',
+    description: 'Build a whole new animated scene into the open project from a plain-language brief (FreeMotion\'s scene builder: it plans, builds every part and reviews the look). Use only when the user asks for a new video or scene, not for a change to what is there.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        prompt: { type: 'string', description: 'the brief in the user\'s own words, with anything they said about it' },
+        aspect: { type: 'string', enum: ['9:16', '16:9', '1:1', '4:5'], description: 'only if they asked for a shape' },
+        duration: { type: 'number', description: 'seconds, only if they said a length' },
+        pacing: { type: 'string', enum: ['slow', 'medium', 'fast'] },
+        style: { type: 'string', description: 'a few words: punchy, elegant, retro…' },
+      },
+      required: ['prompt'],
+    },
+  };
+  /* the tool's answer as the Director's chips — every field checked, since it comes from the model.
+     ⚠️ THE SHAPE IS HIS, NEVER THE MODEL'S (F3 review, queue 690 hunt d). A chosen Aspect switches off generateScene's guard that
+     keeps a project holding his own content at its size, and the Director's chip was HIS pick; here the model fills `aspect` and
+     could read "reel" as 9:16 and turn his 16:9 project, clip and all, portrait. So the model's aspect is kept only when his own
+     sentence names a shape, or the project is still empty (where the engine lets a plan size the canvas anyway). */
+  var SHAPE_WORDS = /9\s*:\s*16|16\s*:\s*9|\b1\s*:\s*1\b|4\s*:\s*5|portrait|landscape|vertical|horizontal|square|widescreen/i;
+  /* a sentence that asks for a whole NEW video (the no-key offer reads it; js/ai-mock.js chat answers a narrower one on the dry run) */
+  var WANTS_SCENE = /\b(make|build|create|generate)\b.*\b(video|scene|reel|intro|outro|promo|advert|animation)\b|^\s*(an?|new)\b.*\b(video|scene|reel|intro|outro|promo|advert|animation|title|card)\b/i;
+  function chipsFrom(input, prompt, said) {
+    var c = {}, i = input || {};
+    if (['9:16', '16:9', '1:1', '4:5'].indexOf(i.aspect) >= 0 && (SHAPE_WORDS.test(String(said || '')) || !FM.scene.layers.length)) c.aspect = i.aspect;
+    var d = Number(i.duration);
+    if (isFinite(d) && d >= 2 && d <= 60) c.duration = String(Math.round(d));
+    if (['slow', 'medium', 'fast'].indexOf(i.pacing) >= 0) c.pacing = i.pacing;
+    if (typeof i.style === 'string' && i.style.trim()) c.style = i.style.trim().slice(0, 60);
+    var subj = String(prompt || '').split(/[.,\n]/)[0].trim().slice(0, 60);
+    if (subj) c.subject = subj;
+    return c;
+  }
 
   /* What is on screen RIGHT NOW. layerSummary() in ai.js emits {id,type,name,x,y}, which cannot answer
      "make this bigger" — no selection, no time, no duration, no text, no effect list. This is the block
@@ -112,6 +153,67 @@ window.FM = window.FM || {};
     listEl.appendChild(n);
     listEl.scrollTop = listEl.scrollHeight;
     return n;
+  }
+
+  /* #1243 F2: THE BUILD, REPORTED IN THE CHAT. js/ai.js generateScene reports through a sink (reset/row/note/done/error, the
+     Director panel's shape); this one draws each agent row as an .aic-note that updates in place — Interpreter, Director, the
+     builders, the critic — then says how it went in a bubble. Every word is textContent: labels come from the plan the MODEL wrote. */
+  var MARK = { queued: '·', active: '…', streaming: '…', done: '✓', skipped: '–' };
+  /* F3 review: the rows are lines in HIS chat, so they say what happened in his words. The engine's tags (Interpreter · Haiku,
+     Director · Opus, "4 ops", "used scaffold") were small chips on the Director panel; here they would be jargon, and they
+     brought back the word Director right after its door went. */
+  function rowMeta(state, count, tag) {
+    if (state === 'skipped') return tag === 'budget cap' ? 'stopped at your spending cap' : 'skipped';
+    return state === 'done' && count ? count + (count === 1 ? ' change' : ' changes') : '';
+  }
+  function chatSink() {
+    var rows = {}, stop = null;
+    var sink = {
+      outcome: '',
+      reset: function () {
+        rows = {};
+        if (stop) stop.remove();
+        stop = el('button', 'aic-linkbtn aic-stop', 'Stop — keep what’s built');
+        stop.type = 'button';
+        stop.addEventListener('click', function () { if (FM.ai && FM.ai.cancel) FM.ai.cancel(); stop.disabled = true; stop.textContent = 'Finishing…'; });
+        listEl.appendChild(stop);
+        listEl.scrollTop = listEl.scrollHeight;
+      },
+      row: function (id, label, state, count, tag) {
+        var r = rows[id];
+        if (!r) { r = el('div', 'aic-note aic-row'); rows[id] = r; listEl.insertBefore(r, stop && stop.isConnected ? stop : null); }
+        r.className = 'aic-note aic-row aic-row-' + (state || 'queued');
+        var meta = rowMeta(state, count, tag);
+        r.textContent = (MARK[state] || '·') + ' ' + (label || '') + (meta ? ' · ' + meta : '');
+        listEl.scrollTop = listEl.scrollHeight;
+      },
+      note: function (msg) { note(msg); },
+      done: function (info) {
+        if (stop) { stop.remove(); stop = null; }
+        info = info || {};
+        var n = info.layersAdded || 0;
+        var msg = info.left ? 'Stopped — you opened another project. What was built is kept in “' + info.left + '”.'
+          : info.cancelled ? 'Stopped — I kept what was built.'
+          : 'Built it — ' + n + (n === 1 ? ' layer' : ' layers') + ', all editable. One Undo takes the whole build back.';
+        sink.outcome = info.left ? 'stopped: the user opened another project' : info.cancelled ? 'stopped by the user, kept what was built' : 'built the scene: ' + n + ' layers added';
+        bubble('ai', msg);
+      },
+      error: function (msg) {
+        if (stop) { stop.remove(); stop = null; }
+        sink.outcome = 'the build failed: ' + (msg || 'error');
+        note(msg || 'The scene build went wrong.', 'aic-err');
+      },
+    };
+    return sink;
+  }
+  /* run one build_scene call (or the no-key demo) with the chat as its sink; resolves to the line the model is told */
+  async function runBuild(prompt, chips, extra) {
+    prompt = String(prompt || '').trim().slice(0, 600);
+    if (!prompt) return 'not run: no brief was given';
+    if (FM.ai.isRunning && FM.ai.isRunning()) { note('A scene is already being built — ask again when it finishes.', 'aic-warn'); return 'not run: another build is still running'; }
+    var sink = chatSink();
+    var res = await FM.ai.generateScene(prompt, chips || {}, Object.assign({ sink: sink }, extra || {}));
+    return sink.outcome || (res && res.error ? 'the build failed' : 'built');
   }
 
   function setBusy(on) {
@@ -164,11 +266,37 @@ window.FM = window.FM || {};
     }
 
     if (!FM.ai.DRY_RUN && !FM.aiKey.has()) {
-      note('Connect your Anthropic key first — it goes in Settings → AI key, and the Director uses the same one.', 'aic-warn');
+      /* F3 review: the two key-less builds are offered only for a sentence that asks for a NEW video — under "make the title
+         bigger" a starter scene titled "make the title bigger" is not what he asked for — and each builds once per tap row. */
+      var scene = WANTS_SCENE.test(text);
+      note(scene ? 'Connect your Anthropic key first — it goes in Settings → AI key. Without one I can still build a starter scene from what you wrote, or show you a demo.'
+        : 'Connect your Anthropic key first — it goes in Settings → AI key. Changes need it; without one I can only build a starter scene, if you ask for a whole new video.', 'aic-warn');
+      var row = el('div', 'aic-btnrow');
       var b = el('button', 'aic-linkbtn', 'Add your key in Settings');
       b.type = 'button';
       b.addEventListener('click', openKeySettings);   // queue 930: Settings, not the Director
-      listEl.appendChild(b);
+      row.appendChild(b);
+      if (scene) {
+        /* #1243 F2: the Director's two key-less doors, now here — "the AI assistant button should be able to do everything" */
+        var tb = el('button', 'aic-linkbtn aic-tmpl', 'Build a scene without a key');
+        var db = el('button', 'aic-linkbtn aic-demo', 'Watch a demo');
+        tb.type = 'button'; db.type = 'button';
+        tb.addEventListener('click', function () {
+          if (tb.disabled || (FM.ai.isRunning && FM.ai.isRunning())) return;
+          tb.disabled = true; db.disabled = true;   // one build per offer; ask again for another
+          var r = FM.aiTemplates.build(chipsFrom({}, text));   // one undo step (ai-templates.js commits once)
+          note('Built a starter scene — ' + r.applied + ' changes, all editable. One Undo takes it back.', 'aic-applied');
+        });
+        db.addEventListener('click', async function () {
+          if (busy || db.disabled || (FM.ai.isRunning && FM.ai.isRunning())) return;
+          tb.disabled = true; db.disabled = true;
+          setBusy(true);
+          try { await runBuild((FM.aiPanel && FM.aiPanel.demoPrompt) || text, {}, { dryRun: true }); }   // the mock: no key, no spend
+          finally { setBusy(false); }
+        });
+        row.appendChild(tb); row.appendChild(db);
+      }
+      listEl.appendChild(row);
       listEl.scrollTop = listEl.scrollHeight;
       return;
     }
@@ -196,7 +324,7 @@ window.FM = window.FM || {};
         r = FM.aiMock.chat(text, FM.scene);
       } else {
         r = await FM.ai.call(model(), FM.aiManifest.digest + '\n\n' + PERSONA, messages,
-          FM.aiManifest.tools.ops, { toolChoice: { type: 'auto' }, maxTokens: 1600 });
+          [FM.aiManifest.tools.ops, BUILD_SCENE], { toolChoice: { type: 'auto' }, maxTokens: 1600 });   // #1243 F2: and the scene builder
       }
 
       var blocks = r.content || [];
@@ -206,20 +334,31 @@ window.FM = window.FM || {};
 
       messages.push({ role: 'assistant', content: blocks });
 
-      var ops = [];
-      uses.forEach(function (u) { if (u.input && Array.isArray(u.input.ops)) ops = ops.concat(u.input.ops); });
+      var ops = [], builds = [];
+      uses.forEach(function (u) {
+        if (u.name === 'build_scene') builds.push(u);   // #1243 F2: a whole scene goes to the builder, never through applyTurn
+        else if (u.input && Array.isArray(u.input.ops)) ops = ops.concat(u.input.ops);
+      });
       var moved = home != null && FM.storage.openProjectId() !== home;   // queue 690: he opened another project meanwhile
       var summary = moved ? null : applyTurn(ops);
 
+      if (said) bubble('ai', said);
+      else if (!summary && !moved && !builds.length) bubble('ai', 'Done.');
+      if (moved && (ops.length || builds.length)) note('Not applied — you opened another project while I was answering. Ask again here if you want it in this one.', 'aic-warn');
+      if (summary) note(summary, 'aic-applied');
+
+      /* #1243 F2: ONE build per sentence, its rows drawn here (chatSink), its own one undo step (generateScene commits once — it is
+         never inside applyTurn's mute). A second build_scene in the same reply is answered, not run. */
+      var built = {};
+      if (!moved && builds.length) {
+        built[builds[0].id] = await runBuild(builds[0].input && builds[0].input.prompt, chipsFrom(builds[0].input, builds[0].input && builds[0].input.prompt, text));
+        builds.slice(1).forEach(function (u) { built[u.id] = 'not run: one scene at a time'; });
+      }
+
       // every tool_use must be answered, or the NEXT request is rejected by the API
       uses.forEach(function (u) {
-        pendingResults.push({ type: 'tool_result', tool_use_id: u.id, content: moved ? 'not applied: the user opened a different project before this arrived' : (summary || 'applied') });
+        pendingResults.push({ type: 'tool_result', tool_use_id: u.id, content: moved ? 'not applied: the user opened a different project before this arrived' : (built[u.id] || summary || 'applied') });
       });
-
-      if (said) bubble('ai', said);
-      else if (!summary && !moved) bubble('ai', 'Done.');
-      if (moved && ops.length) note('Not applied — you opened another project while I was answering. Ask again here if you want it in this one.', 'aic-warn');
-      if (summary) note(summary, 'aic-applied');
 
       trim();
     } catch (e) {
@@ -243,7 +382,7 @@ window.FM = window.FM || {};
       /* ⚠️ ONLY WHEN IT IS OPEN (queue 930 security review, high). A reply that lands while the Assistant is hidden — he
          tapped "API key" while it was thinking — used to focus this hidden box, so the key he then pasted for Settings
          went HERE, and Enter sent his key to the model as a chat message. */
-      if (canTakeFocus()) inputEl.focus();
+      if (canTakeFocus()) inputEl.focus({ preventScroll: true });   // #1243 F3: no pan of the page up to the field
     }
   }
 
@@ -265,15 +404,64 @@ window.FM = window.FM || {};
   function autosize() {
     if (!inputEl) return;
     inputEl.style.height = 'auto';
-    inputEl.style.height = Math.min(120, inputEl.scrollHeight) + 'px';
+    /* #1243 F3: three lines (72 px) while the keyboard is up — the box grows into the transcript, never past the line, and never
+       taller than the room the panel has between its slim header and the keyboard (about 104 px on an 800 px phone) */
+    var cap = 120;
+    if (panelEl && panelEl.classList.contains('aic-typing')) {
+      var head = panelEl.querySelector('.aic-head'), comp = inputEl.parentNode, cs = getComputedStyle(comp);
+      var room = panelEl.clientHeight - (head ? head.offsetHeight : 0) - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0) - 10;
+      cap = Math.max(38, Math.min(72, room));
+    }
+    inputEl.style.height = Math.min(cap, inputEl.scrollHeight) + 'px';
+  }
+
+  /* ═══ #1243 F3 — THE PANEL STOPS AT THE ADD MENU'S LINE, ALSO WHILE TYPING ════════════════════════════════════════════════════
+     His words, 8 Nov: "when you open up the AI assistant menu, it like takes up the whole screen. And then when you start actually
+     typing into it, then that goes up even more as well. I think you could probably condense it so it only covers up like the same
+     amount of area that the add menu comes up to."
+     It was a 74svh sheet from the bottom, so it rose far above the Add menu's top, and while typing the compose row padded itself
+     by the keyboard and iOS panned the page up to the field. On a phone now: its top is THE SHEET LINE, FM.mobile.sheetLine() —
+     the stage's bottom edge, the same line the Add sheet's top is (js/mobile.js syncAddSheetTop) — and its BOTTOM is lifted
+     above the keyboard (FM.kbInset), so the top never moves and the transcript shrinks instead. The field is focused without a
+     scroll, and if iOS pans the visual viewport anyway (offsetTop > 0) the top is moved down by the same amount, so on the screen
+     it stays put. While the keyboard is up the header folds to a slim row and the box keeps to three lines (1243-D F3's
+     RECOMMENDED pick A: the transcript keeps the newest reply in view and scrolls). PC keeps its right-hand column, unchanged. */
+  var unwatch = null, stageRO = null;
+  function phone() { return !!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone()); }
+  function place() {
+    if (!panelEl) return;
+    var kb = FM.kbInset ? FM.kbInset() : 0;
+    var kbWas = panelEl.style.getPropertyValue('--aic-kb');
+    panelEl.style.setProperty('--aic-kb', kb + 'px');
+    var vv = window.visualViewport, off = vv && vv.offsetTop > 0 ? Math.round(vv.offsetTop) : 0;
+    /* F3 review: iOS may PAN the page up to the field instead of shrinking it, which leaves kbInset at about 0 and the panel's room
+       just as small (its top moves down by the pan, below) — so a pan while he is in the box is the keyboard too */
+    var typing = phone() && (kb > 0 || (off > 0 && !!inputEl && document.activeElement === inputEl));
+    var typingWas = panelEl.classList.contains('aic-typing');
+    panelEl.classList.toggle('aic-typing', typing);
+    if (!phone()) { panelEl.style.removeProperty('--aic-top'); return; }
+    var line = FM.mobile.sheetLine ? FM.mobile.sheetLine() : 0;
+    if (line > 0) panelEl.style.setProperty('--aic-top', (line + off) + 'px');
+    else panelEl.style.removeProperty('--aic-top');
+    if (kbWas !== kb + 'px' || typingWas !== typing) { autosize(); if (listEl) listEl.scrollTop = listEl.scrollHeight; }   // the newest reply stays in view
+  }
+  function watchPlace() {
+    unwatchPlace();
+    if (FM.screen && FM.screen.watch) unwatch = FM.screen.watch(place);
+    var st = document.getElementById('stage');
+    if (st && window.ResizeObserver) { stageRO = new ResizeObserver(function () { place(); }); stageRO.observe(st); }
+  }
+  function unwatchPlace() {
+    if (unwatch) { try { unwatch(); } catch (e) {} unwatch = null; }
+    if (stageRO) { try { stageRO.disconnect(); } catch (e) {} stageRO = null; }
   }
 
   function build() {
     panelEl = el('div'); panelEl.id = 'ai-chat';
     panelEl.setAttribute('role', 'dialog');
-    panelEl.setAttribute('aria-label', 'AI assistant');
+    panelEl.setAttribute('aria-label', 'Ask & edit');   // #1243 F2: the new name, everywhere he can meet it
 
-    var grab = el('button', 'aic-grab'); grab.type = 'button'; grab.setAttribute('aria-label', 'Close assistant');
+    var grab = el('button', 'aic-grab'); grab.type = 'button'; grab.setAttribute('aria-label', 'Close Ask & edit');
     grab.appendChild(el('span', 'grab-bar'));
     grab.addEventListener('click', hide);
     panelEl.appendChild(grab);
@@ -281,17 +469,33 @@ window.FM = window.FM || {};
     var head = el('div', 'aic-head');
     var title = el('div', 'aic-title');
     title.appendChild(el('span', 'aic-spark', '✦'));
-    title.appendChild(el('span', null, 'Assistant'));
+    title.appendChild(el('span', null, 'Ask & edit'));
     head.appendChild(title);
     statusEl = el('span', 'aic-status', '');
     head.appendChild(statusEl);
+    /* #1243 F2: what the builds and replies have cost on his key so far (an estimate, FM.aiBudget), beside API key — the Director's
+       budget ring, which went with AI Scene.
+       ⚠️ A RUNNING TOTAL (F3 review). FM.aiBudget is the BUILD's meter — generateScene resets it as each build starts, because its
+       spending cap is per build — so reading it here dropped every reply's cost back to 0 the moment a build began. This sums the
+       meter's rises since the app opened: a reset is read as starting again from 0, never as money given back. */
+    var spentHere = 0, meterWas = FM.aiBudget ? FM.aiBudget.spentCents() : 0;
+    var spendLabel = function (c) { return c < 1 ? c.toFixed(2) + '¢' : c.toFixed(1) + '¢'; };
+    var spend = el('span', 'aic-spend', spendLabel(0));
+    spend.title = 'Estimated spend on your key since the app opened'; spend.setAttribute('aria-label', 'Estimated spend on your key since the app opened');
+    if (FM.aiBudget && FM.aiBudget.onChange) FM.aiBudget.onChange(function () {
+      var now = FM.aiBudget.spentCents();
+      if (now < meterWas) meterWas = 0;   // the meter was reset (a build started)
+      spentHere += now - meterWas; meterWas = now;
+      spend.textContent = spendLabel(spentHere);
+    });
+    head.appendChild(spend);
     /* The key's door, always in the header (queue 930: "a button in both pages that takes you to app settings"). */
     var keyBtn = el('button', 'aic-keybtn', 'API key');
     keyBtn.type = 'button'; keyBtn.title = 'Your Anthropic key — in Settings'; keyBtn.setAttribute('aria-label', 'API key settings');
     keyBtn.addEventListener('click', openKeySettings);
     head.appendChild(keyBtn);
     var close = el('button', 'aic-close', '✕');
-    close.type = 'button'; close.title = 'Close'; close.setAttribute('aria-label', 'Close assistant');
+    close.type = 'button'; close.title = 'Close'; close.setAttribute('aria-label', 'Close Ask & edit');
     if (FM.drawnX) FM.drawnX(close, 22);   // queue 965: one drawn ✕ for the app
     close.addEventListener('click', hide);
     head.appendChild(close);
@@ -304,9 +508,11 @@ window.FM = window.FM || {};
     inputEl = document.createElement('textarea');
     inputEl.className = 'aic-input';
     inputEl.rows = 1;
-    inputEl.placeholder = 'Tell me what to change…';
-    inputEl.setAttribute('aria-label', 'Tell the assistant what to change');
+    inputEl.placeholder = 'Ask for a change, or a whole new video…';   // #1243 F2: it does both now
+    inputEl.setAttribute('aria-label', 'Tell Ask & edit what to change or make');
     inputEl.addEventListener('input', autosize);
+    inputEl.addEventListener('focus', function () { if (isOpen()) place(); });   // F3 review: a pan while in the box is typing (place)
+    inputEl.addEventListener('blur', function () { if (isOpen()) place(); });
     inputEl.addEventListener('keydown', function (e) {
       // Enter sends, Shift+Enter is a new line. Never send mid-IME composition.
       if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
@@ -324,12 +530,9 @@ window.FM = window.FM || {};
 
     /* The on-screen keyboard does not change window.innerHeight, only the visual viewport — so a bottom
        sheet whose text field is at the bottom sits UNDER the keyboard without this. FM.kbInset is the
-       app's existing answer (queue 814) and is exported precisely so a headless suite can drive it. */
-    if (window.visualViewport) {
-      var kb = function () { panelEl.style.setProperty('--aic-kb', (FM.kbInset ? FM.kbInset() : 0) + 'px'); };
-      window.visualViewport.addEventListener('resize', kb);
-      window.visualViewport.addEventListener('scroll', kb);
-    }
+       app's existing answer (queue 814) and is exported precisely so a headless suite can drive it.
+       #1243 F3: place() reads it, with the sheet line, on every visual-viewport, window and stage change while the panel is open
+       (watchPlace in show, taken down in hide). */
 
     document.addEventListener('keydown', function (e) {
       if (e.key !== 'Escape' || !panelEl.classList.contains('open')) return;
@@ -342,7 +545,8 @@ window.FM = window.FM || {};
 
   function greet() {
     note('Tell me what to change and I will do it — "make the title bigger", "give it a soft glow", ' +
-         '"start it half a second later". Tap a layer first and "this" means that one.');
+         '"start it half a second later" — or ask for a whole new video: "make a 6 second product reel". ' +
+         'Tap a layer first and "this" means that one.');   // #1243 F2: it builds scenes too
   }
 
   /* THE CHAT BOX TAKES THE FOCUS ONLY WHEN NOTHING ELSE HAS IT (queue 930 review, round 2). "Only when open" was not enough:
@@ -368,10 +572,13 @@ window.FM = window.FM || {};
     // ONE AI PANEL AT A TIME (queue 930) — see js/ai-panel.js show()
     if (FM.aiPanel && FM.aiPanel.isOpen && FM.aiPanel.isOpen()) FM.aiPanel.hide();
     if (FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone() && FM.mobile.close) FM.mobile.close();
+    place();   // #1243 F3: on the sheet line before it slides, so it rises straight to it
     panelEl.classList.add('open');
     panelEl.inert = false;
     document.body.classList.add('aic-open');
-    setTimeout(function () { if (canTakeFocus()) inputEl.focus(); }, 120);
+    watchPlace();
+    requestAnimationFrame(place);   // the layer sheet closing (FM.mobile.close above) can move the stage a frame later
+    setTimeout(function () { if (canTakeFocus()) inputEl.focus({ preventScroll: true }); }, 120);   // #1243 F3: no pan up to the field
   }
   function hide() {
     if (!panelEl) return;
@@ -379,6 +586,7 @@ window.FM = window.FM || {};
     panelEl.inert = true;   // closed = unreachable: nothing can focus or type into it off screen (queue 930 review)
     document.body.classList.remove('aic-open');
     if (inputEl) inputEl.blur();
+    unwatchPlace();   // #1243 F3
   }
   function toggle() { (panelEl && panelEl.classList.contains('open')) ? hide() : show(); }
   function isOpen() { return !!(panelEl && panelEl.classList.contains('open')); }
