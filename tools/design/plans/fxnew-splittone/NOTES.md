@@ -13,7 +13,7 @@ from reading the code and from hand arithmetic. The proof is written and waiting
 - ChatGPT's pile (`ssh/main:tools/design/chatgpt-tasks/pile/LAND-LIST.md`): no split tone, tint or toning effect.
 - `ssh/main:REQUESTS.md`: "split ton" only in passing (#349's tile notes on Teal & Orange; Copperplate's "no split-tone look existed").
   POLISH-LOG v3.94: Tint gained Range + Keep brightness and "two Tints on one layer now give you a real split-tone".
-- `tools/design/954-effect-names.md`: "Split Toning" is not one of Alight Motion's names; it is the photo editors' generic term.
+- `tools/design/954-effect-names.md`: "Split Toning" is not one of [another app]'s names; it is the photo editors' generic term.
 - The registry, read row and kernel:
 
 | Effect | What it does | Why Split Toning is not it |
@@ -62,7 +62,7 @@ Also: `fx-registry.js` color2Gate can now be **dead at a slider value** (`deadAt
 second-colour row unchanged). Search words: split toning, split tone, split-tone, tint, teal and orange, grade, colour grade, color
 grade, shadows highlights colour/color, warm and cool, cinematic (not "sepia" or "cross process": effects of their own). Tile photo:
 **dog** (the strongest tonal structure — big darks and big lights; cat already carries Teal & Orange and Colour Wheels). Leads the
-NEW row (batch 48, the newest). Name "Split Toning" is the backlog's and the generic photo term; not an AM name, not a trademark.
+NEW row (batch 48, the newest). Name "Split Toning" is the backlog's and the generic photo term; not a [another app] name, not a trademark.
 
 Files: js/compositor.js (the block), js/fx-registry.js (CATEGORY_OF batch 48, ADJ_OK, SEARCH_ALIASES, color2Gate deadAt),
 js/fx-thumbs.js (PHOTO_OF.dog), js/inspector.js (NOOP_WHY), index.html busters — **compositor 224 → 225, fx-registry 28.36 → 28.37,

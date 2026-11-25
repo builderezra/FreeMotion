@@ -4,13 +4,13 @@ Step 2 of `STATUS.md` (one of three independent designs; this one leads with how
 Written 29 Sep 2026 against HEAD `2d06a3f5` (v17.11) plus the working tree. **Design only. Nothing is built.** Ezra's gate:
 *"don't build it until I say to do it"* (INBOX.md:28).
 
-Research this rests on (all in `research/`): `capcut-mobile.md` (cited **CC §n**), `pro-editors.md` (**PE §n**),
+Research this rests on (all in `research/`): `[another editor]-mobile.md` (cited **[another editor] §n**), `pro-editors.md` (**PE §n**),
 `fm-model.md` (**FMM §n**), `fm-collab.md` (**FMC §n**), `fm-ui.md` (**FMU §n**), `his-prefs.md` (**HP §n**).
 Code references are `file:line` and were spot-checked for this note (function locations in `js/app.js`, `js/scene.js`,
 `js/timeline.js`, `js/storage.js`, `js/home.js`, `js/collab-*.js`, `index.html`). Anything I did not confirm is marked
 **UNVERIFIED**.
 
-Working names in this document: **Quick** (the new, CapCut/Premiere-style editor) and **Full** (today's editor). They are
+Working names in this document: **Quick** (the new, [another editor]/[another editor]-style editor) and **Full** (today's editor). They are
 placeholders until Ezra picks (decision D1). Internally the code says `quick` / `full`, and the stored data uses a neutral
 key, `seq`, so a rename later never touches saved projects.
 
@@ -20,11 +20,11 @@ key, `seq`, so a rename later never touches saved projects.
 
 **One project, one document, two editors that are two ways of looking at it.** Quick and Full show the same
 `FM.scene.layers`, the same canvas, the same playhead and the same undo history; switching is a view change that takes
-one tap and about a third of a second, and never converts or rewrites anything (the Resolve Cut/Edit model, PE §4; the
-opposite of Rush→Premiere, which Adobe has now retired, PE §2). Quick adds exactly one idea to the data: some video and
+one tap and about a third of a second, and never converts or rewrites anything (the [another editor] Cut/Edit model, PE §4; the
+opposite of [another editor]→[another editor], which [another editor] has now retired, PE §2). Quick adds exactly one idea to the data: some video and
 image layers are flagged as **the main track** (`layer.seq.main`), and Quick's commands keep those clips end to end, so
 trimming, deleting, speeding up or reordering one slides everything after it, *and everything sitting on top of those
-clips slides with them* (the thing CapCut's phone app does not do, CC §13.4). Everything else (overlays, text, captions,
+clips slides with them* (the thing [another editor]'s phone app does not do, [another editor] §13.4). Everything else (overlays, text, captions,
 audio, effect segments) stays an ordinary free layer, shown in its own section of the Quick timeline instead of one row
 per layer. Full keeps every option and stays free: a Full edit is never "wrong", it may only leave a gap or an overlap
 on the main track, which Quick then shows honestly with a one-tap fix. Because the time axis, zoom and fixed-centre
@@ -71,10 +71,10 @@ Per device, never in the document (so nobody's editor flips because of someone e
 | Choice | Picked | Why |
 |---|---|---|
 | Where the main track lives | **A flag on each clip** (`seq.main`), order = `start` | `start` is already the truth the renderer, exporter and Full read (FMM §6). A main track with no gaps has exactly one order, so storing a second order (`ord`, or a `project.mainTrack` list, FMM §13.5 B, FMC §9.4 A) would be a second opinion Full can contradict. Nothing to remap on import/duplicate/paste, no `KEYED` table change, **no `SCHEMA_REV` bump** for phases 1-4 (FMC §3). |
-| Are starts derived? | **No. Quick's commands write them explicitly** | A derived start would drag keyframes along only if keyframe time stopped being absolute, and `FM.evalProp` has **888 call sites** across 20 files (grep, 29 Sep; `js/scene.js:72`). It would also snap a Full user's deliberate drags back, which is the interference the brief rules out (FMM §13.4 point 2). Resolve does the same: magnetism is a behaviour of the Cut page's commands (PE §4). |
-| How "attached" is stored | **Not stored. Worked out at edit time** from where an item starts, with a stored opt-out (`seq.stay`) | No layer id inside the metadata, so nothing to remap in the four id-remap sites (FMM §3.3, rule 2 of FMM §0), nothing goes stale when a Full user moves things, and nothing new to merge in collab. It is how the Resolve Cut page behaves (PE §4, inference there). §4 has the rule and why it is predictable enough. |
+| Are starts derived? | **No. Quick's commands write them explicitly** | A derived start would drag keyframes along only if keyframe time stopped being absolute, and `FM.evalProp` has **888 call sites** across 20 files (grep, 29 Sep; `js/scene.js:72`). It would also snap a Full user's deliberate drags back, which is the interference the brief rules out (FMM §13.4 point 2). [another editor] does the same: magnetism is a behaviour of the Cut page's commands (PE §4). |
+| How "attached" is stored | **Not stored. Worked out at edit time** from where an item starts, with a stored opt-out (`seq.stay`) | No layer id inside the metadata, so nothing to remap in the four id-remap sites (FMM §3.3, rule 2 of FMM §0), nothing goes stale when a Full user moves things, and nothing new to merge in collab. It is how the [another editor] Cut page behaves (PE §4, inference there). §4 has the rule and why it is predictable enough. |
 | Which editor you see | **Per device, per project** (localStorage), with `project.seq.home` only as the default for a device that has never opened it | FMC §5: an editor mode in `FM.scene` would flip the other person's screen. `home` is written once, at creation, and never by the switch, so switching makes no document write, no sync op and no undo step. |
-| Sections (Overlays, Text, Captions, Audio, Effects) | **Derived from the layer type**, never stored | FMM §13.3. Final Cut's audio lanes "do not affect the content of your project" (PE §3). |
+| Sections (Overlays, Text, Captions, Audio, Effects) | **Derived from the layer type**, never stored | FMM §13.3. [another editor]'s audio lanes "do not affect the content of your project" (PE §3). |
 | Stacking | Main clips live at the **bottom of the array** (end = back); new overlays/text go to index 0 (front) | Array order is z-order, index 0 on top (`js/compositor.js:16167`). Quick keeps "main track behind everything"; if Full breaks it, Quick's check shows it (§3.6). |
 
 ### 2.3 Derived things (computed at draw or edit time; never saved)
@@ -194,7 +194,7 @@ moveMain(c, toIndex)        → only the clips BETWEEN the old and new slot move
 
 ### 3.3 Live dragging
 
-A trim or reorder drag shows the ripple while the finger moves (CapCut does, CC §2.1). At pointerdown `FM.seq.gesture()`
+A trim or reorder drag shows the ripple while the finger moves ([another editor] does, [another editor] §2.1). At pointerdown `FM.seq.gesture()`
 snapshots `{start, duration, trimStart, kf}` of every layer the operation can touch; each pointermove restores the
 snapshot and re-applies the operation with the new value (so errors never accumulate); pointerup commits once. The
 timeline already refuses to rebuild mid-gesture (`js/timeline.js:5212-5220`); the Quick timeline copies that rule, and
@@ -203,7 +203,7 @@ collab's `held` machinery already covers every path touched during the gesture (
 ### 3.4 What Quick never does
 
 No automatic re-pack on open, on switch or after a remote change. No derived writer in collab. No silent edits. The
-only writes are the ones a person asked for (iMovie's lesson, PE §5: never let a mode change rewrite the project).
+only writes are the ones a person asked for ([another editor]'s lesson, PE §5: never let a mode change rewrite the project).
 
 ### 3.5 Snapping in Quick
 
@@ -241,23 +241,23 @@ hostOf(l, main):
 
 - **An item that starts exactly on a cut belongs to the clip after the cut** (it was placed there to start with it).
 - **The link is shown**, so it is never a surprise: when an item is selected, a thin line in its section colour runs from
-  its left edge down to the clip it follows (Rush's yellow connection line and LumaFusion's link line, PE §2, §5), and
+  its left edge down to the clip it follows ([another editor]'s yellow connection line and [another editor]'s link line, PE §2, §5), and
   the tray shows a switch **"Stay put"** (off) that turns it into a `seq.stay` item.
 - **Defaults:** everything follows, **except** audio added through Audio → Music and voice recorded "for the whole
-  video", which get `seq.stay: true` (iMovie's background-music area, LumaFusion's unlinked track, PE §5). A sound effect
+  video", which get `seq.stay: true` ([another editor]'s background-music area, [another editor]'s unlinked track, PE §5). A sound effect
   follows (it was placed on a moment).
 - **Moving an item re-links it** automatically, because the link is where it starts. Dragging a title from clip 2 onto
   clip 4 means it now follows clip 4, with no extra step.
 
 ### 4.2 Why derived and not stored (and the one cost)
 
-A stored `attachedTo: <clipId>` (Final Cut, PE §3) would need id remapping in `reIdLayers`, duplicate and paste
+A stored `attachedTo: <clipId>` ([another editor], PE §3) would need id remapping in `reIdLayers`, duplicate and paste
 (`js/storage.js:2044-2080`, `js/app.js:4313-4360`), would go stale the moment a Full user drags either end, and would be a
 new cross-layer reference to merge in collab. The derived rule has none of that. **The cost:** an item that *ends* on a
-different clip than it starts on follows only its start clip. That is also what Final Cut, LumaFusion and Premiere mobile
+different clip than it starts on follows only its start clip. That is also what [another editor], [another editor] and [another editor] mobile
 do (the connection point is the item's first frame, PE §3, §5).
 
-### 4.3 Captions: follow cue by cue (better than CapCut)
+### 4.3 Captions: follow cue by cue (better than [another editor])
 
 A caption track is one text layer holding many cues in layer-local time (`js/captions.js:1-16`, `:35-37`). It spans many
 clips, so it does not follow one host. Instead `rippleCues(track, T, delta)`:
@@ -277,14 +277,14 @@ for cue of track.captions:
 track.duration = max(track.duration + delta, lastCue.end)  // never cut off the last cue
 ```
 
-So deleting a clip removes the captions spoken over it and pulls the rest back in sync. CapCut leaves them "pointing at
-the wrong words" (CC §2.3); this is the single most visible way Quick beats it. The whole `captions` array is one atomic
+So deleting a clip removes the captions spoken over it and pulls the rest back in sync. [another editor] leaves them "pointing at
+the wrong words" ([another editor] §2.3); this is the single most visible way Quick beats it. The whole `captions` array is one atomic
 value in collab (`js/collab-path.js:262`), which §10 covers.
 
 ### 4.4 Deleting a clip with things on it
 
 Default (decision D6): **they go with it**, in the same undo step, and the toast says so: *"Clip deleted with 2 things on
-it · Undo"*. This matches Final Cut, LumaFusion and Premiere mobile (PE §3, §5). "Stay put" items never go.
+it · Undo"*. This matches [another editor], [another editor] and [another editor] mobile (PE §3, §5). "Stay put" items never go.
 
 ---
 
@@ -429,7 +429,7 @@ background).
 │ └──────────────────┘ └──────────────────┘ │
 │ Name  [ Beach day            ]            │
 │ Aspect ratio  [9:16] 16:9  1:1  4:5 …     │   ← already here; sets the canvas FIRST, which fixes
-│ …                                         │     CapCut's "set the ratio first" trap (CC §3.4, §13.9)
+│ …                                         │     [another editor]'s "set the ratio first" trap ([another editor] §3.4, §13.9)
 │                     [ Cancel ] [ Create ] │
 ```
 
@@ -442,10 +442,10 @@ FMU §7). It writes `project.seq = {v:1, home}` and the index `editor`.
 After **Create** in Quick, the system file picker opens at once (the existing `#file-input`, `pickFiles`,
 `js/addmenu.js:61-70`), with `multiple` and `accept="video/*,image/*"`. The clips land on the main track **in the order the
 browser hands them over**, one after another from 0:00 (`appendMain`), and the editor opens with the first frame showing.
-This is CapCut's "no blank editor" start (CC §3), without its separate picker screen.
+This is [another editor]'s "no blank editor" start ([another editor] §3), without its separate picker screen.
 
-- **Order.** A browser picker does not reliably report the order you tapped (CapCut's own guide warns about relying on
-  it, CC §2.1). So the landing order is the browser's, and the main track's `⋯` menu has **Sort by date taken**
+- **Order.** A browser picker does not reliably report the order you tapped ([another editor]'s own guide warns about relying on
+  it, [another editor] §2.1). So the landing order is the browser's, and the main track's `⋯` menu has **Sort by date taken**
   (`File.lastModified`; **UNVERIFIED** how iOS Safari fills it for Photos picks; check on his iPhone). Hold-and-drag
   reorders any clip.
 - **Cancelled picker:** the Quick editor opens empty (§7.4).
@@ -542,21 +542,21 @@ lines (20) + one open section of two lanes (2×32) = 182. **UNVERIFIED** until m
   **D** trim end to playhead (`js/timeline.js:185-213` in Full, ripple versions in Quick), **Delete** delete (closes the
   gap), **Space** play, **E** switch editor, ⌘Z/⌘Y undo/redo.
 
-### 8.3 Fixing CapCut's four pain points
+### 8.3 Fixing [another editor]'s four pain points
 
-| CapCut problem (research) | Quick's answer |
+| [another editor] problem (research) | Quick's answer |
 |---|---|
-| **Tools vanish when a clip is selected**; "tap an empty area … then look again" (CC §4, §13.7) | **Two rows.** The project tools row never goes away. Selecting something adds the clip tray *above* it. Tapping Text while a clip is selected adds text at the playhead; no deselect needed. (Decision D8.) |
-| **"Edit" appears twice** (project toolbar and inside the clip toolbar, CC §5.1) | **No button is called "Edit".** Project tools are named for what they add (Clips, Text, Captions, Audio, Overlay, Effects, Filters, Canvas); clip tools for what they do (Split, Speed, Crop …). Crop, rotate and flip are one tool, **Crop**. |
-| **Nothing is attached on mobile**; overlays, text, captions and music drift (CC §13.4) | Things **follow the clip they start on**, captions follow cue by cue, music stays put, and the link line shows it (§4). |
-| **Stacking order is hidden**: overlay rows are drawn *below* the main track but render *on top* (CC §2.2, §13.6) | **Higher on screen = in front**, exactly like Full's rows (index 0 on top). Text and overlays are drawn above the main track, audio below. The switch morph depends on this and makes it obvious. |
-| **Main ↔ overlay is a buried trick** (Duplicate → Overlay, CC §13.5) | One visible tray tool: **Make overlay** on a main clip, **Make main clip** on an overlay. |
-| **One category open at a time, the rest are "bubbles"** (CC §2.7) | Kept on the phone because it is what makes lanes fit, but folded sections stay visible as labelled coloured lines you tap directly, and selecting an item on the canvas opens its section by itself. The PC shows all of them. |
+| **Tools vanish when a clip is selected**; "tap an empty area … then look again" ([another editor] §4, §13.7) | **Two rows.** The project tools row never goes away. Selecting something adds the clip tray *above* it. Tapping Text while a clip is selected adds text at the playhead; no deselect needed. (Decision D8.) |
+| **"Edit" appears twice** (project toolbar and inside the clip toolbar, [another editor] §5.1) | **No button is called "Edit".** Project tools are named for what they add (Clips, Text, Captions, Audio, Overlay, Effects, Filters, Canvas); clip tools for what they do (Split, Speed, Crop …). Crop, rotate and flip are one tool, **Crop**. |
+| **Nothing is attached on mobile**; overlays, text, captions and music drift ([another editor] §13.4) | Things **follow the clip they start on**, captions follow cue by cue, music stays put, and the link line shows it (§4). |
+| **Stacking order is hidden**: overlay rows are drawn *below* the main track but render *on top* ([another editor] §2.2, §13.6) | **Higher on screen = in front**, exactly like Full's rows (index 0 on top). Text and overlays are drawn above the main track, audio below. The switch morph depends on this and makes it obvious. |
+| **Main ↔ overlay is a buried trick** (Duplicate → Overlay, [another editor] §13.5) | One visible tray tool: **Make overlay** on a main clip, **Make main clip** on an overlay. |
+| **One category open at a time, the rest are "bubbles"** ([another editor] §2.7) | Kept on the phone because it is what makes lanes fit, but folded sections stay visible as labelled coloured lines you tap directly, and selecting an item on the canvas opens its section by itself. The PC shows all of them. |
 
 ### 8.4 The timeline, in detail
 
 - **Main track row.** Clips as joined filmstrips (the existing `drawFilmstrip`), the clip's own sound as a faint
-  waveform inside the clip (video and audio merged into one item, Resolve's Cut page, PE §4). At its head a **🔈 mute
+  waveform inside the clip (video and audio merged into one item, [another editor]'s Cut page, PE §4). At its head a **🔈 mute
   all clip sound** toggle (sets `muted` on every main clip in one commit). At the tail a **+** (append clips).
 - **◇ at each cut.** Phase 5: opens the transition sheet (thumbnails, Duration, **Use on every cut**). Until transitions
   ship, the ◇ is not drawn (better nothing than a bad version, #152).
@@ -565,7 +565,7 @@ lines (20) + one open section of two lanes (2×32) = 182. **UNVERIFIED** until m
   first, so an item drawn higher is in front where two overlap). Lanes are not stored (FMM §13.3).
 - **"From the full editor"** lane, folded by default, holds pro-only items (§9).
 - **Beyond the end of the main track**, if something else is longer, the main row shows a dark hatched band labelled
-  `black` so it is clear why the video runs on (CapCut's surprise, CC §2.1 "black screens").
+  `black` so it is clear why the video runs on ([another editor]'s surprise, [another editor] §2.1 "black screens").
 - **Gestures:** tap selects; hold (350 ms, the same timing as Full, `js/timeline.js:2190-2240`) picks a clip up to
   reorder (main) or move in time (items); edge grips trim; pinch zooms; swipe scrolls under the fixed playhead. Mouse on
   PC drags at once, as in Full.
@@ -601,9 +601,9 @@ inside Quick's sheet (phone) or band (PC), with a `simple` flag that hides keyfr
 rows. The new code is the tray and the small **Adjust** panel (one list of sliders that writes a single filter-container
 effect named "Adjust" with brightness, contrast, saturation, exposure, temperature and vignette children).
 
-### 8.7 The feature list against CapCut's (Core = first release of Quick, Later = after, Never = not in Quick)
+### 8.7 The feature list against [another editor]'s (Core = first release of Quick, Later = after, Never = not in Quick)
 
-| CapCut (CC §1, §4-§12) | Quick | Tier | Engine today (FMU §8) |
+| [another editor] ([another editor] §1, §4-§12) | Quick | Tier | Engine today (FMU §8) |
 |---|---|---|---|
 | Magnetic main track; ripple trim, delete, reorder | Yes | **Core** | New (`js/seq.js`) |
 | Split at playhead | Yes | **Core** | `FM.splitLayer` |
@@ -613,7 +613,7 @@ effect named "Adjust" with brightness, contrast, saturation, exposure, temperatu
 | Overlay (picture in picture), blend, opacity | Yes | **Core** | Exists |
 | Main ↔ overlay | One visible button | **Core** | New |
 | Overlay order forward/back | Yes | **Core** | `FM.moveLayers` |
-| Overlay lane cap (~6) | No cap | **Never** | Measure performance instead (CC §15) |
+| Overlay lane cap (~6) | No cap | **Never** | Measure performance instead ([another editor] §15) |
 | Speed 0.1×–100×, keep pitch | Yes (range per engine) | **Core** | Speed category |
 | Smooth slow-mo | "Smooth" switch | **Core** | `frameBlend` exists |
 | Speed curve presets | Montage, Hero, Bullet… as presets over the existing ramp | **Later** | Speed ramps exist |
@@ -704,7 +704,7 @@ absolute values at once (FMC §9.1).
   so no version bump (FMC §9.4 F). The people chip reads *"Sam · Quick"*.
 - **Remote ripples glide instead of jumping.** When a batch changes `start` on two or more main clips, both timelines
   animate the boxes over 200 ms (the same FLIP code as the switch) and tint the moved clips in the mover's colour for a
-  second, with a line in the timeline: *"Sam moved 4 clips"* (Descript's "who is working where", PE §6).
+  second, with a line in the timeline: *"Sam moved 4 clips"* ([another editor]'s "who is working where", PE §6).
 - **In Quick**, items a Full user holds (their lease, `pr.ls`) wear that person's colour ring; in Full, main clips a
   Quick user is dragging (their `af` held path) are outlined the same way.
 
@@ -765,8 +765,8 @@ absolute values at once (FMC §9.1).
 - **Transitions (Phase 5)** must render in the compositor, not the UI, so preview, export and a Full user all see them.
   A transition of length `d` on the cut into clip B draws A and B together over `[cut − d/2, cut + d/2]`: A uses source
   frames past its out-point if the source has them (else holds its last frame), B uses frames before its `trimStart`
-  (else holds its first frame), blended by the transition. **Clip times do not change** (CapCut: "transitions do not
-  shorten clips", CC §9), so the main track maths stays as it is. Hooks: `FM.isLayerVisibleAt` (`js/scene.js:1127`) widens
+  (else holds its first frame), blended by the transition. **Clip times do not change** ([another editor]: "transitions do not
+  shorten clips", [another editor] §9), so the main track maths stays as it is. Hooks: `FM.isLayerVisibleAt` (`js/scene.js:1127`) widens
   the two clips' windows by `d/2`, `FM.layerLocalTime` (`js/scene.js:1068`) clamps to the source, and the render loop
   (`js/compositor.js:16167`) applies the blend. Old builds would not draw them, so Phase 5 bumps `SCHEMA_REV` to keep
   mismatched peers apart.
@@ -777,7 +777,7 @@ absolute values at once (FMC §9.1).
   inserted layers so a second main track never appears on top of the first (`js/storage.js:3333`, `:3608`).
 - **Duplicate, paste, extract audio in Full** strip `seq.main` from the copy (a copy at the same time would be a second
   main clip overlapping the first). Extract audio's twin also gets no `seq` so it follows its clip.
-- **Captions.** One caption track = one layer = one style for every line (CapCut's "apply to all" is free here). **Find
+- **Captions.** One caption track = one layer = one style for every line ([another editor]'s "apply to all" is free here). **Find
   speech** runs the existing detection, which finds *when* someone speaks and makes empty cues to type into; it does not
   write the words (`js/captions-vad.js:4`). The sheet says so in one line. Writing the words is **Later** (an on-device
   model or his own AI key), not faked (#152). Captions follow the main track cue by cue (§4.3).
@@ -870,7 +870,7 @@ absolute values at once (FMC §9.1).
 | `js/collab-host.js:847-934` `receive`, `:350-387` `cas` | `all:1` all-or-nothing CAS tx (Phase 4); `PROTO` bump in `js/collab-core.js:22-29`. |
 | `js/scene.js:1127` `isLayerVisibleAt`, `:1068` `layerLocalTime`; `js/compositor.js:16167` | Transitions (Phase 5); `SCHEMA_REV` bump. |
 | `tests/tests.js:68197-68208` | Widen the brand-name guard from effect labels to the switch, the New project cards, Home chips and every Quick label ("safeguards must be structural", HP §12.2). |
-| `BEFORE-PUBLISHING.md` | Log each Quick screen that borrows CapCut's arrangement as it lands (the standing rule). |
+| `BEFORE-PUBLISHING.md` | Log each Quick screen that borrows [another editor]'s arrangement as it lands (the standing rule). |
 
 ### 14.3 Tests (per phase, in `tests/tests.js`, run at desktop and 380 px)
 
@@ -913,9 +913,9 @@ Every phase ends with the 380 px check and a full suite run (global rule, `LOOP.
 | **The derived attachment rule surprises someone** | An item that ends over another clip follows only its start clip. | The link line on selection, Stay put, and every precedent works the same way (PE §3). |
 | **Full users make messy main tracks** | Gaps, overlaps, main clips in front. | The check shows it with one-tap fixes; nothing automatic. |
 | **Transitions renderer** | Blending two clips past their trims touches the hottest render path. | Last core phase, its own version bump, measured for phone lag first (LOOP.md "the lag … for mobile"). |
-| **Identity** | A CapCut-shaped screen is the same borrowing as the Alight Motion one (HP §10). | Own words (no "Edit", no "Overlay track magnet"), own motion (the morph), BEFORE-PUBLISHING entries, and the widened brand-name test. |
+| **Identity** | A [another editor]-shaped screen is the same borrowing as the [another app] one (HP §10). | Own words (no "Edit", no "Overlay track magnet"), own motion (the morph), BEFORE-PUBLISHING entries, and the widened brand-name test. |
 | **Two renderers drift** | Quick and Full timelines both draw clips; a fix to one may miss the other. | Shared helpers exported from `timeline.js`; the switch test compares x positions across both. |
-| **Scope creep toward CapCut's whole list** | The ceiling is CapCut, not the target. | The Core / Later / Never table (§8.7) is the contract; Later items need his go-ahead one by one. |
+| **Scope creep toward [another editor]'s whole list** | The ceiling is [another editor], not the target. | The Core / Later / Never table (§8.7) is the contract; Later items need his go-ahead one by one. |
 | **Performance of ripples on long projects** | Every moved layer rewrites its keyframes. | Only layers that actually move are touched; measure at 200 clips. |
 
 ---
@@ -928,10 +928,10 @@ Every phase ends with the 380 px check and a full suite run (global rule, `LOOP.
 | **D2** | Where is the switch? | **A. First button in the play bar, phone and PC** · B. Beside the project name at the top · C. Only in the ⚙ menu · D. A pill floating over the video | **A.** One tap, always there, same place on both, no crowding of the top bar. |
 | **D3** | How does a new project choose? | **A. Two cards in New project, remembers your last pick** · B. Always start Quick · C. Always start Full · D. Two separate "+" buttons on Home | **A.** |
 | **D4** | Opening an old project in Quick | **A. Show it as it is, with a "Make one from my clips" button** · B. Turn it into a main track automatically · C. Don't allow it | **A.** Nothing changes unless you ask; the button is one undo. |
-| **D5** | Do text, stickers and overlays follow their clip? | **A. Yes, and music stays put; any item can be set to "Stay put"** · B. No, like CapCut on the phone · C. Ask each time | **A.** It's what a non-editor expects and the thing CapCut gets wrong. |
+| **D5** | Do text, stickers and overlays follow their clip? | **A. Yes, and music stays put; any item can be set to "Stay put"** · B. No, like [another editor] on the phone · C. Ask each time | **A.** It's what a non-editor expects and the thing [another editor] gets wrong. |
 | **D6** | Deleting a clip that has things on it | **A. They go too, the toast says how many, Undo brings all back** · B. They stay and slide to the cut | **A.** |
-| **D7** | Can the main track be "unstuck" (gaps allowed) on PC? | **A. No, always stuck together on phone and PC** · B. A switch on PC only (CapCut desktop) | **A.** Same on both (your rule); Full is the free editor. |
-| **D8** | When a clip is selected | **A. Its tools appear above the main toolbar, which never disappears** · B. Its tools replace the toolbar (CapCut) | **A.** |
+| **D7** | Can the main track be "unstuck" (gaps allowed) on PC? | **A. No, always stuck together on phone and PC** · B. A switch on PC only ([another editor] desktop) | **A.** Same on both (your rule); Full is the free editor. |
+| **D8** | When a clip is selected | **A. Its tools appear above the main toolbar, which never disappears** · B. Its tools replace the toolbar ([another editor]) | **A.** |
 | **D9** | The switch animation | **A. Morph: rows fly into the main track and back** · B. Fold (hinge) · C. Slide · D. All three at random (#974) | **A**, with D available if you want to live with all three first. |
 | **D10** | How Home shows the editor | **A. First chip on the card's info line ("▭▭▭ Quick")** · B. A badge on the thumbnail · C. Icon only | **A.** |
 | **D11** | Who comes first | **A. Someone who has never edited (plain words, big start), with the same keys as Full for experienced people** · B. Experienced-in-a-hurry first | **A.** |

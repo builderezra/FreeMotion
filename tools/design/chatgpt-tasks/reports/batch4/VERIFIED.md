@@ -234,7 +234,7 @@ No. Checked one by one:
 
 | Id | Claim | Why it doesn't hold |
 |---|---|---|
-| KI-1 | Rotation keys should interpolate the short way | Raw degrees is deliberate (AE and Alight Motion do the same) and makes 0→720 two turns. Drags shift every key together, so the app doesn't make a 350/10 pair by accident. Its neighbour, the drag seam, is item 5 |
+| KI-1 | Rotation keys should interpolate the short way | Raw degrees is deliberate ([another app] and [another app] do the same) and makes 0→720 two turns. Drags shift every key together, so the app doesn't make a 350/10 pair by accident. Its neighbour, the drag seam, is item 5 |
 | KI-2 | Colour keys blend in sRGB and look muddy | Industry default. Changing it alters every saved colour animation. An OKLab option would be his call |
 | KI-3 | Easing endpoints (no defect) | Correct, but Cyclic's f(1) is ~2e-15 below 1, so the comment at `js/eases.js:23-26` is literally false. Invisible |
 | KI-4 | Hold/step keys (no defect) | Correct, reproduced |

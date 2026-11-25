@@ -6,7 +6,7 @@ whether he will understand it and like it. Written 29 Sep 2026 against HEAD `2d0
 review only. Nothing in the repo was changed except this file.
 
 I read all three designs in full: `design-model.md` (1,112 lines), `design-ux.md` (941) and `design-collab.md` (939).
-I also read the brief (INBOX.md:28), STATUS.md, all of `his-prefs.md`, and the parts of `capcut-mobile.md` and `fm-ui.md`
+I also read the brief (INBOX.md:28), STATUS.md, all of `his-prefs.md`, and the parts of `[another editor]-mobile.md` and `fm-ui.md`
 that the designs rely on. I checked five code facts myself; they are marked **[checked]**.
 
 ---
@@ -15,11 +15,11 @@ that the designs rely on. I checked five code facts myself; they are marked **[c
 
 1. **All three agree on the thing that matters most to him.** There is one project and two editors, a switch that
    converts nothing, things that follow their clip, captions that stay in sync, and a Full editor that keeps every
-   option. None of them repeats the Rush→Premiere mistake.
+   option. None of them repeats the [another editor]→[another editor] mistake.
 2. **Ranking under this lens: UX first (8.6), Model second (7.4), Collab third (6.8).**
 3. **Winning core architecture: Model option F, which is also UX's shape.** `start` stays the stored truth. One flag
    marks a main clip. Magnetism lives only in the simple editor's commands. That leaves the Full editor exactly as he
-   knows it (#966, "anything anywhere"). It lets the first visible release come early. It is the Resolve precedent.
+   knows it (#966, "anything anywhere"). It lets the first visible release come early. It is the [another editor] precedent.
 4. **Collab's derived-start model loses on this lens, not on engineering.** It changes how main-track clips behave
    inside **Full**: they push, they swap when dragged past a neighbour's middle, and gestures can no longer write
    `start` (design-collab §3.5-3.6). It also puts an invisible protocol change first (§15, Phase 0).
@@ -37,7 +37,7 @@ that the designs rely on. I checked five code facts myself; they are marked **[c
    the red LIVE pill sits right beside it (`styles.css:10694-10695`, `top: 9px; left: 42px`). Model's and Collab's
    switch pill lands on top of both.
 9. **What none of them includes:** the talk-to-it Assistant as a simple-mode door (#856, `js/ai-chat.js`). It is his own
-   "CapCut one where you can just talk to her", and it is the most natural easy path in the app. Also missing: a check
+   "[another editor] one where you can just talk to her", and it is the most natural easy path in the app. Also missing: a check
    that the switch fits the 380 px transport row, and a written answer to "what does a beginner see first".
 10. **Tell him in one line:** "Any project opens in either editor, nothing converts, clips stick together in Quick, and
     you and a friend can each use a different one at the same time." All three designs support that sentence. UX makes
@@ -49,7 +49,7 @@ that the designs rely on. I checked five code facts myself; they are marked **[c
 
 | # | Criterion | What a 10 looks like |
 |---|---|---|
-| C1 | **Brief coverage** | Every clause of INBOX.md:28 has an answer. The clauses: quick switch; how a project starts; can a project be turned and turned back; collab across modes "at the same time and not interfere"; clip after clip with overlays/effects/text in their own sections; captions; CapCut as the ceiling; phone = PC; visualizers and a code plan |
+| C1 | **Brief coverage** | Every clause of INBOX.md:28 has an answer. The clauses: quick switch; how a project starts; can a project be turned and turned back; collab across modes "at the same time and not interfere"; clip after clip with overlays/effects/text in their own sections; captions; [another editor] as the ceiling; phone = PC; visualizers and a code plan |
 | C2 | **A non-editor can figure it out** | an obvious start (#326), nothing to learn before the first cut, no dead ends, no jargon |
 | C3 | **Fast for someone experienced** | keys, few taps, no relearning between editors, nothing slows a pro |
 | C4 | **Phone and PC work the same** | same names, same order, same model; laid out for each screen (#852); PC not behind (#229, #978) |
@@ -89,9 +89,9 @@ Why each score sits where it does is in §3-§5. Where a score rests on a code f
   nothing to turn.**" (§5.5). Collab is covered, but the leftover races show up as seam chips (§10.4).
 - **C2 8.** Any project opens in Quick with **no button to press**. A pure classifier works out the main track, and
   nothing is written until the first Quick edit (§5.2-5.3). A new Quick project goes straight to the picker (§7). Lost
-  points: the toolbar swaps to the item's tools when something is selected, which is CapCut's trap. A fixed "‹ Done"
+  points: the toolbar swaps to the item's tools when something is selected, which is [another editor]'s trap. A fixed "‹ Done"
   softens it (§8.2) but does not remove it.
-- **C3 6.** Quick gets Premiere-style Q/W for trims, and "the Full editor's own keys … A/S/D … are off in Quick"
+- **C3 6.** Quick gets [another editor]-style Q/W for trims, and "the Full editor's own keys … A/S/D … are off in Quick"
   (§8.3). Today A/S/D are Full's trim/split/trim keys (`js/app.js:8809-8814` **[checked]**). Someone who knows Full would
   have to learn different letters for the same three actions in Quick. That breaks the spirit of "you don't have to
   learn both", applied to the two editors.
@@ -100,7 +100,7 @@ Why each score sits where it does is in §3-§5. Where a score rests on a code f
   placement is wrong (see flaws).
 - **C6 7.** The ≤ 34-character label rule is carried over (`js/timeline.js:2795`, §7). The brand guard is widened
   (§14.2). But the toolbar reads **Clips · Text · Captions · Overlay · Audio · Effects · Filters · Ratio · Background**
-  (§8.2), which is CapCut's own set almost word for word. It also has a "Follows clip" toggle, "Tidy main track", and
+  (§8.2), which is [another editor]'s own set almost word for word. It also has a "Follows clip" toggle, "Tidy main track", and
   a "block" concept a beginner will not understand.
 - **C7 9.** Full is untouched apart from optional badges and four layer-menu items (§9.4, §4.4).
 - **C8 7.** A pre-flight check refuses a whole Quick command, naming the person, if any layer it would touch is leased
@@ -119,12 +119,12 @@ Why each score sits where it does is in §3-§5. Where a score rests on a code f
    moment." instead of half-applying it. This is what lets Quick edit in a live session from its first release (UX
    cannot).
 3. **Stacking bands for what Quick adds, without re-sorting what exists** (§3.5). The "effect directly above the
-   top-most main clip" rule is right: an adjustment layer grades only the main track, which is what a CapCut user
+   top-most main clip" rule is right: an adjustment layer grades only the main track, which is what a [another editor] user
    expects.
 4. **Captions as "riders" that move cue by cue** (§3.4 rider span ops), including scaling cues on a speed change.
 5. **One helper per copy route (`FM.spine.onCopy`) with a test that drives every route** (§14.3). This applies his
    "safeguards must be structural" rule and the whitelist-drift lesson.
-6. **"Block" for groups made from main clips.** Quick ripples and reorders them as one piece, like CapCut desktop's
+6. **"Block" for groups made from main clips.** Quick ripples and reorders them as one piece, like [another editor] desktop's
    compound clip (§9.3).
 7. **A Labs flag for the first cut** (§15, Phase 2). The first version reaches his phone without touching anyone
    else's projects.
@@ -140,10 +140,10 @@ Why each score sits where it does is in §3-§5. Where a score rests on a code f
 - **MEDIUM: two attachment rules.** Items Quick creates store `sm.on` (the clip under the playhead). Full-made items
   are derived: they follow a clip only if at least 50% of the item overlaps it (§4.3). Only the link line tells them
   apart. A person can predict one rule. Two rules they have to find out by surprise.
-- **MEDIUM: tools replace the toolbar when something is selected** (§8.2). This is CapCut's worst beginner trap
-  (capcut-mobile §0.5 and §13.7: "tap an empty area … to deselect"). "‹ Done" is a patch. UX's two rows remove the
+- **MEDIUM: tools replace the toolbar when something is selected** (§8.2). This is [another editor]'s worst beginner trap
+  ([another editor]-mobile §0.5 and §13.7: "tap an empty area … to deselect"). "‹ Done" is a patch. UX's two rows remove the
   trap.
-- **MEDIUM: the words are CapCut's.** "Ratio", "Background", "Overlay" and "Adjust" as a row, in CapCut's order, is
+- **MEDIUM: the words are [another editor]'s.** "Ratio", "Background", "Overlay" and "Adjust" as a row, in [another editor]'s order, is
   the kind of borrowing BEFORE-PUBLISHING exists to stop (his-prefs §10). The design logs it (§14.2) but does not try
   to avoid it.
 
@@ -164,7 +164,7 @@ Why each score sits where it does is in §3-§5. Where a score rests on a code f
   (§10.2 rule 7). His brief asks for exactly the collab it postpones.
 - **C2 9.** The main track is the add button (§7.4, with his moving colours from #398 and the hidden playhead from
   #354). There is one hint line that goes away on the first tap, which respects #294 "don't overexplain". Project tools
-  never disappear (§8.3). "Higher on screen = in front", which fixes CapCut's hidden stacking order (§8.3). A hatched
+  never disappear (§8.3). "Higher on screen = in front", which fixes [another editor]'s hidden stacking order (§8.3). A hatched
   "black" band explains why the video runs past the last clip (§8.4). Lost point: old projects need a tap on "Make one
   from my clips" (§5.2).
 - **C3 9.** The same A/S/D letters as Full, rippling in Quick. E switches editors, and bare E is unbound today (only
@@ -201,7 +201,7 @@ Why each score sits where it does is in §3-§5. Where a score rests on a code f
    rule, it can be said in a sentence, and moving an item re-links it with no extra step. That is predictable for a
    non-editor. It also stores no id, so nothing needs remapping (§4.2).
 5. **"Higher on screen = in front"**, with text and overlays above the main track and audio below (§8.3). This fixes
-   CapCut's #6 trap (capcut-mobile §13.6), and the morph depends on it.
+   [another editor]'s #6 trap ([another editor]-mobile §13.6), and the morph depends on it.
 6. **Remote ripples glide in the mover's colour, with "Sam moved 4 clips"** (§10.1).
 7. **The main-track check as a table of problem → how it shows → one-tap fix** (§3.6), including "main clip in front
    of an overlay → Put behind".
@@ -245,8 +245,8 @@ Why each score sits where it does is in §3-§5. Where a score rests on a code f
 - **C2 7.** It has the big "+ Add clips" start and the picker straight away (§7). But an old project needs an adopt
   card (§5). The Captions tool makes **one caption track per spoken main clip** (§12). Restyling "all my captions"
   then means changing N tracks, which is at odds with his #151 ("effects that effect the whole layer"). The phone
-  sketch also draws captions **below** the main track (§8.2) even though they render on top, which is CapCut's hidden
-  stacking trap again (capcut-mobile §13.6).
+  sketch also draws captions **below** the main track (§8.2) even though they render on top, which is [another editor]'s hidden
+  stacking trap again ([another editor]-mobile §13.6).
 - **C3 7.** S splits and Delete ripples, but "the complex keys (… A/S/D clip keys) are rebound or off in Simple"
   (§8.3). That is the same relearning problem as Model.
 - **C4 8.** Same tools in the same order: a strip on the phone, a grid on the PC (§8.3).
@@ -259,7 +259,7 @@ Why each score sits where it does is in §3-§5. Where a score rests on a code f
   A drag that crosses a neighbour's middle **swaps** them (`slotFor`, §3.5). No gesture may write `start` (§3.6), and
   the host refuses an `s start` on a derived layer (§10.2.4). The inspector's type-a-start is rerouted (edge 4). In a
   project started in Simple, the Full user's "anything anywhere" becomes "anything anywhere except these clips, which
-  now behave like CapCut's". That is two rules inside one editor (#454, one meaning per thing), and it takes choice
+  now behave like [another editor]'s". That is two rules inside one editor (#454, one meaning per thing), and it takes choice
   away from the complex side (#966). "Free everything" and "Take off main track" are escape hatches (§5, §16.4), not
   the default. The design admits the risk ("new behaviour in 'his' editor", §16.4).
 - **C8 9.** Cases J, F and Q are real wins. A friend's crop tool no longer freezes your ripple. A keyframe edit and a
@@ -333,8 +333,8 @@ Why, under this lens:
    magnetic track. Under derived starts, a main clip in Full behaves differently from the layer beside it.
 3. **Progress he can see.** F needs no protocol change to show him the switch and any project drawn as clips (UX Phase
    1). The first thing he holds is the thing he asked for.
-4. **The precedent he will recognise.** Resolve's Cut and Edit pages are two views over one timeline, with magnetism in
-   the Cut page's commands (pro-editors §4). Final Cut's connected clips give the attachment idea. F takes both.
+4. **The precedent he will recognise.** [another editor]'s Cut and Edit pages are two views over one timeline, with magnetism in
+   the Cut page's commands (pro-editors §4). [another editor]'s connected clips give the attachment idea. F takes both.
 5. **The collab cost is real but bounded, and the grafts shrink it.** F's weak cases are two ripples at once and a
    keyframe edit racing a ripple (fm-collab §9.1). Clip-relative keyframes on the wire (Collab §3.3) remove the second
    one completely. Pre-flight blockers (Model §10.3) remove the common form of the first. An all-or-nothing CAS tx
@@ -358,7 +358,7 @@ for that, "without touching Quick's UI".
 | Switch feel | UX | The vertical morph, a one-frame target, hinge for the toolbar, the #974 random pool, reduced motion. |
 | Toolbar | UX | Two rows, with the icons-only tray as the fallback if the 380×667 measurement says so. |
 | Keys | UX | Same A/S/D in both editors (rippling in Quick), E to switch, Delete ripples in Quick. |
-| Words | UX | Stay put, Take sound out, Look, Remove a colour, one Crop; no "Edit"; nothing named after another company; widen the brand guard (`tests/tests.js:68197-68208`). Avoid CapCut's toolbar order and wording where a plain alternative exists, and log what remains in BEFORE-PUBLISHING. |
+| Words | UX | Stay put, Take sound out, Look, Remove a colour, one Crop; no "Edit"; nothing named after another company; widen the brand guard (`tests/tests.js:68197-68208`). Avoid [another editor]'s toolbar order and wording where a plain alternative exists, and log what remains in BEFORE-PUBLISHING. |
 | Collab, first release | Model | Pre-flight blockers, so Quick edits live from day one. Presence `ed`. UX's glides and "Sam moved 4 clips". |
 | Collab, hardening | Collab + UX | Clip-relative keyframes on the wire (Collab §3.3, including the pointer-up drag fix at `js/timeline.js:5073`), keep my frame (Collab §10.5), all-or-nothing CAS with intent re-run (UX §10.2 rule 3), `commit({label, ed})` (Collab §11). |
 | Transitions | UX | Do not shorten clips (UX §12). A later phase, with its own schema bump. |
@@ -366,7 +366,7 @@ for that, "without touching Quick's UI".
 | Names (D1) | show all | "Quick / Full" (Model and UX) does not talk down to his "experienced but in a hurry" group (his-prefs §12.4). "Simple / Full" (Collab) is his own word. Draw both and mark one recommended. It is his call. |
 
 ### Add what all three left out
-1. **The Assistant as a simple-mode door** (#856, `js/ai-chat.js`, v16.23). He named it as the CapCut feature he wants
+1. **The Assistant as a simple-mode door** (#856, `js/ai-chat.js`, v16.23). He named it as the [another editor] feature he wants
    ("you can just talk to her and say what you want"). It needs his own key today, so it is an optional door and not
    part of the core. It is one button in the project tools row.
 2. **A named "first ten seconds" for a beginner, drawn at 380 px:** New project → Quick card → picker → clips land →

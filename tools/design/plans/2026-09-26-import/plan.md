@@ -199,7 +199,7 @@ Images (all ≤1200px wide, ≤3x tall; each labelled BEFORE/AFTER and with the 
 | `960_builder_pc_sizes.png` | FOR THE BUILDER, not him: why `nowrap` alone is not the PC fix |
 | `960_builder_rename_breaks_fit.png` | FOR THE BUILDER: PC 1280, HEAD vs the rename alone (fit lost) |
 
-(All in `/Users/ezrasmith/Claude/FreeMotion/tools/design/plans/2026-09-26-import/`.)
+(All in `/Users/me/Claude/FreeMotion/tools/design/plans/2026-09-26-import/`.)
 
 ## 5. The exact change
 

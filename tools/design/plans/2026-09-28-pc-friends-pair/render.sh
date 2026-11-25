@@ -3,7 +3,7 @@
 #   tools/design/plans/2026-09-28-pc-friends-pair/render.sh OUTDIR OPT PLAN WIDTH HEIGHT [FRAMES]
 # OPT A|B, PLAN strip|sizes|measure. Waits for the tree to be quiet first (no ship / mutation / spotcheck, load < 8).
 set -e
-cd /Users/ezrasmith/Claude/FreeMotion
+cd /Users/me/Claude/FreeMotion
 HERE=tools/design/plans/2026-09-28-pc-friends-pair
 OUT=$1 OPT=$2 PLAN=$3 W=$4 H=$5 FR=${6:-}
 until [ ! -f .ship-in-progress ] && [ ! -f .mutation-in-progress ] && [ ! -f .spotcheck-in-progress ] && [ "$(sysctl -n vm.loadavg | awk '{print int($2)}')" -lt 8 ]; do sleep 20; done

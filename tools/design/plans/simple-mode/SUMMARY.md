@@ -17,7 +17,7 @@ Friends swap shows the new tile moving too. Turned sideways, the new section lan
 once Simple can edit, ⌘Z on a step made in Simple can be refused in Full while a friend can edit.
 
 **What it is.** A second editor in FreeMotion, called **Simple**. Today's editor is **Full**. Those are the names on screen
-everywhere (your D1). Like CapCut: one row of clips end to end, with text, captions, overlays and sound in their own rows.
+everywhere (your D1). Like [another editor]: one row of clips end to end, with text, captions, overlays and sound in their own rows.
 Delete, trim or move a clip and the rest close up. Titles stick to the clip they start on; music and voice-overs stay put.
 
 **Switching is in the ⚙ cog.** The cog gets a third section beside Canvas settings and Friends. It stays small: a

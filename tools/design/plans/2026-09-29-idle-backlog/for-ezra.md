@@ -1,6 +1,6 @@
 # More choice: what's coming when the list runs dry
 
-You said this is the complex version and more choice is always better (#966). So I went through every effect, filter and sound in FreeMotion and compared them with CapCut, Alight Motion, After Effects and Premiere. This is what came out.
+You said this is the complex version and more choice is always better (#966). So I went through every effect, filter and sound in FreeMotion and compared them with [another editor], [another app], [another editor] and [another editor]. This is what came out.
 
 ## The next three updates (nothing to answer, these just get built)
 

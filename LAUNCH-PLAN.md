@@ -4,7 +4,7 @@
 >
 > **Read [BEFORE-PUBLISHING.md](BEFORE-PUBLISHING.md) alongside this.** This plan's growth engine is
 > App Store header video and TikTok before/after clips, i.e. publishing recordings of the UI. The UI
-> is currently modelled on Alight Motion, so the identity work is a prerequisite for the FIRST VIDEO,
+> is currently modelled on [another app], so the identity work is a prerequisite for the FIRST VIDEO,
 > not for the store submission.
 
 ---
@@ -127,7 +127,7 @@ Featuring is the only realistic way a solo app gets 6-figure downloads without a
 
 ### One trap to avoid
 
-If you ship a social feed, a public template gallery, or content redistribution, you get auto-classified as **Social Media**, which forces a minimum **13+ rating** and pulls you into iOS 27 parental Time Allowances. A 4+ rating is better for featuring and reach. Keep the community gallery out, or gate it with the Declared Age Range API. Also, per the November 2025 guideline update (4.1c), **you cannot put another company's brand in your app name or icon**. No "CapCut templates," no "Reels maker," no "for TikTok."
+If you ship a social feed, a public template gallery, or content redistribution, you get auto-classified as **Social Media**, which forces a minimum **13+ rating** and pulls you into iOS 27 parental Time Allowances. A 4+ rating is better for featuring and reach. Keep the community gallery out, or gate it with the Declared Age Range API. Also, per the November 2025 guideline update (4.1c), **you cannot put another company's brand in your app name or icon**. No "[another app] templates," no "Reels maker," no "for TikTok."
 
 ---
 
@@ -176,7 +176,7 @@ Your CTA has to be *specific*. "Link in bio" is where installs die. "It's called
 
 ### Launch platforms, ranked honestly
 
-- **Reddit:** worth it, but slow. r/SideProject, r/AlphaAndBetaUsers, r/BetaTestersNeeded, r/AppHookup (requires giving something free), plus r/motiongraphics, r/AfterEffects, r/VideoEditing, r/NewTubers. Needs 2–6 weeks of genuine participation and 30–50 karma first. A strong beta-recruitment post can produce 1,000+ installs, but that's best case, not a benchmark. Reddit traffic rarely converts to paying users.
+- **Reddit:** worth it, but slow. r/SideProject, r/AlphaAndBetaUsers, r/BetaTestersNeeded, r/AppHookup (requires giving something free), plus r/motiongraphics, r/[another app], r/VideoEditing, r/NewTubers. Needs 2–6 weeks of genuine participation and 30–50 karma first. A strong beta-recruitment post can produce 1,000+ installs, but that's best case, not a benchmark. Reddit traffic rarely converts to paying users.
 - **Product Hunt:** mostly not worth it now. Only ~10% of launches get featured (down from 60–98% in 2020–23), and non-featured launches produce 100–500 visitors and 1–15 signups. **89% of surveyed founders said they wouldn't launch again.** Real residual value is a DR-91 backlink, not downloads. Do it, spend one day on it, expect nothing.
 - **Hacker News:** skip unless you have a genuine engineering story (a Metal pipeline, real-time compositing, on-device rendering). Front-page Show HN gets 5,000–30,000 visitors, but only 2.3% of submissions make the front page and the median Show HN score is **2 points**. HN explicitly punishes consumer apps without technical differentiation. If you do post, lead with the engineering.
 - **Discord:** not an acquisition channel for non-games. Use it for beta feedback and retention.

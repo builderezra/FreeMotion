@@ -1,7 +1,7 @@
 #!/bin/zsh
 # sweep.sh <W> <H> <P-json> <out.png> [css-file]
-D=/Users/ezrasmith/Claude/FreeMotion/tools/design/plans/2026-09-26-panels
-cd /Users/ezrasmith/Claude/FreeMotion
+D=/Users/me/Claude/FreeMotion/tools/design/plans/2026-09-26-panels
+cd /Users/me/Claude/FreeMotion
 until [ ! -f .ship-in-progress ] && [ ! -f .mutation-in-progress ] && [ ! -f .spotcheck-in-progress ] && [ "$(sysctl -n vm.loadavg | awk '{print int($2)}')" -lt 8 ]; do sleep 20; done
 F=$D/tmp/s-$RANDOM$RANDOM.js
 if [ -n "$5" ]; then

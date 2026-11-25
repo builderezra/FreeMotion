@@ -1,6 +1,6 @@
 """gen2.py — harness whose frames carry a stamp of the seek they show (pixel at css 4,4), so capture lag cannot mislabel them."""
 import json
-D = '/Users/ezrasmith/Claude/FreeMotion/tools/design/plans/2026-09-26-emptytap/'
+D = '/Users/me/Claude/FreeMotion/tools/design/plans/2026-09-26-emptytap/'
 setup = open(D + 'setup.js').read()
 fx = open(D + 'fx.js').read()
 GAP = 2500

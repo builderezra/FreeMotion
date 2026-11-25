@@ -2,7 +2,7 @@
  * A focused, full-screen text-entry mode: a big text field docked under the top toolbar (#439) + a
  * compact top toolbar with exactly four controls — Align · Font · Size · Colour — and a ✓ Done.
  * Everything else (bold/italic, spacing, line-height, curve, outline, animation, captions) stays in
- * the inspector's "Edit Text" category, matching AM (it keeps those out of the focused text bar too).
+ * the inspector's "Edit Text" category (it keeps those out of the focused text bar too).
  * Cloned from crop-tool.js's overlay lifecycle, with all on-canvas geometry stripped.
  */
 window.FM = window.FM || {};
@@ -170,7 +170,7 @@ window.FM = window.FM || {};
       if (drawn.cues[i] !== cues[i]) return true;   // the same words in a replaced caption are still the wrong row
       const t = rows[i].querySelectorAll('.cap-time'), tx = rows[i].querySelector('.cap-text');
       if (t.length < 2 || +t[0].value !== +cues[i].start || +t[1].value !== +cues[i].end) return true;
-      if (!tx || tx.textContent !== ((cues[i].text || '').trim() || 'Empty — tap to type')) return true;
+      if (!tx || tx.textContent !== ((cues[i].text || '').trim() || 'Empty')) return true;
     }
     return false;
   }
@@ -192,7 +192,7 @@ window.FM = window.FM || {};
     const t = row && row.querySelector('.cap-text');
     if (!t) return;
     const s = (c.text || '').trim();
-    t.textContent = s || 'Empty — tap to type';   // textContent: caption text is his data, never innerHTML
+    t.textContent = s || 'Empty';   // textContent: caption text is his data, never innerHTML
     t.classList.toggle('cap-empty', !s);
   }
   function updateCueNav() {
@@ -480,7 +480,7 @@ window.FM = window.FM || {};
     const showSystem = !FM.settings || FM.settings.get('systemFonts') !== false;
     if (showSystem) FONTS.forEach(css => addCard(css, css.split(',')[0].trim()));
     (FM.fonts ? FM.fonts.list() : []).forEach(f => addCard(f.css, f.name));
-    // Import (AM's "View All Fonts" → here it's the useful action: pull a font off the device)
+    // Import ([the reference app]'s "View All Fonts" → here it's the useful action: pull a font off the device)
     const imp = elc('button', 'te-font-card te-font-import', '<span class="te-font-abc">＋</span><span class="te-font-name">Import</span>');
     imp.type = 'button';
     imp.addEventListener('click', () => { if (!FM.fonts) return; FM.fonts.pick(rec => { const ly = layer(); if (!ly || !rec) return; ly.fontFamily = rec.css; FM.requestRender(); updateBarLabels(); if (popKind === 'font') openPop('font', buildFontRail); }); });
@@ -514,7 +514,7 @@ window.FM = window.FM || {};
     host.appendChild(wrap);
   }
 
-  // "Aa" sheet — the text options AM keeps out of the top bar (Style / Spacing / Line height / Curve /
+  // "Aa" sheet — the text options [the reference app] keeps out of the top bar (Style / Spacing / Line height / Curve /
   // Animate / Captions). Reuses the inspector's builder so there's one source of truth.
   function buildExtrasPop(host) {
     const l = layer(); if (!l) return;

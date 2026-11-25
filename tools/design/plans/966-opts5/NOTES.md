@@ -36,7 +36,7 @@ under Posterize — Flow speed instead).
 |---|---|---|---|---|---|
 | Shape Wipe (`shapewipe`) | `border` | Border width | 0–100 px (unit px: pxToPlate scales it), keyframable | 0 | a band of the Border colour along the edge of the opening, on the part still showing — the iris's rim, a heart outlined as it grows (the sibling of Wipe's and Radial Wipe's borders) |
 | | `color` | Border colour | colour row, greyed while Border width is 0 (`colorGate` deadAt 0, "0 px") | #ffffff | the band's colour |
-| Topo Bands (`contourstrips`) | `flow` | Flow speed | −10 to 10 /s (bands a second), keyframable | 0 | the bands keep moving through the tones, the first coming round after the last — the flowing contour map, AE's Colorama cycle; + moves them from the darks towards the lights; integrated when keyframed |
+| Topo Bands (`contourstrips`) | `flow` | Flow speed | −10 to 10 /s (bands a second), keyframable | 0 | the bands keep moving through the tones, the first coming round after the last — the flowing contour map, [another editor]'s Colorama cycle; + moves them from the darks towards the lights; integrated when keyframed |
 | Engraving (`halftonelines`) | `color` | Ink | colour row | #000000 | the colour of the lines |
 | | `color2` | Paper | colour row | #ffffff | the colour of the paper — banknote green on cream, white on navy, gold on black |
 | Pop Art (`popart`) | `layout` | Grid | + Four by four (2) | Two by two (0), unchanged | sixteen squares |

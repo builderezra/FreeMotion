@@ -3615,8 +3615,8 @@ window.FM = window.FM || {};
   DEFS.forEach(d => { d.presets = PRESETS[d.type] || []; });
 
   /* ═══ VOICES — THE VOICE CATEGORY (#966 B1, refers to #545) ═══════════════════════════════════════════════════════════
-   * His steer (#966): "you can add new sound effects … more choices always better". CapCut's most-used audio feature, and
-   * Final Cut has a whole Voice category; the DSP was all here already, only the packaging was missing. A voice is the audio
+   * His steer (#966): "you can add new sound effects … more choices always better". [another app]'s most-used audio feature, and
+   * [another app] has a whole Voice category; the DSP was all here already, only the packaging was missing. A voice is the audio
    * twin of a filter recipe (js/filters.js): DATA, not code — a name and a STACK of the effects above, each { type, params }.
    * A tile puts that stack on the clip as ordinary effects, one row each, every control still his to move, in ONE history
    * step (audio-fx-browser.js addVoice), so one Undo takes the whole voice off again. Nothing is locked and nothing marks a

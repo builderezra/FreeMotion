@@ -1,8 +1,8 @@
-/* FreeMotion — AM-style "Add" menu (shared component).
+/* FreeMotion — "Add" menu (shared component).
  * Used in TWO places:
  *   • PC: the inspector's no-selection state (nothing selected → this menu; select a clip → editor).
  *   • Mobile: the green + FAB bottom-sheet.
- * AM interaction model: TOP-ROW tabs OPEN A SUB-SECTION of choices; the QUICK-ADD rail ADDS INSTANTLY. */
+ * Interaction model: TOP-ROW tabs OPEN A SUB-SECTION of choices; the QUICK-ADD rail ADDS INSTANTLY. */
 window.FM = window.FM || {};
 (function (FM) {
   'use strict';
@@ -142,7 +142,7 @@ window.FM = window.FM || {};
       : '<path d="' + d + '" fill="currentColor" stroke="none"/>';
     return '<svg viewBox="0 0 24 24">' + body + '</svg>';
   }
-  // The extra AM shape library (pages 2–4 of AM's shape sheet).
+  // The extra shape library (pages 2–4 of [the reference app]'s shape sheet).
   var LIB_SHAPES = [
     ['speech', 'Speech'], ['moon', 'Moon'], ['snowflake', 'Snowflake'], ['shield', 'Shield'], ['check', 'Check'],
     ['droplet', 'Droplet'], ['cloud', 'Cloud'], ['play', 'Play'], ['spiral', 'Spiral'], ['sparkle', 'Sparkle'],
@@ -256,12 +256,12 @@ window.FM = window.FM || {};
         { label: 'Camera', icon: ico('<rect x="3" y="7" width="13" height="10" rx="2"/><path d="M16 10l5-3v10l-5-3z"/>'), add: function () { FM.addCameraLayer && FM.addCameraLayer(); } },
         /* "CONTROLLER", not "Null" (queue 363). Ezra: "If you can think of another name for null that
            still makes sense and describes what it is then change the name of it to that."
-           Null is After Effects' word and it names what the thing is NOT. What it IS: an invisible layer
+           Null is [another app]'s word and it names what the thing is NOT. What it IS: an invisible layer
            that renders nothing and exists to be parented to — you animate it and everything attached
            follows. "Controller" says what you use it for, is a real word, and collides with nothing.
            "Anchor" and "Pivot" were both rejected on purpose: every layer already has an ANCHOR POINT
            control, so an Anchor layer would collide with an existing, different, visible concept — worse
-           than a vague name. "Empty" (Blender's word) repeats Null's mistake of naming an absence.
+           than a vague name. "Empty" ([another app]'s word) repeats Null's mistake of naming an absence.
            `layer.type` stays 'null', so every saved project keeps working — this is a string change. */
         /* ⚠️ THESE TWO SAY WHAT THEY ARE FOR NOW — queue 596. Ezra: *"What do the controllers and
            adjustments even do? What is their function?"* **He was asking about two of his own layer
@@ -520,78 +520,18 @@ window.FM = window.FM || {};
     } },
     // "Elements" (was "Object / Element" — Ezra). Elements are now a first-class thing with their own
     // section on Home, so the tab is named after them rather than after the odds and ends beside them.
-    { key: 'template', label: 'Template', icon: icoMulti(
-      /* "give the two lines in the middle different colours from the lines on the outside." The frame
-         stays orange and the two dividers go amber — the lighter of the pair inside, so the icon reads
-         frame-first and the layout it is describing sits within it. */
-      /* Ezra: "make the lines in the middle complimentary colours but also very different from the
-         border colour, and also make the sideways line and the downwards line both unique colours, and
-         make sure the border lines go on top of the middle ones, not how it is currently."
-         So: the two dividers are SEPARATE paths with their own hues — cyan across, violet down. Both
-         sit opposite orange on the wheel, which is what makes them read as "not the border", and they
-         are a near-complementary pair to each other. ORDER IS THE FIX for the last part: SVG paints in
-         document order, so the dividers are declared FIRST and the frame LAST, and the frame's rounded
-         corners now cover the divider ends instead of the dividers crossing the frame. */
-      '<defs>'
-      + '<linearGradient id="fm-ic-tpH" x1="4" y1="10" x2="20" y2="10" gradientUnits="userSpaceOnUse">'
-      + '<stop offset="0" stop-color="#7FE9F5"/><stop offset="1" stop-color="#0EA5C6"/></linearGradient>'
-      + '<linearGradient id="fm-ic-tpV" x1="10" y1="10" x2="10" y2="20" gradientUnits="userSpaceOnUse">'
-      + '<stop offset="0" stop-color="#D8B4FE"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient>'
-      + '<linearGradient id="fm-ic-tpB" x1="4" y1="4" x2="20" y2="20" gradientUnits="userSpaceOnUse">'
-      + '<stop offset="0" stop-color="#FFC98A"/><stop offset="1" stop-color="#F0790E"/></linearGradient>'
-      + '</defs>'
-      /* NOT [THE REFERENCE APP]'S SHAPE ANY MORE (queue 375). Ezra: "Template icon needs to be a little bit
-         different as it's identical to [the reference app]'s just with colour, should be a simple task just
-         make it look good." He named the SHAPE, not the palette — the colours here are already his, from
-         queue 267 and the two amendments after it — so the frame and both accent hues stay and the
-         division inside changes. What made it identical was the arrangement: a full-width crossbar with
-         an upright dropping from its centre, dividing the frame into a band over two panes, which is
-         exactly AM's glyph. The crossbar stays (it is the thing that reads as "a layout"), the upright
-         goes, and a single rounded content block sits under it instead — a header over a piece of
-         content rather than a header over two panes. Three marks either way, so it carries the same
-         weight beside Shape / Media / Audio / Elements at 24px, and the block is centred so the lower
-         half is not lopsided the way one offset pane would be.
-         Paint order is unchanged and still load-bearing: the block and the crossbar are declared FIRST
-         and the frame LAST, so the frame's rounded corners cover their ends — "make sure the border
-         lines go on top of the middle ones, not how it is currently". */
-      /* ⚠️ REPLACED AGAIN — FOURTH TIME, AND THIS TIME HE CHOSE IT (queue 546/510/432).
-         *"Template button still looks shitty like in the projects and inspector menu"*, and before that
-         simply *"template icon looks shit"*. Queue 432 drew four alternatives and he picked none — the
-         reason is recorded there and is worth remembering: they were "put to him" IN WORDS while the
-         drawings sat in a local file he cannot open from a phone. Asking someone to choose between five
-         icons by description is asking them to imagine one.
-         So this time five were drawn, rendered at their REAL 24px beside the four neighbours, and sent to
-         him as a picture. He picked the STAMP.
-         WHY IT IS THE RIGHT SHAPE, in his terms rather than mine: a template is a thing you make copies
-         from, and that is what this draws — a dashed master behind, a solid copy in front. It is also the
-         only dashed texture in the TAB STRIP it lives in, so it is identifiable at 24px before the shape
-         resolves at all — which is precisely what the old header-over-a-block failed at: at real size the
-         bar and the block crowded into a smudge.
-         ⚠️ Dashes are NOT unique in this menu overall, and that is worth knowing before anyone adds a
-         third: `Controller` and `New group` are both dashed, and there the dashes mean "an EMPTY
-         container". Here they mean "the master you copy from". Two meanings for one texture is a real
-         cost, accepted because those two are CARDS inside the Elements tab while this is a TAB icon, so
-         they never appear beside each other, and because this is the only one pairing a dashed shape with
-         a SOLID one — which is the part that reads as "a copy of that" rather than "an empty box". If a
-         dashed card ever lands in the tab strip, this is the note that says why it would be a problem.
-         The PALETTE is untouched — orange frame, cyan and violet accents are his from queue 267 and the
-         two amendments after it, and he has never complained about the colours, only the arrangement.
-         Paint order is still load-bearing, and still his instruction: the copy is filled with the panel
-         colour so the master reads as BEHIND it rather than crossing through it. */
-      /* ⚠️ THE MASTER IS DRAWN AS AN OPEN PATH, NOT A RECT WITH A MATCHING FILL — and that is the whole
-         difference between this working everywhere and working only where I tested it.
-         The first version hid the master's covered corner by filling the copy with `var(--panel-2)`.
-         It looked perfect, because the page I checked it on happened to have that exact background.
-         On any tile whose background is NOT that colour — an active tab, a hover state, a future theme —
-         the fill shows up as a slightly-wrong box sitting inside the icon. And the alternative, leaving
-         it unfilled, puts the dashed lines straight through the solid copy: the EXACT fault he reported
-         on the Sample clip icon an hour earlier.
-         So the master traces only the part the copy does not cover — right stub, top, left, bottom stub,
-         one continuous path. Nothing is hidden, so nothing has to match, and the icon is correct against
-         any background. */
-      + '<path d="M16.4 8.6V5.8A1.8 1.8 0 0 0 14.6 4H5.8A1.8 1.8 0 0 0 4 5.8v8.8a1.8 1.8 0 0 0 1.8 1.8h2.8" stroke="url(#fm-ic-tpH)" stroke-dasharray="2.6 2.4"/>'
-      + '<rect x="8.6" y="8.6" width="11.4" height="11.4" rx="1.8" stroke="url(#fm-ic-tpB)"/>'
-      + '<path d="M11.4 14.3h5.8" stroke="url(#fm-ic-tpV)"/>'), options: function () {
+    { key: 'template', label: 'Template', icon: ico(
+      /* HIS PICK, AND THE SAME DRAWING EVERYWHERE (#1255, 24 Nov). On the Templates icon: "I just want them to be consistent"; then,
+         shown every Template redesign again: "Yeah, I picked the recommended one. Just go with the recommended one." That is option 1,
+         STACKED CARDS: a card behind, a card in front with a play triangle. It is FM.ICON.template (js/drawn-x.js), the table Home's
+         Templates tab, its empty tab and its cards with no picture draw from too, so the three cannot drift apart again (the
+         '1255 icons · one drawing per thing' test compares them). One colour, the tab's own, as every tab but Media is.
+         The card behind is an OPEN path that traces only what the card in front does not cover, so nothing is filled and the icon is
+         right on any background: the mistake queue 546's test still guards.
+         History, for whoever is asked to change it again: a frame with a crossbar (queues 267, 375); then the STAMP, a dashed master
+         with a solid copy in three gradients, which he chose from five drawn options on 24 Aug (queues 432, 510, 546) after three
+         he rejected, and which this replaces. Every time, he chose from a PICTURE at the real size, never from a description. */
+      (FM.ICON && FM.ICON.template) || ''), options: function () {
       var out = (FM.templates ? FM.templates.list() : []).map(function (t) {
         /* THE TEMPLATE'S OWN PICTURE, not the same little glyph nine times (queue 268, and the last
            open clause of #210 — "it shouldn't even colour it should show the hero image of whatever
@@ -606,9 +546,12 @@ window.FM = window.FM || {};
            is the add below, unchanged */
         return { label: t.name, thumb: t.thumb || null, templateId: t.id,
           // the SAME shape queue 375 replaced on the tab — it lives here too, as the fallback for a
-          // template saved before thumbs existed, and changing only one of the two would have left AM's
+          // template saved before thumbs existed, and changing only one of the two would have left [the reference app]'s
           // glyph on screen while the entry claimed it was gone.
-          icon: ico('<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 8.6h16"/><rect x="7.2" y="11.7" width="9.6" height="5.6" rx="1.4"/>'),
+          // #1255: so it is the tab's drawing now, his Stacked cards (FM.ICON.template), for any template with no picture (also a
+          // capture that failed, or an imported file whose picture was refused). It was still the old frame with a crossbar, a third
+          // Templates icon beside the tab's and Home's ("I just want them to be consistent").
+          icon: ico((FM.ICON && FM.ICON.template) || ''),
           add: async function () { const ok = await FM.templates.insertInto(t.id); if (FM.toast) FM.toast(ok === false ? 'Template data missing \u2014 re-save it from a project' : 'Inserted \u201c' + t.name + '\u201d'); } };   // await the result \u2014 insertInto returns false when the IDB pack was evicted; the toast used to lie
       });
       /* AN EMPTY PANEL THAT EXPLAINS ITSELF, NOT A BUTTON THAT POPS A TOAST (queue 651). Ezra, with a
@@ -621,7 +564,8 @@ window.FM = window.FM || {};
          which is what the entry says. Same shape, more words, because this is the surface where you
          would be asking WHAT a template is rather than where they went. */
       if (!out.length) out.push({ emptyPanel: {
-        mark: '\u25F1',
+        /* #1255: the Stacked cards, drawn, as Home's empty Templates tab draws them (was a typed mark) */
+        icon: 'template',
         title: 'No templates yet',
         lines: ['A template is a whole project saved as a starting point \u2014 its layers, effects and timing, ready to drop into whatever you are working on.',
                 'To make one: go to the home screen, open a project\u2019s \u22ef menu and choose Save as template.'] } });
@@ -956,7 +900,7 @@ window.FM = window.FM || {};
       b.insertBefore(timg, b.firstChild);
       b.classList.add('addmenu-media', 'has-thumb');
     }
-    if (!iconOnly) {   // shape cards are icon-only (AM) — the name lives in the tooltip
+    if (!iconOnly) {   // shape cards are icon-only — the name lives in the tooltip
       var lb = document.createElement('span'); lb.className = 'addmenu-lbl';
       lb.textContent = label;   // element/template/file names are USER input — textContent, never innerHTML (#r3)
       b.appendChild(lb);
@@ -972,7 +916,27 @@ window.FM = window.FM || {};
   FM._tabLabels = function () { return TABS.map(function (t) { return t.label; }); };
   FM._tileTints = function () { return Object.keys(BY_LABEL); };
 
+  /* Deliberately built with textContent and appendChild rather than innerHTML: the only reason this
+     panel exists is to carry WORDS, and words are the thing that must never be able to become
+     markup. Nothing here is user data today; the template NAME is one edit away from being.
+     #1255: `spec.icon` names one of the app's own drawings (FM.ICON), drawn where a typed mark stood; a spec with
+     only `mark` (or a missing table) still types it. Out here, not inside render(), so the suite can draw one. */
+  function emptyPanel(spec) {
+    var box = document.createElement('div'); box.className = 'am-empty';
+    var m = document.createElement('div'); m.className = 'am-empty-mark';
+    var d = spec.icon && FM.drawnIcon ? FM.drawnIcon(spec.icon) : null;
+    if (d) m.appendChild(d); else m.textContent = spec.mark || '\u25F1';
+    var t = document.createElement('div'); t.className = 'am-empty-title'; t.textContent = spec.title || '';
+    box.appendChild(m); box.appendChild(t);
+    (spec.lines || []).forEach(function (line) {
+      var p = document.createElement('p'); p.textContent = line; box.appendChild(p);
+    });
+    return box;
+  }
+
   FM.addMenu = {
+    /* for the suite: the empty tab's panel, drawn from a spec ('1255 icons') */
+    _emptyPanel: emptyPanel,
     /* Exposed for the suite (queue 340). The Elements browser's empty state tells you how to MAKE an
        element, and for a long time it named a route through this menu that had been deleted — so the
        one instruction in the room pointed at a door that is not there. A test can only catch that if it
@@ -1079,20 +1043,6 @@ window.FM = window.FM || {};
         FM.tileFit.apply(root, plan, box);
       }
 
-      /* Deliberately built with textContent and appendChild rather than innerHTML: the only reason this
-         panel exists is to carry WORDS, and words are the thing that must never be able to become
-         markup. Nothing here is user data today; the template NAME is one edit away from being. */
-      function emptyPanel(spec) {
-        var box = document.createElement('div'); box.className = 'am-empty';
-        var m = document.createElement('div'); m.className = 'am-empty-mark'; m.textContent = spec.mark || '\u25F1';
-        var t = document.createElement('div'); t.className = 'am-empty-title'; t.textContent = spec.title || '';
-        box.appendChild(m); box.appendChild(t);
-        (spec.lines || []).forEach(function (line) {
-          var p = document.createElement('p'); p.textContent = line; box.appendChild(p);
-        });
-        return box;
-      }
-
       function drawBody() {
         root._amDemo = demo();   // what Demo mode was when these tiles were drawn — see the settings listener below
         bodyEl.innerHTML = '';
@@ -1149,7 +1099,7 @@ window.FM = window.FM || {};
            make every older import unreachable, and one-tap re-adding is the whole point of the list. */
         var isLib = !!(splitTab && pinnedOpts.length > 0);
         bodyEl.classList.toggle('addmenu-body--lib', isLib);
-        var iconOnly = tab.key === 'shape';   // AM: shape grid is icon-only (name = tooltip) \u2192 bigger art, denser grid
+        var iconOnly = tab.key === 'shape';   // Shape grid is icon-only (name = tooltip) \u2192 bigger art, denser grid
         /* The tint follows the item's position in the WHOLE tab, not its position on the page, so a
            button keeps its colour when the pager moves and two pages never open with the same run of
            hues. Media/Audio library tiles are skipped — they show the user's own frame, and a colour
@@ -1196,7 +1146,7 @@ window.FM = window.FM || {};
           }
           return c;
         }
-        // AM: the grid PAGES HORIZONTALLY (swipe sideways) with page dots — not a vertical scroll.
+        // The grid PAGES HORIZONTALLY (swipe sideways) with page dots — not a vertical scroll.
         /* The Elements tab used to get its own search field and scrolling list, because every saved
          * element was dumped into it. Nothing open-ended lives here any more — it is nine fixed
          * entries, all visible at once — so the field searched a list you could already see whole.

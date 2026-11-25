@@ -43,19 +43,19 @@ Colour's Opacity** (also the text layer's own outline, `_mediaOutline`, built fr
 
 | Effect (type) | Key | Label | Range / choices | Default | What it does |
 |---|---|---|---|---|---|
-| Colour Wash (`gradientoverlay`) | `centerx` | Centre X | 0–100 %, keyframable, live under Radial / Conic (`liveWhen` [1, 2]) | 50 | the middle of a Radial or Conic wash across the frame — a glow of colour off one corner (After Effects' Gradient Ramp has a Start of Ramp point); a moved Radial runs from Start at its centre to End at the farthest corner |
+| Colour Wash (`gradientoverlay`) | `centerx` | Centre X | 0–100 %, keyframable, live under Radial / Conic (`liveWhen` [1, 2]) | 50 | the middle of a Radial or Conic wash across the frame — a glow of colour off one corner ([another editor]'s Gradient Ramp has a Start of Ramp point); a moved Radial runs from Start at its centre to End at the farthest corner |
 | | `centery` | Centre Y | 0–100 %, keyframable, same gate | 50 | …and down it |
-| Bump Map (`bumpmap`) | `color` | Light colour | colour row | #ffffff | tints the key light (warm lamp, cold moonlight — AE Lighting Effects' Light Color); the ambient fill stays neutral |
+| Bump Map (`bumpmap`) | `color` | Light colour | colour row | #ffffff | tints the key light (warm lamp, cold moonlight — [another editor] Lighting Effects' Light Color); the ambient fill stays neutral |
 | | `shine` | Shine | 0–100 %, keyframable | 0 | a glossy Blinn highlight where the surface faces the light, in the light's colour — wet paint, a plastic logo |
 | Mosaic (`mosaic`) | `gapfill` | Gap shows | Picture (0) / Colour (1) / Clear (2), live above Gap 0 (`liveAbove` 0 — a choice row may carry it now) | Picture | Colour fills the gap with grout, Clear cuts it out so the tiles float |
 | | `color` | Gap colour | colour row, live under Colour (`colorGate` when 1) | #000000 | the grout's colour (Hexagon Tiles' Grout colour, for square tiles) |
 | Squircle Corners (`roundcorners`) | `corners` | Corners | All (0) / Top (1) / Bottom (2) / Left (3) / Right (4) / Diagonal (5: top left and bottom right), greyed while Continuous curve is on | All | which corners are shaped — a tab, a card on the bottom edge, a leaf |
-| | `cshape` | Corner shape | Round (0) / Cut (1) / Scoop (2), same gate | Round | Cut chamfers straight across, Scoop bites a quarter circle out — Illustrator's Round / Chamfer / Inverted Round (the ticket, the ticket stub) |
+| | `cshape` | Corner shape | Round (0) / Cut (1) / Scoop (2), same gate | Round | Cut chamfers straight across, Scoop bites a quarter circle out — [another editor]'s Round / Chamfer / Inverted Round (the ticket, the ticket stub) |
 | Scatter Array (`scatterarray`) | `order` | Copies sit | In front (0) / Behind (1) | In front | Behind keeps the layer itself in front of its copies (Trail's own Behind) |
 | | `blend` | Blend | Normal (0) / Add (1) / Screen (2) | Normal | lays each copy on as light, so crossing copies glow — the layer itself is always drawn normally |
 | Edge Halo (`mattefringe`) | `blend` | Blend | Normal (0) / Screen (1) / Multiply (2) | Normal | Screen: the band as light (a rim light), Multiply: as shade (an inked inner edge) |
 | | `side` | Rim on | All round (0) / Top (1) / Right (2) / Bottom (3) / Left (4) | All round | the band only on the edge facing that way — a rim light from one side |
-| Text Curve (`textcurve`) | `upright` | Letters | Follow the curve (0) / Stay upright (1) | Follow | each letter stands straight where it sits on the arc (AE text on a path, Perpendicular To Path off) — still and animated |
+| Text Curve (`textcurve`) | `upright` | Letters | Follow the curve (0) / Stay upright (1) | Follow | each letter stands straight where it sits on the arc ([another editor] text on a path, Perpendicular To Path off) — still and animated |
 
 Exact definitions (js/compositor.js; each helper has a suite seam):
 
@@ -230,7 +230,7 @@ Screen), Blend (Screen / Multiply), Rim on, Letters (Follow the curve / Stay upr
   off straight on, so a flat surface catches a little of the highlight); a strong edge facing the light gains up to ~145. A Gloss slider
   (the exponent) would be the next control. Like the relief itself, the highlight is computed on plate pixels, so a reduced preview's
   edges are a little steeper — the existing trade, not a new one.
-- **Bump Map's Light colour tints only the key light**; the ambient half stays the picture's own colour (After Effects lights work that
+- **Bump Map's Light colour tints only the key light**; the ambient half stays the picture's own colour ([another editor] lights work that
   way; a fully coloured picture is Colourize's job).
 - **Colour Wash's moved Radial reaches End at the farthest corner**, so moving the centre also stretches the ramp; at the middle that
   distance is the old half-diagonal, so the change is continuous.

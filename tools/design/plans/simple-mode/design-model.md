@@ -7,7 +7,7 @@ I say to do it"* (INBOX.md:28).
 Built on the six research notes in `research/`. Where this design relies on code it cites `file:line`. Where it relies on
 a research claim it names the note (`fm-model §6`, `fm-collab §9.1`, …). **UNVERIFIED** marks anything read but not run.
 
-Working names in this file: **Quick** is the new CapCut/Premiere editor, **Full** is today's editor. They are
+Working names in this file: **Quick** is the new [another editor]/[another editor] editor, **Full** is today's editor. They are
 placeholders; the real names are decision D1 (§17). In code the new timeline structure is the **spine** (`FM.spine`),
 never "magnet" (that already means snapping, `js/timeline.js:4463`) and never "parent" (that means transform parenting,
 `js/scene.js:707`).
@@ -17,7 +17,7 @@ never "magnet" (that already means snapping, `js/timeline.js:4463`) and never "p
 ## 0. The whole design in twelve lines
 
 1. **One project, one document, two editors.** Quick is a second *view and command set* over the same `{project, layers}`
-   (DaVinci Resolve's Cut/Edit pages), never a second format (Rush → Premiere's one-way, lossy copy).
+   ([another editor]'s Cut/Edit pages), never a second format ([another editor] → [another editor]'s one-way, lossy copy).
 2. **`start` stays the only stored time.** The renderer, the exporter and the Full editor read exactly what they read today.
 3. **Three optional keys on a layer** carry everything Quick needs: `sm.main` (this clip is on the main track), `sm.on`
    (this item follows that main clip, or `'*'` rides the whole track, or `'free'`), and later `trIn` / `clipAnim` (looks).
@@ -42,7 +42,7 @@ never "magnet" (that already means snapping, `js/timeline.js:4463`) and never "p
 ## 1. The core idea (one paragraph)
 
 FreeMotion keeps its single document: a flat, z-ordered array of free layers, each with its own absolute `start` and
-`duration`. Quick is a second editor over that same array. It *reads* the array as CapCut does, as one main track of clips
+`duration`. Quick is a second editor over that same array. It *reads* the array as [another editor] does, as one main track of clips
 end to end with overlays, text, captions, effects and audio in sections around it, and it *writes* back through a small set
 of commands that keep that reading true: insert, delete, trim, split, reorder and speed all ripple the clips after the edit
 point, and everything stuck to a moved clip moves with it. The only new stored facts are which clips form the main track
@@ -61,7 +61,7 @@ in Quick as it is, and a Quick user and a Full user can share one live project b
 | **A. Project-level ordered list** `project.spine = [{id}, …]` (fm-collab §9.4 A) | an id list, keyed in collab | concurrent inserts and reorders compose as keyed-array ops; leases do not bite on `P/…` paths | a **layer-id reference outside the layer**: every re-id route (`reIdLayers` `js/storage.js:2044-2080`, duplicate/paste `js/app.js:4313-4360`) must remap it, and an **element pack carries no `project` at all** (fm-model §9), so a pasted or element-inserted main clip loses its place; dangling ids when Full deletes a clip; needs a `KEYED` entry (`js/collab-path.js:251`) and a hand `SCHEMA_REV` bump | Rejected |
 | **B. Per-layer flag + fractional `ord`** (fm-model §13.2) | `sm:{main, ord}` | order explicit, no id refs | **two truths about order** (`ord` and `start`) that the Full editor will contradict every time it drags a main clip; split/duplicate/paste all need `ord` repair | Rejected, but kept the per-layer namespace |
 | **C. Main track as a `group`** (fm-model §13.5 C) | a group layer, clips as children | Full already shows it as one collapsible row | `parent` becomes membership, so a main clip can no longer be parented to a null; any group look flattens the whole track into one unit (`js/compositor.js:15611-15622`); `collapsed` is shared in collab | Rejected |
-| **D. Derived at view time, nothing stored** (Resolve's Cut page, pro-editors §4) | nothing | tolerant of any Full edit | membership changes silently when a Full user nudges something; a beginner's clip can fall off the track | Used **only** as the fallback when nothing is stored (§5) |
+| **D. Derived at view time, nothing stored** ([another editor]'s Cut page, pro-editors §4) | nothing | tolerant of any Full edit | membership changes silently when a Full user nudges something; a beginner's clip can fall off the track | Used **only** as the fallback when nothing is stored (§5) |
 | **E. Derived `start`** from an order list, as a collab derived writer (fm-collab §9.3 b) | order list; `start` computed | concurrent structural edits compose | forces magnetism on the Full user (a drag fights the finger unless every Full drag/trim site learns about it); keyframes are absolute (`js/scene.js:373-376`), so the writer must still shift whole `kf` lists and the keyframe race (fm-collab §9.1 row 2) is **not** fixed; clip-relative keyframes would touch every `evalProp` call (674 in `js/compositor.js` alone, by grep) | Rejected now; kept as the Phase 6 upgrade path (§15) |
 | **F. Per-layer flag, order = `start`, magnetism in the commands** | `sm:{main:true}` on main clips, `sm:{on}` on attached items | no id list, no second order truth, no derived writer, no schema-fingerprint change, Full edits stay free and are always meaningful to Quick | concurrent ripples from two devices compose as absolute numbers (fm-collab §9.1 rows 1, 3, 7) | **Chosen.** The collab cost is handled in §10: a pre-flight check stops the common case, and the rare case shows as a visible, one-tap-fixable seam. |
 
@@ -71,8 +71,8 @@ The deciding facts:
 - Unknown top-level layer keys and unknown project keys survive load, import, undo, templates, elements, duplicate, split
   and collab (fm-model §9, table "What happens to fields the sanitisers don't know"). A namespaced `sm` object rides every
   route for free.
-- DaVinci Resolve is the one working precedent for one project, two editors, and there magnetism is a behaviour of the
-  Cut page's commands (pro-editors §4). Final Cut stores attachment as a link with a derived offset (pro-editors §3).
+- [another editor] is the one working precedent for one project, two editors, and there magnetism is a behaviour of the
+  Cut page's commands (pro-editors §4). [another editor] stores attachment as a link with a derived offset (pro-editors §3).
   F takes both.
 
 ### 2.2 The stored shapes
@@ -256,7 +256,7 @@ replaced by this plan (§14).
 
 **Delete a main clip `c`**:
 ```
-removes = [c.id, ...followers(c)]                  // FCP, LumaFusion, Premiere mobile all agree (pro-editors §3, §5)
+removes = [c.id, ...followers(c)]                  // [another editor], [another editor], [another editor] mobile all agree (pro-editors §3, §5)
 rides   = riders: removeSpan(c.start, c.end)       // captions over a deleted clip go with it
 plan   += ripplePlan(R, c.end, −c.len, {c})
 toast: "Deleted clip and 2 things on it · Undo"
@@ -316,11 +316,11 @@ plan += ripplePlan(R, c.start + before, c.duration − before, {c} ∪ followers
 ```
 A clip with a speed **ramp** (`speed` is `{kf}`) shows its ramp as "made in Full" (§9); Quick offers flat speed only.
 
-**Replace** (`FM.replaceMedia`, `js/app.js:4658`): keeps the slot length, like CapCut. If the new media is shorter, the
+**Replace** (`FM.replaceMedia`, `js/app.js:4658`): keeps the slot length, like [another editor]. If the new media is shorter, the
 duration clamps and the difference ripples as a tail trim.
 
 **Duplicate a main clip**: `copy = FM.cloneLayer(c)` (`js/scene.js:807`), `copy.sm = {main:true}`, then insert at `c.end`.
-The things stuck to `c` are not copied (CapCut does the same, capcut-mobile §2.1).
+The things stuck to `c` are not copied ([another editor] does the same, [another editor]-mobile §2.1).
 
 **Extract audio** (`FM.extractAudio`, `js/app.js:1007`): the twin gets `sm = {on: c.id}` and never `main`.
 
@@ -431,23 +431,23 @@ FM.spine.edit = async function (label, makePlan) {
 | Overlay (picture-in-picture), sticker/shape, text | `sm.on = <main clip under the playhead>` | moves, splits and is deleted with its clip |
 | Effect segment (adjustment layer) | same | same |
 | Sound effect, voiceover | same | same |
-| Music | `sm.on = 'free'` | stays at its absolute time: "edit the pictures to the music" (iMovie background music, LumaFusion unlinked track; pro-editors §5) |
+| Music | `sm.on = 'free'` | stays at its absolute time: "edit the pictures to the music" ([another editor] background music, [another editor] unlinked track; pro-editors §5) |
 | Caption track | `sm.on = '*'` | each cue rides the edit under it; cues over a deleted clip go with it |
 | Anything added after the last clip | `'free'` | nothing to follow |
 
-This deliberately beats CapCut's phone app, where nothing follows the main track and text and captions drift out of sync
-(capcut-mobile §0 point 2, §13 point 4). Adobe's newest simple editor made the same choice (pro-editors §2).
+This deliberately beats [another editor]'s phone app, where nothing follows the main track and text and captions drift out of sync
+([another editor]-mobile §0 point 2, §13 point 4). [another editor]'s newest simple editor made the same choice (pro-editors §2).
 
 ### 4.2 Why only the host id is stored
 
-Final Cut stores `offset` in the host's time and derives the absolute time (pro-editors §3). FreeMotion already stores the
+[another editor] stores `offset` in the host's time and derives the absolute time (pro-editors §3). FreeMotion already stores the
 absolute `start`, so storing an offset too would be a second truth that the Full editor would break the first time it
 dragged the item. Instead `offset = start − host.start` is read when needed. A Full-editor drag of an attached item just
 changes its offset; nothing has to chase it.
 
 ### 4.3 Items with no stored link (Full-made content)
 
-When `sm.on` is absent, Quick works the link out when it needs it, which is what Resolve's Cut page appears to do
+When `sm.on` is absent, Quick works the link out when it needs it, which is what [another editor]'s Cut page appears to do
 (pro-editors §4, marked inference there):
 
 ```
@@ -468,7 +468,7 @@ creates the item.
 - **Full, layer menu** (`FM.layerMenuItems`, `js/app.js:5147`), Phase 3: "Stick to the clip under it" / "Unstick",
   "Make main clip" / "Take off main track". Full users keep every option (#966).
 - **Visible link:** in Quick, selecting a main clip underlines everything following it and draws a short tick at each
-  connection point (Premiere Rush's yellow line, pro-editors §2).
+  connection point ([another editor]'s yellow line, pro-editors §2).
 
 ### 4.5 Edge rules
 
@@ -486,8 +486,8 @@ creates the item.
 ### 5.1 The principle
 
 Switching editors is a **view switch** on the same document, never a conversion, in both directions. Every precedent with
-two formats converts one way and loses things (Rush → Premiere, Premiere mobile → desktop with a list of lost features,
-Final Cut iPad → Mac, iMovie → Final Cut; pro-editors §2, §3, §5). The one two-way precedent, Resolve, has no conversion at
+two formats converts one way and loses things ([another editor] → [another editor], [another editor] mobile → desktop with a list of lost features,
+[another editor] iPad → Mac, [another editor] → [another editor]; pro-editors §2, §3, §5). The one two-way precedent, [another editor], has no conversion at
 all (pro-editors §4).
 
 - **Full → Quick:** classify (pure), draw. Nothing is written.
@@ -545,7 +545,7 @@ FM.spine.classify = function (scene) {
 // overlaps(a, b, eps): a.start < b.end − eps && b.start < a.end − eps
 ```
 
-Why "bottom of the stack first": in CapCut the main track is the base picture (capcut-mobile §2.6). A typical Full edit has
+Why "bottom of the stack first": in [another editor] the main track is the base picture ([another editor]-mobile §2.6). A typical Full edit has
 a base footage row and things on top; greedy from the bottom picks that base, and the manual cross-fade copies a Full user
 puts on the row above become overlays that follow the clip they sit on.
 
@@ -620,7 +620,7 @@ What Quick can't edit renders exactly as it did and shows as a locked block he c
 ```
 
 - **Quick → Create** goes straight to the media picker (multi-select, numbered in pick order), then into Quick with the
-  clips appended in that order (§3.4 Append). "From the first clip" is a size choice, like CapCut's Original.
+  clips appended in that order (§3.4 Append). "From the first clip" is a size choice, like [another editor]'s Original.
 - **Full → Create** is exactly today's flow.
 - `FM.projects.create` (`js/storage.js:2540`) gets `opts.home`; it writes `project.sm = {v:1, home}` and `rec.editor` on
   the index entry, the same way it already copies `sizePicked`/`elementDraft` (`:2554-2595`).
@@ -661,7 +661,7 @@ class is on, so their 90 callers need no change.
 ├──────────────────────────────────────┤
 │ CC  ▪▪  ▪ ▪▪   │                     │  Captions   ┐ sections in stacking order:
 │ Aa     ════════│══                   │  Text       │ higher on screen = in front
-│ ◧   ▭▭▭        │                     │  Overlays   ┘ (CapCut hides this; we show it)
+│ ◧   ▭▭▭        │                     │  Overlays   ┘ ([another editor] hides this; we show it)
 │┃[▓▓▓▓▓▓]◇[▓▓▓▓│▓▓▓]◇[▓▓▓▓▓]  [ + ]  │  MAIN: tall filmstrip; ◇ = the transition button at each cut
 │ ♪  ~~~~~~~~~~~~│~~~~~~~~~~~~~~~      │  Audio
 │                │ ← fixed playhead    │
@@ -671,15 +671,15 @@ class is on, so their 90 callers need no change.
 ```
 
 - **Sections fold.** Each section with items shows one compact lane; one with more stacked items shows a count and opens
-  to all its lanes when tapped, the others folding to thin coloured lines (CapCut's one-category-at-a-time trick,
-  capcut-mobile §2.7). Sections with nothing in them are not drawn.
+  to all its lanes when tapped, the others folding to thin coloured lines ([another editor]'s one-category-at-a-time trick,
+  [another editor]-mobile §2.7). Sections with nothing in them are not drawn.
 - **Gestures:** tap selects; hold 350 ms and drag reorders a main clip (neighbours open a slot) or moves an item (the same
   hold timing as today, `js/timeline.js:2190-2240`); drag an edge grip to trim (the main track ripples live); pinch to
   zoom; swipe to scrub under the fixed playhead.
 - **Bottom toolbar, nothing selected:** Clips · Text · Captions · Overlay · Audio · Effects · Filters · Ratio ·
   Background. It scrolls sideways (the last two are off-screen at 380 px).
-- **Something selected:** the strip becomes that item's tools, with a fixed **‹ Done** at the left. CapCut's worst
-  beginner trap is tools vanishing while a clip is selected (capcut-mobile §4); **Done** is always visible and tapping
+- **Something selected:** the strip becomes that item's tools, with a fixed **‹ Done** at the left. [another editor]'s worst
+  beginner trap is tools vanishing while a clip is selected ([another editor]-mobile §4); **Done** is always visible and tapping
   empty timeline also deselects.
 - **Tool panels** open in the existing bottom sheet (`#inspector-panel`, docked by `dockSheet`, `js/mobile.js:271-294`) in
   his small/big two-size style (#927, #975), built from the existing category builders through
@@ -708,7 +708,7 @@ class is on, so their 90 callers need no change.
   toolbar is a column in the inspector band instead of a strip; a tool's panel opens in the band, as the Add menu does now
   (`js/inspector.js:6904-6919`).
 - All sections are open (there is room).
-- **Keys** (Premiere-style, and they ripple): Space play · S split · Delete delete-and-close · Q trim start to playhead ·
+- **Keys** ([another editor]-style, and they ripple): Space play · S split · Delete delete-and-close · Q trim start to playhead ·
   W trim end to playhead · ⌘Z / ⌘⇧Z. Files dropped on the main track insert at the seam under the pointer.
 - The Full editor's own keys (1–5 Add tabs, Shift+1–4, A/S/D, `js/app.js:8761-8814`) are off in Quick.
 
@@ -735,12 +735,12 @@ annoying, an optional `sm.row` hint can be added later (fm-model §13.3).
 | **Block** (made in Full) | Move · Delete · Duplicate · Open in Full |
 | **Transition ◇** (Ph.4) | the transition picker · Length · Apply to all |
 
-### 8.6 Every CapCut feature, mapped
+### 8.6 Every [another editor] feature, mapped
 
 **Core** is in the first Quick release (Phases 2–4). **Later** comes after. **Never** is left out on purpose. "Exists"
 names where FreeMotion already has the engine (fm-ui §6, §8).
 
-| CapCut | FreeMotion engine | Quick |
+| [another editor] | FreeMotion engine | Quick |
 |---|---|---|
 | Magnetic main track, append, insert, reorder, delete, trim, split | `FM.splitLayer`, trims, `FM.deleteLayer` + **`FM.spine` (new)** | **Core** |
 | Speed (normal) | speed with ramps (`js/inspector.js:5756`) | **Core** (flat); curves **Later** |
@@ -753,7 +753,7 @@ names where FreeMotion already has the engine (fm-ui §6, §8).
 | Captions (type the words, find the speech timing) | caption tracks, `js/captions.js`, `captions-vad.js` | **Core**. Honest label: it finds *when* people speak; you type the words |
 | Auto captions that write the words | none (`js/captions-vad.js:4`) | **Later** (needs speech-to-text; "better nothing than a bad version", #152) |
 | Overlay (picture-in-picture), blend, opacity | the core model | **Core** |
-| Move main ↔ overlay | **new** (§3.4) | **Core**, as one visible button each way (CapCut buries it) |
+| Move main ↔ overlay | **new** (§3.4) | **Core**, as one visible button each way ([another editor] buries it) |
 | Audio: import, record voice, sound effects | `js/voice-rec.js`, `js/sfx.js` | **Core** |
 | Effects | ~188 types, `js/fx-browser.js` | **Core**, with the 3D category hidden in Quick |
 | Ratio, background colour | canvas dialog (`js/app.js:8319`) | **Core** |
@@ -764,7 +764,7 @@ names where FreeMotion already has the engine (fm-ui §6, §8).
 | Templates (fill your clips in) | `js/template-fill.js` | **Core** entry from the Quick start flow |
 | Freeze frame | none | **Later** (a held still inserted on the main track) |
 | Keyframe diamond | full keyframes exist | **Later** (one "animate this" diamond; everything deeper stays in Full) |
-| Mask, chroma key | exist | **Later** in Quick (Pro-ish in CapCut too); always in Full |
+| Mask, chroma key | exist | **Later** in Quick (Pro-ish in [another editor] too); always in Full |
 | Stickers, text templates, music library | user-made elements and templates only | **Later** (needs shipped content) |
 | Background blur or image behind the frame | per-layer "Fill Behind" only | **Later** |
 | Beat markers | audio-react follows loudness only | **Later** |
@@ -798,7 +798,7 @@ construction.
   `sm`, the looks it owns, and the fields of the panels it opens. A block's insides are only ever **shifted as a unit**.
 - **A block on the main track:** if a Full user groups main clips (`FM.groupSelection`, `js/app.js:3897`), the members
   keep `sm.main`, the group is the unit, and Quick shows one "block" clip in that slot of the main track: it ripples and
-  reorders as one piece, like CapCut desktop's compound clip.
+  reorders as one piece, like [another editor] desktop's compound clip.
 - **Open in Full** switches editor and selects the layer (or enters its group, `FM.enterGroup`, `js/app.js:4127`).
 
 ### 9.4 What the Full editor shows of Quick's keys (Phase 3, optional)
@@ -876,7 +876,7 @@ would make those seams impossible at the price of forcing magnetism on the Full 
 
 ## 11. Undo
 
-- **One history for both editors** (Resolve shares one stack across its editing pages, pro-editors §4). Solo, it is the
+- **One history for both editors** ([another editor] shares one stack across its editing pages, pro-editors §4). Solo, it is the
   existing snapshot stack (`js/history.js:25-29`, 120 steps); `sm` is inside the snapshot, so it undoes for free.
 - **One Quick command = one step**, including adoption (§5.3), ripples, rider edits and follower deletes.
 - **Switching editors is not a step** (it is not in the document) and does not clear the stack.
@@ -892,7 +892,7 @@ would make those seams impossible at the price of forcing magnetism on the Full 
 ### 12.1 Export parity
 
 - **Phases 0–3 change nothing in the renderer or exporter.** A Quick project is an ordinary project; what exports is what
-  the preview shows, in either editor. A gap exports as the background colour, as it does today and as CapCut does with its
+  the preview shows, in either editor. A gap exports as the background colour, as it does today and as [another editor] does with its
   magnet off (pro-editors §1).
 - **Phase 4 adds two renderer features, used by both editors and the exporter:**
   - `trIn` on a main clip: during the overlap `[b.start, b.start + d]` the renderer blends the outgoing clip `a` (found as
@@ -954,7 +954,7 @@ would make those seams impossible at the price of forcing magnetism on the Full 
 | 19 | Very short clips (< 2 frames) | trims clamp to 1 frame; transitions clamp to half the shorter neighbour |
 | 20 | Source shorter than the slot (replaced media, missing file) | duration clamps and the difference ripples; a missing file shows the existing offline look |
 | 21 | Image (still) clips | default length from Settings (`FM.defaultLayerDuration`, `js/app.js:2736-2739`); extendable without limit |
-| 22 | Project length | still `FM.autoFitDuration` (`js/app.js:852`), the furthest end of anything, so an overlay past the last clip shows over the background (CapCut does the same) |
+| 22 | Project length | still `FM.autoFitDuration` (`js/app.js:852`), the furthest end of anything, so an overlay past the last clip shows over the background ([another editor] does the same) |
 | 23 | Markers, loop in/out, collab comment pins | absolute; not moved by ripples in Core; a marker option is Later |
 | 24 | Canvas size change | unchanged path (`FM.rescaleProjectContents`, `js/scene.js:1202-1280`); classification's frame test re-runs |
 | 25 | A 2,000-layer project (the collab cap, `js/collab-host.js:565`) | classification is O(n log n) and cached; the Quick timeline draws only the visible time range (§14.2) |
@@ -1009,7 +1009,7 @@ would make those seams impossible at the price of forcing magnetism on the Full 
 | `js/collab-core.js:29` | `SCHEMA_REV = 3` in the phase that adds `sanitizeSm` |
 | `js/compositor.js` (Phase 4) | `trIn` blend and `clipAnim` transients in the per-layer draw, beside the text-animation code (`:2592-2601`); a per-frame cached main-track index for finding the outgoing clip |
 | `tests/tests.js:68197-68208` (the brand-name guard) | widen it to the mode pill, the New project cards, Quick's toolbar and panel labels (his structural-safeguard rule; his-prefs §12 point 2) |
-| `BEFORE-PUBLISHING.md` | list every Quick screen built from a CapCut/Premiere reference as it lands |
+| `BEFORE-PUBLISHING.md` | list every Quick screen built from a [another editor]/[another editor] reference as it lands |
 
 ### 14.3 One helper per rule, so no site is forgotten
 
@@ -1087,7 +1087,7 @@ project (the `sm` keys are absent from everything that exists today).
 | Phone performance with filmstrips and many lanes | Medium | visible-range drawing, folded sections, measured budgets (§14.5) |
 | Captions disappoint without transcription | Medium | say plainly "finds when people speak"; transcription is Later |
 | Oversized tx on a huge ripple | Low | measure in Phase 2; refuse whole rather than half-apply |
-| Looks copied from CapCut | Certain, if unguarded | BEFORE-PUBLISHING list, our own composition and names; the widened brand-name guard |
+| Looks copied from [another editor] | Certain, if unguarded | BEFORE-PUBLISHING list, our own composition and names; the widened brand-name guard |
 | Transitions need the renderer and cost the phone frames | Medium | Phase 4 on its own; crossfade first; measured |
 | Mode word collisions (magnet, parent, Studio, Pro) | Low once named | code says `spine`; UI names are D1 |
 
@@ -1100,9 +1100,9 @@ project (the `sm` keys are absent from everything that exists today).
 | D1 | What are the two editors called? | **A. Quick / Full (recommended)** · B. Simple / Advanced · C. Cut / Motion · D. Easy / Pro (clashes with the paid "pro version") |
 | D2 | What does New project start in? | **A. Two cards, last one used is picked; first time: Quick (recommended)** · B. Always Quick · C. Always Full |
 | D3 | Where is the switch? | **A. A small Quick/Full pill on the canvas corner, both layouts (recommended)** · B. Inside the cog · C. In the playback bar |
-| D4 | When you move or delete a clip, what happens to the text and stickers on it? | **A. They go with it; music stays put (recommended)** · B. Nothing moves with it (CapCut phone) · C. Everything moves, music too |
+| D4 | When you move or delete a clip, what happens to the text and stickers on it? | **A. They go with it; music stays put (recommended)** · B. Nothing moves with it ([another editor] phone) · C. Everything moves, music too |
 | D5 | Deleting a clip that has things on it | **A. Deletes them too, with Undo in the toast (recommended)** · B. Leaves them where they were |
-| D6 | Gaps in the main track | **A. Quick never makes them; gaps made in Full show as a chip you tap to close (recommended)** · B. Quick closes all gaps the moment you switch (this rewrites the project) · C. A magnet on/off switch on PC like CapCut desktop (phone and PC would then differ) |
+| D6 | Gaps in the main track | **A. Quick never makes them; gaps made in Full show as a chip you tap to close (recommended)** · B. Quick closes all gaps the moment you switch (this rewrites the project) · C. A magnet on/off switch on PC like [another editor] desktop (phone and PC would then differ) |
 | D7 | A project made in Full, opened in Quick | **A. Opens as it is; what Quick can't edit shows as a locked block you can open in Full (recommended)** · B. Refuse to open · C. Make a copy converted for Quick |
 | D8 | Who is the first version for? | **A. Someone who has never edited, on the phone; the same screens serve the fast expert (recommended)** · B. The fast expert first |
 | D9 | Transitions in the first version? | **A. Straight after the first version, as their own release (recommended)** · B. In the first version (it waits longer) · C. Later |

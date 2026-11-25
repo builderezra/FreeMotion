@@ -218,7 +218,7 @@ window.FM = window.FM || {};
       };
     }
 
-    // ---------- AM phone clip-edit: top-bar clip name + duplicate/delete + docked sheet ----------
+    // ---------- Phone clip-edit: top-bar clip name + duplicate/delete + docked sheet ----------
     var clipNameM = document.getElementById('clip-name-m');
     var mDup = document.getElementById('m-dup');
     var mDel = document.getElementById('m-del');
@@ -259,7 +259,7 @@ window.FM = window.FM || {};
     // of its entries went. What made it removable was the canvas dialog's new "App settings…" button:
     // FM.settings used to be reachable from the home screen only, so on a phone this menu really was
     // the one door to snapping, onion skin, guides and save/reset. It is two taps from the cog now.
-    // AM: Group button (top bar, next to the bin) — appears when 2+ layers are selected
+    // Group button (top bar, next to the bin) — appears when 2+ layers are selected
     /* ONE TAP, NO MENU (queue 376) — AND NOW A PAIR OF THEM (queue 436).
        Queue 376's note said a second icon here "would come straight out of 4 layers selected", and put
        Masking Group in the multi-select sheet instead. Ezra came back and said that is not what he
@@ -424,7 +424,7 @@ window.FM = window.FM || {};
     FM._dockSheet = function () { try { dockSheet(); } catch (e) {} };
     window.addEventListener('resize', function () { if (isPhone() && document.body.classList.contains('m-editing')) { syncClipName(); requestAnimationFrame(dockSheet); } });
 
-    // ---------- AM-style mobile chrome: top bar + green + FAB + Add sheet ----------
+    // ---------- Mobile chrome: top bar + green + FAB + Add sheet ----------
     function clickHidden(id) { var b = document.getElementById(id); if (b) b.click(); }
 
     // mirror the build version onto the phone top bar so Ezra can confirm he's on the latest deploy
@@ -459,9 +459,9 @@ window.FM = window.FM || {};
       // The bar belongs to the selection → back LEAVES the selection, it does not leave the project.
       // Without this the arrow beside a live multi-selection went to the home screen (v5.71).
       if (isPhone() && document.body.classList.contains('sel-mode')) { FM.selectLayer(null); return; }
-      if (isPhone() && document.body.classList.contains('m-editing')) { FM.selectLayer(null); return; }   // AM: back = deselect the clip
+      if (isPhone() && document.body.classList.contains('m-editing')) { FM.selectLayer(null); return; }   // Back = deselect the clip
       if (FM.groupContext && FM.exitGroup) { FM.exitGroup(); return; }   // back out of the Edit Group timeline first
-      // AM: back from the editor = the home screen (project browser). The old file menu's actions
+      // Back from the editor = the home screen (project browser). The old file menu's actions
       // moved there: Import/Export live on home (⋯ + per-project menu); reset = delete the project.
       if (FM.home) { FM.home.open(); return; }
       var r = mBack.getBoundingClientRect();
@@ -1040,7 +1040,7 @@ window.FM = window.FM || {};
     if (addGrab) addGrab.addEventListener('click', function () { if (addSheet._swiped) { addSheet._swiped = false; return; } closeAdd(); });
     if (addSheet) makeSwipeDown(addSheet, addGrab, closeAdd, null);
 
-    // The Add sheet now hosts the shared AM-style Add menu (same component the PC inspector uses when
+    // The Add sheet now hosts the shared Add menu (same component the PC inspector uses when
     // nothing is selected). Tabs open a sub-section; the quick-add rail adds instantly; X closes.
     if (addGrid && FM.addMenu) {
       addGrid.classList.remove('add-grid');           // drop the old 3-col grid; the menu owns its layout

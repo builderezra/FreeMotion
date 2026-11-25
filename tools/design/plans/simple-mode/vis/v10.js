@@ -294,7 +294,7 @@
     { id: 'D4', q: 'Do text, stickers and overlays follow their clip?', why: 'It decides whether titles stay on their picture when you move or cut clips.', rec: 'A',
       before: () => before(beach(), { mark: { id: 'c1', kind: 'del' } }, '<b>Before.</b> The title sits on Waves, the shell sticker on Sandcastle. You delete <b>Arriving</b>.'),
       opts: [['A', 'Yes, music stays put', 'Yes; music, voice-overs and long things stay put; anything can be set to Stay put; lyrics timed to the song are spotted and you are offered "Keep on the music".'],
-        ['B', 'Nothing follows', 'Nothing follows (CapCut on the phone).'], ['C', 'Ask each time', 'Ask each time.']],
+        ['B', 'Nothing follows', 'Nothing follows ([another editor] on the phone).'], ['C', 'Ask each time', 'Ask each time.']],
       pic: k => k === 'A' ? stripPic(after(ed => ed.run('deleteClip', { id: 'c1' })), {}, { note: 'The title and the shell move with their clips. The song stays.' })
         : k === 'B' ? stripPic(after(ed => { ed.run('stayPut', { id: 'title', on: true }); ed.run('stayPut', { id: 'sticker', on: true }); ed.run('deleteClip', { id: 'c1' }); }), {}, { note: 'They stay where they were, now over the wrong clips.' })
         : stripPic(after(ed => ed.run('deleteClip', { id: 'c1' })), {}, { app: 'Move 2 things with their clips?', btn: ['Yes', 'No'] }) },
@@ -341,7 +341,7 @@
             t(64, 22, 'Cooking with Mia', { size: 8.5, weight: 700 }) + r(64, 29, 38, 13, 6.5, 'rgba(155,135,245,.16)', ' stroke="rgba(155,135,245,.55)"') + ic('fA', 67, 31, 9, C.fullInk) +
             t(78, 38.6, tag(1, true), { size: 7.5, fill: C.fullInk }) + t(106, 38.6, 'only', { size: 7.5, fill: C.faint }),
           { note: 'Old projects open in {F} only.' }) },
-    { id: 'D10', q: 'When a clip is selected', why: 'CapCut\'s worst trap is the main toolbar vanishing when a clip is tapped.', rec: 'A',
+    { id: 'D10', q: 'When a clip is selected', why: '[another editor]\'s worst trap is the main toolbar vanishing when a clip is tapped.', rec: 'A',
       opts: [['A', 'Its tools above the toolbar', 'Its tools appear in a row above the main toolbar, which never disappears.'], ['B', 'Its tools replace the toolbar', 'Its tools replace the toolbar, with a "‹ Done".']],
       pic: k => mock(d10(k)) },
     { id: 'D11', q: 'The switch animation', why: 'It decides what plays as the cog closes after a switch, so you see the timeline move into the other editor.', rec: 'A', anim: true,
@@ -366,7 +366,7 @@
     { id: 'D15', q: 'Build it?', why: 'The go-ahead; nothing is built until you say so.', rec: 'A',
       opts: [['A', 'Build Phase 1', 'Build Phase 1 (see any project as clips, with the switch in the ⚙ cog and {F} untouched) and show you.'], ['B', 'Keep planning', 'Keep planning.'], ['C', 'Not now', 'Not now.']],
       pic: k => mock(d15(k)) },
-    { id: 'D16', q: 'Icons and marks', why: 'You will look at these every day, and none may be copied. Drawn big and at their real size, none from CapCut or Alight Motion.', rec: 'A',
+    { id: 'D16', q: 'Icons and marks', why: 'You will look at these every day, and none may be copied. Drawn big and at their real size, none from [another editor] or [another app].', rec: 'A',
       opts: [['A', 'The set drawn for you', 'The set marked recommended on the sheet (open "See the rows" below).'], ['B', 'Pick per row', 'Pick per row, in "See the rows" below.']],
       pic: k => mock(d16(k)), extra: () => iconRows() },
     { id: 'D17', q: 'Music longer than your clips', why: 'It decides whether a long song makes the video run on in black.', rec: 'A',

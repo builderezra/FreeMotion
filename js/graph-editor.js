@@ -1,6 +1,6 @@
 /* FreeMotion — Easing Curve editor ([the reference app]'s graph editor).
  * Rendered INLINE as a sub-view of the Move & Transform panel (same bottom sheet, NOT a separate
- * full-screen screen — AM doesn't do that). Opened from the panel's left-rail easing button. Edits
+ * full-screen screen — [the reference app] doesn't do that). Opened from the panel's left-rail easing button. Edits
  * the easing of the active mode's animated properties at the playhead together: drag the two
  * cubic-bezier handles, pick a preset, set Hold, or loop the property. Writes kf.bez / kf.e /
  * p.loopMode; evalProp uses them immediately.
@@ -476,7 +476,7 @@ window.FM = window.FM || {};
     // inspector.refresh() with the family unchanged (a keyframe toggle, the mobile sheet re-syncing)
     // came back with NO preset buttons at all.
     _railFam = null;
-    // The FAMILY rail sits ABOVE the presets, the way AM nests them: pick the kind of graph first,
+    // The FAMILY rail sits ABOVE the presets, the way [the reference app] nests them: pick the kind of graph first,
     // then which of its presets.
     famWrap = document.createElement('div'); famWrap.className = 'es-fams';
     (FM.EASE_FAMILIES || []).forEach(F => {

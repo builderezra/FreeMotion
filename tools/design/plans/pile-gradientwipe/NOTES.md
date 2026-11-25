@@ -16,7 +16,7 @@ not wait, so every choice on the sheet is already an option on the effect. His p
 | Controls | Wipe map picker, Progress 0–1 (0.005 notch, 0.5), Softness 0–100 % (10), Read Luma / Alpha / Red / Green / Blue, Invert | **the same**, in the same order, same defaults |
 | Route | its own draw function beside Luma Matte: a `dspSlot` pool slot, `nestedPlate`, the target and the map drawn on plates, the map at full opacity with its own Gradient Wipes stripped, read × the map's alpha | **the same** (`drawGradientWipe`), parameters read through `b966N` so the fallbacks are the registry's defaults |
 | The edge | `edge = 1 − progress` — **pops**: at Softness 20 % the map's brightest pixels show at ~51 % one notch after 0 and its darkest are ~49 % hidden one notch before 1, then the early returns snap them | **the fix**: `edge = (1 + s/2) − progress × (1 + s)`, so alpha `(v − 1 + progress (1 + s)) / s` is 0 for every map value at 0 and 1 at 1, and continuous into both early returns at any Softness |
-| No map picked | the layer drawn untouched at any Progress (Luma Matte's rule) | **the layer's own brightness** (After Effects' default; the picker's own empty choice already reads "This layer (self)"); `layerOptional`, so no "Needs a setting" badge. A one-line change back if he prefers the pile's — **question 1** |
+| No map picked | the layer drawn untouched at any Progress (Luma Matte's rule) | **the layer's own brightness** ([another editor]'s default; the picker's own empty choice already reads "This layer (self)"); `layerOptional`, so no "Needs a setting" badge. A one-line change back if he prefers the pile's — **question 1** |
 | Registration | spliced into the main table between Radial Wipe and Venetian Blinds; desc twice (row + DESCRIPTIONS) | **batch 48** at the end (`GW_ROWS`, just before `FM._FX_TABLES`), so it leads the NEW row; desc on the row only; search words added |
 | Tile | none | `gradientwipe: kf01('progress')` — with no map the tile wipes the photo by its own brightness |
 | Busters | compositor 221 → 222, fx-registry 25.41 → 25.42 (ChatGPT's private count) | from this tree, once: compositor 224 → **225**, fx-registry 28.36 → **28.37**, fx-thumbs 59 → **60** |
@@ -96,7 +96,7 @@ a map is a layer at Opacity 0 in the same frame. Every page is under 2× as tall
 | `gradwipe-ends.jpg` | **the fix**, at Progress 0 · 0.005 · 0.02 · 0.5 · 0.98 · 0.995 · 1, Softness 30 %: as built vs ChatGPT's formula — drawn by the app itself, since the pile's edge is exactly the built one at Progress (p + s/2) / (1 + s) |
 
 ## Questions for Ezra
-1. **With no map picked**: wipe by the layer's own brightness (built — works the moment it is added, as in After Effects), or leave
+1. **With no map picked**: wipe by the layer's own brightness (built — works the moment it is added, as in [another editor]), or leave
    the layer untouched until a map is picked (ChatGPT's choice, and Luma Matte's)?
 2. **Default look**: no map, Softness 10 % — or a softer default (30 %) that reads more like a dissolve on photos?
 3. **Read** keeps all five choices (Luma / Alpha / Red / Green / Blue) — fine, or just Luma and Alpha?

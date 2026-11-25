@@ -208,7 +208,8 @@ window.FM = window.FM || {};
     scrub.addEventListener('input', () => seek(+scrub.value || 0));
     root.appendChild(scrub);
 
-    root.appendChild(el('div', 'tfill-lead', 'Tap a slot to make it yours'));
+    /* (#1255: the line "Tap a slot to make it yours" stood here on every opening; the slots are the next thing on the screen, and
+       styles.css gives their rail the gap the line's box gave) */
     slotsEl = el('div', 'tfill-slots');
     root.appendChild(slotsEl);
 

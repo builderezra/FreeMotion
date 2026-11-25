@@ -38,7 +38,7 @@
 .fm-edge.top-test-red { display: block; background-color: #ff0000; z-index: 10003; }
 
 :root {
-  /* Palette matched to real [the reference app] screenshots (see reference/AM-LAYOUT.md): dark navy + teal accent */
+  /* Palette: dark navy + teal accent */
   --bg: #0e1320;
   /* v5.86. Ezra: "on the canvas, the background colour is a bit too close to black so you can't
      really tell when the canvas ends and when the background begins, make it slightly brighter."
@@ -57,7 +57,7 @@
   --text-faint: #59647a;
   --accent: #29d9bb;
   --accent-2: #18b89c;
-  --am-green: #1ed760;   /* AM's brighter add/export green (FAB + export button) */
+  --am-green: #1ed760;   /* the brighter add/export green (FAB + export button) */
   --accent-soft: rgba(41, 217, 187, .15);
   --kf: #ffce4a;
   --good: #4cd497;
@@ -505,13 +505,12 @@ body {
 /* Z sub-mode: a vertical-only pad. The chevrons ARE the affordance — they say which way the gesture
    runs, which a bare panel with a line of text does not. */
 .mt-zpad { flex-direction: column; gap: 10px; cursor: ns-resize; }
-.mt-zpad .mt-trackpad-hint { color: var(--accent); font-weight: 600; }
 .mt-zpad-arrow { width: 0; height: 0; border-left: 9px solid transparent; border-right: 9px solid transparent; opacity: .5; }
 .mt-zpad-arrow.up { border-bottom: 9px solid #7d8ca5; }
 .mt-zpad-arrow.down { border-top: 9px solid #7d8ca5; }
 .mt-link { width: 32px !important; height: 32px !important; align-self: center; margin-top: 4px; flex: none; }
 .mt-link.on { color: var(--accent); border-color: rgba(41,217,187,.5); }
-/* Edit Shape (media) = Size editor: the two AM top-right toggles + Width/Height boxes. */
+/* Edit Shape (media) = Size editor: the two top-right toggles + Width/Height boxes. */
 .es-media { flex-direction: column; gap: 8px; }
 .es-toprow { display: flex; justify-content: flex-end; gap: 8px; }
 .es-toggle { width: 42px; height: 34px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; flex: none; }
@@ -519,7 +518,7 @@ body {
 .es-toggle.on { color: var(--accent); border-color: rgba(41,217,187,.55); background: rgba(41,217,187,.13); box-shadow: inset 0 0 0 1px rgba(41,217,187,.45); }
 .es-body { display: flex; gap: 9px; align-items: stretch; }
 .es-boxes { display: flex; gap: 10px; }
-/* Edit Shape header: back button on the left, the two crop toggles pinned top-RIGHT (AM). */
+/* Edit Shape header: back button on the left, the two crop toggles pinned top-RIGHT. */
 .cat-head-row { display: flex; align-items: center; gap: 8px; }
 .cat-back-flex { flex: 1 1 auto; min-width: 0; }
 .cat-head-row .es-toprow { flex: none; }
@@ -537,6 +536,23 @@ body {
    earlier keyframes" wraps — every line started hard against the pad's left edge, 12px outside the
    brackets that frame it. */
 .mt-trackpad-hint { color: #56657c; font-size: 13px; pointer-events: none; padding: 0 16px; text-align: center; }
+/* #1255: A SWIPE PAD'S DRAWN FOUR-WAY MARK (FM.PAD_MARK, js/draw-tool.js), where its sentence stood ("There shouldn't be any explanations
+   like that"). The Move pad's own line is empty at rest and takes no room; it names a snap while one holds, and the mark steps aside
+   for those words. The pen bar's pad is tall (104 px) and takes the same mark; the mask bar's is a 40 px strip and takes a smaller one. */
+.pad-mark { width: 28px; height: 28px; flex: none; color: #56657c; pointer-events: none; }
+.mt-trackpad-hint:empty { display: none; }
+.mt-trackpad.snap-x .pad-mark, .mt-trackpad.snap-y .pad-mark { display: none; }
+.mk-pad .pad-mark { width: 20px; height: 20px; color: var(--text-faint); }
+/* #1255: THE APP'S OWN DRAWN ICONS (FM.ICON, js/drawn-x.js), where a typed character stood that a phone draws as a colour emoji (the play
+   triangle, the two-way arrow, the cog). One em square in the text's own colour unless its place sizes it; never a pointer target, so
+   the button it sits on receives the press exactly as it did under a typed character. */
+.fm-ic { width: 1em; height: 1em; flex: none; vertical-align: -.125em; pointer-events: none; }
+.fm-ic-inline { width: 1.2em; height: 1.2em; vertical-align: -.25em; }   /* the cog named inside a sentence: a toast, a question (FM.lineInto) */
+.hm-thumb-empty .fm-ic, .hm-empty-mark .fm-ic { display: block; margin: 0 auto; }   /* Home: a card with no picture yet, an empty tab */
+.am-empty-mark .fm-ic { display: block; margin: 0 auto; }   /* the Add menu's empty Template tab: the tab's own drawing, as Home's empty tab */
+.cap-grip .fm-ic { width: 16px; height: 16px; }   /* the caption grip's two-way arrow */
+.ai-link .fm-ic { width: 12px; height: 12px; margin-right: 5px; vertical-align: -1.5px; }   /* Watch a demo run */
+.brand .brand-mark { width: .9em; height: .9em; margin-right: .3em; vertical-align: -.08em; }   /* the top bar's play mark: nothing on a phone, where the name is hidden by font-size 0 */
 .mt-trackpad::before, .mt-trackpad::after { content: ''; position: absolute; width: 20px; height: 20px; border: 2px solid #475774; }
 .mt-trackpad::before { left: 12px; top: 12px; border-right: 0; border-bottom: 0; border-radius: 6px 0 0 0; }
 .mt-trackpad::after { right: 12px; bottom: 12px; border-left: 0; border-top: 0; border-radius: 0 0 6px 0; }
@@ -584,7 +600,7 @@ body {
 .mt-scrub-mid { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--accent); transform: translateX(-50%); }
 .mt-scrub-ticks { display: none; }
 
-/* ===== Easing Curve editor — rendered INLINE inside the Move & Transform panel (AM-style), not a separate screen =====
+/* ===== Easing Curve editor — rendered INLINE inside the Move & Transform panel, not a separate screen =====
    LAYOUT (v5.70): the family and preset rails run HORIZONTALLY under the graph — they used to be
    vertical columns beside it. Measured, on the unfixed build: the preset column was 351px tall inside
    an inspector that is 290px on a 390x800 phone, so the panel overflowed by 224px and three presets
@@ -610,7 +626,7 @@ body {
 .es-presets { max-width: 340px; }
 .es-preset { width: auto; min-width: 0; height: 36px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
 .es-preset.on { border-color: var(--accent); background: rgba(41,217,187,.14); box-shadow: inset 0 0 0 1px rgba(41,217,187,.5); }
-/* FAMILY rail (v5.47) — above the presets, the way AM nests them: pick the KIND of graph first, then
+/* FAMILY rail (v5.47) — above the presets, the way [the reference app] nests them: pick the KIND of graph first, then
    which of its presets. Labelled, because this rail changes what the whole editor is and three
    unlabelled squiggles would not say that. */
 .es-fams { max-width: 300px; }
@@ -687,7 +703,7 @@ body {
 .vol-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 26px; height: 26px; border-radius: 50%; background: var(--accent); border: 3px solid #0c1016; box-shadow: 0 1px 4px rgba(0,0,0,.4); cursor: pointer; }
 .vol-slider::-moz-range-thumb { width: 22px; height: 22px; border-radius: 50%; background: var(--accent); border: 3px solid #0c1016; cursor: pointer; }
 
-/* ===== Paste Style picker (AM) ===== */
+/* ===== Paste Style picker ===== */
 .ps-overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,.5); padding: 18px; }
 .ps-card { background: #1b2233; border: 1px solid var(--line); border-radius: 18px; padding: 16px; width: min(340px, 88vw); box-shadow: 0 22px 54px rgba(0,0,0,.55); }
 .ps-title { display: flex; align-items: center; gap: 8px; font-size: 17px; font-weight: 600; color: var(--text); margin: 2px 4px 14px; }
@@ -1133,7 +1149,7 @@ body.home-open .dh-stick, body.home-open .dh-body, body.home-open .dh-whack path
 /* ---------- inspector ---------- */
 #inspector { padding: 4px 14px 14px; }   /* tighter bottom pad so dense categories (Edit Shape) fit the side panel without scrolling */
 
-/* AM property-category model */
+/* Property-category model */
 .insp-head { display: flex; align-items: center; gap: 9px; padding: 10px 0 12px; border-bottom: 1px solid var(--line-soft); margin-bottom: 14px; }
 .insp-thumb { width: 46px; height: 30px; border-radius: 5px; background: #000; border: 1px solid var(--line); flex: 0 0 auto; }
 .insp-name { flex: 1; min-width: 0; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font-size: 13px; font-weight: 600; }
@@ -1268,7 +1284,7 @@ body.fm-moving .am-glint i, body.fm-playing .am-glint i, body.fm-moving .addmenu
   .cat-grid { --cat-cols: 3; }
 }
 
-/* Blending & Opacity — AM-style category dropdowns */
+/* Blending & Opacity — category dropdowns */
 .blend-cat { background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 9px; overflow: hidden; }
 .blend-cat.active { border-color: rgba(41,217,187,.4); }
 .blend-cat-head { display: flex; align-items: center; gap: 10px; width: 100%; padding: 13px 14px; background: transparent; border: 0; color: var(--text); font-size: 14.5px; cursor: pointer; text-align: left; }
@@ -1284,7 +1300,7 @@ body.fm-moving .am-glint i, body.fm-playing .am-glint i, body.fm-moving .addmenu
 
 /* Point editor overlay */
 #pe-overlay { position: absolute; z-index: 40; touch-action: none; cursor: crosshair; }
-/* Edit Points panel (AM): curve/corner/delete rail + X/Y + move-point trackpad */
+/* Edit Points panel: curve/corner/delete rail + X/Y + move-point trackpad */
 .pep-btn { width: 38px; height: 38px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; flex: none; }
 .pep-btn svg { width: 21px; height: 21px; }
 .pep-btn.on { color: var(--accent); border-color: rgba(41,217,187,.55); background: rgba(41,217,187,.13); box-shadow: inset 0 0 0 1px rgba(41,217,187,.45); }
@@ -1303,13 +1319,13 @@ body.fm-moving .am-glint i, body.fm-playing .am-glint i, body.fm-moving .addmenu
 .eyedrop-btn { flex: none; width: 34px; height: 34px; border: 1px solid var(--line); background: var(--panel-2); color: #9fb0c4; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; }
 .eyedrop-btn svg { width: 18px; height: 18px; }
 .eyedrop-btn:hover { color: var(--accent); border-color: rgba(41,217,187,.5); }
-#crop-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px 8px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.5); max-width: 94vw; }
-#crop-bar .cb-hint { font-size: 12px; color: var(--text-faint); margin-right: 4px; }
+.ai-spark-ic { width: 16px; height: 16px; flex: none; vertical-align: -3px; margin-right: 5px; }   /* #1255: the drawn spark on the scene panel, where the sparkles emoji was */
+#crop-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px; box-shadow: 0 6px 24px rgba(0,0,0,.5); max-width: 94vw; }   /* even padding: the bar holds its buttons only (the "Drag to crop" line went, #1255) */
 #crop-bar button { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 999px; padding: 6px 14px; font-size: 12.5px; cursor: pointer; }
 #crop-bar .cb-done { background: var(--accent); border-color: var(--accent); color: #06231d; font-weight: 700; }
 #crop-bar .cb-cancel { color: var(--text-dim); }
 
-/* ===== AM-style focused text-edit mode (text-edit.js) ===== */
+/* ===== Focused text-edit mode (text-edit.js) ===== */
 .te-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 80; display: flex; align-items: center; gap: 8px;
   padding: max(8px, calc(env(safe-area-inset-top) + var(--fm-sharp-top))) 10px 8px; background: var(--panel); border-bottom: 1px solid var(--line); box-shadow: 0 4px 18px rgba(0,0,0,.4); }
 .te-btn { display: flex; align-items: center; justify-content: center; gap: 6px; min-height: 40px; padding: 6px 12px;
@@ -1480,7 +1496,7 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 #btn-del-layer:hover { color: #ff6b6b; border-color: #ff6b6b; }
 .cat-back { display: flex; align-items: center; gap: 4px; background: none; border: none; color: var(--accent); font-size: 13px; font-weight: 600; cursor: pointer; padding: 2px 0 10px; }
 
-/* ---------- AM-style Add menu (PC inspector no-selection state + mobile + bottom-sheet) ---------- */
+/* ---------- Add menu (PC inspector no-selection state + mobile + bottom-sheet) ---------- */
 .addmenu { display: flex; gap: 10px; align-items: stretch; }
 .addmenu-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 9px; }
 /* THE TAB ROW MUST NOT BE SQUEEZED BY WHAT IS UNDER IT (queue 431). Ezra, twice, the second time
@@ -1628,7 +1644,7 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
    sheet's ✕) is unaffected, because then it isn't empty. */
 .addmenu-side:empty { display: none; }
 
-/* Mobile bottom-sheet: AM layout — content on the left, quick-add rail on the right. */
+/* Mobile bottom-sheet: layout — content on the left, quick-add rail on the right. */
 .addmenu-host { padding: 0 12px 6px; }
 .addmenu--sheet { padding-top: 2px; }
 /* Was `flex: 0 0 88px` to hold the ✕. With the ✕ gone the rail is empty and :empty collapses it,
@@ -1685,7 +1701,7 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .insp-sub-label.bs-sub { border-top: 1px solid var(--line-soft); padding-top: 10px; margin-top: 12px; }
 .insp-sub-label.bs-sub:first-of-type { border-top: 0; padding-top: 0; }
 
-/* Color & Fill — AM-style None / Solid / Gradient / Media selector */
+/* Color & Fill — None / Solid / Gradient / Media selector */
 .fill-tabs { display: flex; gap: 6px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 5px; margin-bottom: 13px; }
 .fill-tab { flex: 1; height: 42px; display: flex; align-items: center; justify-content: center; border: 0; border-radius: 9px; background: transparent; color: var(--text-faint); cursor: pointer; transition: background .12s, color .12s; }
 .fill-tab svg { width: 22px; height: 22px; }
@@ -1770,7 +1786,7 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
   transition: border-color .12s;
 }
 .prop-row input:focus, .prop-row select:focus { outline: none; border-color: var(--accent); }
-/* rangeRow renders the AM ruler now instead of <input type=range> (v6.20), so its row has to WRAP the
+/* rangeRow renders the ruler now instead of <input type=range> (v6.20), so its row has to WRAP the
    way .fx-scrub-row does: .fx-scrub is `flex: 1 1 100%; order: 2`, and in a non-wrapping .prop-row it
    would crush the label and the number onto a sliver. Wrapping gives it the same two-line shape as
    every effect parameter — name and number on the first line, ruler underneath — so a shape's Width
@@ -1876,7 +1892,7 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .fx-slider { display: flex; align-items: center; gap: 9px; }
 .fx-val { color: var(--text-dim); font-size: 11px; font-variant-numeric: tabular-nums; min-width: 40px; text-align: right; }
 
-/* ===== AM effects list + per-effect editor ===== */
+/* ===== Effects list + per-effect editor ===== */
 .fx-list { display: flex; flex-direction: column; gap: 7px; }
 .fx-row { background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: 10px; padding: 0; margin: 0; overflow: hidden; position: relative; }
 /* effect-row gestures: swipe-left to delete, press-hold + drag to reorder */
@@ -1937,10 +1953,10 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .fx-mv.dis { opacity: .25; pointer-events: none; }
 .fx-row.fx-off .fx-name { opacity: .45; }
 .fx-ed-body { padding: 4px 11px 13px; display: flex; flex-direction: column; gap: 11px; border-top: 1px solid var(--line-soft); }
-/* value scrubber (AM signature): a FINITE tick ruler (.fx-scrub-ticks — width + scroll set by JS,
+/* value scrubber (signature): a FINITE tick ruler (.fx-scrub-ticks — width + scroll set by JS,
    one notch per 7px = TICK in inspector.js) slides under the fixed green centre line. The ruler
    physically ends at min/max, so the wall is visible. White .fx-scrub-mark lines = notable values.
-   Two lines like AM (◆ ease label … value / full-width ruler): the 286px panel leaves a one-line
+   Two lines like (◆ ease label … value / full-width ruler): the 286px panel leaves a one-line
    strip only ~23px wide — unusable. order:2 wraps the strip onto its own line. */
 .fx-scrub-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .fx-scrub-row > .fx-scrub-label { flex: 1; }
@@ -2081,7 +2097,7 @@ body.text-editing { overflow: hidden; }   /* curb iOS's auto-scroll when the key
 .fx-stack-tools { display: flex; gap: 6px; margin-top: 9px; justify-content: center; }
 .fx-stack-tools .fx-act { margin: 0; }
 
-/* ===== Add-Effect browser (full-screen, AM) ===== */
+/* ===== Add-Effect browser (full-screen) ===== */
 /* Every full-screen browser panel, by ID. Ezra: "when I press the custom elements button literally
  * nothing happens" — #el-browser was missing from this list, so it opened with display:block,
  * visibility:visible, opacity:1 and a measured rect of 0x247: position:static, no width, no z-index.
@@ -2711,7 +2727,7 @@ body.tl-resizing { cursor: ns-resize; user-select: none; }
   :root { --tl-h: clamp(300px, 33vh, 460px); }
   :root { --insp-w: clamp(320px, 20vw, 380px); }
 }
-/* AM transport: all 7 controls spread evenly across the FULL row width (play lands in the middle as the
+/* Transport: all 7 controls spread evenly across the FULL row width (play lands in the middle as the
    4th of 7). The side groups are display:contents so every button is a direct flex child + spreads. */
 /* A GRID, NOT space-between (queue 373 clause 8). Ezra: "Make sure everything aligned perfectly and
    don't make me have to say it's not right."
@@ -2982,7 +2998,7 @@ body.white-chrome #btn-addside .sw-track { transition: top 220ms cubic-bezier(.2
      ends inside the window rather than 3px past it — measured. */
   #transport.t-fold #t-sel.has-sel { padding-left: 3px; padding-right: 3px; }
 }
-/* AM-style centred timecode pill, just under the transport row (fills its 26px grid row, centred). */
+/* Centred timecode pill, just under the transport row (fills its 26px grid row, centred). */
 /* THE PILL LIVES IN THE TRANSPORT ROW NOW (queue 364, clauses 1 + 5) — #tc-bar is gone, so these are
    no longer scoped to it. It is the play/pause control, so it takes a control's affordances: a real
    press state, and enough padding to be a thumb target rather than a label. */
@@ -3100,7 +3116,7 @@ body.white-chrome #time-readout:active {
 .tl-marker { transition: transform .12s ease, filter .12s ease; }
 .tl-marker:hover { transform: scale(1.3); filter: drop-shadow(0 0 5px rgba(255, 206, 74, .95)); }
 .tl-marker:hover::after { background: rgba(255, 206, 74, .8); }
-/* AM: transport controls are bare icons — no box/background at rest. */
+/* Transport controls are bare icons — no box/background at rest. */
 .tbtn {
   background: transparent; border: none; color: var(--text);
   min-width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 0;
@@ -3228,7 +3244,7 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
 #btn-addside.sw-dragging .sw-knob { background: var(--sw-colour, var(--accent)); }
 #btn-addside.sw-dragging .sw-track { border-color: var(--sw-colour, var(--accent)); box-shadow: 0 0 8px -1px var(--sw-colour, var(--accent)); }
 
-/* AM-style: each layer is a timeline row — head (eye/thumb/name/lock) + clip lane. No separate panel. */
+/* Each layer is a timeline row — head (eye/thumb/name/lock) + clip lane. No separate panel. */
 .track-row { display: flex; height: 42px; border-bottom: 1px solid var(--line-soft); }
 .track-head {
   width: var(--head-w); flex: 0 0 var(--head-w);
@@ -3291,7 +3307,7 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
    "Hide other layers" checkbox in the export dialog.) */
 .clip-trim { position: absolute; top: 0; bottom: 0; width: 5px; z-index: 3; pointer-events: none; background: repeating-linear-gradient(45deg, rgba(255,255,255,.45) 0 2px, transparent 2px 4px); }
 .clip-trim.l { left: 0; } .clip-trim.r { right: 0; }
-.th-name { display: none; }   /* AM: the layer NAME lives ON the clip bar (.clip-label), never in the left head column */
+.th-name { display: none; }   /* The layer NAME lives ON the clip bar (.clip-label), never in the left head column */
 .th-name-edit { flex: 1 1 auto; min-width: 0; width: 100%; background: var(--panel-3); border: 1px solid var(--accent); color: var(--text); border-radius: 5px; padding: 2px 5px; font-size: 11.5px; }
 .track-lane { flex: 1; position: relative; min-width: 0; touch-action: none; }
 /* The hint lives inside the horizontally-scrolling track area, so it inherits the (wide) scroll
@@ -3308,7 +3324,7 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
   box-shadow: 0 2px 6px rgba(0,0,0,.3);
 }
 .clip:active { cursor: grabbing; }
-/* AM: a selected clip gets a WHITE bar/outline with grip caps + chevron arrows at each end. */
+/* A selected clip gets a WHITE bar/outline with grip caps + chevron arrows at each end. */
 .clip.sel { border-color: #fff; box-shadow: 0 0 0 2px #fff, 0 2px 10px rgba(0,0,0,.45); overflow: visible; }   /* let the grip caps sit OUTSIDE the clip */
 .clip.under-playhead { box-shadow: inset 0 0 0 1px rgba(255,255,255,.35), 0 2px 6px rgba(0,0,0,.3); }
 .clip.sel.under-playhead { box-shadow: 0 0 0 2px #fff, inset 0 0 0 1px rgba(255,255,255,.5), 0 2px 8px rgba(0,0,0,.4); }
@@ -3323,7 +3339,7 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
 .clip-grip.left { left: 0; border-radius: 7px 0 0 7px; }
 .clip-grip.right { right: 0; border-radius: 0 7px 7px 0; }
 .clip-grip:hover { background: rgba(255,255,255,.3); }
-/* chevron arrows — only shown on the SELECTED clip's grips (white caps, like AM), sitting just OUTSIDE each clip edge */
+/* chevron arrows — only shown on the SELECTED clip's grips (white caps), sitting just OUTSIDE each clip edge */
 .clip.sel .clip-grip { background: #fff; width: 13px; }
 .clip.sel .clip-grip.left { left: -13px; border-radius: 7px 0 0 7px; }
 .clip.sel .clip-grip.right { right: -13px; border-radius: 0 7px 7px 0; }
@@ -3341,7 +3357,7 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
 /* queue 822: the slip pill arms on a hold like the grips do, and says so the same way. */
 .clip-slip.armed { background: var(--accent); color: #06212a; box-shadow: 0 0 0 2px rgba(41,217,187,.35); }
 .clip.sel .clip-grip.armed::after { border-top-color: #06212a; border-right-color: #06212a; }
-/* AM: the layer name printed ON the clip bar, left-aligned, readable over fills/waveforms.
+/* The layer name printed ON the clip bar, left-aligned, readable over fills/waveforms.
    Phone-only: on desktop the track-head column still shows the name (no redundancy). */
 .clip-label {
   position: absolute; left: 9px; right: 9px; top: 50%; transform: translateY(-50%);
@@ -3351,6 +3367,7 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .clip-speed { position: absolute; top: 3px; right: 4px; z-index: 2; font-size: 9.5px; font-weight: 700; line-height: 1; padding: 2px 4px; border-radius: 4px; background: rgba(0,0,0,.55); color: #fff; letter-spacing: .3px; pointer-events: none; }
+.clip-speed .clip-speed-ic { width: 10px; height: 10px; margin-right: 2px; vertical-align: -1.5px; stroke-width: 2.4; }   /* #1255: the drawn ramp, where the lightning emoji was */
 .quick-row { display: flex; gap: 8px; padding: 6px 2px 10px; }
 .qr-btn { flex: 1; height: 36px; display: flex; align-items: center; justify-content: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; color: var(--text-dim); cursor: pointer; }
 .qr-btn.qr-danger { color: #ff6b7a; border-color: rgba(255, 107, 122, .35); }   /* delete-selection button reads as destructive */
@@ -3453,6 +3470,8 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
 .cap-src, .cap-scope { flex: 1 1 auto; min-width: 0; background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 6px 8px; font-size: 12px; }
 .cap-src.hidden { display: none; }
 .cap-detect-btn { flex: 1 1 auto; justify-content: center; }
+/* #1255: its drawing (DS3, a speech bubble holding a short waveform: his pick), where the microphone emoji was */
+.cap-detect-btn .cap-detect-ic { width: 18px; height: 18px; flex: none; }   /* the button's own 7 px gap is the space to its words */
 .cap-detect-btn[disabled] { opacity: .5; cursor: default; }
 @media (max-width: 420px) { .cap-detect { flex-direction: column; align-items: stretch; } }
 
@@ -3711,8 +3730,14 @@ html.fm-classic-sb #timeline:has(.tl-addrow--empty)::-webkit-scrollbar { display
   display: flex; align-items: center; justify-content: center;
   background: rgba(0,0,0,.65); backdrop-filter: blur(3px);
 }
-.aspect-row { display: flex; gap: 7px; margin-bottom: 16px; }
-.aspect-chip { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 5px; padding: 9px 0 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text-dim); cursor: pointer; font-size: 11px; height: 58px; }
+/* #1243 ST7: three by two, so each chip has room for the row of marks under its ratio (js/app.js FM.ASPECT_USES); was one row of six */
+.aspect-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 7px; margin-bottom: 16px; }
+.aspect-chip { min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; padding: 8px 0 7px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text-dim); cursor: pointer; font-size: 11px; height: 66px; }
+/* the marks: 13 px line drawings in the chip's own ink (dim at rest, dark on the lit chip), the row the same height on every chip */
+.ac-uses { display: flex; align-items: center; justify-content: center; gap: 4px; height: 13px; flex: none; }
+.ac-uses svg { width: 13px; height: 13px; flex: none; }
+.hm-aspect .ac-uses { margin-top: 2px; color: var(--text-dim); }
+.hm-aspect.active .ac-uses { color: var(--accent); }
 .aspect-chip:hover { background: var(--panel-3); color: var(--text); }
 .aspect-chip.on { background: var(--accent); color: #06231d; border-color: var(--accent); }
 .ac-frame { border: 1.5px solid currentColor; border-radius: 1px; }
@@ -4327,7 +4352,7 @@ body.home-open #toast { z-index: 205; }
   touch-action: none;
 }
 
-/* AM-style mobile chrome (phone only) — hidden on desktop. */
+/* Mobile chrome (phone only) — hidden on desktop. */
 #topbar-m, #add-fab, #add-sheet { display: none; }
 
 /* The inspector-drawer toggle is a phone-only floating button (hidden on desktop). */
@@ -4364,7 +4389,7 @@ body.home-open #toast { z-index: 205; }
   #timeline-panel  { grid-area: 3 / 1 / 4 / 2; }
   #inspector-panel { grid-area: auto; }
   #tl-resizer { display: none; }   /* desktop-only: the phone timeline sizing is driven by --stage-h, not a drag handle */
-  /* TEXT-EDIT IS A FULL-SCREEN TAKEOVER — ON THE PHONE ONLY (like AM). The toolbar owns the top edge
+  /* TEXT-EDIT IS A FULL-SCREEN TAKEOVER — ON THE PHONE ONLY. The toolbar owns the top edge
    * and the field is docked above the keyboard, so the inspector grid and the timeline are hidden and
    * the whole grid becomes one cell for the canvas.
    *
@@ -4388,7 +4413,7 @@ body.home-open #toast { z-index: 205; }
   body.text-editing #app { grid-template-rows: auto 1fr !important; grid-template-columns: minmax(0, 1fr) 0 !important; }
   body.text-editing #stage { padding: 56px 0 104px; box-sizing: border-box; }
   body.drawing #app { grid-template-rows: auto 1fr !important; }   /* same defect, same fix — see the note above */
-  #canvas-wrap { max-width: 98%; max-height: 95%; }   /* contain in the stage with a small float margin (AM) */
+  #canvas-wrap { max-width: 98%; max-height: 95%; }   /* contain in the stage with a small float margin */
   #stage { box-shadow: inset 0 -1px 0 var(--line); }
   #topbar { overflow-x: auto; overflow-y: hidden; gap: 8px; padding: 7px 10px; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
   #topbar::-webkit-scrollbar { display: none; }
@@ -4458,7 +4483,7 @@ body.home-open #toast { z-index: 205; }
   /* with the grab handle present, the floating button hides while the sheet is open (no overlap) */
   #insp-toggle.on { display: none; }
 
-  /* AM phone: the left column is the EYE plus the layer's own preview — the clip's NAME still lives
+  /* Phone: the left column is the EYE plus the layer's own preview — the clip's NAME still lives
      ON the clip bar, so there's no name/swatch here. The preview is not decoration: it's the one
      select target that isn't next to anything else (Ezra: "there's only the eye… it's hard to select
      it when you accidentally press the arrow each time" — the ‹ › grips sit on the clip itself, so
@@ -4521,7 +4546,7 @@ body.home-open #toast { z-index: 205; }
   }
   #insp-toggle.on { background: var(--panel-3); color: var(--text); border: 1px solid var(--accent); }
 
-  /* ---------- AM: a clip is SELECTED → focused edit layout ----------
+  /* ---------- A clip is SELECTED → focused edit layout ----------
      Canvas shrinks; the timeline shows ONLY the selected clip; the property
      options dock right below the clip (sheet top is anchored by mobile.js so it
      never covers the clip, on any screen size). */
@@ -4554,7 +4579,7 @@ body.home-open #toast { z-index: 205; }
   body.m-editing #insp-grab { display: none; }        /* docked panel, not a dismissable sheet */
   body.m-editing #inspector { padding-top: 12px; }
 
-  /* mobile top bar becomes the AM clip header: name (rename) · duplicate · delete · ⋯ more */
+  /* mobile top bar becomes the clip header: name (rename) · duplicate · delete · ⋯ more */
   #clip-name-m, #m-selcount, #m-dup, #m-del, #m-group, #m-maskgroup, #m-more { display: none; }
   /* (#btn-share left this list and the Select one below with #967 batch 2 — his pick A, "with a layer selected the person chip
      stays visible". They were written when the phone's Share lived in this bar; since S7 it is the person+ on the video.) */
@@ -4701,6 +4726,7 @@ body.home-open #toast { z-index: 205; }
 }
 .ai-title { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px; flex: 1; }
 .ai-title .ai-spark { font-size: 15px; }
+.ai-title .ai-spark-ic { margin-right: 0; }   /* #1255: the title's own 8 px gap is the space to Director; the buttons keep their 5 px */
 .ai-close { background: var(--panel-2); border: 1px solid var(--line); color: var(--text-dim); width: 28px; height: 28px; border-radius: 7px; cursor: pointer; font-size: 13px; }
 .ai-close:hover { background: var(--panel-3); color: var(--text); }
 
@@ -4832,10 +4858,10 @@ body.home-open #toast { z-index: 205; }
 }
 
 /* ============================================================
-   AM-style mobile chrome (section 1: top bar + add FAB + add sheet)
+   mobile chrome (section 1: top bar + add FAB + add sheet)
    ============================================================ */
 @media (max-width: 700px) {
-  /* the desktop button toolbar is replaced by AM's minimal top bar */
+  /* the desktop button toolbar is replaced by [the reference app]'s minimal top bar */
   #topbar { display: none; }
   /* …and the version chip has to be hidden WHERE IT ACTUALLY IS (queue 221). Hiding #topbar was
      enough when `.ver` lived inside it, but pcTransportLayout() MOVES it out into #t-far on the
@@ -4914,7 +4940,7 @@ body.home-open #toast { z-index: 205; }
   }
   /* Export is Ezra's own glass render now (v5.57) — the same object language as the + FAB and the
      OPEN badge, so the app's one primary action looks like it belongs to this app rather than being a
-     mint rectangle borrowed from AM. Keyed off its black backdrop by flooding inward from the border,
+     mint rectangle borrowed from [the reference app]. Keyed off its black backdrop by flooding inward from the border,
      which is what preserves the DARK arrow: a luminance key would have taken the arrow out with the
      background (the mistake the OPEN badge taught). The button is now the artwork, so its own icon and
      fill go — square, because the artwork is a squircle and letterboxing it inside a 42x36 rectangle
@@ -5132,7 +5158,7 @@ body.home-open #toast { z-index: 205; }
     transform: translateY(2px) scale(.97);
   }
 
-  /* AM has no edit pencil — selecting a layer opens its property menu. Hide the ✎ FAB. */
+  /* [the reference app] has no edit pencil — selecting a layer opens its property menu. Hide the ✎ FAB. */
   #insp-toggle { display: none; }
 
   /* Add bottom sheet (opened by the + FAB) */
@@ -5177,7 +5203,7 @@ body.home-open #toast { z-index: 205; }
   body.add-open #add-fab, body.add-open #insp-toggle,
   body.insp-open #add-fab { display: none; }
 
-  /* AM property menu: SHORT + HORIZONTAL — a compact 3-wide category grid, not a tall 2-col stack */
+  /* Property menu: SHORT + HORIZONTAL — a compact 3-wide category grid, not a tall 2-col stack */
   #inspector-panel .cat-grid { --cat-cols: 3; --cat-gap: 8px; }
   /* ONE 3-across rhythm for both rows. The bottom grid used to be 4 columns while the top was 3,
      so a phone with 9 categories laid out 3 / 4 / 2 and left a hole in the bottom-right corner —
@@ -5199,8 +5225,8 @@ body.home-open #toast { z-index: 205; }
   #inspector { padding: 2px 12px 18px; }
 }
 
-/* ---- Add Effect browser: AM parity ---- */
-/* Phone: categories as a 2-col wall of tiles (label over count), like AM */
+/* ---- Add Effect browser: parity ---- */
+/* Phone: categories as a 2-col wall of tiles (label over count) */
 @media (max-width: 700px) {
   /* THREE ACROSS ON A PHONE, four on the desktop — and note which block this is: everything from
      line 3340 is `@media (max-width: 700px)`, i.e. the PHONE. Written the other way round first, the
@@ -5354,7 +5380,7 @@ body.home-open #toast { z-index: 205; }
 .addmenu-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; }
 .addmenu-none { padding: 18px 4px; color: var(--text-faint); font-size: 12.5px; }
 
-/* ---- Home screen (AM-style project browser) ---- */
+/* ---- Home screen (project browser) ---- */
 #home-screen { position: fixed; inset: 0; z-index: 200; background: var(--bg, #0b0e14); display: flex; flex-direction: column; }
 #home-screen.hidden { display: none; }
 /* Symmetric vertical padding. It was 16px top / 8px bottom, so align-items:center centred the row's
@@ -5385,7 +5411,7 @@ body.home-open #toast { z-index: 205; }
 #hm-search-clear:active .hm-clear-disc { opacity: .7; }
 .hm-search-hint { max-width: 700px; margin: 0 auto; font-size: 11.5px; color: var(--text-dim); padding: 6px 4px 0; line-height: 1.4; }   /* --text-dim, not --text-faint: at 11px the faint tone is ~3:1 and this line is the ONLY place the date syntax is taught */
 .hm-search-hint.hidden { display: none; }
-/* AM-style pill tabs */
+/* Pill tabs */
 /* The tab row belongs to the SAME column as everything under it (v5.48, from the layout sweep). It
    was a full-bleed flex row, so on a 1440 desktop the first pill sat at x=18 while the search field,
    its hint and every project card started at 370 — a 352px offset, three rows sharing an edge and one
@@ -5427,7 +5453,7 @@ body.home-open #toast { z-index: 205; }
 }
 .hm-tab.active { background: var(--accent); border-color: var(--accent); color: #0b0e14; }
 .hm-scroll { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 16px 16px 110px; }
-/* AM-style project LIST rows: thumb left, name + meta stacked, actions right */
+/* Project LIST rows: thumb left, name + meta stacked, actions right */
 .hm-grid { display: flex; flex-direction: column; gap: 10px; max-width: var(--hm-col); margin: 0 auto; }   /* same variable as .hm-tabs — the two must line up */
 .hm-card { position: relative; display: flex; align-items: center; gap: 13px; text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 16px; padding: 10px; cursor: pointer; color: var(--text); }
 .hm-card:active { background: var(--panel-3); }
@@ -5848,7 +5874,7 @@ body.hm-selecting .hm-pin { display: none; }
 }
 .hm-body { flex: 1; min-width: 0; }
 .hm-name { font-size: 14.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* AM-style meta chips: aspect · resolution · fps · layers — wraps to 2 lines on a phone */
+/* Meta chips: aspect · resolution · fps · layers — wraps to 2 lines on a phone */
 .hm-meta { display: flex; flex-wrap: wrap; gap: 3px 12px; font-size: 11.5px; color: var(--text-dim); margin-top: 4px; }
 .hm-mi { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
 .hm-mi i { font-style: normal; opacity: .55; font-size: 10.5px; }
@@ -5989,7 +6015,7 @@ body.hm-selecting #hm-new { visibility: hidden; pointer-events: none; }
    is cut through to transparent so the backdrop shows in it, which means the button can carry no fill
    of its own; border-radius:50% keeps the sheen (theme-glass.css) clipped to the rim instead of a
    square; and the SVG glyph is hidden, not removed, so the accessible name survives. */
-#hm-new { display: flex; align-items: center; justify-content: center; position: fixed; left: 50%; transform: translateX(-50%); bottom: max(24px, env(safe-area-inset-bottom)); width: 58px; height: 58px; border-radius: 50%; border: none; padding: 0; color: #eef8ff; cursor: pointer; -webkit-tap-highlight-color: transparent; }   /* centred like AM's +; the ambient glow is a box-shadow so it can't reach the + cut-out */
+#hm-new { display: flex; align-items: center; justify-content: center; position: fixed; left: 50%; transform: translateX(-50%); bottom: max(24px, env(safe-area-inset-bottom)); width: 58px; height: 58px; border-radius: 50%; border: none; padding: 0; color: #eef8ff; cursor: pointer; -webkit-tap-highlight-color: transparent; }   /* centred like [the reference app]'s +; the ambient glow is a box-shadow so it can't reach the + cut-out */
 /* ABOVE THE CARDS, ALWAYS (queue 992). v15.09 gave the PC project list `.hm-grid { position: relative; z-index: 1 }` for the
    cursor wash, and the + — fixed, but with no z-index of its own — then painted UNDER the grid: with enough projects to reach
    the bottom of Home (25 at 1280x800, measured), a card sat on top of the +, it showed only as a faint glow behind that card,
@@ -6269,7 +6295,7 @@ body.group-editing #add-fab { display: none; }   /* adding layers happens at pro
 .track-row.drop-target { outline: 2px solid var(--accent); outline-offset: -2px; }
 .track-head { user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 
-/* ---- Add-menu horizontal paging (AM: swipe sideways) ---- */
+/* ---- Add-menu horizontal paging (swipe sideways) ---- */
 .addmenu-pager { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
 .addmenu-pager::-webkit-scrollbar { display: none; }
 .addmenu-page { flex: 0 0 100%; scroll-snap-align: start; box-sizing: border-box; }
@@ -6318,7 +6344,7 @@ body.group-editing #add-fab { display: none; }   /* adding layers happens at pro
     filter: drop-shadow(0 0 1px rgba(0, 0, 0, .85)) drop-shadow(0 1px 0 rgba(0, 0, 0, .6));
   }
 }
-/* Shape grid: icon-only cards (name = tooltip) → bigger art, 5/6 across like AM */
+/* Shape grid: icon-only cards (name = tooltip) → bigger art, 5/6 across like */
 .addmenu-page .addmenu-grid--ico { grid-template-columns: repeat(5, 1fr); }
 .addmenu--panel:not(.addmenu--fit) .addmenu-page .addmenu-grid--ico { grid-template-columns: repeat(6, 1fr); }
 .addmenu-card--ico { padding: 12px 4px; }
@@ -6600,7 +6626,7 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
                     repeating-linear-gradient(0deg, rgba(255,255,255,.07) 0 1px, transparent 1px 26px);
 }
 #draw-bar .db-pad:active { cursor: grabbing; border-color: var(--accent); }
-#draw-bar .db-pad-hint { font-size: 11px; color: var(--text-faint); pointer-events: none; padding: 0 10px; line-height: 1.35; }
+#draw-bar .db-pad .pad-mark { color: var(--text-faint); }   /* #1255: the pad's drawn mark, where .db-pad-hint's sentence stood */
 #draw-bar .db-add { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
 
 /* ⋯ menu quick-colour strip + parent-picker button state */
@@ -6926,8 +6952,14 @@ body.drawing #canvas-wrap { max-width: 96%; max-height: 100%; }
 .cam-tab svg { width: 22px; height: 22px; }
 .cam-tab:hover { color: var(--text); border-color: var(--accent-dim, var(--line)); }
 .cam-tab.on { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
+/* #1255: the camera panel's "?" beside the tab's name (the cog's Friends block's own .cs-help, #1243 ST8), and the lesson it shows in the panel */
+.cam-head { position: relative; display: flex; align-items: center; min-height: 32px; padding-right: 44px; margin: 2px 0 8px; }
+.cam-head > .insp-sub-label { margin: 0; }
+.cam-helprow { margin: 0 0 8px; }
+.cam-help-title { font-size: 15px; font-weight: 700; color: var(--text); }
+.cam-helpbody { padding: 0 2px 10px; }
 
-/* Anchor-mode pivot marker: the After Effects crosshair-in-a-ring, centred on the anchor point.
+/* Anchor-mode pivot marker: the familiar crosshair-in-a-ring, centred on the anchor point.
    Sits above the selection box so it stays readable over a bright layer. */
 .anchor-dot {
   position: absolute; z-index: 6; pointer-events: none;
@@ -7842,7 +7874,7 @@ body.fm-pushing #app { position: fixed; left: 0; top: 0; z-index: 210; backgroun
    also named #insp-toggle here and claimed it rode the same curve; that rule was dead and has been
    deleted. #insp-toggle is display:none at EVERY width: the base rule at styles.css:1800 hides it
    outright, the phone block re-styles it at :1887 but the LATER phone rule at :2210 hides it again
-   ("AM has no edit pencil"), so nothing ever un-hides it. Re-measured in the real editor at
+   ("[the reference app] has no edit pencil"), so nothing ever un-hides it. Re-measured in the real editor at
    320 / 380 / 414 / 700 / 701 / 900 / 1280 — display:none and a 0x0 box at all seven. */
 /* THE ORB'S TIMING IS THE EDITOR'S TIMING, THROUGH THE SAME TWO VARIABLES (queue 459). It rides with
    #app, so a duration or a curve that differs by anything at all shows up as the orb arriving early and
@@ -7978,7 +8010,7 @@ body.fm-pushing #toast { z-index: 213; }
 /* ===== Selected parameter row — the tapped-name half of the v5.42 focus rule ====================
  * Ezra, from [the reference app]: "to tell what slider you have selected — hence forth what key frames ur
  * gonna be editing, it shows by making the item ur changing have a different colour on the name of
- * it, you can also tap on the name to select the row." AM draws the chosen parameter's NAME as a
+ * it, you can also tap on the name to select the row." [the reference app] draws the chosen parameter's NAME as a
  * dark pill with green text; every other name stays the usual dim grey.
  *
  * This is the visible half of the focus rule v5.42 introduced: an unselected panel arms all of its
@@ -8415,7 +8447,6 @@ body.fm-pushing #toast { z-index: 213; }
 .sfx-title { color: #ffd9b3; }
 .sfx-head { padding: 14px 16px 10px; border-bottom: 1px solid var(--line); }
 .sfx-title { font-weight: 800; font-size: 16px; }
-.sfx-hint { font-size: 12px; color: var(--text-dim); padding: 10px 16px 4px; }
 .sfx-list { flex: 1 1 auto; overflow-y: auto; min-height: 0; padding: 4px 10px 8px; }
 .sfx-cat { font-size: 10.5px; letter-spacing: .5px; text-transform: uppercase; color: var(--text-faint);
   padding: 12px 6px 5px; }
@@ -9643,7 +9674,7 @@ svg.cog-turn { animation: cog-turn 280ms cubic-bezier(.2, .8, .3, 1); }
 .hm-np-chip-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .hm-np-chip-meta { color: var(--text-dim); font-size: 11px; white-space: nowrap; }
 
-/* Speed-to-the-playhead buttons (queue 184). Above the speed ruler, matching where AM puts them.
+/* Speed-to-the-playhead buttons (queue 184). Above the speed ruler, matching where [the reference app] puts them.
    They borrow .qr-btn so they are visibly the same KIND of control as the trim buttons in the quick
    row — which is the comparison he drew himself ("kinda like how we have the extend and crop
    buttons already"). Wider than a quick-row button because there are only two of them and a
@@ -10466,7 +10497,6 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
 .tfill-stage { flex: 1 1 auto; min-height: 120px; display: flex; align-items: center; justify-content: center; padding: 12px; }
 .tfill-cv { display: block; border-radius: 10px; background: #000; max-width: 100%; max-height: 100%; }
 .tfill-scrub { width: calc(100% - 28px); margin: 0 14px; accent-color: var(--accent, #4ea8ff); }
-.tfill-lead { text-align: center; font-size: 13px; color: var(--text-dim, #9aa7b8); padding: 12px 14px 8px; }
 /* A horizontal rail, not a grid: one slot per clip and templates can have a lot of them, and a row you
    swipe keeps the preview above it on screen. overflow-x AND overflow-y are both declared, because CSS
    will not let one axis be visible while the other scrolls and leaving it implicit is how three other
@@ -10475,7 +10505,7 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
    container's own padding — so the first slot snapped to scrollLeft: 14 and sat flush against the
    screen edge with its selection ring clipped. Measured, not guessed: padding read 14px and scrollLeft
    read 14 at the same moment. */
-.tfill-slots { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; padding: 0 14px 4px;
+.tfill-slots { display: flex; gap: 10px; overflow-x: auto; overflow-y: hidden; padding: 12px 14px 4px;   /* 12 px on top: the gap the lead line's box gave before #1255 took the line */
                scroll-snap-type: x proximity; scroll-padding: 0 14px; }
 .tfill-slot { position: relative; flex: 0 0 auto; width: 84px; padding: 0; border-radius: 12px; cursor: pointer;
               background: var(--panel-2); border: 1px solid var(--line); overflow: hidden; scroll-snap-align: start; }
@@ -10506,7 +10536,7 @@ html[data-theme="glass"] .addmenu-card--rainbow > .addmenu-ic { color: #ffffff; 
    would be a wall of letterbox, and the rail would run half a metre. */
 @media (min-width: 701px) {
   #tpl-fill { align-items: center; }
-  .tfill-top, .tfill-scrub, .tfill-lead, .tfill-slots, .tfill-replace, .tfill-stage { width: min(680px, 94vw); }
+  .tfill-top, .tfill-scrub, .tfill-slots, .tfill-replace, .tfill-stage { width: min(680px, 94vw); }
   .tfill-top { align-self: center; }
 }
 
@@ -11710,6 +11740,9 @@ body.group-editing .track-head.in-group { padding-left: 8px; }
 .cs-status { font-size: 12.5px; color: var(--text-dim); margin-top: 8px; min-height: 17px; overflow-wrap: anywhere; }
 /* The one-shot line under the title that says what happened to a code that is no longer on screen. */
 .cs-note { font-size: 12.5px; line-height: 1.45; color: #ffd08a; margin: -6px 0 12px; overflow-wrap: anywhere; }
+/* #1255: "Keep FreeMotion open while you share", said once in the live card's head. It looks like the note and is not one: the
+   one-shot note is the first .cs-note in the head, and this line must never stand in for it. */
+.cs-keepnote { font-size: 12.5px; line-height: 1.45; color: #ffd08a; margin: -6px 0 12px; overflow-wrap: anywhere; }
 /* §14.6's short authentication string: five characters, big enough to read down a phone line. */
 .cs-sas {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 28px; font-weight: 700;
@@ -12243,6 +12276,58 @@ body.text-editing .collab-cmt, #stage:has(> #collab-people.cp-hidden) > .collab-
 .cs-body > .cs-joinlink { margin-top: 12px; }
 .cs-keepopen { color: var(--text); }
 .cs-body > .cs-add + .cs-comments { margin: 12px 0 0; }   /* the Share panel's Comments, moved below the invite (J1-6) */
+/* #1243 ST8: the "?" in the block's head (js/collab-ui.js helpButton) — a 32 px round button at the head's top right, its catch 44 px —
+   and the page it opens: the steps (lesson 17, drawn by FM.tutorials) and what gets sent, with ‹ back. */
+.cs-head.cs-head-q { position: relative; padding-right: 44px; }
+.cs-help { position: absolute; top: 0; right: 0; width: 32px; height: 32px; padding: 0; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--panel-2); color: var(--text); font: inherit; font-weight: 800; font-size: 16px; line-height: 1; cursor: pointer; }
+.cs-help::before { content: ''; position: absolute; inset: -6px; }
+.cs-help:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cs-helpbody .cs-lesson { font-size: 14px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
+.cs-helpbody .tut-title { display: none; }   /* the page's own head says what it is */
+.cs-helpbody .tut-intro { margin: 0 0 10px; }
+.cs-helpbody .cs-lesson p { margin: 0 0 10px; }
+.cs-helpbody .tut-steps li { margin-bottom: 10px; }
+.cs-helpbody .cs-privacy { margin-top: 10px; }
+/* ═══ #1243 ST8 (BUG) — his words: "in the friends menu, for some reason on mobile, you have to like scroll this one really weird small
+   spot instead of it like allowing you to scroll the whole thing." The spot was .cs-body: the head (title, state, the three-line how-to),
+   the switch row and Done were pinned around it, and at 390×844 that left it about 146 px. ON A PHONE THE WHOLE BLOCK SCROLLS NOW, at
+   every height: #cv-fr-body is the one scroller under the block's bar, and the head, the body, the switch and the foot (Done; live,
+   ⚙ · Stop sharing · Done) all move with it. Nothing is pinned. (His "get rid of the done button in the friends section" comes with
+   the cog's one Done for every block, which is not built yet; until then the block keeps its own, at its foot.) A PC keeps its
+   layout. */
+@media (max-width: 700px) {
+  #canvas-dialog.cv-bars.cv-fr-big > #cv-friends > #cv-fr-body { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; scroll-padding-bottom: 0; }
+  #canvas-dialog.cv-bars.cv-fr-big.cv-flying > #cv-friends > #cv-fr-body { overflow-y: hidden; }   /* no scrollbar coming and going mid-air */
+  #canvas-dialog.cv-bars.cv-fr-big > #cv-friends > #cv-fr-body > .cs-body { flex: 1 0 auto; min-height: auto; overflow: visible; }
+  #canvas-dialog.cv-bars.cv-fr-big > #cv-friends > #cv-fr-body > .cs-foot { position: static; margin: 0; padding: 12px 0 0; background: none; box-shadow: none; }
+}
+/* ═══ #1243 ST1 — his words: "the animation for in the settings, how we've got the four different settings options, how you've got app
+   settings, canvas, friends, and then the editor mode. Basically, make it so that the animation is just a bit better, like improve it a
+   bit. Like, just put some polish and effort into it." Pick A (recommended), cascade and unfold. THE ENTRANCE CASCADES: each block
+   swings in 45 ms after the one before it, in the order the blocks stand (js/app.js cvStagger writes --cv-i: top to bottom on a phone,
+   from the cog outward on a PC), the scrim leading. Was: all at one instant. Reduced motion: the delays are only set when motion is
+   welcome. A block waits UNSEEN for its turn (fill backwards): a PC's cv-grow has no fill of its own, so a late block was drawn at
+   rest, blinked out when its turn came, then grew. The phone's swing already filled backwards. */
+@media (prefers-reduced-motion: no-preference) {
+  body #canvas-dialog#canvas-dialog.cv-pair.cv-pair.cv-pair > * { animation-delay: calc(var(--cv-i, 0) * 45ms); animation-fill-mode: backwards; }
+}
+/* ═══ #1243 ST5 — his words: "when you're in that menu and you press app settings, like, it's fine that the app settings is like on the
+   left, but I think you should make it have like an animation, because all the others have like an animation when you open them, except
+   for app settings. It kind of just boots you out of it." The cog no longer vanishes in one frame under an undimmed editor: Settings
+   opens over it with its dim already at full strength (js/settings.js fromCog), the panel slides in from the left as always, and the
+   cog's blocks leave — App settings toward the panel, the others 24 px the other way — fading, one after another, before the cog is
+   put away (js/app.js, the App settings bar). Settings' ✕ becomes ‹, back to the cog. */
+@keyframes cv-leave { to { opacity: 0; transform: translateX(24px); } }
+@keyframes cv-leave-app { to { opacity: 0; transform: translateX(-32px) scale(.97); } }
+body #canvas-dialog#canvas-dialog.cv-leaving.cv-leaving.cv-leaving > * { animation: cv-leave 190ms cubic-bezier(.4, 0, 1, 1) forwards; animation-delay: calc(var(--cv-i, 0) * 20ms); pointer-events: none; }
+body #canvas-dialog#canvas-dialog.cv-leaving.cv-leaving.cv-leaving > #cv-app { animation-name: cv-leave-app; }
+/* The cog's own dim and blur fade out with the blocks, under Settings' dim (already at full strength), so the editor does not brighten
+   and sharpen in one frame when the cog is put away. On a PC its tail goes as the leave starts: it sits above Settings' dim. */
+#canvas-dialog.cv-leaving { pointer-events: none; background-color: transparent; backdrop-filter: blur(0px); transition: background-color 190ms linear, backdrop-filter 190ms linear; }
+body:has(> #canvas-dialog.cv-leaving) > .pop-tail { visibility: hidden; }
+.set-scrim.set-from-cog { transition: none; background: rgba(4, 6, 10, .62); }
+.set-close.set-back { font-size: 26px; line-height: 1; padding: 0 0 3px; }
 
 /* ── §16.3's courtesy: a Viewer or a Commenter sees what they cannot change, and is told why ── */
 body.collab-ro #add-fab { display: none; }

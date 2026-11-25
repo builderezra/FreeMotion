@@ -10,13 +10,25 @@ You'll be able to share a project live, so a friend can edit it with you on thei
 6. A card says your friend wants to join. Tap **Let in**. Answer within 2 minutes, or it turns them away and they have to try again. <!-- not walked: needs a second device on a real network; the container has no network -->
 7. You are both editing the same project. When you are done, tap the red **LIVE** at the top left of the video (or your friend's initials beside it) and tap **Stop sharing**. A box asks you to confirm: tap **Stop sharing** again.
 
-No link? Your friend can type the short code instead (it stops working 30 minutes after you close the sharing card). On Home they tap the person icon at the top, then **Join a friend's project…**, type the code and tap **Join**.
+No link? Your friend can type the short code instead (it stops working 30 minutes after you close the sharing card). On Home they tap the round profile button at the top (a person, or their initials or photo once they have a profile), then **Join a friend's project…**, type the code and tap **Join**. <!-- #hm-profile-btn in .hm-top-actions (index.html); its menu: js/home.js openHomeProfileMenu. Read from the code 25 Nov, not walked in a browser -->
 
 On a computer: click the cog (Canvas settings) in the row with the time counter, just left of the Export arrow, and open **Friends**: it is a small block there with a ⤢ button, and Canvas settings is the big one beside it. The same buttons are there. <!-- not walked: the walk was the 380 px phone layout only -->
 
 Tip: Nothing is shared until you tap **Start sharing**. To keep Work with friends out of the way altogether, turn it off in Settings.
 
-If it doesn't work: If the link won't connect, tap **Link not working? Swap codes instead** and follow the two steps it shows.
+Note: Everyone who joins sees the whole project, its notes and reminders included, whatever they join as. Up to 12 people can be in a project shared from a computer and 6 from a phone, counting you. <!-- the second sentence was a small line in Sharing settings until #1255: js/collab-ui.js drawSettingsStep -->
+
+Note: A friend who types the short code always has to be let in by you. With the link you choose, under **When someone uses the link**: **Ask me first** or **Let them in**. <!-- was the line under that switch: js/collab-ui.js askRow -->
+
+Note: On a phone, keep FreeMotion open while you share: sharing pauses when your screen locks. <!-- was a standing line of a phone's Share panel until #1255 -->
+
+Note: The gear at the foot of the sharing card opens Sharing settings. Under **You**, **Change…** sets the name and colour the others see. **Editors can invite others** lets an Editor see the link and pass it on: with the link on **Ask me first** you still let each person in, and on **Let them in** whoever they give it to gets straight in. A link they already copied works until you reset it. With **Viewers and commenters can export** off, their FreeMotion won't export the project or keep a copy when they leave; their device needs the clips to play it, so it can't stop a screen recording. <!-- were the descriptions under those two switches: js/collab-ui.js drawSettingsStep -->
+
+Note: **Show others’ pointers** shows their mouse pointer and their taps, in their colour, and **Show others’ selections** an outline in their colour around the layers they have selected. **Swap codes only** uses no online helpers: links and short codes stop working, and you swap codes with each person instead. <!-- were the descriptions under those three switches -->
+
+Note: In a project a friend shared with you, **Watch along** on someone's row makes your screen follow theirs: where they are in the video, and what they play. Tap it again to stop. <!-- was the line under the people of a friend's panel: js/collab-ui.js drawGuestPanel -->
+
+If it doesn't work: If the link won't connect, tap **Link not working? Swap codes instead** and follow the two steps it shows: you copy a swap code to them, and they copy one back. A friend who was sent something taps **Got an invite? Join with what your friend sent** and pastes the link or swap code, or types the short code.
 
 ### Verification (checked against the code at b46b47d, v17.23)
 
@@ -38,7 +50,7 @@ If it doesn't work: If the link won't connect, tap **Link not working? Swap code
 | 6 a joining friend gets Let in / Don't allow (Allow / Not now is only for a member asking to edit) | js/collab-ui.js:4120 | yes |
 | 6 the link asks first by default | js/collab-ui.js:360 | yes |
 | 7 Stop sharing | js/collab-ui.js:1597 | yes |
-| No link: Home person icon | index.html:687 | yes |
+| No link: Home's round profile button at the top (a person, or initials or a photo) | index.html #hm-profile-btn | read 25 Nov, not walked |
 | No link: Join a friend's project… in its menu | js/home.js:2957 | yes |
 | No link: type the short code | js/collab-ui.js:3357 | yes |
 | PC: the cog is in the row with the time counter, left of Export (not at the top) | index.html:325 #btn-settings (index.html:283 #btn-canvas is hidden at 1280) | re-checked 11 Oct at 1280 |

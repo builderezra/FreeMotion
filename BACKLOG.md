@@ -91,7 +91,7 @@ Still open:
 | ✅ | ~~Multiple masks per layer + mask stack~~ SHIPPED — `layer.masks` is an array; see `js/masks.js`. | Masking | common | — | — |
 | 3 | Live nested precomps | Layers | common | M/L | `FM.elements` re-IDs layers into independent **copies** — editing the source doesn't update instances. |
 | 3 | Per-clip audio loop · crossfade · mic recording | Audio | common | M | Per-clip `source.loop`; linked fade envelopes; `getUserMedia` + `MediaRecorder`. |
-| 3 | Text: scrolling/ticker presets + AE-style per-unit animator | Text | common | M/L | Only 5 fixed reveal presets; no rotation channel, no free per-unit animator. |
+| 3 | Text: scrolling/ticker presets + [another app]-style per-unit animator | Text | common | M/L | Only 5 fixed reveal presets; no rotation channel, no free per-unit animator. |
 | 3 | Merge / flatten layers | UI | common | L | Offscreen render of N layers over a time range → a new baked media layer. |
 | 4 | Active/multi-camera + camera cuts | Camera | core | M | `app.js:671` hard-blocks a second camera. Data model + timeline UI; no WebGL needed. |
 | 4 | Independent preview pan/zoom viewport | Camera | common | S/M | Editor navigation currently writes the **camera layer's** transform. Pure editor-space offset/scale. |

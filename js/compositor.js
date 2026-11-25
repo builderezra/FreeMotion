@@ -67,7 +67,7 @@ window.FM = window.FM || {};
     saturation: 'saturation',
     color: 'color',
     luminosity: 'luminosity',
-    // Mask blending (AM): the layer's alpha KEEPS (include) or CUTS (exclude) everything below it.
+    // Mask blending: the layer's alpha KEEPS (include) or CUTS (exclude) everything below it.
     'mask-include': 'destination-in',
     'mask-exclude': 'destination-out',
   };
@@ -589,7 +589,7 @@ window.FM = window.FM || {};
       /* #966 opts10 (hunt/966-opts10, his "more choices always better"): the tint always carried exactly the swatch's colour at the
          picture's own light. SATURATION is how much colour it carries — 0 a grey tone (the picture in black and white at the tint's
          brightness), above 100 % a richer colour than the swatch — and LIGHTNESS lifts the whole tint toward white or sinks it toward
-         black (−100 is black, 100 white): Photoshop's Colorize has the pair. Both act on the tint before Blend lays it on. 100 % and 0
+         black (−100 is black, 100 white): [another app]'s Colorize has the pair. Both act on the tint before Blend lays it on. 100 % and 0
          run the old loop untouched (colorize10 only off them). */
       { key: 'sat', label: 'Saturation', min: 0, max: 200, step: 1, def: 100, unit: '%', note: '0 a grey tone · above 100 % richer than the swatch' },
       { key: 'light', label: 'Lightness', min: -100, max: 100, step: 1, def: 0, note: '−100 black · 100 white' },
@@ -744,7 +744,7 @@ window.FM = window.FM || {};
     ] },
     { type: 'stripes', label: 'Stripes', color: true, defColor: '#000000', colorLabel: 'Colour', params: [
       { key: 'size', label: 'Width', min: 4, max: 80, step: 1, def: 16, unit: 'px' },
-      { key: 'direction', label: 'Direction', def: 0, options: [[0, 'Diag ↘'], [1, 'Diag ↗'], [2, 'Across'], [3, 'Down']] },
+      { key: 'direction', label: 'Direction', def: 0, options: [[0, 'Diag down'], [1, 'Diag up'], [2, 'Across'], [3, 'Down']] },
       { key: 'duty', label: 'Bar / gap', min: 0.05, max: 0.95, step: 0.05, def: 0.5 },
       { key: 'strength', label: 'Strength', min: 0, max: 1, step: 0.02, def: 0.6 },
       /* #966 opts3: the stripes could only sit still. SCROLL SPEED keeps them moving across their own direction — a barber pole, hazard
@@ -802,7 +802,7 @@ window.FM = window.FM || {};
       /* #966 opts8 (hunt/966-opts8, his "more choices always better"): with the curve off every corner was rounded, and only rounded.
          CORNERS picks which — the top two (a tab, a card that sits on the bottom of the frame), the bottom two, one side, or two
          opposite (a leaf); CORNER SHAPE cuts each chosen corner off straight (a chamfer: the ticket, the label) or scoops a quarter
-         circle out of it (the ticket stub) — Illustrator's Round / Chamfer / Inverted Round. Like Radius they only work with the
+         circle out of it (the ticket stub) — [another app]'s Round / Chamfer / Inverted Round. Like Radius they only work with the
          curve off, so both grey out while it is on. All and Round are the old rounded rectangle, the same call. */
       { key: 'corners', label: 'Corners', def: 0, options: [[0, 'All'], [1, 'Top'], [2, 'Bottom'], [3, 'Left'], [4, 'Right'], [5, 'Diagonal']], overriddenBy: 'style', note: 'Diagonal: top left and bottom right' },
       { key: 'cshape', label: 'Corner shape', def: 0, options: [[0, 'Round'], [1, 'Cut'], [2, 'Scoop']], overriddenBy: 'style' },
@@ -873,7 +873,7 @@ window.FM = window.FM || {};
       { key: 'relief', label: 'Relief depth', min: 10, max: 400, step: 5, def: 100, unit: '%' },
       { key: 'ambient', label: 'Ambient', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       /* #966 opts8 (hunt/966-opts8, his "more choices always better"): the light was always white and the surface always matt. LIGHT
-         COLOUR tints the key light (warm lamp, cold moonlight — After Effects' Lighting Effects has a Light Color); the ambient fill
+         COLOUR tints the key light (warm lamp, cold moonlight — [another app]'s Lighting Effects has a Light Color); the ambient fill
          stays neutral, so the lit side takes the colour and the shade keeps the picture's own. SHINE adds a glossy highlight where the
          surface faces the light (a Blinn highlight, tinted the light's colour) — wet paint, a plastic logo. White and 0 % run the old
          loop untouched (bumpLit966). */
@@ -1144,8 +1144,8 @@ window.FM = window.FM || {};
     ], color: true, defColor: '#ff7a1a', colorLabel: 'Burn colour', colorGate: { by: 'burn', deadAt: 0, deadAtText: '0%' } },
     { type: 'blockdissolve', label: 'Block Fade', params: [{ key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5 }, { key: 'size', label: 'Block Size', min: 4, max: 60, step: 1, def: 16, unit: 'px' }, { key: 'dir', label: 'Order', def: 0, options: [[0, 'Random'], [1, '→'], [2, '←'], [3, '↓'], [4, '↑']] }, { key: 'seed', label: 'Pattern', min: 0, max: 99, step: 1, def: 0 },   /* queue 904: the block order was one fixed constant — no seed, no direction */
       /* #966 opts2: the blocks were always square and each one popped out in a single frame. BLOCK HEIGHT makes them tall or wide
-         (a share of Block Size, AE's Block Width and Block Height); FEATHER fades each block out over a stretch of Amount instead
-         (AE's Feather), so the transition shimmers out rather than flickering. 100 % and 0 % run the old loop untouched. */
+         (a share of Block Size, [another app]'s Block Width and Block Height); FEATHER fades each block out over a stretch of Amount instead
+         ([another app]'s Feather), so the transition shimmers out rather than flickering. 100 % and 0 % run the old loop untouched. */
       { key: 'aspect', label: 'Block height', min: 25, max: 400, step: 5, def: 100, unit: '%', note: 'A share of Block Size · 200 = twice as tall as wide' },
       { key: 'feather', label: 'Feather', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'Each block fades out instead of vanishing at once' }] },
     // ---- batch 14: Matte / Mask / Key (alpha geometry) ----
@@ -1166,8 +1166,8 @@ window.FM = window.FM || {};
        silently re-render every project that already uses these. A step change cannot — every value the
        old step could hold is still exactly representable. */
     /* #966 opts3 (his "more choices always better"): the wipe could only run in from one side, and its edge was only ever a cut.
-       OPENS From middle opens both ways at once from a line through the centre (Premiere's Barn Doors; with Invert it closes in to
-       that line); BORDER WIDTH lays a band of the Border colour along the edge as it travels, on the part still showing (Premiere's
+       OPENS From middle opens both ways at once from a line through the centre ([another app]'s Barn Doors; with Invert it closes in to
+       that line); BORDER WIDTH lays a band of the Border colour along the edge as it travels, on the part still showing ([another app]'s
        Wipe border), in project px — pxToPlate scales it, so the phone's border is the export's. One side and 0 px run the old cut
        untouched; wipe966 (beside wCx) copies its two branches to the bit. (Edge softness is queue 904's; Fit to and Invert #482 12.3's.) */
     { type: 'wipe', label: 'Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'angle', label: 'Angle', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
@@ -1176,7 +1176,7 @@ window.FM = window.FM || {};
       { key: 'border', label: 'Border width', min: 0, max: 100, step: 1, def: 0, unit: 'px', note: 'A band of the Border colour along the edge as it wipes' }],
       color: true, defColor: '#ffffff', colorLabel: 'Border colour', colorGate: { by: 'border', deadAt: 0, deadAtText: '0 px' } },
     /* #966 opts4 (his "more choices always better"): the radial wipe could only cut. BORDER WIDTH lays a band of the Border colour
-       along both edges of the sweep as it turns — Premiere's Clock Wipe border, and the border round three gave Wipe — on the part
+       along both edges of the sweep as it turns — [another app]'s Clock Wipe border, and the border round three gave Wipe — on the part
        still showing, in project px (pxToPlate scales it, so the phone's border is the export's). 0 px runs the old cuts untouched;
        radialWipe966 (beside radialWipe12) copies their alpha to the bit, so the border never changes what the wipe shows. */
     { type: 'radialwipe', label: 'Radial Wipe', params: [{ key: 'progress', label: 'Progress', min: 0, max: 1, step: 0.005, q: 0.005, def: 0.5 }, { key: 'start', label: 'Start', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' }, { key: 'softness', label: 'Edge softness', min: 0, max: 200, step: 1, def: 0, unit: 'px' },
@@ -1234,7 +1234,7 @@ window.FM = window.FM || {};
       { key: 'blend', label: 'Blend', def: 0, options: [[0, 'Normal'], [1, 'Add'], [2, 'Screen']], note: 'Add and Screen lay each copy on as light, so crossing copies glow' },
       { key: 'tint', label: 'Copy tint', min: 0, max: 100, step: 1, def: 0, unit: '%', note: 'The copies fade into the Tint colour, the furthest the most · the Tint colour row wakes above 0' },
     ], color: true, defColor: '#3dc8ff', colorLabel: 'Tint colour', colorGate: { by: 'tint', deadAt: 0, deadAtText: '0%' } },
-    // ---- Scatter Array (queue 484: AM's Scatter Repeat, our name) — copies that are NOT on a grid ----
+    // ---- Scatter Array (queue 484: [the reference app]'s Scatter Repeat, our name) — copies that are NOT on a grid ----
     { type: 'scatterarray', label: 'Scatter Array', params: [
       { key: 'count', label: 'Copies', min: 1, max: 24, step: 1, def: 8 },
       { key: 'spread', label: 'Spread', min: 0, max: 200, step: 1, def: 60, unit: '%' },
@@ -1298,8 +1298,8 @@ window.FM = window.FM || {};
         // #482, decided 11 Oct under his rule: a new one starts Gentler (0.5); a save without the setting still draws 0.8 (the kernel's)
         { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.5, legacy: 0.8 },
         /* #966 opts8 (hunt/966-opts8, his "more choices always better"): a Radial or Conic wash could only sit in the middle of the
-           frame. CENTRE X / Y put its middle anywhere — a glow of colour off one corner, a conic sweep about a point in the shot (After
-           Effects' Gradient Ramp has a Start of Ramp point). A radial wash then still runs from Start at its centre to End at the
+           frame. CENTRE X / Y put its middle anywhere — a glow of colour off one corner, a conic sweep about a point in the shot (another
+           program's Gradient Ramp has a Start of Ramp point). A radial wash then still runs from Start at its centre to End at the
            farthest corner, so moving it never leaves part of the ramp unused. Linear has no centre to move, so the rows grey out
            there. 50 / 50 is the old middle, to the bit. */
         { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%', overriddenBy: 'shape', liveWhen: [1, 2] },
@@ -1453,7 +1453,7 @@ window.FM = window.FM || {};
       { key: 'passes', label: 'Smoothness', min: 1, max: 4, step: 1, def: 1 },
     ] },
     /* #966 opts5: the bands could only sit still. FLOW SPEED keeps them moving through the tones — each tone steps through the band
-       colours in turn and the first band comes round again after the last: the flowing contour map (After Effects' Colorama cycle). In
+       colours in turn and the first band comes round again after the last: the flowing contour map ([another app]'s Colorama cycle). In
        bands a second, + moving them from the darks towards the lights; a keyframed speed is integrated, so slowing it holds the bands
        where they got to. Tone and time only, never a pixel's place, so it keeps its CROP_FX membership. 0 runs the old loop untouched
        (topoFlow966). */
@@ -1524,7 +1524,7 @@ window.FM = window.FM || {};
       { key: 'mode', label: 'Applies', def: 0, options: [[0, 'Replaces'], [1, 'Adds to layer']] },
       /* #966 opts8 (hunt/966-opts8, his "more choices always better"): every letter was turned to follow the arc. LETTERS Stay upright
          keeps each one standing straight where it sits on the arc — the rainbow-of-letters title, the badge where nothing reads
-         sideways (After Effects' text on a path has Perpendicular To Path to switch off). The places along the arc are the same;
+         sideways ([another app]'s text on a path has Perpendicular To Path to switch off). The places along the arc are the same;
          only the turn goes. Follow the curve is the old arc, call for call, still and animated. */
       { key: 'upright', label: 'Letters', def: 0, options: [[0, 'Follow the curve'], [1, 'Stay upright']] },
     ] },
@@ -1725,7 +1725,7 @@ window.FM = window.FM || {};
       { key: 'threshold', label: 'Clear smooth areas', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'tooth', label: 'Paper tooth', min: 0, max: 100, step: 1, def: 0, unit: '%' },
     ], color: true, defColor: '#000000', colorLabel: 'Pencil', color2: true, defColor2: '#ffffff', color2Label: 'Paper' },
-    // ---- batch 22: 3D (textured-mesh renderer via CANVAS_FX — AM's 3D category) ----
+    // ---- batch 22: 3D (textured-mesh renderer via CANVAS_FX — [the reference app]'s 3D category) ----
     // Shared params: rotx/roty/rotz spin the solid (keyframe them to animate), size scales it
     // relative to the layer's rendered bounds, shading = strength of the fixed key light.
     { type: 'cube3d', label: 'Cube', params: [{ key: 'rotx', label: 'Rotate X', min: 0, max: 360, step: 1, def: 25, unit: '°' }, { key: 'roty', label: 'Rotate Y', min: 0, max: 360, step: 1, def: 35, unit: '°' }, { key: 'rotz', label: 'Rotate Z', min: 0, max: 360, step: 1, def: 0, unit: '°' }, { key: 'size', label: 'Size', min: 10, max: 200, step: 1, def: 70, unit: '%' }, { key: 'shading', label: 'Shading', min: 0, max: 1, step: 0.02, def: 0.6 }, { key: 'light', label: 'Light from', min: 0, max: 360, step: 1, def: 53, unit: '°', overriddenBy: 'shading', liveAbove: 0 },
@@ -1830,7 +1830,7 @@ window.FM = window.FM || {};
          (round the upright line through the pivot), Flip ↕ tumbles it head over heels (round the level line), at the same
          Speed and Start angle; seen from straight on, so it narrows to a line and comes back mirrored — its back. (Card
          Flip is the one with perspective, for a single turn.) Flat runs the old lines untouched. */
-      { key: 'axis', label: 'Turns', def: 0, options: [[0, 'Flat'], [1, 'Flip ↔'], [2, 'Flip ↕']], note: '↔ like a coin on its edge, ↕ head over heels — the back shows mirrored' },
+      { key: 'axis', label: 'Turns', def: 0, options: [[0, 'Flat'], [1, 'Flip sideways'], [2, 'Flip over']], note: 'Sideways is like a coin on its edge, over is head over heels — the back shows mirrored' },
     ] },
     /* #482 polish 2.2. Pulse was a sine about the middle of the layer, the same amount both ways. WAVE picks the shape of each
        beat, SQUASH & STRETCH trades width for height as it grows (1 = wider as it grows, −1 = taller), and the PIVOT puts the
@@ -1851,7 +1851,7 @@ window.FM = window.FM || {};
       { key: 'ry', label: 'Ellipse', min: 0, max: 200, step: 1, def: 100, unit: '%' },
       { key: 'depth', label: 'Depth', min: 0, max: 100, step: 1, def: 0, unit: '%' },
       { key: 'face', label: 'Face direction of travel', def: 0, options: [[0, 'Off'], [1, 'On']] }] },
-    // ---- batch 24: Squeeze (AM featured distort) + Tiles (repeat with gaps) ----
+    // ---- batch 24: Squeeze (featured distort) + Tiles (repeat with gaps) ----
     { type: 'squeeze', label: 'Squeeze', params: [
       { key: 'amount', label: 'Amount', min: -1, max: 1, step: 0.02, def: 0.5 },
       { key: 'axis', label: 'Pinches', def: 0, options: [[0, 'Horizontally'], [1, 'Vertically']] },
@@ -1878,7 +1878,7 @@ window.FM = window.FM || {};
     ] },
     // ---- batch 25: content-aware motion blur — blurs what MOVES INSIDE the clip (frame-to-frame),
     // not how the clip is transformed. Four styles like other editors: optical-flow Pixel Motion
-    // (RSMB/AE Pixel Motion Blur), Directional Smear, Echo Trails (long-exposure), Frame Blend.
+    // (Pixel Motion Blur), Directional Smear, Echo Trails (long-exposure), Frame Blend.
     { type: 'motionflow', label: 'Motion Blur (Footage)', desc: 'Blurs whatever MOVES on screen — including movement an effect makes, like Orbit or Spin, which Motion Blur (Object) cannot see. It reads the picture frame to frame, so very fast movement outruns it. Moving, scaling or rotating the clip itself never smears it — for that, use Motion Blur (Object).',
       params: [
       /* ⚠️ DEFAULT IS SMEAR (1), NOT PIXEL (0) — queue 577's neighbour, queue 578 clause 1. Ezra:
@@ -1937,7 +1937,7 @@ window.FM = window.FM || {};
          old centred window, byte for byte. */
       { key: 'phase', label: 'Shutter phase', min: -100, max: 100, step: 1, def: 0, unit: '%', note: '−100 trails behind only · +100 runs ahead' },
     ] },
-    // ---- batch 26 (AM parity fill-ins: glow / selective colour / generative) ----
+    // ---- batch 26 (parity fill-ins: glow / selective colour / generative) ----
     { type: 'softglow', label: 'Dreamy Bloom', color: true, defColor: '#ffffff', colorLabel: 'Glow', colorGate: { by: 'from', when: 0 }, params: [   // queue 904: was hardcoded white
       { key: 'amount', label: 'Amount', min: 0, max: 1, step: 0.02, def: 0.6 },
       { key: 'radius', label: 'Radius', min: 10, max: 400, step: 5, def: 100, unit: '%' },
@@ -2023,7 +2023,7 @@ window.FM = window.FM || {};
       { key: 'opacity', label: 'Opacity', min: 0, max: 100, step: 1, def: 78, unit: '%' },
       /* #966 opts7 (hunt/966-opts7, his "more choices always better"): the shadow always faded the same way as it fell, and the layer
          always stood in front of it. FADE sets how much it fades — 100 % is the old fade, 0 % keeps it solid to its end; SHADOW ONLY
-         hides the layer and keeps its shadow, its own footprint shadowed too (After Effects' Radial Shadow has a Shadow Only). 100 % and Off run
+         hides the layer and keeps its shadow, its own footprint shadowed too ([another app]'s Radial Shadow has a Shadow Only). 100 % and Off run
          the old loop untouched (lampShadow966 runs the same taps off them). */
       { key: 'fade', label: 'Fade', min: 0, max: 100, step: 1, def: 100, unit: '%', note: 'How much the shadow fades as it falls away · 0 keeps it solid to its end' },
       { key: 'shadowonly', label: 'Shadow only', def: 0, options: [[0, 'Off'], [1, 'On']], note: 'Hides the layer and keeps its shadow' },
@@ -2052,7 +2052,7 @@ window.FM = window.FM || {};
       { key: 'centerx', label: 'Centre X', min: 0, max: 100, step: 1, def: 50, unit: '%' },
       { key: 'centery', label: 'Centre Y', min: 0, max: 100, step: 1, def: 50, unit: '%' },
     ] },
-    // ---- batch 28 (more AM Distortion/Warp + Procedural + Color parity) ----
+    // ---- batch 28 (more Distortion/Warp + Procedural + Color parity) ----
     { type: 'turbulentdisplace', label: 'Turbulent Displace', params: [
       { key: 'amount', label: 'Amount', min: 0, max: 80, step: 1, def: 30, unit: 'px' },
       { key: 'scale', label: 'Detail', min: 10, max: 400, step: 1, def: 60 },
@@ -2078,7 +2078,7 @@ window.FM = window.FM || {};
       { key: 'size', label: 'Tile', min: 8, max: 1600, step: 1, def: 120, unit: 'px' },
       { key: 'angle', label: 'Angle', min: -180, max: 180, step: 1, def: 45, unit: '°' },
     ] },
-    // ---- Wrap Shift (queue 484: AM's Offset, our name) — slide the frame, wrap the overflow ----
+    // ---- Wrap Shift (queue 484: [the reference app]'s Offset, our name) — slide the frame, wrap the overflow ----
     { type: 'wrapshift', label: 'Wrap Shift', params: [
       { key: 'offsetx', label: 'Shift X', min: -100, max: 100, step: 1, def: 25, unit: '%' },
       { key: 'offsety', label: 'Shift Y', min: -100, max: 100, step: 1, def: 0, unit: '%' },
@@ -2506,7 +2506,7 @@ window.FM = window.FM || {};
     // footage as well as bend a flat shot, and it carries the radial colour fringing that comes with
     // real glass — strongest at the corners, zero at the centre.
     /* #966 opts7 (hunt/966-opts7, his "more choices always better"): the lens could only sit in the middle of the frame. CENTRE X / Y
-       put its middle anywhere (After Effects' Optics Compensation has a View Center) — a bulge off to one side, the one corner of a wide
+       put its middle anywhere ([another app]'s Optics Compensation has a View Center) — a bulge off to one side, the one corner of a wide
        shot straightened; Zoom and the fringing follow it. How hard it bends is still measured against the frame's half-diagonal, so
        moving the centre never changes the strength. 50 / 50 is the old middle, to the bit. */
     { type: 'lensdistort', label: 'Lens Distortion', desc: 'Real lens geometry — barrel or pincushion by a k1/k2 polynomial, with colour fringing that grows toward the corners the way glass does. Straightens wide-angle footage as well as bends a flat shot. Centre X and Y put the middle of the lens anywhere in the frame.', params: [
@@ -2528,7 +2528,7 @@ window.FM = window.FM || {};
       { key: 'high', label: 'Bright cut', min: 0, max: 1, step: 0.01, def: 0.85 },
       { key: 'length', label: 'Max run', min: 8, max: 600, step: 4, def: 160, unit: 'px' },
       /* #482 polish 13.5: two diagonals, ↘ and ↗ — 0 and 1 are the old rows and columns, so a saved value means what it did. */
-      { key: 'direction', label: 'Direction', options: [[0, 'Horizontal'], [1, 'Vertical'], [2, 'Diagonal ↘'], [3, 'Diagonal ↗']], def: 0 },
+      { key: 'direction', label: 'Direction', options: [[0, 'Horizontal'], [1, 'Vertical'], [2, 'Diagonal down'], [3, 'Diagonal up']], def: 0 },
       { key: 'order', label: 'Order', options: [[0, 'Dark → bright'], [1, 'Bright → dark']], def: 0 },
       /* #482 polish 13.5. A run was always ordered by brightness, the same lines were sorted in every Pixel Sort, and they never
          changed. Sort by orders each run by Hue (a rainbow smear), Saturation or one channel instead — Dark cut and Bright cut
@@ -2664,7 +2664,7 @@ window.FM = window.FM || {};
     const oc = _ckCanvases[sl]; oc.width = w; oc.height = h;
     const octx = oc.getContext('2d');
     octx.clearRect(0, 0, w, h);
-    octx.filter = filterStr || 'none';                    // filter the SOURCE before keying (AM order: FX → key)
+    octx.filter = filterStr || 'none';                    // filter the SOURCE before keying (order: FX → key)
     try { octx.drawImage(src, 0, 0, w, h); } catch (e) { octx.filter = 'none'; return src; }
     octx.filter = 'none';
     let img;
@@ -2774,7 +2774,7 @@ window.FM = window.FM || {};
   /* Levels: out = outB + (outW - outB) * clamp((v - inB) / (inW - inB))^(1/gamma).
    * Memoized on the param signature exactly like gradeLUT — the table is rebuilt only when a
    * control actually moves, so scrubbing a static frame costs one 256-entry loop, not one per frame.
-   * gamma is the PHOTOSHOP sense: >1 lifts the midtones, which is the direction people expect the
+   * gamma is in the image editors' sense: >1 lifts the midtones, which is the direction people expect the
    * middle slider to go. */
   let _lvLUT = null, _lvSig = null;
   function levelsLUT(inB, inW, gam, outB, outW) {
@@ -2800,7 +2800,7 @@ window.FM = window.FM || {};
    * Channel used to say WHICH channel the one set of five sliders graded, so a red cast and a blue cast could not be fixed
    * in one Levels. Now every channel keeps its own set (inblack_r … outwhite_b, identity by default) and Channel only picks
    * which set the panel shows (`showWhen`): each channel goes through its own set, then the master (RGB) set grades all
-   * three — the order Photoshop applies them in.
+   * three — the order [another app] applies them in.
    * A SAVED Levels has no per-channel keys, and the kernel then runs its old loops untouched (the master set on the chosen
    * channel, or on all three) — so it draws byte for byte as it did whether or not anything else has touched it.
    * levelsMigrate gives such an instance the new shape before the panel or the render-time fill (queue 784) sees it: a
@@ -4264,9 +4264,9 @@ window.FM = window.FM || {};
   }
 
   // Apply the layer's parent-chain transform (translate/rotate/scale, root-most first) so a
-  // child inherits its parent's motion (AM layer parenting). Cycle- and missing-parent-safe.
+  // child inherits its parent's motion (layer parenting). Cycle- and missing-parent-safe.
   // Composes the parent chain onto ctx (position/rotation/scale, root-first) and RETURNS the total
-  // inherited rotation in radians — used to implement AM parenting rotation modes on the child.
+  // inherited rotation in radians — used to implement parenting rotation modes on the child.
   function applyParentChain(ctx, layer, t, scene) {
     if (!layer.parent || !scene) return 0;
     const chain = [];
@@ -4400,7 +4400,7 @@ window.FM = window.FM || {};
     const tr = g.transform;
     return !!tr && (!!tilt3D(g, t) || !!isAnimatedProp(tr.rotationX) || !!isAnimatedProp(tr.rotationY));
   }
-  // AM parenting rotation modes: 'locked' keeps the child world-upright while it still orbits the
+  // Parenting rotation modes: 'locked' keeps the child world-upright while it still orbits the
   // parent; 'weighted' keeps a fraction of the parent's rotation. Call after translate(x,y), before
   // the child's own rotation. (Position already inherited the full parent rotation via the chain.)
   function applyParentRotMode(ctx, layer, accumRot) {
@@ -7494,7 +7494,7 @@ window.FM = window.FM || {};
      not change the character of the mode.
      Kept as a shared function rather than inlined: it is the same arithmetic every future effect that
      gains blend modes will want, and eight formulas copied twice is eight chances to get one wrong.
-     Soft Light is the W3C/Photoshop curve rather than the cheap `2*s*d` approximation, because the cheap
+     Soft Light is the W3C/[another app] curve rather than the cheap `2*s*d` approximation, because the cheap
      one is visibly wrong in the shadows — which is exactly where a soft-light colour cast is used. */
   function fxBlendPx(mode, src, dst) {
     var s = src / 255, dv = dst / 255, r;
@@ -8952,7 +8952,7 @@ window.FM = window.FM || {};
         if (grey && a < 1) { const g0 = 128 * (1 - a); d[i] = d[i] * a + g0; d[i + 1] = d[i + 1] * a + g0; d[i + 2] = d[i + 2] * a + g0; }
       }
     },
-    /* HSL Bands — the CapCut/Lightroom HSL panel: retune ONE colour band and leave the rest alone.
+    /* HSL Bands — the [another app] HSL panel: retune ONE colour band and leave the rest alone.
      * The weight is `hue proximity x the pixel's OWN saturation`, and that second term is the whole
      * point — a plain hue window centred on orange also grabs skin and warm neutrals, which is the
      * classic way this control ruins a shot. One pass, no slice, no taps; most of the frame exits at
@@ -12864,7 +12864,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           else { d[bi2]=d[bi2]+(cr-d[bi2])*bk; d[bi2+1]=d[bi2+1]+(cg-d[bi2+1])*bk; d[bi2+2]=d[bi2+2]+(cb-d[bi2+2])*bk;
                  if(d[bi2+3]<255) d[bi2+3]=d[bi2+3]+(255-d[bi2+3])*bk; }
         } } },
-    // ---- batch 26 (AM parity fill-ins) ----
+    // ---- batch 26 (parity fill-ins) ----
     // Soft Glow: wide low-threshold bloom — bright-pass, separable box blur, screen-composite.
     // Same skeleton as lightglow but the pass threshold is 90 (not 153) and the radius scales with
     // frame size, so mid-tones haze softly instead of only hot highlights blooming.
@@ -13129,7 +13129,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
           } }
       }
     },
-    // ---- batch 28 (AM parity fill-ins) ----
+    // ---- batch 28 (parity fill-ins) ----
     // Palette Map: quantize every pixel to the nearest of a small evenly-spaced palette (posterize in
     // 3D RGB space → banded, screen-print look). Count = palette steps per axis; Amount blends toward it.
     palettemap: function(d,W,H,p,t){ var pm_c = fparam(p, 'count', 4, t); pm_c=Math.round(pm_c); if(pm_c<2)pm_c=2; if(pm_c>8)pm_c=8; var pm_amt = fparam(p, 'amount', 1, t); if(pm_amt<0)pm_amt=0; if(pm_amt>1)pm_amt=1; if(pm_amt<=0)return;
@@ -17446,7 +17446,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var ip_rad=ipRp===60?maxR*0.6:maxR*(ipRp/100); if(ip_rad<=0)return [x,y];
       var ip_nr=ip_r/ip_rad; if(ip_nr>=1)return [x,y]; var ip_fall=1-ip_nr*ip_nr; var ip_k=1+ip_a*ip_fall*0.8;
       return [ipCx+ip_dx*ip_k, ipCy+ip_dy*ip_k]; },
-    // ---- batch 24: Squeeze — hourglass waist pinch (k>0) / barrel bulge (k<0), AM featured ----
+    // ---- batch 24: Squeeze — hourglass waist pinch (k>0) / barrel bulge (k<0), featured ----
     squeeze: function(x,y,W,H,cx,cy,maxR,p,t){ var sq_k=p.amount==null?0.5:FM.evalProp(p.amount,t); if(sq_k<-1)sq_k=-1; if(sq_k>1)sq_k=1;
       // The waist was always at the vertical midpoint and always pinched horizontally. Same remap as
       // Bend for where the waist sits, and the axis switch pinches the other way instead.
@@ -17463,7 +17463,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       var sqArg=(sqAx===0&&sqPs===50)?(Math.PI*y/H):(Math.PI*sqF2);
       var sq_f=1-sq_k*Math.sin(sqArg); if(sq_f<0.05)sq_f=0.05;
       return sqAx===1?[x, cy+(y-cy)/sq_f]:[cx+(x-cx)/sq_f, y]; },
-    // ---- batch 28 (AM Distortion/Warp fill-ins) ----
+    // ---- batch 28 (Distortion/Warp fill-ins) ----
     // Turbulent Displace: domain-warped value-noise field pushes each pixel — organic churn, distinct
     // from fractalwarp's plain sum-of-sines (this warps the noise input by more noise → curlier). t
     // scrolls the field so it boils over time. Deterministic (no random).
@@ -18208,7 +18208,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   // Canvas-composited effects. Like drawPixelEffect the layer is rendered clean to an offscreen,
   // but the effect fn then REDRAWS it with plain canvas ops (textured triangles / matrices) —
   // no per-pixel loops, so the 3D solids stay realtime. fn(srcCanvas, dstCtx, W, H, bbox, params,
-  // t, tl) where bbox = the layer's rendered alpha bounds (the "texture" region AM wraps onto its
+  // t, tl) where bbox = the layer's rendered alpha bounds (the "texture" region [the reference app] wraps onto its
   // solids) and tl = time since the clip began (so Spin/Drift/Orbit start at the clip's start).
   // Everything derives from params + t only — deterministic, so preview == export.
   function alphaBBox(d, W, H) {
@@ -19434,8 +19434,8 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
   // ---- Motion Blur (Content) — TEMPORAL blur driven by what moves INSIDE the plate ----
   // Keeps each layer's previous rendered plate, block-matches a coarse optical-flow field between
-  // frames, then blurs along the motion. Styles: 0 Pixel Motion (per-pixel directional, RSMB/AE
-  // style) · 1 Directional Smear (global vector, masked) · 2 Echo Trails (long exposure feedback)
+  // frames, then blurs along the motion. Styles: 0 Pixel Motion (per-pixel directional, the
+  // familiar style) · 1 Directional Smear (global vector, masked) · 2 Echo Trails (long exposure feedback)
   // · 3 Frame Blend (temporal smoothing — rescues low-fps clips). Works during forward playback,
   // frame-stepping and export; a backwards seek or a >0.35s jump just shows the frame unblurred.
   let _mfSa = null, _mfSb = null, _mfW1 = null, _mfMask = null, _mfMov = null;
@@ -20703,7 +20703,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         if (!advance) { ac.clearRect(0, 0, W, H); ac.drawImage(A, 0, 0); rec.accSeeded = true; B.drawImage(A, 0, 0); reset(); return; }
         const persist = Math.min(0.96, 0.35 + amount * 0.3);
         ac.save(); ac.globalCompositeOperation = 'destination-in'; ac.fillStyle = 'rgba(0,0,0,' + persist + ')'; ac.fillRect(0, 0, W, H); ac.restore();
-        // merge with LIGHTEN (per-channel max, AE Echo style) — an opaque new frame would otherwise
+        // merge with LIGHTEN (per-channel max, the familiar echo style) — an opaque new frame would otherwise
         // paint its background right over the trail and hide it
         ac.save(); ac.globalCompositeOperation = 'lighten'; ac.drawImage(A, 0, 0); ac.restore();
         rec.accSeeded = true;
@@ -23359,7 +23359,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   }
   FM._layerMotionBetween = layerMotionBetween;
 
-  // ---- Data-driven shape library (AM parity) ----
+  // ---- Data-driven shape library ----
   // Every entry is an ARRAY OF POLYGONS in normalized [0,1] space (multi-polygon shapes like the
   // sun's rays are several subpaths of one fill). Generated once at load; traceShapePath scales
   // them into the layer's box, and point editing converts them straight into editable paths.
@@ -25196,7 +25196,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     // Null objects are invisible transform controllers — never rasterized. They still drive
     // parented children at any time because applyParentChain reads a parent's transform directly.
     if (layer.type === 'null') return;
-    if (layer.type === 'group') return;        // invisible transform parent for its members (AM grouping)
+    if (layer.type === 'group') return;        // invisible transform parent for its members (grouping)
     if (layer.type === 'adjustment') return;   // handled by renderScene (grades layers below)
     if (layer.type === 'camera') return;       // handled by renderScene (drives the composite)
     if (!FM.isLayerVisibleAt(layer, t)) return;
@@ -25459,7 +25459,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const lines = _tPlan.lines, _plan = _tPlan.plan;
       const lh = (layer.fontSize || 96) * (_tEff.lineHeight || 1.15);
       const total = (lines.length - 1) * lh;
-      // Caption background pill: readable semi-transparent box behind the text (CapCut/AM style).
+      // Caption background pill: readable semi-transparent box behind the text (the familiar caption style).
       if (layer.captionBg && String(textSrc).trim()) {
         const fs = layer.fontSize || 96;
         let maxW = 0;
@@ -25545,12 +25545,12 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       const stk = layer.stroke;
 
       // ---- Trim Paths + dashed stroke: build the ONE dash pattern that shapes the BORDER stroke ----
-      // (the FILL is never touched — AE parity). Trim windows the stroke to the [start,end] fraction of
+      // (the FILL is never touched, as other programs do). Trim windows the stroke to the [start,end] fraction of
       // the outline length via a single-period dash (visibleLen on, rest off) rotated by `offset`; a
       // plain stroke.dash is marching-ants. The two share one setLineDash, so an ACTIVELY-windowing trim
       // OWNS it (overrides the dash); a full trim (end−start≥1) falls through to the dash, an empty trim
       // hides the stroke. Canvas restarts the dash phase at every subpath (moveTo) → on a multi-subpath
-      // shape trim applies PER SUBPATH (AE's "Trim Multiple Shapes: Individually"). start>end WRAPS.
+      // shape trim applies PER SUBPATH ([another app]'s "Trim Multiple Shapes: Individually"). start>end WRAPS.
       let strokeDash = null, strokeDashOff = 0, skipStroke = false;
       const _trim = layer.trimPath;
       if (_trim && _trim.enabled) {
@@ -25584,7 +25584,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       // ---- Repeater: draw the shape (fill+stroke, INCLUDING trim/dash) `copies` times. Copy i gets a
       // cumulative extra transform — translate (i·offset), rotate (i·rot) & scale (scale^i) about the
       // repeater anchor — and alpha ×opacity^i. Drawn back-to-front (i=copies−1 first) so copy 0 sits on
-      // top (AE "Composite: Below"). Absent/disabled → exactly one undistorted copy = today's render.
+      // top (the "Composite: Below" order). Absent/disabled → exactly one undistorted copy = today's render.
       let copies = 1, rOffX = 0, rOffY = 0, rRot = 0, rScl = 1, rOpac = 1, pvx = 0, pvy = 0;
       const _rep = layer.repeater;
       if (_rep && _rep.enabled) {
@@ -25697,7 +25697,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
         // source sub-rect to sample. Colour ops (grade/key) still process the FULL source (w×h) — only
         // the final composite samples the crop sub-rect, so cropping never scales the content.
         const cr = FM.cropOf(layer, t), cw = cr.w || w, ch = cr.h || h;
-        // Fill OVERRIDE (AM): a solid/gradient/media fill on a video or image layer fully replaces
+        // Fill OVERRIDE: a solid/gradient/media fill on a video or image layer fully replaces
         // its pixels with that fill over the clip's (cropped) bounds. 'media' with no picture chosen
         // yet keeps showing the original clip, and audio-only clips (0×0) can't be filled.
         const fmode = FM.fillModeOf(layer);
@@ -27013,7 +27013,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
   /* ---- Tone Curve (B19): five points per curve — Blacks, Shadows, Midtones, Highlights and Whites at 0 / 25 / 50 / 75 / 100 % in, each
      slider the level that tone comes OUT at — for RGB and for Red, Green and Blue on their own. Channel shows one set; all four apply
-     at once, each channel's own curve first and then RGB's (the order Photoshop and Levels use). Amount fades the whole thing.
+     at once, each channel's own curve first and then RGB's (the order [another app] and Levels use). Amount fades the whole thing.
      The curve through the points is a monotone cubic: Hermite, with Fritsch–Butland's harmonic-mean slopes (the Fritsch–Carlson
      family), which keep every segment inside Fritsch–Carlson's monotone region, so rising points give a curve that rises everywhere
      and never overshoots them. And the points always rise: where two sliders cross they POOL — they meet at their average — so NO
@@ -28213,7 +28213,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    * tools/design/plans/fxnew-bwmix/NOTES.md). Grayscale is a CSS grayscale() with FIXED weights, so every black-and-white look in
    * the app — the seven mono filters too — turns a red and a green of the same brightness into the same grey, and a blue sky
    * can never be darkened. This is the photographer's control: SIX SLIDERS, Reds, Yellows, Greens, Cyans, Blues and Magentas,
-   * each how bright its colour turns (−200..300 %), starting at 40 / 60 / 40 / 60 / 20 / 80 (Photoshop's default mix).
+   * each how bright its colour turns (−200..300 %), starting at 40 / 60 / 40 / 60 / 20 / 80 ([another app]'s default mix).
    *  · THE GREY. Of a pixel's three channels the smallest stays; the step from it to the middle one is weighted by the SECONDARY
    *    colour the two biggest make together (yellow, cyan or magenta), and the step from the middle to the biggest by the PRIMARY
    *    the biggest is (red, green or blue):   grey = min + (mid − min) · secondary + (max − mid) · primary.
@@ -29373,7 +29373,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       { key: 'keep', label: 'Keep brightness', min: 0, max: 100, step: 1, def: 100, unit: '%' },
       { key: 'mix', label: 'Mix', min: 0, max: 100, step: 1, def: 100, unit: '%' },
       /* #966 opts10 (hunt/966-opts10, his "more choices always better"): the two colours always ran into each other across the whole
-         tonal range. BLENDING (Lightroom's Color Grading has it) is how widely they overlap: 100 % the wide, smooth crossover it has
+         tonal range. BLENDING ([another app]'s Color Grading has it) is how widely they overlap: 100 % the wide, smooth crossover it has
          always had; lower narrows it about the split point Balance sets — the two colours still meet half and half there — so the
          darks take only the shadow colour and the lights only the highlight colour; 0 a hard split. 100 % reads the old table
          untouched (stSplit10 only below it). */
@@ -29472,7 +29472,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
    *    transparent map pixel reads as black and opens last, as Luma Matte's does.
    *  · WIPE MAP is another layer anywhere in the stack, drawn at full opacity (Opacity 0 hides it and it still drives the wipe),
    *    with its own Gradient Wipes stripped so two cannot recurse. LEFT ON the picker's own empty choice, "This layer (self)",
-   *    the map is the layer's OWN brightness (After Effects' Gradient Wipe defaults the same way), so it works the moment it is
+   *    the map is the layer's OWN brightness ([another app]'s Gradient Wipe defaults the same way), so it works the moment it is
    *    added and is not "Needs a setting" (layerOptional). The pile drew the layer untouched with no map (Luma Matte's rule) —
    *    NOTES.md asks Ezra which he wants.
    * A pure function of the two pictures and its parameters — no state, no Math.random, the clock only through keyframes. Only
@@ -30602,7 +30602,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
   /* ═══ bughunt4 #4 — AN ADJUSTMENT LAYER'S BLEND MODE ════════════════════════════════════════════════════════════════════
    * The Mixing card offers an adjustment layer every blend mode, but both blits of its graded plate (applyAdjustment's and the
    * cross-fade's above) were hard-wired to source-over: Multiply, Screen, Soft Light… drew the plain grade at its opacity. Now the
-   * plate is blended onto the UNGRADED frame below with the layer's mode (After Effects' rule; opacity already mixed it so):
+   * plate is blended onto the UNGRADED frame below with the layer's mode ([another app]'s rule; opacity already mixed it so):
    *   · a mode Canvas has — BLEND, the map every ordinary layer's blit reads — is the blit's composite op, same alpha and filter;
    *   · a per-pixel mode (FM.BLEND_MANUAL, js/blend-modes.js) goes drawManualBlendLayer's way: the plate is laid on a clear
    *     scratch at the opacity (baked into its alpha, as the blender expects) with the CSS filter, blended per pixel against the
@@ -31960,7 +31960,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
 
   /* Draw a small fitted thumbnail of one layer's content into a canvas (layer list + timeline). */
   // Unscaled intrinsic size of a layer's content (text measured, media natural, null/fallback 100).
-  // Media CROP rect, in SOURCE pixels. AM's "Edit Shape" for a photo/video crops the visible frame
+  // Media CROP rect, in SOURCE pixels. [the reference app]'s "Edit Shape" for a photo/video crops the visible frame
   // (it does NOT scale the content). Missing/partial crop → the full frame. Each field is animatable
   // (number or {kf}) so the crop can be keyframed. `full` flags an uncropped frame (fast path).
   FM.cropOf = function (layer, t) {

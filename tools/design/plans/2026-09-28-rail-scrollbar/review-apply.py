@@ -1,5 +1,5 @@
 import re,sys
-P='/Users/ezrasmith/Claude/FreeMotion/tools/design/plans/2026-09-28-rail-scrollbar/'
+P='/Users/me/Claude/FreeMotion/tools/design/plans/2026-09-28-rail-scrollbar/'
 def sub(path, old, new, count=1):
     s=open(path).read()
     n=s.count(old)

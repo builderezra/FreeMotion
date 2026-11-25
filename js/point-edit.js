@@ -1,4 +1,4 @@
-/* FreeMotion — Point editor (AM's "Edit Points").
+/* FreeMotion — Point editor ([the reference app]'s "Edit Points").
  * Every point shape (library shapes + drawn paths) is built around this: a point at every bend,
  * smooth points ([u,v,1]) where the curve flows through, corners where it kinks. Drag a point to
  * reshape, tap a hollow ring to ADD a point on the curve, double-tap a point to DELETE it.
@@ -96,7 +96,7 @@ window.FM = window.FM || {};
     }
     return l.subs || (l.points ? [l.points] : []);
   }
-  /* Make sure an animated path has a keyframe AT the playhead before it is edited — AE-style roto,
+  /* Make sure an animated path has a keyframe AT the playhead before it is edited — roto,
    * and the same bargain mask-tool.js's flush() already strikes: editing off-key CREATES the key
    * rather than doing nothing. Idempotent, so calling it on every pointermove of a drag costs one
    * find() after the first. A static path is left alone entirely; nothing here starts animating a
@@ -143,7 +143,7 @@ window.FM = window.FM || {};
         g.beginPath(); g.arc(q[0], q[1], 3.5, 0, 6.2832);
         g.fillStyle = 'rgba(10,14,20,.85)'; g.fill(); g.stroke();
       }
-      // vertices: SMOOTH points draw round, CORNER points draw square (AM-style); selected = green
+      // vertices: SMOOTH points draw round, CORNER points draw square; selected = green
       pts.forEach((p, pi) => {
         const q = map(p);
         const isSel = sel && sel.si === si && sel.pi === pi;
@@ -171,7 +171,7 @@ window.FM = window.FM || {};
       g.restore();
       g.strokeStyle = 'rgba(41,217,187,.9)'; g.lineWidth = 1.25;
     }
-    // tangent HANDLES for the selected SMOOTH point — drag either end to shape the curve (AM)
+    // tangent HANDLES for the selected SMOOTH point — drag either end to shape the curve
     if (sel) {
       const ss = subs[sel.si], sp = ss && ss[sel.pi];
       if (sp && sp[2] === 1) {
@@ -456,7 +456,7 @@ window.FM = window.FM || {};
         l.shape = 'path'; l.subs = cv.subs; delete l.points; l.closed = cv.closed;
       } else if (l.points && !l.subs) { l.subs = [l.points]; delete l.points; }
       active = { layerId, embedded: !!(opts && opts.embedded) };
-      sel = { si: 0, pi: 0 };   // a point is always selected (AM) — the panel edits it
+      sel = { si: 0, pi: 0 };   // a point is always selected — the panel edits it
       const wrap = document.getElementById('canvas-wrap');
       overlay = document.createElement('canvas'); overlay.id = 'pe-overlay';
       wrap.appendChild(overlay);

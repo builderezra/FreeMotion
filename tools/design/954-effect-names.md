@@ -1,12 +1,12 @@
-# #954 step (a) — our effect names against Alight Motion's (26 Sep)
+# #954 step (a) — our effect names against [another app]'s (26 Sep)
 
-Sources for AM's names: PARITY.md's effects table (95 AM feature rows) and a third-party list of ~170 AM effect names
-(<https://smartmotionapp.com/effects-list/>; the official help centre refused the fetch). Neither is AM's complete catalogue,
-so "already ours" means "not found in either list", not "proven original". AM's category ORDER is not in either source.
+Sources for [another app]'s names: PARITY.md's effects table (95 [another app] feature rows) and a third-party list of ~170 [another app] effect names
+(a public list; the official help centre refused the fetch). Neither is [another app]'s complete catalogue,
+so "already ours" means "not found in either list", not "proven original". [another app]'s category ORDER is not in either source.
 
 Labels only: every effect keeps its type id, so saved projects are untouched (BEFORE-PUBLISHING.md's warning).
 
-## 1. Distinctive AM names we still use — 40 (proposed new names, his to veto)
+## 1. Distinctive [another app] names we still use — 40 (proposed new names, his to veto)
 
 | id | today | proposed | category |
 |---|---|---|---|
@@ -51,10 +51,10 @@ Labels only: every effect keeps its type id, so saved projects are untouched (BE
 | `tilerotate` | Tile Rotate | Tile Spin | Warping |
 | `lightning` | Lightning | Bolts | Generative |
 
-## 2. Generic craft names AM also uses — 70 (recommend keeping; his call)
+## 2. Generic craft names [another app] also uses — 70 (recommend keeping; his call)
 
 Gaussian Blur, Brightness, Contrast, Saturation, Hue Shift, Invert, Glow, Vignette, Chroma Key, Luma Key, RGB Split, Pixelate, Posterize, Mirror, Threshold, Gamma, Colour Temperature, Noise, Vibrance, Sharpen, Halftone Dots, Pinch / Bulge, Find Edges, Exposure, Kaleidoscope, Zoom Blur, Box Blur, Spin Blur, Gradient Map, Colourize, Checker, Grid, Mosaic, Lens Blur, Dots, Polar Coordinates, Bend, Glass, Clouds, Stripes, Stroke Colour, Starfield, Curl, Bump Map, Directional Blur, Unsharp Mask, Flicker, Dissolve, Wipe, Radial Wipe, Matte Choker, Channel Remap, Lens Flare, Timecode, Cube, Box, Cylinder, Spherize, Torus, Pyramid, Octahedron, Heart, Swing, Spin, Squeeze, Tiles, Replace Colour, Turbulent Displace, Palette Map, Displacement Map
 
-## 3. Not found in either AM list — 96
+## 3. Not found in either [another app] list — 96
 
 Grayscale, Sepia, Tint, Duotone, Solarize, Scanlines, Dither, Wave, Twirl, Emboss, Fisheye, Squish, Glitch, CRT, Sunburst, Liquid Glass, Squircle Corners, Film Grain, Chunk Noise, Grunge, Colour Balance, Highlights & Shadows, Tilt Shift, Drop Shadow, Chromatic Aberration, Hexagon Tiles, Flash (darken), Breathe, Fill Silhouette, Edge Halo, Tile Grid, Trail, Scatter Array, Ring Array, Mirror Tile, Honeycomb, Crosshatch, Number Roll, Type-On, Scramble Text, Text Curve, Text Reverse, Text Repeat, Text Pad, Letter Spread, Change Case, Bleach Bypass, Teal & Orange, Cross Process, Light Leak, Letterbox, Border Frame, Faded Film, Night Vision, Pencil Sketch, Ring, Spiked Star, Open Box, Cross Beam, Page Curl, Card Flip, Depth Push, Wiggle, Shake, Pulse, Drift, Orbit, Motion Blur (Footage), Motion Blur (Object), Wrap Shift, Polar Displacement, Remove Object, Backdrop Clone, Backdrop Lens, Backfill, Particles, Levels, Halation, Frame Stutter, Shockwave, Speed Lines, Snow & Rain, HSL Bands, Time Warp Scan, Chroma Key Pro, Light Wrap, Dispersion, VHS Tape, Compression Crunch, Temporal Denoise, Lens Distortion, Pixel Sort, Luma Matte, Compound Blur, Match Grade, Filter

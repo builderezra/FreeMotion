@@ -9,7 +9,7 @@
  *   bd — backdrop ImageData.data for a rect (Uint8ClampedArray RGBA), mutated IN PLACE.
  *   sd — the source layer's ImageData.data for the SAME rect and the same W/H.
  * Both come straight from getImageData: NON-premultiplied (straight) alpha, 8-bit, sRGB-ENCODED.
- * Do NOT linearise before calling — Photoshop and every browser blend in gamma space, and matching
+ * Do NOT linearise before calling — [another app] and every browser blend in gamma space, and matching
  * canvas' own modes sitting next to these in the picker is the whole point.
  * getImageData throws on a tainted canvas, so the caller still needs the try/catch guard used at
  * js/compositor.js:363.
@@ -84,7 +84,7 @@ window.FM = window.FM || {};
     // Darker Color — NON-SEPARABLE: the three channels are NOT blended independently. One
     // comparison decides the whole pixel and all three channels come from the winner, so the
     // output is always a colour that actually existed in one of the layers (unlike Darken, which
-    // can invent one). Not in the W3C spec at all — Photoshop is the only reference, and it
+    // can invent one). Not in the W3C spec at all — [another app] is the only reference, and it
     // compares "the total of all channel values", i.e. the UNWEIGHTED sum R+G+B.
     // Compared on the raw bytes: scaling both sides by 255 cannot change the sign of a comparison,
     // so this is the same decision the 0..1 form makes, minus six divides.
@@ -115,14 +115,14 @@ window.FM = window.FM || {};
     // ---- LIGHTEN family -------------------------------------------------------------------
     // Lighter Color — NON-SEPARABLE counterpart of Lighten. Implemented channel-wise it would just
     // BE Lighten, which is why it needs this path at all.
-    // Lum = 0.3/0.59/0.11 (the W3C/Photoshop weights), NOT Rec.709: the spec's non-separable Lum()
+    // Lum = 0.3/0.59/0.11 (the W3C/[another app] weights), NOT Rec.709: the spec's non-separable Lum()
     // — the one canvas already uses for our native hue/saturation/color/luminosity — is defined
     // with these, and disagreeing with the Luminosity mode two rows down in the same menu would be
     // indefensible. Weights applied to the raw bytes; a positive scale cannot flip the comparison.
-    // TIE-BREAK: '>=' hands equal luminosity to the SOURCE (Photoshop leaves this undefined; two
+    // TIE-BREAK: '>=' hands equal luminosity to the SOURCE ([another app] leaves this undefined; two
     // different colours can share a luminosity, e.g. pure red vs 30% grey, so it must be stated).
     // NOTE this is a different comparator from Darker Color's R+G+B above — that asymmetry comes
-    // from the agreed spec (Photoshop's own docs for one, W3C Lum for the other) and is kept
+    // from the agreed spec ([another app]'s own docs for one, W3C Lum for the other) and is kept
     // on purpose. The two modes are therefore NOT exact mirrors on saturated hues.
     'lighter-color': function (bd, sd, W, H) {
       const n = Math.min(W * H * 4, bd.length, sd.length);
@@ -134,7 +134,7 @@ window.FM = window.FM || {};
         const as = sa * INV255, ab = ba * INV255;
         const k2 = as * ab, k1 = as - k2, k3 = ab - k2, ao = as + k3;
         // UNWEIGHTED channel sum, matching darker-color eight lines up. Lighter Color is not a W3C
-        // mode — Photoshop is the only reference and it compares "the total of all channel values".
+        // mode — [another app] is the only reference and it compares "the total of all channel values".
         // Using the W3C Lum() weights here picked a different winner on 17% of colour pairs AND
         // disagreed with darker-color about which of a pair is lighter vs darker on saturated hues.
         const ls = sd[i] + sd[i + 1] + sd[i + 2];
@@ -188,7 +188,7 @@ window.FM = window.FM || {};
     // cs <= 0; in the dodge half test cb <= 0 BEFORE cs >= 1. Get it wrong and (1,0) / (0,1) are a
     // literal 0/0 — NaN, which Uint8ClampedArray stores as 0, punching black holes through
     // highlights. With them, a white backdrop survives a black layer and vice versa, as in
-    // Photoshop. Continuous at cs = 0.5 (both halves give cb). Saturates over large areas by
+    // [another app]. Continuous at cs = 0.5 (both halves give cb). Saturates over large areas by
     // design — that is the mode's character, not clipping damage.
     'vivid-light': function (bd, sd, W, H) {
       const n = Math.min(W * H * 4, bd.length, sd.length);
@@ -322,7 +322,7 @@ window.FM = window.FM || {};
     // ColorDodge(Cb, 1-Cs). So cb === 0 is tested FIRST (black backdrop stays black, 0/0 resolves
     // to 0 rather than NaN), then cs === 0 blows out to white. That ordering is the only
     // self-consistency we can actually verify — it guarantees Divide and our native color-dodge
-    // agree pixel for pixel. Photoshop appears to return white even over black; GIMP's legacy
+    // agree pixel for pixel. [another app] appears to return white even over black; [another app]'s legacy
     // divide is base*256/(blend+1). Both differ from this only on pure black.
     // Blowout is aggressive: any cs < cb clamps straight to 1.
     // The tempting native fast path (draw the source inverted, then gCO 'color-dodge') is only

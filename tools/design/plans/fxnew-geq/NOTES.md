@@ -21,7 +21,7 @@ An audio effect in **EQ / Filter, right after the 3-Band EQ**: `graphiceq`, labe
   `DESCRIPTIONS`, the audio tiles show only the label) — it is data for when one does.
 - Search words: graphic eq, graphic equaliser, graphic equalizer, equaliser, equalizer, eq, 10 band, ten band, bass,
   bass boost, treble, tone. Checked against queue 986 C13's stray rule: `on`, `no`, `the` and `low` do not list it.
-- Name: "Graphic EQ" is a generic craft name. Not in either Alight Motion list in `tools/design/954-effect-names.md` (that
+- Name: "Graphic EQ" is a generic craft name. Not in either [another app] list in `tools/design/954-effect-names.md` (that
   record covers the visual effects; no audio name clashes), and not one of ours.
 - Tile icon: none of its own — it falls back to the EQ category's glyph (the Band-Pass bump), as the Trance Gate does for
   Dynamics. A glyph is a picture, so it is his pick (#545), not drawn here.

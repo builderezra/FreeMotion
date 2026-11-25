@@ -1,7 +1,7 @@
 /* export-card.js — the Export card, option A: “What you’ll get” (queue 985).
  *
  * His words, 29 Sep: "the export menus settings are honestly a bit daunting for someone who doesnt know how it works. I
- * dont want to lose any function but i want it to actually make sense at first glance. Capcut does a really good job of
+ * dont want to lose any function but i want it to actually make sense at first glance. [another app] does a really good job of
  * this but dont fully copy". Three designs were drawn inside the real app (tools/design/985/); A was decided on 11 Oct
  * (#1130). It opens on the answer — a picture, the length and about how big the file will be — then five buttons for what
  * to make, four plain rows that open in place with Recommended on the default, and the exact controls in More options.

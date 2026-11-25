@@ -177,6 +177,6 @@ A red run that means nothing is worse than no test — they are worth fixing tog
 
 ## Before any public release
 
-[BEFORE-PUBLISHING.md](BEFORE-PUBLISHING.md) — the UI is modelled on Alight Motion and must be made our
+[BEFORE-PUBLISHING.md](BEFORE-PUBLISHING.md) — the UI is modelled on [another app] and must be made our
 own first. Raise it if he mentions publishing, launching, the App Store, a demo or a tutorial. Do not
 start the re-design unasked.

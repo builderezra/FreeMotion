@@ -61,7 +61,7 @@ A **canvas** effect like Trail and Scatter Array (copies of the layer drawn with
 - Search words: circle array, circular array, radial array, circle repeat, ring of copies, copies around, around, circular, clone,
   copies, wreath, flower, rosette, mandala. Not 'repeat around' / 'circular repeat' (Ring Array's), not 'kaleidoscope'
   (Kaleidoscope's), not 'petals' (Snow & Rain's).
-- **Name**: "Circle Array" is the backlog's name; it is in neither Alight Motion list `tools/design/954-effect-names.md` was built from,
+- **Name**: "Circle Array" is the backlog's name; it is in neither [another app] list `tools/design/954-effect-names.md` was built from,
   and is a plain description, not a trademark. ⚠️ It sits close to **Ring Array** (the wedge fold) — see question 2.
 
 ## The tests (each fails on fb24f68b on its first line: "no registry entry for circlearray — the effect is not built")

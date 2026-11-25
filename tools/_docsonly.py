@@ -24,6 +24,7 @@ ALLOW = [
     re.compile(r'^tools/\.weak-proofs\.log$'),
     re.compile(r'^tools/_classify\.py$'),                  # the queue classifier (self-tested by ship.sh's gates)
     re.compile(r'^tools/(next|tick|inbox|status)\.sh$'),   # the scripts that READ the queue and the inbox
+    re.compile(r'^tools/\.names-allow$'),                  # read only by tools/names-gate.py (#1264): the app never loads it
 ]
 
 
@@ -68,6 +69,10 @@ def selftest():
     want(not ok, 'an empty change list is never "docs-only" (nothing to ship is not a fast path)')
     ok, _ = docs_only(['tools/design/hunts/x.md', 'tools/unblock/unblock.html', 'tools/.spotcheck.log', 'tools/_classify.py'])
     want(ok, 'hunt notes, the unblock source, the spotcheck log and the classifier are docs-only')
+    ok, _ = docs_only(['REQUESTS.md', 'tools/.names-allow'])
+    want(ok, 'a notes release plus the names gate\'s allow list is docs-only (the gate itself tells a session to add to it)')
+    ok, b = docs_only(['REQUESTS.md', 'tools/names-gate.py'])
+    want(not ok and b == ['tools/names-gate.py'], 'the names gate itself is NOT docs-only')
     import tempfile
     d = tempfile.mkdtemp(prefix='fm-docsonly-')
     t = os.path.join(d, 'tests.js')

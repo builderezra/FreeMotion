@@ -1,6 +1,6 @@
 # FreeMotion — Quality System
 
-How FreeMotion gets built to Alight-Motion parity and **stays correct without Ezra babysitting it.**
+How FreeMotion gets built to [another app] parity and **stays correct without Ezra babysitting it.**
 Read this first in any fresh session. The chat is disposable; **this repo is the brain.**
 
 ---
@@ -13,7 +13,7 @@ Long chat sessions degrade output — relevant facts get diluted by hundreds of 
 
 | Artifact | Role |
 |---|---|
-| `PARITY.md` | The matrix: every AM feature × our status. "What is this and is it done?" |
+| `PARITY.md` | The matrix: every [another app] feature × our status. "What is this and is it done?" |
 | `BACKLOG.md` | Prioritized gaps + bugs. Top of the list = build next. |
 | `QUALITY.md` (this) | The process + the test plan. How a cycle runs. |
 | `tests/` + `CHANGELOG.md` + memory | What "working" means; what changed when. |
@@ -29,14 +29,14 @@ Every build cycle runs a panel of fresh-context agents. No single bot's word is 
 | Role | Job |
 |---|---|
 | **Builder** | Implements the top backlog item + writes its test. |
-| **AM-Parity Auditor** (unbiased) | Researches the *real* Alight Motion and diffs feature-by-feature. Never told what the builder intended, so it can't be charitable. |
+| **[another app]-Parity Auditor** (unbiased) | Researches the *real* [another app] and diffs feature-by-feature. Never told what the builder intended, so it can't be charitable. |
 | **Bug Hunter** | Adversarial — tries to break it, hunts edge cases. |
 | **UX / Mobile Reviewer** | The 380px phone pass + interaction feel (the gap that started all this). |
 | **Verifiers ×2–3** | Independently try to *refute* every "done" claim and every reported bug. |
 | **Synthesizer** | Updates `PARITY.md` / `BACKLOG.md` / `tests/`, commits. |
 
 ### Accountability rules (non-negotiable)
-- A feature is **done** only when: builder says done **AND** the auditor confirms it against AM **AND** verifiers can't refute it **AND** its test passes.
+- A feature is **done** only when: builder says done **AND** the auditor confirms it against [another app] **AND** verifiers can't refute it **AND** its test passes.
 - A bug is **real** only when **≥2 independent verifiers** reproduce it. (Kills false alarms.)
 - Nothing merges with a red test suite.
 
@@ -49,7 +49,7 @@ pick top BACKLOG item
   → write/locate its test (red)
   → Builder implements
   → test goes green + whole suite stays green
-  → Council: AM-Parity Auditor + Bug Hunter + UX reviewer
+  → Council: [another app]-Parity Auditor + Bug Hunter + UX reviewer
   → Verifiers adversarially confirm (majority vote)
   → Synthesizer: update PARITY.md (✅), remove from BACKLOG, append CHANGELOG, git commit
   → append one line to the daily digest

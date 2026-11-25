@@ -1,4 +1,4 @@
-# MISSION — Pro-parity features (After Effects gaps that are realistic)
+# MISSION — Pro-parity features ([another app] gaps that are realistic)
 
 Ezra's standing order (2026-07-17): build ALL eight realistic features below, one at a
 time, multi-agent where it helps, adversarially bug-checked, each committed (pushable)

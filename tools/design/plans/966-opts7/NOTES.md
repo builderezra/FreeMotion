@@ -45,8 +45,8 @@ in v17.23, is on the same line).
 | Timecode (`timecode`) | `speed` | Clock speed | 0–600 ×, keyframable | 1 | the time-lapse clock: 60 runs a minute a second, 0 stops it; before Start at and Counts (a countdown runs down at that speed); a keyframed speed integrated on the project's clock over the clip's (or the timeline's) seconds |
 | | `lead` | Leading zero | Keep (0) / Drop (1), live in the padded formats (`liveWhen` [0, 1, 2, 4, 6]) | Keep | Drop writes 0:05 for 00:05, 0:00:12 for 00:00:12 — the first number only |
 | Lamp Shadow (`radialshadow`) | `fade` | Fade | 0–100 %, keyframable | 100 | how much the shadow fades as it falls away: 100 % the old fade, 0 % solid to its end |
-| | `shadowonly` | Shadow only | Off (0) / On (1) | Off | hides the layer and keeps its shadow, the layer's own footprint shadowed too (After Effects' Radial Shadow has a Shadow Only) |
-| Lens Distortion (`lensdistort`) | `centerx` | Centre X | 0–100 %, keyframable | 50 | the middle of the lens across the frame — a bulge off to one side, one corner of a wide shot straightened (After Effects' Optics Compensation has a View Center) |
+| | `shadowonly` | Shadow only | Off (0) / On (1) | Off | hides the layer and keeps its shadow, the layer's own footprint shadowed too ([another editor]'s Radial Shadow has a Shadow Only) |
+| Lens Distortion (`lensdistort`) | `centerx` | Centre X | 0–100 %, keyframable | 50 | the middle of the lens across the frame — a bulge off to one side, one corner of a wide shot straightened ([another editor]'s Optics Compensation has a View Center) |
 | | `centery` | Centre Y | 0–100 %, keyframable | 50 | …and down it |
 | Dispersion (`dispersion`) | `seed` | Pattern | 0–999, keyframable | 0 | another noise front: two dispersing layers stop tearing alike |
 | | `scatter` | Scatter | 0–100 %, keyframable | 0 | each piece flies off its own way, up to that far either side of Direction (100 % every way) — a shatter rather than a gust; the tear itself is unchanged |

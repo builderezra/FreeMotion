@@ -4,7 +4,7 @@ You'll be able to begin a new project from a ready-made one, and turn your own p
 
 1. On Home, tap the **Templates** tab, the second one along. On a fresh install it is empty (it says **No templates yet**), so do step 5 first to save a template of your own.
 2. On a template's card, tap the small three-dots button at the right and choose **New project from template**.
-3. A screen called **Insert your Media** opens. It says **Tap a slot to make it yours**. Tap a slot, then choose **Replace Media** for a photo or video, or type under **Your words** for a title.
+3. A screen called **Insert your Media** opens. Tap a slot, then choose **Replace Media** for a photo or video, or type under **Your words** for a title.
 4. Tap **Done**. Your new project opens.
 5. To save your own: tap the **Projects** tab, tap the three dots on the project's card and choose **Save as template…**. Type a name and tap **Save**.
 6. To drop a template into a project you are already editing, tap the add row, open the **Template** tab and tap the template.
@@ -24,7 +24,7 @@ If it doesn't work: If you tapped the card itself, a message says **Editing "nam
 | 2 three-dots on the card; New project from template | js/home.js:2003 | yes |
 | 2 tapping the card edits the template instead | js/home.js:2019 | yes |
 | 3 Insert your Media | js/template-fill.js:191 | yes |
-| 3 Tap a slot to make it yours | js/template-fill.js:210 | yes |
+| 3 the slots under the picture (the line above them went in v18.53) | js/template-fill.js:212 | yes |
 | 3 Replace Media | js/template-fill.js:259 | yes |
 | 3 Your words | js/template-fill.js:216 | yes |
 | 4 Done | js/template-fill.js:192 | yes |

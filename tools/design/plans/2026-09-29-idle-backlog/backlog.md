@@ -15,7 +15,7 @@ The page for Ezra's phone is [for-ezra.md](for-ezra.md).
 1. **Log a batch only when you are idle and about to build it.** Do not log all 15 up front. Oldest-first means a batch logged today as #990 would be worked before anything he types tomorrow (#995). Only the `(hunt …)` tier sorts behind his words (`tools/_classify.py:287`), and these batches are not hunt findings. So log one batch, ship it, log the next.
 2. **Log the §C bugs as hunt items first**, each with `(hunt HIGH|MEDIUM|LOW #n)`, because they sort behind his words anyway. When an A item also fixes a C item, the release closes both. Name both as `queue NNN` in the POLISH-LOG line, and give each its own test that fails today (prove.sh wants one per item).
 3. **Polish = new controls on an existing effect.** It ships with a before/after picture. **New effects, new filter looks, new sound packs, and any new button or layout in a panel** go through an options sheet first (#545: draw, render at the shipped size, he picks, "recommended" beside the best).
-4. **New names:** check every new effect or control name against `tools/design/954-effect-names.md` (#954, move away from Alight Motion names).
+4. **New names:** check every new effect or control name against `tools/design/954-effect-names.md` (#954, move away from [another app] names).
 
 ### 0.2 What the spot-check found (so nobody re-checks it)
 
@@ -996,7 +996,7 @@ Ranking: things his edits use (beats, voices, trails, captions, overlays) and ch
 | Old record | lofi 0.7 + crackle |
 
   Plus "Save this stack as a voice".
-- Why: CapCut's most-used audio feature, and FCP has a whole Voice category. The DSP exists already; only the packaging is missing.
+- Why: [another editor]'s most-used audio feature, and [another editor] has a whole Voice category. The DSP exists already; only the packaging is missing.
 - How: a `voice` entry in `FM.AFX_CATEGORIES` + `AUDIO_CAT_ICON`. A tile calls `makeInstance` per member inside one `history.commit`.
 - Risk: none for render. The stack counts against `AFX_MAX` 16. Robot needs the 7.7 square shape, Underwater needs the 7.5 slope, and Radio/Old record need 9.5, so ship B1 after batches 7 and 9, or ship v1 without those three.
 
@@ -1020,7 +1020,7 @@ Ranking: things his edits use (beats, voices, trails, captions, overlays) and ch
   - `start` 0–1 (1).
   - `order` Behind / In front.
   - `blend` Normal / Add / Screen / Lighten / Maximum.
-- Why: AE Echo, CapCut Ghost/Afterimage. Dance edits and light-painting. Nothing here renders a layer at past times.
+- Why: [another editor] Echo, [another editor] Ghost/Afterimage. Dance edits and light-painting. Nothing here renders a layer at past times.
 - How: a CANVAS_FX that calls `drawLayer` at t + k·time on the pooled plate (`_cfPool`), with the `FM._mfGhost` recursion guard. Stateless.
 - Risk: count × one layer render, so cap it and use the plate scale.
 
@@ -1051,7 +1051,7 @@ Ranking: things his edits use (beats, voices, trails, captions, overlays) and ch
   - Colour (#ffffff).
   - `falloff` 0.2–4 (1.2).
   - `rainbow` 0–1 (0).
-- Why: Trapcode Starglow and CapCut Starlight, for sparkle on lights, jewellery and titles.
+- Why: [another editor] and [another editor] Starlight, for sparkle on lights, jewellery and titles.
 - How: highlight extract (the Light Glow pattern), then N/2 two-sided streak passes (the Linear Streaks tap walk), then screen. It may spread past alpha, and it skips dark pixels.
 
 **B7. Film Damage. Stylize, M.**
@@ -1090,7 +1090,7 @@ Ranking: things his edits use (beats, voices, trails, captions, overlays) and ch
   - Active colour; box colour.
   - `padding` px; `radius` px.
   - `past` Keep highlight / Return.
-- Why: the single most-requested caption look on TikTok and CapCut. `captions.js` exists already.
+- Why: the single most-requested caption look on TikTok and [another editor]. `captions.js` exists already.
 - How: the text renderer must accept styled runs (the `drawAnimatedText` per-unit path). Word times from captions-vad have to be stored.
 - Risk: touches the text renderer, so static text must stay byte-identical.
 
@@ -1238,7 +1238,7 @@ Ranking: things his edits use (beats, voices, trails, captions, overlays) and ch
 | B30 | Circle Array | count 2–36, radius, start, face centre, scale step, spin, spiral, fade |
 | B31 | Cartoon | smoothing, shading steps 2–12, edge width, edge threshold, edge colour, saturation, mix |
 | B32 | Oil Paint | brush 2–16 px, sharpness, detail 4/8 sectors, levels 0–32, mix. Summed-area Kuwahara. |
-| B33 | Black & White Mixer | Reds/Yellows/Greens/Cyans/Blues/Magentas −200..300 (Photoshop 40/60/40/60/20/80), filter preset Neutral/Red/Orange/Yellow/Green/Blue/Infrared, tint + amount, contrast |
+| B33 | Black & White Mixer | Reds/Yellows/Greens/Cyans/Blues/Magentas −200..300 ([another editor] 40/60/40/60/20/80), filter preset Neutral/Red/Orange/Yellow/Green/Blue/Infrared, tint + amount, contrast |
 | B34 | Graphic EQ (10-band) | 31 Hz–16 kHz at ±12 dB, output, presets |
 
 **B35–B56: the rest, in order.**

@@ -43,7 +43,7 @@ the phone plate; at Scale 16 every pixel everywhere. Two companions make it hold
 | The noise | value noise, smoothstep, the pile's Math.imul hash and per-octave salt (seed + 1013 x octave); Smooth = finer octaves x0.25 instead of x0.5 | **the same** functions (`fnHash`, `fnValue`) |
 | The grid | ≤ 320 samples on the long edge, stretched to the plate, read at pixel corners | **the fix** (above): step from the finest drawn octave, fixed node places, pixel centres; sub-pixel octaves faded out |
 | Ridged | `1 − |2v − 1|` — exactly Turbulent's negative (the sum is linear, so Ridged = 1 − Turbulent at every pixel: two of the four patterns were one picture and its inverse, and swapping Dark and Light gave the other) | `(1 − |2v − 1|)²` — the ridged-noise standard: the square narrows the bright ridges and widens the dark valleys, so it is its own look. **Question 2** |
-| Evolution | a speed (/s); each octave slides through its lattice at its own rate (0.7 + 0.21 o, −0.9 − 0.17 o lattice units per unit), integrated when keyed — from the PROJECT's 0 | **the same motion**, on **the clip's own clock** (`FM.fxLocalTime`, integrated from the clip's first moment — a split or trimmed clip keeps its texture). **Question 1** asks whether he wants AE's churn-in-place instead |
+| Evolution | a speed (/s); each octave slides through its lattice at its own rate (0.7 + 0.21 o, −0.9 − 0.17 o lattice units per unit), integrated when keyed — from the PROJECT's 0 | **the same motion**, on **the clip's own clock** (`FM.fxLocalTime`, integrated from the clip's first moment — a split or trimmed clip keeps its texture). **Question 1** asks whether he wants [another editor]'s churn-in-place instead |
 | Registration | spliced into the main table after Fractal Ridges' neighbour, `fractalnoise: 1` in the batch-17 POSTFX line, CATEGORY_OF batch 17, desc twice | **batch 48** at the end (`FN_ROWS`, just before `FM._FX_TABLES`), so it leads the NEW row; desc on the row only; search words added |
 | Tile | none | `fractalnoise: scale 24` in fx-thumbs OVERRIDES (the default 100 is one soft blob on a 96-unit tile) |
 | Busters | compositor 220 → 221, fx-registry 25.40 → 25.41 (ChatGPT's private count) | from this tree, once: compositor 224 → **225**, fx-registry 28.36 → **28.37**, fx-thumbs 59 → **60** |
@@ -144,7 +144,7 @@ The probe also returns, for the defaults and for Scale 16 / 6 octaves, the grid'
 
 ## Questions for Ezra
 1. **Evolution's motion**: the pile's (kept) slides each layer of detail at its own speed, so the texture drifts diagonally as it churns
-   — smoke on the wind. After Effects' Evolution instead churns the shapes **in place** without travelling. Keep the drift, add "churn in
+   — smoke on the wind. [another editor]'s Evolution instead churns the shapes **in place** without travelling. Keep the drift, add "churn in
    place" as a choice (a third noise dimension, about twice the cost), or switch to churn only? Recommended: add it as a choice, churn as
    the default — it is what "evolution" means in every other app.
 2. **Ridged**: built as the ridged-noise standard (thin bright ridges, broad dark valleys). The pile's version was Turbulent's exact

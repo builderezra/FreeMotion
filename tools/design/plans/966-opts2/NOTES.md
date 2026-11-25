@@ -10,7 +10,7 @@ suite, no tools/*.sh runner, no node or python running app or test code.
 ## 1. Twin check (done before any code)
 
 Effects were picked for being visible in short phone edits — two transitions, a strobe, a colour look, a lens look, a light
-streak and a gradient generator — and thin next to AE / Premiere / CapCut / Alight Motion / DaVinci. Every candidate option was
+streak and a gradient generator — and thin next to [another editor] / [another editor] / [another editor] / [another app] / [another editor]. Every candidate option was
 checked six ways:
 
 | Check | How | Result |
@@ -34,8 +34,8 @@ that only a run can give; nothing thin and visible enough left after §A batches
 | Dissolve (`dissolve`) | `grain` | Grain size | 1–40 px (unit px: pxToPlate scales it), keyframable | 1 | the holes come in square grains this big instead of single pixels |
 | | `burn` | Burn edge | 0–100 %, keyframable | 0 | the edge glows as it eats in: what is about to go turns the Burn colour, fading back to the picture further in — burning paper |
 | | `color` | Burn colour | colour row, greyed while Burn edge is 0 | #ff7a1a | the glow's colour |
-| Block Fade (`blockdissolve`) | `aspect` | Block height | 25–400 %, keyframable | 100 | tall or wide blocks (AE's Block Width / Block Height) |
-| | `feather` | Feather | 0–100 %, keyframable | 0 | each block fades out instead of vanishing at once (AE's Feather) |
+| Block Fade (`blockdissolve`) | `aspect` | Block height | 25–400 %, keyframable | 100 | tall or wide blocks ([another editor]'s Block Width / Block Height) |
+| | `feather` | Feather | 0–100 %, keyframable | 0 | each block fades out instead of vanishing at once ([another editor]'s Feather) |
 | Strobe (`blink`) | `soft` | Softness | 0–100 %, keyframable | 0 | the strobe fades on and off instead of switching — at 100 a smooth pulse |
 | Colour Pop (`spotcolor`) | `darken` | Darken the rest | 0–100 %, keyframable | 0 | the drained part also goes darker, so the kept colour pops harder (the Sin City look) |
 | | `color2` | Rest colour | colour row, greyed while Drain the rest is 0 | #808080 (any grey = none) | the drained part takes this colour's tint at its own brightness — a sepia or blue world round the red coat |

@@ -86,7 +86,7 @@ window.FM = window.FM || {};
     return clamp(Math.floor(t * n) / (n - 1), 0, 1);
   }
 
-  // The same staircase with each tread overshooting as it lands, which is AM's "Elastic Steps".
+  // The same staircase with each tread overshooting as it lands, which is [the reference app]'s "Elastic Steps".
   function fElasticSteps(t, p) {
     const n = Math.max(2, Math.round(p.n)), w = clamp(p.w, 0, 1);
     const x = t * n, i = Math.floor(x), f = x - i;

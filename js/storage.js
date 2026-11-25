@@ -2121,7 +2121,7 @@ window.FM = window.FM || {};
     if (!l) return;
     /* ⚠️ THE FLOOR IS -3600, NOT 0, AND THAT IS A DATA-LOSS FIX (queue 680).
      * A NEGATIVE START IS A DELIBERATE, SUPPORTED STATE. js/timeline.js floors a clip drag at
-     * `-(duration - 0.1)` under the comment "AM: a clip can be dragged PAST 0 into negative start — it
+     * `-(duration - 0.1)` under the comment "[the reference app]: a clip can be dragged PAST 0 into negative start — it
      * keeps going", the move-to-playhead path repeats that floor, and the suite itself builds a
      * `start: -2` scene as valid input. Clamping it to 0 here did not repair corruption; it destroyed
      * something he had deliberately done.

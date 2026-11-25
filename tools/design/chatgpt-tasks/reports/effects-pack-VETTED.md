@@ -8,7 +8,7 @@ Checked against:
 - the ten #912 looks on branch `fm912-filters`: Sepia, Digicam, Portrait Film, Moody, Cyberpunk, Tungsten, Airy, Colour Splash, Cyanotype, HDR;
 - the idle backlog (`tools/design/plans/2026-09-29-idle-backlog/backlog.md`, sections A, B and C);
 - REQUESTS.md #966, #912 and #954 (`tools/design/954-effect-names.md`);
-- Alight Motion's ~170 effect names, re-fetched today from smartmotionapp.com/effects-list.
+- [another app]'s ~170 effect names, re-fetched today from a public list.
 
 **This file is a design record, not a build order.** Every new effect and new filter below still needs his picture-pick under #545 before it ships: draw it, show it at the size it ships at, and let him choose. The upgrades are polish on existing effects, so under #966 each can ship with a before/after picture.
 
@@ -16,7 +16,7 @@ Checked against:
 
 Held up:
 - Every `file:line` anchor it cited (Wipe 654, Mosaic 362, Tunnel 1194, Inner Blur 806 and the rest) points at the right line in the current tree.
-- No name it coined matches an Alight Motion name or one of our own labels.
+- No name it coined matches a [another app] name or one of our own labels.
 
 Wrong or missing, and corrected in the shortlist:
 1. **It treats temporal effects as having no path yet. They do have one.** E08 and E17 are marked "confidence low until temporal access is designed". In fact four shipped effects already keep frame history in `_mfRec` (`js/compositor.js:11925`): Motion Blur (Footage), Frame Stutter, Time Warp Scan (12384) and Temporal Denoise (1490). They follow a fixed set of rules:
@@ -96,8 +96,8 @@ Every one depends on a new effect, so it can only ship after that effect (§0 it
 
 ### Name clashes
 
-**Against Alight Motion's list (fetched today): no clashes**, for ChatGPT's names or for any name proposed below.
-**CapCut's catalogue could not be checked from here.** Three of the proposed names are generic craft terms that CapCut may also use: "Low Poly", "Watercolour" and "Jigsaw". That is the same tier as #954 section 2 ("Gaussian Blur" and the like), which #954 recommends keeping. Check CapCut before shipping.
+**Against [another app]'s list (fetched today): no clashes**, for ChatGPT's names or for any name proposed below.
+**[another app]'s catalogue could not be checked from here.** Three of the proposed names are generic craft terms that [another app] may also use: "Low Poly", "Watercolour" and "Jigsaw". That is the same tier as #954 section 2 ("Gaussian Blur" and the like), which #954 recommends keeping. Check [another app] before shipping.
 
 ## A. Effects: the best 12, ranked by value to his edits
 
@@ -335,4 +335,4 @@ Not taken:
 2. **Draw one #545 options sheet of the first six effects** (Colour Delay, Character Art, Jigsaw, Ink Seep, Rain on Glass, Water Light), rendered through the app on real clips at phone size, and let him pick.
 3. **Draw a second sheet for effects 7–12.**
 4. **Build each filter only after its effects ship,** and show the filters beside the unpicked #912 ten and backlog B8.
-5. **Check CapCut for "Low Poly", "Watercolour" and "Jigsaw"** before they ship.
+5. **Check [another app] for "Low Poly", "Watercolour" and "Jigsaw"** before they ship.

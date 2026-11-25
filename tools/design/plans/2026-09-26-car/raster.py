@@ -3,7 +3,7 @@ Used only to iterate and to measure before the in-app renders; the pictures show
 import json, math, re
 import numpy as np
 
-REPO = '/Users/ezrasmith/Claude/FreeMotion'
+REPO = '/Users/me/Claude/FreeMotion'
 
 
 def current_car():

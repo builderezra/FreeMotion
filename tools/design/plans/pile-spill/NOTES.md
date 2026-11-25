@@ -14,7 +14,7 @@ reading the code and from hand arithmetic. The proof is written and waiting: `sc
 
 - **Chroma Key** has a Despill slider (queue 904, v16.56): the key's dominant channel pulled down to the larger of the other two.
 - **Chroma Key Pro** has Despill (0.7) and, since #482 12.1, *Despill from* Key colour / Green / Blue (hunt C3 fixed it always pulling green).
-- **REQUESTS.md #484 clause 2** designed a *Spill Remover* (Alight Motion's *Key Spill Cleaner*) and did not ship it: it would have been
+- **REQUESTS.md #484 clause 2** designed a *Spill Remover* ([another app]'s *Key Spill Cleaner*) and did not ship it: it would have been
   **invisible at its default on the tile sample** (#661). Round 13 (v8.98) skipped a spill control on Chroma Key because Pro had one.
 
 Both existing controls only act INSIDE their own key, on the pixels that key keeps. A standalone effect is different and is what §B54
@@ -41,7 +41,7 @@ two, `lim = max(x, y)` (Gentle) or `(x + y) / 2` (Strong). If `v > lim`: `cut = 
 - **Which despill is it, and is it the standard?** The pile used the **max-of-the-other-two limit** — the standard "Gentle"/limit
   despill, and exactly what both keys' Despill already does here. Strong (the average limit) is the other standard mode in compositing
   apps; it takes more but turns yellows orange (230,235,60 → 230,145,60), which the row's note says. Neither is a desaturate-toward-a-
-  replacement-colour method (AE's Advanced Spill Suppressor "Standard"); that one also greys real greens in the subject and needs a
+  replacement-colour method ([another editor]'s Advanced Spill Suppressor "Standard"); that one also greys real greens in the subject and needs a
   colour picker, so it was not added.
 - A colour whose spill channel does not lead — a grey, a red, a blue (on Green), skin with no cast — is never touched, byte for byte.
 - **Keep brightness**: at 100 % the Rec.601 brightness is unchanged within rounding, and the spill stays gone (adding the same to every
@@ -76,7 +76,7 @@ Fixed / changed:
 5. **Default Amount 100 %, not 60 %** (a suppressor's job is to suppress; Chroma Key Pro's Despill starts at 70 %).
 6. Spill colour is a **Green / Blue / Key colour** row, the swatch greyed unless Key colour (the pile always read a colour swatch);
    the kernel's fallbacks equal the registry's defaults (784); NaN from a bad keyframe reads as the default; browser tile on the
-   keyshot; `NOOP_WHY`; more search words, including the #484 design's name (spill remover) and Alight Motion's (key spill cleaner),
+   keyshot; `NOOP_WHY`; more search words, including the #484 design's name (spill remover) and [another app]'s (key spill cleaner),
    as Chroma Key Pro is found by "advanced chroma key".
 7. The pile's description said "after keying"; ours says where else it works (a clip keyed elsewhere, an adjustment layer).
 

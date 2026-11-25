@@ -37,7 +37,7 @@ are a different system, and an audio default's sample-identity needs an OfflineA
 
 | Effect (type) | Key | Label | Range / choices | Default | What it does |
 |---|---|---|---|---|---|
-| Radial Wipe (`radialwipe`) | `border` | Border width | 0–100 px (unit px: pxToPlate scales it), keyframable | 0 | a band of the Border colour along both edges of the sweep as it turns, on the part still showing (Premiere's Clock Wipe border; the sibling of round three's Wipe border) |
+| Radial Wipe (`radialwipe`) | `border` | Border width | 0–100 px (unit px: pxToPlate scales it), keyframable | 0 | a band of the Border colour along both edges of the sweep as it turns, on the part still showing ([another editor]'s Clock Wipe border; the sibling of round three's Wipe border) |
 | | `color` | Border colour | colour row, greyed while Border width is 0 (`colorGate` deadAt 0, "0 px") | #ffffff | the band's colour |
 | Scramble Text (`textrandomizer`) | `unit` | Settles by | Letter / Word | Letter (0) | Word lands each word whole while its letters scramble (Type-On has Reveal by; Scramble could only settle letter by letter) |
 | | `ahead` | Scrambled ahead | 0–20, keyframable | 0 (= all) | only that many scrambled units run ahead of the settled text and the rest is hidden — the decoder look; each hidden letter is a no-break space, so the line keeps about its finished length |

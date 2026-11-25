@@ -1,4 +1,4 @@
-# ⚠️ BEFORE PUBLISHING — make it look like OURS, not Alight Motion
+# ⚠️ BEFORE PUBLISHING — make it look like OURS, not [another app]
 
 **Status: NOT DONE.** This is a blocker for any public release (app stores, a public URL you
 promote, a demo video, a tutorial series). Delete this file only when the work below is actually
@@ -8,24 +8,24 @@ finished — not when it's planned.
 
 His words, and it is the first item here he has framed as legal exposure rather than as polish:
 
-> i want every effect to be named different to what it is in alight motion and also have different
-> ordering to avoid getting taken down by aligiht motion for copying and so far this isnt done
+> i want every effect to be named different to what it is in [another app] and also have different
+> ordering to avoid getting taken down by [another app] for copying and so far this isnt done
 
 He is right that it is not done — queue 484 has only ever renamed the handful that were *obviously*
 copied. This is **all ~198 effect names and the category order**.
 
-**Done by #954 (v17.57).** Measured first, as below: of 206 names, 40 were distinctly Alight Motion's and are
+**Done by #954 (v17.57).** Measured first, as below: of 206 names, 40 were distinctly [another app]'s and are
 renamed (tools/design/954-effect-names.md has them with their ids), 70 are plain craft names every editor uses and are
 kept (decided 11 Oct, #1130), and 96 were already ours. The groups now run Colouring · Keying · Blur · Stylize ·
 Drawing / Edge · Warping · Shakes / Movement · Repetition · Generative · 3D · Text · Opacity / Visibility (was Colouring ·
 Blur · Warping · Generative · Stylize · Drawing / Edge · Shakes / Movement · Repetition · Keying · Opacity · Text · 3D).
-Every old name is still a search word. Caveat: AM's names came from a third-party list of about 170, so "ours" means
-"in neither list", not proven original, and AM's own group order is published nowhere we could reach.
+Every old name is still a search word. Caveat: [another app]'s names came from a third-party list of about 170, so "ours" means
+"in neither list", not proven original, and [another app]'s own group order is published nowhere we could reach.
 
 **Do the measuring before any renaming.** Some of these are generic craft terms — Blur, Levels,
 Vignette, Drop Shadow — that every editor in the category uses because they are what the thing is
 called. Renaming those makes the app worse and protects nothing. What matters is the names that are
-distinctively Alight Motion's, and the ORDER, which is a creative arrangement rather than a fact.
+distinctively [another app]'s, and the ORDER, which is a creative arrangement rather than a fact.
 
 ⚠️ **AND THE ONE THING THAT CAN BREAK EVERY EXISTING PROJECT:** a saved project references effects by
 their **type id**, not their label. The ids must not move even when the labels do — or a rename quietly
@@ -34,45 +34,45 @@ stores its type id and its settings, never its label (only a filter stores a nam
 
 ## Why this exists
 
-FreeMotion's UI was deliberately built by copying Alight Motion, screenshot by screenshot, because
+FreeMotion's UI was deliberately built by copying [another app], screenshot by screenshot, because
 that was the fastest way to get a good interface and to learn what "good" looks like in a motion
 editor. That was the right call for building. It is the wrong thing to ship.
 
 Copying **what an app does** is normal — features, capabilities and workflows are how every editor
 in the category resembles every other one. Copying **how an app looks** is the part that gets you
 in trouble and, just as importantly, leaves you with no identity of your own. A user should be able
-to see one screenshot of FreeMotion and know it isn't Alight Motion.
+to see one screenshot of FreeMotion and know it isn't [another app].
 
 (If any of this ends up mattering commercially, get a real opinion from someone qualified — this
 file is a build note, not legal advice.)
 
-## What is currently modelled on Alight Motion
+## What is currently modelled on [another app]
 
-Each of these was built from an AM screenshot and needs an original treatment:
+Each of these was built from a [another app] screenshot and needs an original treatment:
 
 - **Home screen** — the list-row cards (86px thumb left, name + meta chips, ⋯ on the right), the
-  pill tab row, the centred green + FAB, the duration badge on the thumbnail. This is AM's layout.
+  pill tab row, the centred green + FAB, the duration badge on the thumbnail. This is [another app]'s layout.
 - **Settings panel** — the slide-in drawer, its grouped rounded cards, and the row set itself
   (Project sorting / Demo mode / Show touches / Show system fonts / Default layer duration) came
-  straight from AM's settings screenshot.
+  straight from [another app]'s settings screenshot.
 - **Add menu** — the tab row across the top opening a sub-grid, plus the vertical quick-add rail on
-  the right (Text / Freehand / Vector). That interaction model and its arrangement are AM's.
+  the right (Text / Freehand / Vector). That interaction model and its arrangement are [another app]'s.
 - **Editor chrome** — the top bar composition (back ‹, project name, ⚙, green export button), the
   transport row, and the timeline clip look.
-- **Terminology** — "Elements", "Object / Element", "Templates" as tab names follow AM's wording.
+- **Terminology** — "Elements", "Object / Element", "Templates" as tab names follow [another app]'s wording.
 - **Camera Options** (v4.25) — the three-screen structure (Camera View / Focus Blur / Fog), the icon
-  rail that switches between them, and the control names all come from AM screenshots. The optics
+  rail that switches between them, and the control names all come from [another app] screenshots. The optics
   underneath are our own (a real pinhole lens driving the existing Z model); the screen layout is not.
-- **Clip-action row, playhead-outside state** (v4.17) — built from AM screenshots: the middle buttons
+- **Clip-action row, playhead-outside state** (v4.17) — built from [another app] screenshots: the middle buttons
   swapping from trim/split to move-to-playhead / extend-to-playhead when the playhead leaves the clip,
   the two icon glyphs (box → bar, open box → bar), and the multi-select bar carrying the same pair
-  alongside the align set. The behaviour is worth keeping; the icon language is AM's and needs redrawing.
+  alongside the align set. The behaviour is worth keeping; the icon language is [another app]'s and needs redrawing.
 
-- **Top-bar parenting button** (v4.44) — the button beside the bin. It came from an AM screenshot and
+- **Top-bar parenting button** (v4.44) — the button beside the bin. It came from a [another app] screenshot and
   had been mis-read as "duplicate"; v4.44 corrected it to set parenting, which is what the screenshot
-  was actually showing. The glyph and its placement are AM's.
+  was actually showing. The glyph and its placement are [another app]'s.
 
-- **The Share panel — modelled on GOOGLE DOCS, not Alight Motion (queue 921, live collaboration, S3–S7).**
+- **The Share panel — modelled on GOOGLE DOCS, not [another app] (queue 921, live collaboration, S3–S7).**
   Its whole shape is Docs' share dialog: "Share “name”" as the title, the people list with a role drop-down
   on each row (Editor / Commenter / Viewer), "General access" with the link below it and [Copy link], and a
   ⚙ that opens a second page of sharing settings ("Editors can invite others", "Viewers and commenters can
@@ -86,39 +86,39 @@ Our own already: the logo and splash animation (Ezra's: since #1180 the timeline
 above", and its Keyframes intro), the effect set and its internals, the
 slip ghost, the Apple-squircle corner rounding, the media library, and everything under the hood.
 
-_**Swept v4.26 → v4.70 on 2026-08-08** against POLISH-LOG. Only v4.44 above records an AM origin;
+_**Swept v4.26 → v4.70 on 2026-08-08** against POLISH-LOG. Only v4.44 above records a [another app] origin;
 everything else in that range was effects, render fixes or Ezra's own direction. Caveat: this sweep
 can only find what was written down at the time, so if a panel was built from a screenshot without
 saying so it is still missing here. The two worth Ezra's own eye are the **effect-browser hold sheet**
 (v4.50, the press-and-hold description/tag card) and the **preset sheet** (v4.59) — neither log entry
-claims an AM origin, and I can't tell from the code whether one was used._
+claims a [another app] origin, and I can't tell from the code whether one was used._
 
 - **The ⧉ layer-actions drop-down — DONE, v10.76/v10.77 (queue 436 + 437).** ✅ Its item list, order and
-  wording were AM's: *Select All Layers / Group Selection / Masking Group / Duplicate Layer / Copy Layer /
+  wording were [another app]'s: *Select All Layers / Group Selection / Masking Group / Duplicate Layer / Copy Layer /
   … / Paste Layer / Paste Style…*. **Ezra spotted this one himself and unprompted** — *"re order the
-  buttons in it because it's the same layout and wording as alight motion, if you can come up with
-  different wording as well"* — which is the first time the AM-resemblance came from him rather than from
+  buttons in it because it's the same layout and wording as [another app], if you can come up with
+  different wording as well"* — which is the first time the [another app]-resemblance came from him rather than from
   this file. Grouping left the menu entirely (it is two buttons in the top bar now), and the rest was
   renamed on a rule his own two examples imply: name the object the way the app already talks about it
   ("selected", which is what the top bar says), and say WHERE a thing lands. It reads *Select all layers ·
   Copy selected · Duplicate selected · Paste on timeline · Paste look… · Save look as preset · Save as
-  element…*, in three families rather than one AM-ordered list. Guarded by a test that asserts the AM
+  element…*, in three families rather than one [another app]-ordered list. Guarded by a test that asserts the [another app]
   strings are GONE, not merely that the new ones are present.
 
 ## Progress
 
 - **v4.71 — the desktop Studio layout is ours.** The editing panel sits down beside the timeline and the
-  top bar stands up as a rail on the far left. That is a genuinely different composition from AM's
+  top bar stands up as a rail on the far left. That is a genuinely different composition from [another app]'s
   top-bar + right-column + full-width-timeline arrangement, and it was Ezra's own design, not a
   screenshot. It goes a long way on item 2 below and starts item 6.
   **v8.83 finished the job on the desktop half.** The note here used to say "Studio is opt-in and
-  desktop-only, so the default look on first run is still the AM arrangement" — that is no longer true.
+  desktop-only, so the default look on first run is still the [another app] arrangement" — that is no longer true.
   Queue 249 removed the switch, 292 stopped the old layout being painted on a refresh, and **293 deleted
-  the Classic rules from the stylesheet entirely**, so the AM-shaped desktop arrangement is not opt-out,
+  the Classic rules from the stylesheet entirely**, so the [another app]-shaped desktop arrangement is not opt-out,
   not hidden, and not shipped. Verified by a test that reads the shipped CSS rather than the DOM,
   because the concern was that someone could read it.
   **It still does not close item 2:** the entire PHONE layout, which is the primary target, is untouched
-  by all of that and is still the AM arrangement. The list below stands.
+  by all of that and is still the [another app] arrangement. The list below stands.
 - **#1180 — the app's own logo now opens the app and sits on the home screen.** The timeline-F mark (D2,
   "Light from above", his pick on 23 Oct) replaces the previous splash film and app icons: the intro is
   the Keyframes animation drawn for it (inline SVG, plays once, no download), and `icon-192.png`,
@@ -135,19 +135,19 @@ Not a re-skin — a different composition. Concretely:
 2. **Re-lay-out the Add menu.** Keep one-tap access to everything; change the arrangement so it
    isn't tabs-across-the-top plus a right-hand rail.
 3. **Own icon set.** Ours are generic strokes now; give them a consistent, deliberate style.
-4. **Own colour + type.** The teal accent on near-black is close to AM's. Pick a palette and a type
+4. **Own colour + type.** The teal accent on near-black is close to [another app]'s. Pick a palette and a type
    treatment on purpose, and apply them everywhere.
 5. **Own words.** Rename the borrowed labels to what WE call them.
 6. **Own motion.** Panel transitions, the FAB, sheet behaviour — small signature moments.
-7. **Sweep for their marks.** No AM icons or sample assets in anything we publish, and nothing in a
-   screenshot or tutorial that shows their app. On strings: as of v3.73 there are **24 mentions of
-   "Alight Motion" in the source, all of them code comments** citing it as the design reference —
-   nothing user-visible, so nothing leaks to a user today. But they're visible to anyone reading a
-   public repo, so if this goes open-source, reword them to describe the behaviour instead of
-   naming the app. Check with:
+7. **Sweep for their marks.** No [another app] icons or sample assets in anything we publish, and nothing in a
+   screenshot or tutorial that shows their app. On strings: done (#1264, 24 Nov 2026).
+   No file names it any more: the comments describe the behaviour instead, his own quoted words say
+   [another app], and the ship refuses a release in which any file names another editing app
+   (`tools/names-gate.py`, which knows the names only as fingerprints). The old commits still hold
+   the name: rewriting the history is a separate step that needs his own yes. Check with:
 
    ```bash
-   grep -rin "alight" js/ index.html styles.css manifest.json
+   python3 tools/names-gate.py check
    ```
 
 ## 8. Six shapes are traced from stock images — REDRAW BEFORE PUBLISHING
@@ -182,7 +182,7 @@ Everything above is "don't look like theirs". This section is "don't lose the pe
 
 ### In-app onboarding: an interactive first-project walkthrough
 
-Ezra, from research into where Alight Motion falls short: *"In-app onboarding. An interactive first-
+Ezra, from research into where [another app] falls short: *"In-app onboarding. An interactive first-
 project walkthrough. Their reviews are full of people who wanted to learn and gave up."*
 
 That is the strongest launch argument in this file, because it is a gap in the leader rather than a
@@ -212,7 +212,7 @@ building it twice.
 **Queue 921, S8.** Everything above assumed the only people who see FreeMotion before launch are Ezra and
 whoever he hands his phone to. Live collaboration ends that the day it leaves Labs: an invite link opens the
 real app, on a stranger's device, on the Share panel, the Join sheet, the knock card and the comments card —
-so the Alight Motion resemblance in this file (and the Google Docs one in the list above) is shown to people
+so the [another app] resemblance in this file (and the Google Docs one in the list above) is shown to people
 outside the circle **before** anything has been published. The same goes for a QR code on his screen in a
 room full of people. So the rule in "Do this before" applies to the first invite he sends to anybody outside
 his own devices, not only to a store listing: settle the identity pass for every screen a guest can reach
@@ -223,9 +223,9 @@ Q7).**
 ## One thing here is already OURS
 
 **The cursor-proximity glow on the add / layer panel (queue 286, v8.78) is the first piece of visual
-identity in this app that was not modelled on an Alight Motion screenshot.** He asked for it out of
+identity in this app that was not modelled on a [another app] screenshot.** He asked for it out of
 nowhere — *"I just thought of a really premium feature… it makes it feel like the area around ur curser
-knows its there and is reacting to it"* — and nothing in AM does it.
+knows its there and is reacting to it"* — and nothing in [another app] does it.
 Worth saying when the identity pass starts, for two reasons: it is proof the app can carry its own
 ideas rather than only borrowed ones, and it is a good seed to design the rest of the identity AROUND
 (the light temperature, the falloff, the restraint of it) instead of starting from a blank page.
@@ -237,9 +237,9 @@ ideas rather than only borrowed ones, and it is a good seed to design the rest o
   section above: the invite IS a public link to the app's UI.
 - Not before then — it costs real time and the app should be worth publishing first.
 
-## Icons redrawn away from Alight Motion (log them here as they land)
+## Icons redrawn away from [another app] (log them here as they land)
 - **Add sheet · Template tab — done, v10.24 (queue 375).** He spotted this one himself: *"Template icon
-  needs to be a little bit different as it's identical to alight motions just with colour"*. AM's glyph is
+  needs to be a little bit different as it's identical to [another app] just with colour"*. [another app]'s glyph is
   a frame divided by a crossbar with an upright dropping from its centre — a band over two panes. Ours is
   now a crossbar with a single centred content block beneath it: a header over content. Same 24×24 grid,
   same 1.8 stroke, same palette (his, from queue 267).
@@ -251,3 +251,6 @@ ideas rather than only borrowed ones, and it is a good seed to design the rest o
 - **#1243 ST7, the aspect-ratio presets.** His pick, 9 Nov: *"just do logos without names for the aspect ratios"*. They show the platforms' logos
   (TikTok, Instagram and so on) with no names. Those marks are other companies' trademarks: draw them ourselves as simple glyphs (no downloaded
   brand assets), and check each platform's brand rules before a store release, or swap them for neutral icons there.
+  **Built (#1243 ST7):** TikTok, Instagram, YouTube and Facebook, as our own line drawings in the chip's ink, in ONE table
+  (`FM.ASPECT_USES` / `PLAT_SVG` in js/app.js) read by the cog's Canvas chips and Home's New project chips. Swapping them for
+  neutral icons is that one table.

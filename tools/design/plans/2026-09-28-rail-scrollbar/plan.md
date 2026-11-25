@@ -1,7 +1,7 @@
 # The white slider bar on PC (filter rows), and the New row a mouse cannot slide. Plan for the builder
 
 Written by the planning chat on 28 Sep. Nothing in the repo was edited. Every file named `PLAN/…` is in
-`/Users/ezrasmith/Claude/FreeMotion/tools/design/plans/2026-09-28-rail-scrollbar/`.
+`/Users/me/Claude/FreeMotion/tools/design/plans/2026-09-28-rail-scrollbar/`.
 Measured against v17.11 (HEAD 2d06a3f5), in Chrome 153 through `tools/shot.py`. The desktop shots are the Studio layout,
 which has been the only desktop layout since queue 293.
 

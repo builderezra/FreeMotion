@@ -1,6 +1,6 @@
 /* FreeMotion — the AI you can TALK TO (queue 856 clause 1).
  *
- * Ezra, 10 Sep: "we probably should make that more like CapCut one where you can just talk to her and
+ * Ezra, 10 Sep: "we probably should make that more like [another app] one where you can just talk to her and
  * say what you want and then it goes and does it for you inside the edit". The Director (ai.js) builds
  * a WHOLE SCENE from one prompt and then stops. This is the other half — a conversation that edits the
  * project you already have, one sentence at a time, remembering what you said before it.
@@ -9,7 +9,7 @@
  * closed, validated op vocabulary the Director uses, which ai-ops.js's own header calls "the ONLY code
  * that turns AI output into FM.scene mutations". The tempting shortcut was to let this file call
  * FM.deleteLayer / FM.cloneLayer straight from model output, because the op list has no word for
- * "delete that" and "delete that" is exactly what people say to CapCut. That would put a second,
+ * "delete that" and "delete that" is exactly what people say to [another app]. That would put a second,
  * UNVALIDATED path around the safety boundary — raw ids, no clamping, no cascade rules — and "an AI
  * wrecked my project, how do I undo it" is a question he has already had to ask once. So the four verbs
  * a conversation needs and a scene BUILDER never did — delete, duplicate, select, move the playhead —
@@ -173,7 +173,7 @@ window.FM = window.FM || {};
       reset: function () {
         rows = {};
         if (stop) stop.remove();
-        stop = el('button', 'aic-linkbtn aic-stop', 'Stop — keep what’s built');
+        stop = el('button', 'aic-linkbtn aic-stop', 'Stop and keep what’s built');
         stop.type = 'button';
         stop.addEventListener('click', function () { if (FM.ai && FM.ai.cancel) FM.ai.cancel(); stop.disabled = true; stop.textContent = 'Finishing…'; });
         listEl.appendChild(stop);
@@ -192,9 +192,9 @@ window.FM = window.FM || {};
         if (stop) { stop.remove(); stop = null; }
         info = info || {};
         var n = info.layersAdded || 0;
-        var msg = info.left ? 'Stopped — you opened another project. What was built is kept in “' + info.left + '”.'
-          : info.cancelled ? 'Stopped — I kept what was built.'
-          : 'Built it — ' + n + (n === 1 ? ' layer' : ' layers') + ', all editable. One Undo takes the whole build back.';
+        var msg = info.left ? 'Stopped: you opened another project. What was built is kept in “' + info.left + '”.'
+          : info.cancelled ? 'Stopped. I kept what was built.'
+          : 'Built it: ' + n + (n === 1 ? ' layer' : ' layers') + ', all editable. One Undo takes the whole build back.';
         sink.outcome = info.left ? 'stopped: the user opened another project' : info.cancelled ? 'stopped by the user, kept what was built' : 'built the scene: ' + n + ' layers added';
         bubble('ai', msg);
       },
@@ -210,7 +210,7 @@ window.FM = window.FM || {};
   async function runBuild(prompt, chips, extra) {
     prompt = String(prompt || '').trim().slice(0, 600);
     if (!prompt) return 'not run: no brief was given';
-    if (FM.ai.isRunning && FM.ai.isRunning()) { note('A scene is already being built — ask again when it finishes.', 'aic-warn'); return 'not run: another build is still running'; }
+    if (FM.ai.isRunning && FM.ai.isRunning()) { note('A scene is already being built. Ask again when it finishes.', 'aic-warn'); return 'not run: another build is still running'; }
     var sink = chatSink();
     var res = await FM.ai.generateScene(prompt, chips || {}, Object.assign({ sink: sink }, extra || {}));
     return sink.outcome || (res && res.error ? 'the build failed' : 'built');
@@ -258,7 +258,7 @@ window.FM = window.FM || {};
     if (!text || busy) return;
     if (KEYLIKE.test(text)) {
       inputEl.value = ''; autosize();
-      note('That looks like your API key — it goes in Settings → AI key, never in the chat. Nothing was sent.', 'aic-warn');
+      note('That looks like your API key. It goes in Settings → AI key, never in the chat. Nothing was sent.', 'aic-warn');
       var kb = el('button', 'aic-linkbtn', 'Open Settings → AI key');
       kb.type = 'button'; kb.addEventListener('click', openKeySettings);
       listEl.appendChild(kb); listEl.scrollTop = listEl.scrollHeight;
@@ -269,8 +269,8 @@ window.FM = window.FM || {};
       /* F3 review: the two key-less builds are offered only for a sentence that asks for a NEW video — under "make the title
          bigger" a starter scene titled "make the title bigger" is not what he asked for — and each builds once per tap row. */
       var scene = WANTS_SCENE.test(text);
-      note(scene ? 'Connect your Anthropic key first — it goes in Settings → AI key. Without one I can still build a starter scene from what you wrote, or show you a demo.'
-        : 'Connect your Anthropic key first — it goes in Settings → AI key. Changes need it; without one I can only build a starter scene, if you ask for a whole new video.', 'aic-warn');
+      note(scene ? 'Connect your Anthropic key first. It goes in Settings → AI key. Without one I can still build a starter scene from what you wrote, or show you a demo.'
+        : 'Connect your Anthropic key first. It goes in Settings → AI key. Changes need it; without one I can only build a starter scene, if you ask for a whole new video.', 'aic-warn');
       var row = el('div', 'aic-btnrow');
       var b = el('button', 'aic-linkbtn', 'Add your key in Settings');
       b.type = 'button';
@@ -285,7 +285,7 @@ window.FM = window.FM || {};
           if (tb.disabled || (FM.ai.isRunning && FM.ai.isRunning())) return;
           tb.disabled = true; db.disabled = true;   // one build per offer; ask again for another
           var r = FM.aiTemplates.build(chipsFrom({}, text));   // one undo step (ai-templates.js commits once)
-          note('Built a starter scene — ' + r.applied + ' changes, all editable. One Undo takes it back.', 'aic-applied');
+          note('Built a starter scene: ' + r.applied + ' changes, all editable. One Undo takes it back.', 'aic-applied');
         });
         db.addEventListener('click', async function () {
           if (busy || db.disabled || (FM.ai.isRunning && FM.ai.isRunning())) return;
@@ -344,7 +344,7 @@ window.FM = window.FM || {};
 
       if (said) bubble('ai', said);
       else if (!summary && !moved && !builds.length) bubble('ai', 'Done.');
-      if (moved && (ops.length || builds.length)) note('Not applied — you opened another project while I was answering. Ask again here if you want it in this one.', 'aic-warn');
+      if (moved && (ops.length || builds.length)) note('Not applied: you opened another project while I was answering. Ask again here if you want it in this one.', 'aic-warn');
       if (summary) note(summary, 'aic-applied');
 
       /* #1243 F2: ONE build per sentence, its rows drawn here (chatSink), its own one undo step (generateScene commits once — it is
@@ -491,7 +491,7 @@ window.FM = window.FM || {};
     head.appendChild(spend);
     /* The key's door, always in the header (queue 930: "a button in both pages that takes you to app settings"). */
     var keyBtn = el('button', 'aic-keybtn', 'API key');
-    keyBtn.type = 'button'; keyBtn.title = 'Your Anthropic key — in Settings'; keyBtn.setAttribute('aria-label', 'API key settings');
+    keyBtn.type = 'button'; keyBtn.title = 'Your Anthropic key, in Settings'; keyBtn.setAttribute('aria-label', 'API key settings');
     keyBtn.addEventListener('click', openKeySettings);
     head.appendChild(keyBtn);
     var close = el('button', 'aic-close', '✕');
@@ -508,7 +508,9 @@ window.FM = window.FM || {};
     inputEl = document.createElement('textarea');
     inputEl.className = 'aic-input';
     inputEl.rows = 1;
-    inputEl.placeholder = 'Ask for a change, or a whole new video…';   // #1243 F2: it does both now
+    /* #1243 F2: it does both now. Short enough for ONE line in the PC column and on a 380 px phone (24 Nov: the longer hint wrapped
+       in the 376 px column and its second line was cut by the one-row box) */
+    inputEl.placeholder = 'Ask for a change or a new video…';
     inputEl.setAttribute('aria-label', 'Tell Ask & edit what to change or make');
     inputEl.addEventListener('input', autosize);
     inputEl.addEventListener('focus', function () { if (isOpen()) place(); });   // F3 review: a pan while in the box is typing (place)
@@ -544,9 +546,10 @@ window.FM = window.FM || {};
   }
 
   function greet() {
-    note('Tell me what to change and I will do it — "make the title bigger", "give it a soft glow", ' +
-         '"start it half a second later" — or ask for a whole new video: "make a 6 second product reel". ' +
-         'Tap a layer first and "this" means that one.');   // #1243 F2: it builds scenes too
+    /* #1243 F2: it builds scenes too. Three plain sentences and no long dash (his words of 24 Nov on a line with one: "it just
+       looks written by AI") */
+    note('Tell me what to change and I will do it: "make the title bigger", "give it a soft glow", ' +
+         '"start it half a second later". Or ask for a whole new video: "make a 6 second product reel".');
   }
 
   /* THE CHAT BOX TAKES THE FOCUS ONLY WHEN NOTHING ELSE HAS IT (queue 930 review, round 2). "Only when open" was not enough:

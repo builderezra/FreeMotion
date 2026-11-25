@@ -2,7 +2,7 @@
 
 Branch `hunt/fxnew-bwmix` (helper clone, local, NOT pushed), worktree `~/fm-helper-wt/fxnew-bwmix`, on `fb24f68b`
 (hunt/fxnew-drums: the effects landing plus every §B branch so far). Backlog `tools/design/plans/2026-09-29-idle-backlog/backlog.md`
-§B33: *Reds/Yellows/Greens/Cyans/Blues/Magentas −200..300 (Photoshop 40/60/40/60/20/80), filter preset
+§B33: *Reds/Yellows/Greens/Cyans/Blues/Magentas −200..300 ([another editor] 40/60/40/60/20/80), filter preset
 Neutral/Red/Orange/Yellow/Green/Blue/Infrared, tint + amount, contrast*, and its structural note: *"Grayscale is CSS-only with fixed
 weights, so all 7 mono filters share one channel mix. B33 is the answer."* Not built before: no `bwmixer` (or any mixer) type in this
 tree; on ssh/main REQUESTS.md's hits for "black and white" / "b&w" are the #579 / #593 / #603 / #645 complaints that the mono
@@ -18,7 +18,7 @@ Every claim below is from reading the code and from hand arithmetic. The proof i
 | Row | Range (default) | What it does |
 |---|---|---|
 | Colour filter | Neutral / Red / Orange / Yellow / Green / Blue / Infrared (**Neutral**) | a tap WRITES the six sliders below (the table further down); the kernel reads nothing from the row |
-| Reds, Yellows, Greens, Cyans, Blues, Magentas | −200..300 % (**40 / 60 / 40 / 60 / 20 / 80**, Photoshop's default mix) | how bright that colour turns in grey |
+| Reds, Yellows, Greens, Cyans, Blues, Magentas | −200..300 % (**40 / 60 / 40 / 60 / 20 / 80**, [another editor]'s default mix) | how bright that colour turns in grey |
 | Contrast | −100..100 (0) | a curve through black and white: an S above 0, its reverse below; never inverts, never clips |
 | Tint | 0..100 % (0) | how much of the Tint colour is laid over the greys |
 | Tint colour | a swatch (**#c09060**, a warm sepia), keyframable | greyed out ("Not used when Tint is 0%") while Tint is 0 |
@@ -47,7 +47,7 @@ By construction:
   test's #8fd4ff = 143,212,255 turns grey 193: red moves 50), so it is NOT in that test's `KNOWN_NOOP`. On a layer that is already
   grey it does nothing at Contrast 0 and Tint 0; the inspector says why (`NOOP_WHY`).
 
-**The Colour filter** — what each glass does on black-and-white film (Neutral is the backlog's Photoshop default; the other six are
+**The Colour filter** — what each glass does on black-and-white film (Neutral is the backlog's [another editor] default; the other six are
 mine, designed from the filters' physics, not copied from any app):
 
 | Filter | Reds | Yellows | Greens | Cyans | Blues | Magentas | Why |
@@ -74,7 +74,7 @@ Also: search words black and white, black & white, b&w, mono, monochrome, graysc
 colour/color filter, red filter (not "bw" — two letters match inside too many words; not "noir" — the Noir filter's name). Browser
 tile on the clouds photo (fx-thumbs `PHOTO_OF.clouds`: a blue sky over water and trees — the picture a black-and-white mix is for;
 Clarity, the tile before it, is on towers). It leads the NEW row (batch 48, the newest). Name: "Black & White Mixer" is the backlog's;
-"black and white", "mixer" and the filter colours are generic words, none is an Alight Motion effect name (checked against
+"black and white", "mixer" and the filter colours are generic words, none is a [another app] effect name (checked against
 `tools/design/954-effect-names.md` — it has Grayscale, Sepia, Tint, Colourize, Channel Remap; nothing like this), and none is a
 trademark. A category title may not carry "&" (queue 287/288) but effect names do (Clarity & Dehaze, Teal & Orange, Snow & Rain).
 
@@ -137,7 +137,7 @@ numbers are read from the effect's own row, so the sheet shows what a tap writes
 
 ## Questions for Ezra (one picture each)
 
-1. **The starting look** — Neutral (recommended; Photoshop's mix, skies a little darker than Grayscale gives), today's Grayscale
+1. **The starting look** — Neutral (recommended; [another editor]'s mix, skies a little darker than Grayscale gives), today's Grayscale
    weights, Neutral + Contrast 20, or Yellow? (bw-sliders-clouds p2, and the Grayscale tile beside Neutral on every filters page)
 2. **The filters** — keep all six? Any too strong or too weak on his photos? Each is six numbers, so a pick is an edit, not a rebuild.
    (bw-filters-*)

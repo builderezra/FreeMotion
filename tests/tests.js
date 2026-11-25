@@ -4230,7 +4230,7 @@
   test('layers: the Null layer is called Controller, keeps its red, and its saved type is unchanged', { item: 'controller-rename' }, async function () {
     /* Queue 363. Ezra gave me the call rather than a name: "If you can think of another name for null
        that still makes sense and describes what it is then change the name of it to that."
-       Null is After Effects' word and it names what the thing is NOT. It is an invisible layer that
+       Null is [another app]'s word and it names what the thing is NOT. It is an invisible layer that
        renders nothing and exists to be parented to, so "Controller" says what you use it for.
        SCOPED TO CONTAINERS, never document.body.textContent — the entry warns about this and it has
        produced a false pass here before, because the suite prints its own test titles into the page and
@@ -4809,15 +4809,15 @@
     }
   });
 
-  test('the ⧉ menu is ours, not Alight Motion’s — wording and order', { item: '437' }, async function () {
+  test('the ⧉ menu is ours, not another app’s — wording and order', { item: '437' }, async function () {
     /* Queue 437, and he raised it unprompted: "With this drop down menu also re order the buttons in it
-       because it's the same layout and wording as alight motion, if you can come up with different
+       because it's the same layout and wording as [the reference app], if you can come up with different
        wording as well, like instead of paste layer just paste on timeline. And copy selected instead of
        copy layer."
        His two examples are taken as the RULE rather than as two edits: name the object the way the app
        already talks about it ("selected", which is what the top bar says), and say WHERE a thing lands.
-       This is BEFORE-PUBLISHING.md work arriving early — that file records the UI is modelled on AM and
-       has to be made ours before any public release — so the AM strings are asserted GONE, not merely
+       This is BEFORE-PUBLISHING.md work arriving early — that file records the UI is modelled on [the reference app] and
+       has to be made ours before any public release — so the strings are asserted GONE, not merely
        the new ones present. A rename that left a synonym behind would read as done and would not be. */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
     const layers0 = FM.scene.layers.slice();
@@ -4843,10 +4843,10 @@
         // his two examples, verbatim
         if (!has(/^copy selected$/i)) throw new Error('"Copy selected" is missing — that is one of the two rewordings he gave by name');
         if (!has(/^paste on timeline$/i)) throw new Error('"Paste on timeline" is missing — that is the other rewording he gave by name');
-        // …and AM's words must be GONE, not merely joined by ours
+        // …and [the reference app]'s words must be GONE, not merely joined by ours
         if (has(/^copy layer$/i)) throw new Error('"Copy Layer" is still there — he asked for "copy selected" INSTEAD of it');
         if (has(/^paste layer$/i)) throw new Error('"Paste Layer" is still there — he asked for "paste on timeline" INSTEAD of it');
-        if (has(/^paste style/i)) throw new Error('"Paste Style…" is still AM’s wording, and it now disagrees with the overlay it opens');
+        if (has(/^paste style/i)) throw new Error('"Paste Style…" is still the old wording, and it now disagrees with the overlay it opens');
         if (has(/^duplicate layer$/i)) throw new Error('"Duplicate Layer" still says "Layer" about a selection that is often several — the same fault as Copy Layer');
         /* THE ORDER, which is the other half of his sentence. Clipboard actions in the order they are
            used, and the save-for-later entry at the end rather than splitting them. (Queue 994 took the
@@ -5687,7 +5687,7 @@
      * ⚠️ PACED AT 30ms BETWEEN MOVES. The suite's other grip tests fire every move inside one frame, before a
      * single rAF tick, which is exactly why none of them could see this. The pacing IS the fixture.
      * ⚠️ BOTH WAYS. A: born inside the zone → must land within two frames of the finger. B: travelling INTO the
-     * zone from outside → must still auto-scroll, because that is the Alight Motion behaviour he has and this
+     * zone from outside → must still auto-scroll, because that is the [the reference app] behaviour he has and this
      * fix must not take it away. A test with only A passes for a fix that simply deletes the auto-scroll. */
     const layers0 = FM.scene.layers.slice();
     try {
@@ -5727,7 +5727,7 @@
         const expectedA = startA + 30 / pps;
         if (Math.abs(landedA - expectedA) > 2 / fps + 1e-6) throw new Error('a grip born inside the edge zone, dragged +30px with the loop allowed to tick, landed at ' + landedA.toFixed(3) + 's against the finger’s ' + expectedA.toFixed(3) + 's — the edge auto-scroll armed on mere presence and re-trimmed every frame; on a phone 30px of finger became seconds of clip (queue 707)');
 
-        // ── B: a grip that TRAVELS INTO the zone must still auto-scroll (the AM behaviour is kept) ───────
+        // ── B: a grip that TRAVELS INTO the zone must still auto-scroll (the behaviour is kept) ───────
         FM.scene.layers.forEach((l, ix) => { l.start = ix * 2; l.duration = 2.5; });
         FM.selectLayer(null); FM.refreshAll(); FM.timeline.rebuild(); FM.setTime(0); tl.scrollLeft = 0; await sleep(360);
         // Park clip 1's LEFT grip well outside the zone (x≈200) by scrolling, so the drag has to TRAVEL in.
@@ -7537,7 +7537,7 @@
   });
 
   test('534: Convert to Outline says coming soon, and the look it used to do is a real effect', { item: '534' }, async function () {
-    /* Queue 534. Ezra explained that Alight Motion's button FLATTENS a shape's editable points into one
+    /* Queue 534. Ezra explained that [the reference app]'s button FLATTENS a shape's editable points into one
        outline — and the points it removes are a feature we do not have. Ours did something else: it
        turned the shape into a stroked path with no fill. So: the button says coming soon and is
        reworded, and the LOOK lives in the effects menu, where it already did.
@@ -13536,7 +13536,7 @@
   test('effects: Voronoi Cells wander individually, and an old one stays frozen', { item: 'voronoi-alive' }, function () {
     /* Queue 350. His words: "Voronoi cells needs the ability to make them move, and I want it to
        actually move in a cool way and not just a drag it up and down, like they're alive. Because
-       that's what alight motion has."
+       that's what [the reference app] has."
        The second half is the design instruction and it is the one worth pinning, because the cheap
        implementation — one Speed slider scrolling the whole field — satisfies "it moves" and is exactly
        what he ruled out. So the test does not ask whether pixels changed; it asks whether any single
@@ -13774,7 +13774,7 @@
   });
 
   test('templates: the Insert-your-Media screen lists the clips you can swap, in the order you watch them', { item: 'template-fill' }, function () {
-    /* Queue 343 clause 2. Ezra, with an Alight Motion screenshot: "the long term goal for templates is
+    /* Queue 343 clause 2. Ezra, with an [the reference app] screenshot: "the long term goal for templates is
        to make it when you press on them you can quickly swap out the media for ur own clips so you can
        use them as templates and not just the exact same thing as elements."
        The SWAP was never the missing part — FM.replaceMediaWith already keeps the layer's transform,
@@ -18392,7 +18392,7 @@
   });
 
   test('keyframes: inert outlines until you open the editor that owns them', { item: 'kf-idle-live' }, function () {
-    // v5.42, from Ezra's Alight Motion screenshots. Tapping a layer shows every keyframe but arms
+    // v5.42, from Ezra's [the reference app] screenshots. Tapping a layer shows every keyframe but arms
     // none of them — "they're clearly showing you where they are but you can't move them yet or hover
     // over them or anything at all". Opening a property's editor arms just that property's keyframes;
     // the rest stay outlines. Selecting a clip used to arm every diamond on the layer.
@@ -18451,7 +18451,7 @@
   });
 
   test('move & transform: tapping Z turns the pad into a depth slider', { item: 'mt-z-pad' }, function () {
-    // v5.43. Ezra, from an AM screenshot: "it's showing what the z position editing looks like and I
+    // v5.43. Ezra, from a reference-app screenshot: "it's showing what the z position editing looks like and I
     // would like you to add z position editing as well… you just tap on z and then it switches to
     // this version." A sub-mode of the move pad, not a fifth button on the mode rail.
     const layers0 = FM.scene.layers.slice(), sel0 = FM.scene.selectedId;
@@ -18478,8 +18478,10 @@
       if (document.querySelectorAll('.mt-trackpad').length !== 1) throw new Error('the X/Y pad is still there alongside the Z pad');
       if (!chip('Z').classList.contains('on')) throw new Error('the Z chip does not read as the active axis');
       if (chip('X').classList.contains('on')) throw new Error('X still reads as active while the pad is editing Z');
-      const hint = zpad.querySelector('.mt-trackpad-hint');
-      if (!hint || !/Z position/i.test(hint.textContent)) throw new Error('the Z pad does not say what it does: "' + (hint && hint.textContent) + '"');
+      /* #1255: the pad's sentence is its NAME for a screen reader now, not words on it ("There shouldn't be any explanations like that") */
+      const zname = zpad.getAttribute('aria-label') || '';
+      if (!/Z position/i.test(zname)) throw new Error('the Z pad is not named for what it does: "' + zname + '"');
+      if (zpad.querySelector('.mt-trackpad-hint') || /swipe/i.test(zpad.textContent || '')) throw new Error('the Z pad still carries a sentence on it: "' + (zpad.textContent || '').trim() + '"');
       if (zpad.querySelectorAll('.mt-zpad-arrow').length !== 2) throw new Error('the Z pad has no up/down affordance');
 
       // Drag it. DOWN pushes the layer away, so z grows — the pad drags the object, not the number.
@@ -19868,7 +19870,7 @@
     });
   });
 
-  /* ---------------- Fill Behind (queue 32, the last of AM's "Other") --------------------------
+  /* ---------------- Fill Behind (queue 32, the last of [the reference app]'s "Other") --------------------------
    * The blurred-backdrop fill from phone video apps: a layer that does not cover the canvas gets the
    * empty space filled with an enlarged, blurred copy of ITSELF, and draws sharp on top. Third
    * member of the Copy Background family, and wired the same way — dispatched out of drawLayer,
@@ -21220,7 +21222,7 @@
   });
 
   test('parameter rows: tapping a name selects that one property’s keyframes', { item: 'param-row-select' }, function () {
-    // The explicit counterpart to v5.42. Ezra, from Alight Motion: "to tell what slider you
+    // The explicit counterpart to v5.42. Ezra, from [the reference app]: "to tell what slider you
     // have selected — hence forth what key frames ur gonna be editing, it shows by making the item ur
     // changing have a different colour on the name of it, you can also tap on the name to select the
     // row." Selection is per-PROPERTY (his screenshot has Offset's X green and its Y not), and it
@@ -23078,7 +23080,7 @@
       FM.settings.open(); await sleep(340);   // the panel slides in over ~260ms; measuring mid-slide reports a row as 'covered'
       cogRow('Import a project file').click(); await sleep(60);
       if (spy.open !== 1) throw new Error('cog ▸ Import a project file no longer reaches FM.storage.importFile — that is where "Open project…" went');
-      /* CANVAS IS NO LONGER A ROW EITHER (queue 310) — *"we don't need the Canva settings button"*, and
+      /* CANVAS IS NO LONGER A ROW EITHER (queue 310) — *"we don't need the Canvas settings button"*, and
          it has a door on both bars. The check that matters is unchanged in substance: pressing the
          surviving control must open the canvas dialog. */
       if (FM.settings.isOpen()) FM.settings.close();
@@ -23347,7 +23349,8 @@
         if (Math.min(ha.w, ha.h) < 30) throw new Error('#cv-app-bar is ' + ha.w + 'x' + ha.h + ' — too small to press');
       }
       appSet.click();
-      await sleep(120);
+      /* #1243 ST5: the cog's blocks now leave with an animation under Settings before it is put away (about 250 ms; a 400 ms backstop) */
+      for (let i = 0; i < 20 && !cvDlg.classList.contains('hidden'); i++) await sleep(30);
       if (!FM.settings.isOpen()) throw new Error('"App settings…" did not open the settings panel');
       if (!cvDlg.classList.contains('hidden')) throw new Error('the canvas dialog is still up behind the panel');
 
@@ -23646,7 +23649,7 @@
   });
 
   /* ---------------- the transport clock, and audio that survives a slow comp ----------------
-   * Ezra: "the sound has lag issues too. In alight motion no matter how laggy the video is, the
+   * Ezra: "the sound has lag issues too. In [the reference app] no matter how laggy the video is, the
    * audio NEVER lags." Measured with an AudioWorklet tap on the real graph, a 24 s clip carrying a
    * known 440 Hz carrier plus a 1320 Hz burst every 50 ms, and a busy-loop wrapped around
    * FM.renderScene to stand in for a heavy comp:
@@ -40906,7 +40909,10 @@
           if (S.normRoomCode(code.textContent) !== H.rec.code) throw new Error('the code on screen is not the room’s code');
           if (!document.querySelector('.cs-copylink')) throw new Error('there is no [Copy link]');
           /* S6 review: every third party by name, and what anybody watching can see — not "the free relay". */
-          const priv = (document.querySelector('.cs-privacy') || {}).textContent || '';
+          /* #1255 (24 Nov, his words on this card: “as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page”): the sentence and its list left the Share panel. They are at the foot of the page
+             behind the card's ?, in Settings and beside the switch when the feature is off, all drawn by the one block read here. */
+          if (document.querySelector('#collab-share .cs-privacy')) throw new Error('the Share panel still prints the privacy sentence; it is behind the card’s ? now (#1255)');
+          const priv = (ui.privacyBlock && ui.privacyBlock().textContent) || '';
           /* #967 B4: behind “What gets sent? ›” now, and with no “relay” in it — still every service by name, and who sees what. */
           ['PeerJS', 'EMQX', 'HiveMQ', 'Google', 'Cloudflare', 'anyone watching those services', 'Anyone with your link or short code', 'never see your project'].forEach(function (w) {
             if (priv.indexOf(w) < 0) throw new Error('the privacy line does not say “' + w + '”: "' + priv + '" — it names one relay and understates who sees what');
@@ -42645,7 +42651,7 @@
     });
   });
 
-  test('921 S7 review: “Editors can invite others” says what the link does — straight in with “Let them in”, nothing to pass on under Codes only — and the Editor’s own panel says the same', { item: '921', budgetMs: 150000 }, async function () {
+  test('921 S7 review: “Editors can invite others” carries no description while the link is in use, says there is nothing to pass on under Codes only, and the Editor is still told on his own panel what the link does — straight in with “Let them in”', { item: '921', budgetMs: 150000 }, async function () {
     const C = need921S7('the invite wording');
     const wasCodes = FM.settings.get('collabCodesOnly');
     try {
@@ -42657,12 +42663,14 @@
           document.querySelector('#collab-share .cs-gear').click();
           const rowOf = function (txt) { return Array.prototype.filter.call(document.querySelectorAll('#collab-share .cs-srow'), function (r) { return r.querySelector('.cs-slabel') && r.querySelector('.cs-slabel').textContent === txt; })[0]; };
           rowOf('Editors can invite others').querySelector('.set-switch').click();
-          const hint = rowOf('Editors can invite others').querySelector('.cs-shint').textContent;
-          if (/you still let each person in/.test(hint) || !/straight in/.test(hint)) throw new Error('with the link set to “Let them in”, the switch says: “' + hint + '”');
+          /* #1255 (24 Nov, his words on this card: “as little as possible… no explanations at all… a question mark that takes you to the tutorial page”): the switch's description went to lesson 17,
+             behind Sharing settings' ?. What the link does is still TOLD to the Editor it is handed to (below, on his own panel). */
+          const hint = rowOf('Editors can invite others').querySelector('.cs-shint');
+          if (hint) throw new Error('with the link in use the switch still carries a description: “' + hint.textContent + '” (#1255: it is in the lesson behind the ?)');
           ed.loop.settle();
           if (!ed.G.roomSettings || !ed.G.roomSettings.link || ed.G.roomSettings.ask !== false) throw new Error('the Editor was handed the link without being told it lets people straight in: ' + JSON.stringify(ed.G.roomSettings));
           FM.settings.set('collabCodesOnly', true); ui._pushSettings(); ui.share({ keepStep: true });
-          const h2 = rowOf('Editors can invite others').querySelector('.cs-shint').textContent;
+          const h2 = (rowOf('Editors can invite others').querySelector('.cs-shint') || {}).textContent || '';
           if (!/codes only/i.test(h2)) throw new Error('under Codes only the switch still says “' + h2 + '” — no link is sent at all');
           FM.settings.set('collabCodesOnly', false);
           ui.close();
@@ -42696,7 +42704,10 @@
         await withCollab921([layer921('A')], async function () {
           await ui.share();
           document.querySelector('#collab-share .cs-gear').click();
-          if (!document.querySelector('#collab-share .cs-privacy')) throw new Error('CONTROL: with the relay on, the settings do not name the relays');
+          /* #1255 (24 Nov, his words on this card: “as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page”): Sharing settings prints the privacy sentence in NO state now, so what was this
+             test's control, that it is there with the helpers on, is its first check the other way round. */
+          if (!document.querySelector('#collab-share .cs-sstatus')) throw new Error('CONTROL: the open step is not Sharing settings (no Connection line)');
+          if (document.querySelector('#collab-share .cs-privacy')) throw new Error('with the online helpers on, Sharing settings still prints the privacy sentence; it is behind the card’s ? now (#1255)');
           FM.settings.set('collabCodesOnly', true);
           ui.share({ keepStep: true });
           if (!/Swap codes only/.test(document.querySelector('#collab-share .cs-sstatus').textContent)) throw new Error('CONTROL: the Connection line does not say Swap codes only');
@@ -47002,7 +47013,7 @@
     /* His whole request was "edit points has literally no keyframe functionality" — so the first half
        is simply: is the ◆ there. The second half is the part that would otherwise look like it works
        and quietly do nothing: between two keys the evaluated points are a throwaway array, so an edit
-       has to CREATE the keyframe it is editing (AE roto, and what mask-tool.js already does). */
+       has to CREATE the keyframe it is editing (as rotoscoping tools do, and what mask-tool.js already does). */
     if (!FM.pointEdit || !FM.pointEdit.start) throw new Error('FM.pointEdit missing');
     const scene = FM.scene, keep = scene.layers.slice(), keepSel = scene.selectedId, keepT = FM.time;
     const wasActive = FM.pointEdit.isActive();
@@ -47275,7 +47286,7 @@
          by design. The default From colour is red (hue 0°, a 30° window) and this fixture is orange (#e8a33d, hue 35.8°), so nothing is
          caught and the matte is black on a black ground; on a red layer it is white ('966 opts9 Replace Colour Show selection …'). */
       'replacecolor:view=max': 1,
-      /* #966 opts10 (hunt/966-opts10): COLOURIZE's Lightness −100 sinks the tint all the way to black — Photoshop's Colorize Lightness
+      /* #966 opts10 (hunt/966-opts10): COLOURIZE's Lightness −100 sinks the tint all the way to black — [another app]'s Colorize Lightness
          at its bottom end, by design, brightness:amount=min's twin. At the default Tone blend and Amount 1 the layer becomes black on this
          fixture's black ground; any Amount below 1, Screen or Overlay, or a lighter ground shows it ('966 opts10 Colourize Lightness …'). */
       'colorize:light=min': 1,
@@ -48190,9 +48201,9 @@
     }, 375);
   });
 
-  /* ---------------- queue 292: a refresh flashed the OLD Alight-Motion-shaped layout ----------------
+  /* ---------------- queue 292: a refresh flashed the OLD [the reference app]-shaped layout ----------------
    * His most urgent report: "when you refresh the page it shows an old version that looks a lot like
-   * alight motion, this is bad because if someone sees it in the final version they may be able to use
+   * [the reference app], this is bad because if someone sees it in the final version they may be able to use
    * this against us."
    * He was looking at the FIRST PAINT. `layout-studio` was added by js/settings.js, so until that ran
    * the page rendered the UNCLASSED default — the retired Classic layout, with a 50px top bar and the
@@ -48963,7 +48974,7 @@
 
   test('the phone timeline carries an Add layer instead of the + button (queue 294)', { item: 'add-row' }, async function () {
     /* "the plus button inside the creator menu is kind of on the nose like… it looks very similar to what
-     * a light motion has and I was thinking of a way to get rid of it from being there while also keeping
+     * [the reference app] has and I was thinking of a way to get rid of it from being there while also keeping
      * functionality… it could be a layer now… if you just tap anywhere on that line it'll open up the
      * same admin where you can add shapes or elements or whatever."
      * The label is his too, and SHORT is an explicit instruction rather than taste: "when you start a new
@@ -50460,7 +50471,7 @@
   });
 
   test('a trimmed edge lands on a whole frame (queue 153)', { item: '153' }, async function () {
-    /* His words, about Alight Motion's trim: *"the notches are frames and the whole thing has to actually
+    /* His words, about [the reference app]'s trim: *"the notches are frames and the whole thing has to actually
      * line up with the notches."* That sentence is the requirement, and it is about the RESULT.
      * `applyTrimAt` already quantised the DELTA (`Math.round(sec*fps)/fps`) — but a whole-frame change to
      * an edge that is not on a frame keeps it off the grid for ever, and an imported clip's duration is
@@ -52953,14 +52964,14 @@
   /* ---------------- #306 / #292: the app must look like itself at FIRST PAINT ---------------- */
 
   /* HIS REPORT, twice, months apart: "when you refresh the page it shows an old version that looks a
-   * lot like alight motion" (#292) and then "the glitch that shows the old version of FreeMotion that
-   * has a more alight motion look STILL shows up when I press refresh" (#306).
+   * lot like [the reference app]" (#292) and then "the glitch that shows the old version of FreeMotion that
+   * has a more [the reference app] look STILL shows up when I press refresh" (#306).
    * THE CAUSE, found at v9.11: theme-glass.css gates 75 rules on html[data-theme="glass"], and that
    * attribute was applied by js/settings.js — which loads at the BOTTOM of the body, after roughly
    * 1.5MB of script. So the browser painted the bare styles.css first and only snapped to the real
    * appearance once settings.js ran. settings.js's own comment states the consequence exactly: "with
    * it absent the app falls back to the bare stylesheet, which is exactly the Classic look queue 178
-   * removed." That bare look IS the Alight-Motion-shaped one he kept seeing.
+   * removed." That bare look IS the [the reference app]-shaped one he kept seeing.
    * My v8.51 fix for #292 addressed a DIFFERENT first-paint flash (the layout-studio class) and was
    * real, but it was not this one — which is why the report came back.
    *
@@ -52975,7 +52986,7 @@
     const htmlTag = (/<html\b[^>]*>/i.exec(src) || [''])[0];
     if (!htmlTag) throw new Error('no <html> tag found in the shipped markup');
     if (!/data-theme\s*=\s*["']glass["']/i.test(htmlTag)) {
-      throw new Error('the shipped <html> tag does not carry data-theme="glass" (' + htmlTag.slice(0, 120) + ') — every load will paint the unthemed stylesheet until settings.js runs, which is the old Alight-Motion-looking flash reported as #292 and #306');
+      throw new Error('the shipped <html> tag does not carry data-theme="glass" (' + htmlTag.slice(0, 120) + ') — every load will paint the unthemed stylesheet until settings.js runs, which is the old-layout flash reported as #292 and #306');
     }
     // and the attribute has to still MEAN something: if theme-glass.css stopped gating on it, this
     // guard would be protecting nothing and should be rewritten rather than left to pass forever.
@@ -58133,17 +58144,15 @@
   });
 
   test('the Template icon does not depend on matching the background (queue 546)', { item: '546' }, async function () {
-    /* Ezra picked the "stamp" — a dashed master with a solid copy in front — from five drawn options,
-       after three earlier attempts at this icon he rejected.
-       ⚠️ WHAT THIS GUARDS IS THE MISTAKE I MADE BUILDING IT, not the shape. My first version hid the
-       master's covered corner by filling the copy with `var(--panel-2)`. It looked perfect on the page I
-       checked it on, because that page happened to have that background. On a tile with any other
-       background — an active tab, a hover, a future theme — the fill shows as a slightly-wrong box
-       inside the icon. And removing the fill instead puts the dashed lines straight through the solid
-       copy, which is the EXACT fault he reported on the Sample clip icon the same day.
-       An icon that is only correct against one background is a bug waiting for a theme, and nothing else
-       in the suite would notice. So: the master is an open path that traces only what the copy does not
-       cover, and no shape in this icon may carry an opaque fill. */
+    /* 24 Aug: he picked the "stamp" (a dashed master with a solid copy in front) from five drawn options. 24 Nov (#1255): shown every
+       Template redesign again he picked option 1, STACKED CARDS, for every Templates spot ("Yeah, I picked the recommended one. Just go
+       with the recommended one"), so the stamp is gone, and what this test said about its dashes with it.
+       ⚠️ WHAT THIS STILL GUARDS IS THE MISTAKE MADE BUILDING THE STAMP, which any two-card drawing can repeat: hiding the back card's
+       covered corner by FILLING the front card with the tile's colour. It looked perfect on the page it was checked on, because that
+       page happened to have that background; on an active tab, a hover or another theme the fill shows as a slightly-wrong box inside
+       the icon. So the card behind is an OPEN path that traces only what the card in front does not cover, and no shape in this icon
+       may carry an opaque fill. That the drawing IS his Stacked cards, the same everywhere, is the '1255 icons · one drawing per
+       thing' test's to say. */
     const host = document.createElement('div');
     host.style.cssText = 'position:fixed;left:-10000px;top:0;width:340px;height:620px';
     document.body.appendChild(host);
@@ -58155,13 +58164,11 @@
       const svg = tab.querySelector('svg');
       if (!svg) throw new Error('the Template tab has no icon at all');
       const shapes = [].slice.call(svg.querySelectorAll('path, rect, circle, polygon'));
-      if (shapes.length < 2) throw new Error('the Template icon is down to ' + shapes.length + ' shape(s) — the stamp needs a master and a copy');
-      /* THE CONTROL: the dashed master IS the idea he picked, so its absence must fail here rather than
-         quietly leaving a plain double-box that means nothing. */
-      const dashed = shapes.filter(el => (el.getAttribute('stroke-dasharray') || '').trim());
-      if (!dashed.length) throw new Error('nothing in the Template icon is dashed any more — the "master you copy from" reading is gone');
-      const solid = shapes.filter(el => !(el.getAttribute('stroke-dasharray') || '').trim());
-      if (!solid.length) throw new Error('the Template icon has no solid shape — there is a master but no copy');
+      if (shapes.length < 2) throw new Error('the Template icon is down to ' + shapes.length + ' shape(s): a card behind and a card in front are two');
+      /* THE CONTROL: it is a two-card drawing with an OPEN card behind that is being judged, or the fill rule below says nothing */
+      const open = shapes.filter(el => el.tagName.toLowerCase() === 'path' && !/z\s*$/i.test((el.getAttribute('d') || '').trim()));
+      if (!open.length) throw new Error('nothing in the Template icon is an open path: the card behind must trace only what the card in front does not cover');
+      if (shapes.some(el => (el.getAttribute('stroke-dasharray') || '').trim())) throw new Error('the Template icon still carries the old stamp’s dashes; his pick of 24 Nov is the Stacked cards');
       // …and the fragile bit: no opaque fill anywhere, so it cannot depend on the tile behind it.
       const filled = shapes.map(el => ({ el: el, f: (el.getAttribute('fill') || '').trim() }))
                            .filter(o => o.f && o.f !== 'none' && o.f !== 'transparent');
@@ -70185,8 +70192,11 @@
   });
 
   /* 917.12 — the swipe pad's hint wraps on a phone, and every line started flush against the pad's left
-     edge (0px) while the corner brackets that frame the pad sit 12px in. Measured per wrapped line. */
-  test('917.12 the swipe pad hint sits inside the pad corner brackets on a phone, not against its edge', { item: '917' }, async function () {
+     edge (0px) while the corner brackets that frame the pad sit 12px in. Measured per wrapped line.
+     #1255 (24 Nov): at rest the pad wears a drawn mark and no sentence, so the words that can wrap are the ones it shows while a snap
+     holds. A line as long as two of those is put in the pad's own line element, the way showPadSnap writes one, so it must wrap at
+     380; the mark at rest must sit inside the brackets too, and step aside while the pad speaks. */
+  test('917.12 the swipe pad’s mark and the line it shows while snapped sit inside the pad corner brackets on a phone, not against its edge', { item: '917' }, async function () {
     var frame = function () { return new Promise(function (r) { setTimeout(r, 90); }); };
     var layers0 = FM.scene.layers.slice();
     try {
@@ -70199,17 +70209,28 @@
         FM.inspector.refresh();
         await frame();
         var pad = [].slice.call(document.querySelectorAll('.mt-trackpad')).filter(function (p) { return p.getBoundingClientRect().width > 0; })[0];
-        var hint = pad && pad.querySelector('.mt-trackpad-hint');
-        if (!hint || !hint.textContent.trim()) throw new Error('no swipe pad with a hint on screen in Position / Scale');
+        var hint = pad && pad.querySelector('.mt-trackpad-hint'), mark = pad && pad.querySelector('.pad-mark');
+        if (!hint || !mark) throw new Error('no swipe pad with its mark and its line on screen in Position / Scale');
         var pr = pad.getBoundingClientRect();
-        var rg = document.createRange(); rg.selectNodeContents(hint);
-        var lines = [].slice.call(rg.getClientRects()).filter(function (r) { return r.width > 2; });
-        if (lines.length < 2) throw new Error('the hint fits on one line at 380px (' + lines.length + '), so the wrap the finding is about is not being measured');
         var BRACKET = parseFloat(getComputedStyle(pad, '::before').left) || 12;
-        lines.forEach(function (r, i) {
-          var l = r.left - pr.left, rr = pr.right - r.right;
-          if (l < BRACKET || rr < BRACKET) throw new Error('hint line ' + (i + 1) + ' sits ' + l.toFixed(1) + 'px from the pad\'s left edge and ' + rr.toFixed(1) + 'px from its right — inside the ' + BRACKET + 'px the corner brackets are inset');
-        });
+        var mr = mark.getBoundingClientRect();
+        if (!(mr.width >= 16) || mr.left - pr.left < BRACKET || pr.right - mr.right < BRACKET) throw new Error('at rest the pad’s mark is ' + mr.width.toFixed(1) + ' px wide, ' + (mr.left - pr.left).toFixed(1) + ' px from the pad’s left edge and ' + (pr.right - mr.right).toFixed(1) + ' from its right — not drawn, or outside the ' + BRACKET + 'px the corner brackets are inset');
+        /* the pad's empty line takes no room at rest, so the mark sits in the middle (shown, its 32 px of padding put the mark 16 px right) */
+        var off = (mr.left + mr.right) / 2 - (pr.left + pr.right) / 2;
+        if (Math.abs(off) > 2) throw new Error('at rest the pad’s mark sits ' + off.toFixed(1) + ' px off the pad’s centre: the empty line is taking room');
+        pad.classList.add('snap-x', 'snap-y');
+        hint.textContent = 'Snapped to right edge + bottom edge, and Snapped to right edge + bottom edge once more';
+        try {
+          await frame();
+          var rg = document.createRange(); rg.selectNodeContents(hint);
+          var lines = [].slice.call(rg.getClientRects()).filter(function (r) { return r.width > 2; });
+          if (lines.length < 2) throw new Error('the line fits on one line at 380px (' + lines.length + '), so the wrap the finding is about is not being measured');
+          lines.forEach(function (r, i) {
+            var l = r.left - pr.left, rr = pr.right - r.right;
+            if (l < BRACKET || rr < BRACKET) throw new Error('line ' + (i + 1) + ' of the pad’s words sits ' + l.toFixed(1) + 'px from the pad\'s left edge and ' + rr.toFixed(1) + 'px from its right — inside the ' + BRACKET + 'px the corner brackets are inset');
+          });
+          if (mark.getClientRects().length) throw new Error('while the pad names a snap its mark is still drawn, over the words');
+        } finally { pad.classList.remove('snap-x', 'snap-y'); hint.textContent = ''; }
       }, 380);
     } finally {
       FM.scene.layers.length = 0;
@@ -74141,7 +74162,7 @@
 
   /* ================= queue 306: the service worker's silent downgrade =============================
    * Ezra, for weeks: *"an older version of our project shows up when you refresh"*, and later *"The
-   * glitch that shows the old version of FreeMotion that has a more alight motion look STILL shows up
+   * glitch that shows the old version of FreeMotion that has a more [the reference app] look STILL shows up
    * when I press refresh… it's such a big issue, PLEASE"*.
    *
    * WHY THIS PATH AND WHY IT SURVIVED. A failed navigation is answered from cache; the stale index.html
@@ -74413,7 +74434,7 @@
   /* ================= queue 308 / 309 / 310: clearing out the settings panel ======================
    * *"you get rid of the trim to last clip button because it automatically does that now"*, *"it has
    * the show guide button but we don't need that there because it's already got a place"*, *"we don't
-   * need the snapping magnet button and also we don't need the Canva settings button"* — and then, on
+   * need the snapping magnet button and also we don't need the Canvas settings button"* — and then, on
    * the obvious worry, *"They all have homes and don't need to be repeated there"*.
    *
    * SO THE TEST IS TWO-SIDED, and the second side is the one that matters. Asserting only that four
@@ -81734,13 +81755,13 @@
                      'gridrepeat', 'linearrepeat', 'radialrepeat', 'blocknoise', 'hexarray', 'rays',
                      'rasterextrude', 'starpoly3d', 'axiscross3d', 'hollowbox3d', 'fliplayer',
                      /* ⚠️ `roundcorners` JOINED THIS LIST LAST, AND IT IS THE ONE THE ENTRY CALLED WORST.
-                        Clause 1 renamed twenty-two labels copied from Alight Motion and MISSED the only
-                        one that was not copied from AM at all — ours read "Rounded Corners / Apple
+                        Clause 1 renamed twenty-two labels copied from [the reference app] and MISSED the only
+                        one that was not copied from [the reference app] at all — ours read "Rounded Corners / Apple
                         style", with a second hit on the toggle ("Apple corners") and a third in the
                         effect browser's description. That is another company's TRADE MARK in our own
                         UI, on a product he intends to publish, and BEFORE-PUBLISHING.md exists for
                         exactly this class of thing. It shipped for months because the rename swept the
-                        AM names and nobody looked at ours. */
+                        copied names and nobody looked at ours. */
                      'roundcorners'];
     const gone = RENAMED.filter(t => !FM.fxRegistry.makeInstance(t));
     if (gone.length)
@@ -81781,8 +81802,9 @@
     /* ⚠️ AND NO OTHER COMPANY'S NAME MAY SIT IN THE UI. The label above is only one instance; the check
        that matters is the class. Apple's mark appeared in THREE user-facing strings for this one effect
        — the label, a toggle and the browser description — so finding and fixing the label alone would
-       have left two. Comments are exempt: explaining WHY a curve exponent is what it is needs the word. */
-    const BRANDS = /\b(Apple|Alight ?Motion|After ?Effects|Adobe|Premiere|Final ?Cut|CapCut|Instagram|TikTok)\b/i;
+       have left two. (Since #1264 a comment may not name another editing app either: the ship's gate reads those.)
+       The platforms are written out here; another editing app is found by its fingerprint (names1264, beside the 1254 tests). */
+    const BRANDS = { test: function (t) { return /\b(Apple|Instagram|TikTok)\b/i.test(t) || !!names1264(t); } };
     const hits = [];
     const defs = FM.fxRegistry.allIncludingHidden ? FM.fxRegistry.allIncludingHidden() : FM.fxRegistry.all();
     for (const d of defs) {
@@ -81811,7 +81833,7 @@
         if (p && p.label && RETIRED.test(p.label)) back.push(key + ' param: "' + p.label + '"');
       }
     }
-    if (back.length) throw new Error('a retired Alight Motion effect name is back on screen: ' + back.join(' · ') + ' (queue 484 — v14.09 renamed the label and this text kept the old one)');
+    if (back.length) throw new Error('a retired effect name is back on screen: ' + back.join(' · ') + ' (queue 484 — v14.09 renamed the label and this text kept the old one)');
   });
 
   /* ═══ QUEUE 657 — "HEALTHY" MUST NOT MEAN "SMOOTH BECAUSE IT GAVE UP SHARPNESS" ═══════════════
@@ -83321,12 +83343,12 @@
   });
 
   /* ═══ QUEUE 484 CLAUSE 2 — MOST OF THE "MISSING" EFFECTS WERE NEVER MISSING ═══════════════════
-   * He asked for the effects Alight Motion has that we lack. Checked one by one against our own 199,
+   * He asked for the effects [the reference app] has that we lack. Checked one by one against our own 199,
    * most were already here under a name he would never search for: Random Displacement is Turbulent
    * Displace, Star is Sunburst, Time Quantization is Frame Stutter, Luma Stamper is Luma Matte,
    * Turbulence is Fractal Ridges, Repeat is Trail.
    * So the fix is not to build them and not to rename them back — clause 1 exists to move AWAY from
-   * AM's names, and one of them turned out to be a trade mark. The other name becomes a SEARCH TERM.
+   * [the reference app]'s names, and one of them turned out to be a trade mark. The other name becomes a SEARCH TERM.
    * ⚠️ A DEAD ALIAS IS SILENT: a key that no longer matches an effect simply never fires, and the
    * search quietly stops finding the thing. Both directions are asserted here. */
   test('#484: the effects he thinks are missing can be found by the name he would type', { item: '484' }, function () {
@@ -83374,7 +83396,7 @@
   });
 
   /* ═══ QUEUE 484 CLAUSE 2 — WRAP SHIFT, the first of the gaps he asked to be filled ════════════
-   * *"look for effects alight motion has that we don't, add them but change the names."* Theirs is
+   * *"look for effects [the reference app] has that we don't, add them but change the names."* Theirs is
    * called Offset; ours is Wrap Shift. It slides the picture and brings whatever leaves one edge back
    * in the other.
    * ⚠️ THE ASSERTION IS THAT IT IS A PERMUTATION, and that is chosen rather than convenient. "Some
@@ -92472,10 +92494,12 @@
     try {
       const A = sh('rect'); FM.scene.layers.push(A); FM.selectLayer(A.id); FM._mtMode = 'anchor';
       FM.refreshAll(); FM.inspector.refresh(); FM.inspector.openCategory('transform');
-      const hint = document.querySelector('.mt-trackpad-hint');
-      if (!hint) throw new Error('setup: the anchor pad (.mt-trackpad-hint) is not in the DOM in anchor mode — the assertion would be vacuous');
-      if (/nine|centre, edges and corners/i.test(hint.textContent)) throw new Error('the anchor pad hint still describes nine points; the grid snaps to 25');
-      if (!/quarter/i.test(hint.textContent)) throw new Error('the anchor pad hint does not describe the quarter-point grid it snaps to: "' + hint.textContent + '"');
+      /* #1255: the pad's sentence is its name for a screen reader now (aria-label); a drawn mark is on the pad */
+      const apad = document.querySelector('.mt-trackpad'), aname = apad ? (apad.getAttribute('aria-label') || '') : '';
+      if (!apad) throw new Error('setup: no swipe pad in the DOM in anchor mode, so the assertion would be vacuous');
+      if (!/anchor/i.test(aname)) throw new Error('the anchor pad is not named for placing the anchor: “' + aname + '”');
+      if (/nine|centre, edges and corners/i.test(aname)) throw new Error('the anchor pad’s name still describes nine points; the grid snaps to 25');
+      if (!/quarter/i.test(aname)) throw new Error('the anchor pad’s name does not describe the quarter-point grid it snaps to: "' + aname + '"');
       FM.scene.layers.splice(FM.scene.layers.indexOf(A), 1);
     } finally { FM._mtMode = mode0; FM.scene.selectedId = sel1; try { FM.refreshAll(); FM.inspector.refresh(); } catch (e) {} }
   });
@@ -94211,7 +94235,7 @@
     }
     /* Built with textContent, never innerHTML: the only reason this panel exists is to carry words, and
        a template NAME is one edit away from being user data in the same box. */
-    const src = String(FM.addMenu.render || '') + String(FM.addMenu.openTab || '');
+    const src = String(FM.addMenu.render || '') + String(FM.addMenu.openTab || '') + String(FM.addMenu._emptyPanel || '');   /* #1255: the builder lives beside render now */
     if (/am-empty[\s\S]{0,200}innerHTML/.test(src))
       throw new Error('the empty panel is being built with innerHTML — it carries prose that will one day carry a user-supplied name');
   });
@@ -94829,7 +94853,9 @@
        tiles are 95px wide on a phone. */
     const tile = document.querySelector('.hm-aspect[data-aspect="custom"]');
     if (!tile) throw new Error('the Custom aspect tile is gone');
-    const sub = tile.querySelector('span:last-child');
+    /* v18.53 (#1243 ST7): every aspect chip ends with a row of app marks (.ac-uses; an empty one on Custom), so the sub-label is the
+       tile's span that is neither the frame drawing nor that row, never its last span */
+    const sub = tile.querySelector(':scope > span:not(.ac-frame):not(.ac-uses)');
     if (!sub) throw new Error('the Custom tile has no sub-label');
     if (!/auto adjusts/i.test(sub.textContent || ''))
       throw new Error('the Custom tile still reads "' + (sub.textContent || '') + '"');
@@ -94838,7 +94864,7 @@
          not, and the suite's own queue-497 guard rightly refused two ids I had invented for a variable
          this never used.) */
       const t = document.querySelector('.hm-aspect[data-aspect="custom"]');
-      const sb = t && t.querySelector('span:last-child');
+      const sb = t && t.querySelector(':scope > span:not(.ac-frame):not(.ac-uses)');
       if (!sb) return;
       const r = sb.getBoundingClientRect(), tr = t.getBoundingClientRect();
       if (!r.width || !tr.width) return;          // the dialog is closed in this run; nothing rendered to measure
@@ -95370,7 +95396,7 @@
 
   test('680 — undo does not drag a clip that starts before zero forward to 0', { item: '680' }, async function () {
     /* 🔴 DATA LOSS, found by a bug hunt he asked for. A NEGATIVE START IS A DELIBERATE, SUPPORTED
-       STATE: js/timeline.js floors a clip drag at -(duration - 0.1) under the comment "AM: a clip can
+       STATE: js/timeline.js floors a clip drag at -(duration - 0.1) under the comment "[the reference app]: a clip can
        be dragged PAST 0 into negative start — it keeps going", and this suite itself builds a
        `start: -2` scene elsewhere as valid input.
        But `history.restore()` runs the IMPORT sanitiser over every layer of the restored snapshot, and
@@ -98986,7 +99012,7 @@
   });
 
   /* ── queue 856: the AI you can TALK TO ─────────────────────────────────────────────────────────
-   * Ezra asked for CapCut's "just talk to her and say what you want and then it goes and does it for
+   * Ezra asked for [another app]'s "just talk to her and say what you want and then it goes and does it for
    * you inside the edit". These four cover the things that would actually hurt him, not the things
    * that are easy to assert:
    *   1. a sentence is ONE undo step — the whole reason he can trust it, and the one that breaks
@@ -107203,7 +107229,7 @@
   test('690 the mask editor follows the playhead — after a scrub its outline is the frame on screen, and dragging a point there keeps the rest of that frame', { item: '690', budgetMs: 60000 }, async function () {
     /* js/mask-tool.js seeded its working points ONCE, in open(), from the path at the playhead — and nothing reseeded them
        when the playhead moved: draw() only reseeded when the mask OBJECT changed (undo / load). So with an animated mask
-       (the AE-style roto its own header advertises: edits write into the keyframe at the playhead), he scrubbed to the
+       (the roto its own header advertises: edits write into the keyframe at the playhead), he scrubbed to the
        next frame he wanted to fix and the teal outline stayed where the mask was on the frame he opened it on, while the
        mask itself had moved on. Touching a handle there made flush() write the WHOLE stale outline into a new keyframe at
        the playhead: that frame snapped back to the old frame's shape with one point moved, and the roto he had there was
@@ -109659,7 +109685,7 @@
       await sleep(100);
       const src = await FM.projects.create({ name: 'HUNTe caption src', width: 1080, height: 1920 }); o.made.push(src);
       const bar = FM.makeLayer('shape', { name: 'HUNTe bar', shape: 'rect', x: 540, y: 1574, shapeW: 900, shapeH: 160, fill: '#e76f51' });
-      const txt = FM.makeLayer('text', { name: 'HUNTe name', text: 'EZRA SMITH', x: 540, y: 1574, fontSize: 80 });
+      const txt = FM.makeLayer('text', { name: 'HUNTe name', text: 'YOUR NAME', x: 540, y: 1574, fontSize: 80 });
       [txt, bar].forEach(function (l) { l.start = 0; l.duration = 4; FM.scene.layers.push(l); });
       FM.refreshAll(); FM.history.commit();
       if (!FM.storage.flushSync()) throw new Error('setup: the source project could not be saved');
@@ -111293,8 +111319,9 @@
             if (Math.abs(r.dx + 40) > 3 || Math.abs(r.dy) > 3 || Math.hypot(r.ox, r.oy) > 2) bad.push('Customise Points, ' + RF690B_HOW[k] + ' on corner 0: the corner the first finger dragged 40 px left moved ' + hb4J({ x: r2(r.dx), y: r2(r.dy) }) + ' and the corner under the second finger moved ' + hb4J({ x: r2(r.ox), y: r2(r.oy) }) + ' — the second finger took the drag');
           });
           /* 2. ON ITS POINT PAD (Swipe here to move point, gain project width / 300): it steps from the LAST event, so a takeover reads the gap as travel. */
-          const padNow = () => { const p = document.querySelector('.mt-trackpad'); return p && /move point/i.test(p.textContent || '') ? p : null; };
-          if (!padNow()) throw new Error('setup: the Customise Points panel has no Swipe here to move point pad');
+          const padNow = () => { const p = document.querySelector('.mt-trackpad'); return p && /move the point/i.test(p.getAttribute('aria-label') || '') ? p : null; };   /* #1255: told by its name; its sentence is no longer on it */
+          if (!document.querySelector('.mt-trackpad')) throw new Error('setup: the Customise Points panel has no swipe pad');
+          if (!padNow()) throw new Error('the Customise Points pad is not named for moving the point: “' + (document.querySelector('.mt-trackpad').getAttribute('aria-label') || '') + '”');
           const sens = (FM.scene.project.width || 1080) / 300;
           let g0;
           /* (F2) the second finger's own move has a y part: x alone is blind at one pad width (where its mutated travel equals
@@ -111535,8 +111562,10 @@
           ['case', 'move'].forEach(k => { if (Math.abs(T[k].rot - rWant) > 2) bad.push('the rotation ring, ' + RF690B_HOW[k] + ' at 9 o’clock: the rotation is ' + r1(T[k].rot) + ', not about ' + rWant + ' — the second finger restarted the turn from its own angle'); });
           /* 3. THE ANCHOR PAD: 260 px of swipe crosses the layer; the second finger lands 150 px to the right */
           FM._mtMode = 'anchor'; FM.inspector.openCategory('transform'); await hb4Wait(400);
-          const apad = () => { const p = document.querySelector('.mt-trackpad'); return p && /anchor/i.test(p.textContent || '') ? p : null; };
-          if (!apad()) throw new Error('setup: Move and Transform has no anchor pad in its anchor mode');
+          /* v18.53 (#1255): the pad's sentence is its NAME now (aria-label, js/inspector.js padMark) and a drawn mark stands where the
+             words stood, so the pad is found by its name; its words are still read, for a build that prints them. */
+          const apad = () => { const p = document.querySelector('.mt-trackpad'); return p && /anchor/i.test((p.getAttribute('aria-label') || '') + ' ' + (p.textContent || '')) ? p : null; };
+          if (!apad()) throw new Error('setup: Move and Transform has no anchor pad in its anchor mode (no .mt-trackpad named or worded for the anchor)');
           /* (F2) the second finger's own move has a y part, as on the other pads. 16 px, not 12: the pad snaps within 0.045 of a
              quarter point (11.7 px of swipe), so 12 px would sit 0.3 px from being snapped back to 0.5; 16 px is 0.062 */
           const A = await rf690bThree({
@@ -118193,7 +118222,8 @@
         const unOpen = stub1132(FM.settings, 'open', function () { opened++; });
         try {
           FM.openCanvasDialog({ block: 'none' }); await entranceDone(dlg); await sleep(40);
-          document.getElementById('cv-app-bar').click(); await sleep(60);
+          /* #1243 ST5: the cog's blocks now leave with an animation under Settings (styles.css cv-leave) before it is put away */
+          document.getElementById('cv-app-bar').click(); await sleep(450);
           if (!dlg.classList.contains('hidden')) throw new Error('the App settings bar left the cog open — Settings would open behind it');
           if (opened !== 1) throw new Error('the App settings bar did not open Settings (' + opened + ')');
         } finally { unOpen(); try { FM.closeCanvasDialog(); } catch (e) {} }
@@ -119190,7 +119220,10 @@
     });
   });
 
-  test('967 10 the name prompt finishes on Return, backing out of it from Start sharing says a name is needed, and the idle row’s colour is the one the prompt picks', { item: '967', budgetMs: 60000 }, async function () {
+  /* #1243 ST8 RENAMED THIS — it was '967 10 …, and the idle row’s colour is the one the prompt picks'. The bare block (his #1243 "bare bones
+     simple just so it works") has no row of his own, so there is no preview colour to agree with: the name and colour are asked for at
+     Start sharing, which still pre-selects one. */
+  test('967 10 the name prompt finishes on Return, backing out of it from Start sharing says a name is needed, and the prompt Start sharing raises comes with a colour already picked', { item: '967', budgetMs: 60000 }, async function () {
     /* J1-7. */
     const C = need921S7('the name prompt');
     await withLabs921(async function (ui) {
@@ -119210,7 +119243,7 @@
         if (res === 'still up' || !res || res.name !== 'Mia') throw new Error('Return in the name field did nothing (' + JSON.stringify(res) + ') — on an iPhone the keyboard’s return key is how you finish');
         if (document.getElementById('collab-profile')) throw new Error('the prompt stayed up after Return');
         if (/cursor/i.test(promptText)) throw new Error('the prompt talks about a cursor — a phone has none (J1-7)');
-        /* The idle Friends row and the prompt agree on the colour. */
+        /* Start sharing from the bare block raises the prompt with a colour already picked. */
         localStorage.removeItem('fm.profile');
         Math.random = function () { return 0.5; };
         await editorWithShape(async function () {
@@ -119219,15 +119252,11 @@
               FM.openCanvasDialog({ block: 'friends' });
               await entranceDone(document.getElementById('canvas-dialog')); await land945();
               const body = document.getElementById('cv-fr-body');
-              const dot = body.querySelector('.cs-person .cs-dot');
-              if (!dot) throw new Error('setup: the idle block has no row for him');
-              const idle = getComputedStyle(dot).backgroundColor;
+              if (!body.querySelector('.cs-start')) throw new Error('setup: the idle block has no Start sharing');
               body.querySelector('.cs-start').click();
               await settle921(120);
               const on = document.querySelector('#collab-profile .collab-swatch[aria-pressed="true"]');
-              if (!on) throw new Error('setup: the prompt pre-selected nothing');
-              const picked = getComputedStyle(on).backgroundColor;
-              if (picked !== idle) throw new Error('the idle row shows ' + idle + ' and the prompt it opens pre-selects ' + picked + ' — the preview and the pick disagree');
+              if (!on) throw new Error('the prompt Start sharing raised pre-selected no colour');
               document.querySelector('#collab-profile .fm-ask-cancel').click();
               await settle921(200);
               const note = body.querySelector('.cs-note');
@@ -121036,6 +121065,9 @@
             if (!o) throw new Error(what + ': the Friends block has no “Work with friends” on/off row — once it is on, nothing here can turn it off (J3-1): “' + fr().textContent.slice(0, 140) + '”');
             if (o.label !== 'Work with friends') throw new Error(what + ': the row is labelled “' + o.label + '”');
             if (o.on !== on) throw new Error(what + ': the row’s switch reads ' + (o.on ? 'on' : 'off') + ' while the feature is ' + (on ? 'on' : 'off'));
+            /* #1243 ST8: on a phone the whole block is the one scroller and nothing is pinned, so the row is at the foot of what scrolls —
+               brought into view the way a finger would (scrollIntoView moves only a scroller he can scroll), then read */
+            o.sw.scrollIntoView({ block: 'nearest' });
             box967(o.sw, document.getElementById('cv-friends'), what + ': the switch');
             return o;
           };
@@ -121541,13 +121573,18 @@
     }
   });
 
-  test('967 B2 8 the Friends block says how it works in three steps, off and on; Start sharing says what he will get; the short code says what the friend does; and in the Share panel the invite comes straight under the people, Comments after it, and “Keep FreeMotion open” is in the panel, not a toast', { item: '967', budgetMs: 120000 }, async function () {
+  /* #1243 ST8 REWROTE THIS — it was '967 B2 8 the Friends block says how it works in three steps, off and on; Start sharing says what he will
+     get; …'. His #1243 words: "it shouldn't show you how to use it every single time… bare bones… and then have a question mark button
+     … that'll take you to another menu… the steps." The three steps moved behind the block's ?, and the line under Start sharing went. */
+  test('967 B2 8 the Friends block keeps how it works behind its ? — three steps there, off and on, and none on the block itself; nothing stands under the short code; and in the Share panel the invite comes straight under the people, Comments after it, and “Keep FreeMotion open while you share” is said once in the card’s head when sharing starts, never as a toast or a standing line', { item: '967', budgetMs: 120000 }, async function () {
     /* R5 / J5-2, J1-8, J5-4 (owner half); J1-6, J1-12, J1-13 (order half), J5-8 — his pick A. Measured at v17.06: nothing
        said it in steps, Comments sat between the people and the invite, and the keep-open toast landed over the short code. */
     const C = need921S7('how it works');
-    const STEPS = [/^1\s*Tap Start sharing$/, /^2\s*Send your friend the link$/, /^3\s*They tap it — you’re both editing$/];
-    /* Review fix: off, there is no Start sharing to tap — step 1 names the switch that IS there, then Start sharing. */
-    const STEP1_OFF = /^1\s*Turn on Work with friends below, then tap Start sharing$/;
+    /* step 3 in his words of 24 Nov (the dash in “They tap it — you’re both editing” “just looks written by AI”) */
+    const STEPS = [/^1\s*Tap Start sharing$/, /^2\s*Send your friend the link$/, /^3\s*Start editing together$/];
+    /* Review fix: off, there is no Start sharing to tap — step 1 names the switch that IS there, then Start sharing. (#1243 ST8 review
+       E1-R7: on the ? page the switch is not below the steps, so it says where it is.) */
+    const STEP1_OFF = /^1\s*Go back \(‹\) and turn on Work with friends at the foot of the block, then tap Start sharing$/;
     await withFakeNet921(async function () {
       await withLabs921(async function (ui) {
         await with945(async function () {
@@ -121562,20 +121599,20 @@
               for (const on of [false, true]) {
                 FM.settings.set('collabLabs', on); ui.syncLabs();
                 FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
-                const ol = fr.querySelector('.cs-how');
-                const li = ol ? Array.prototype.map.call(ol.children, function (x) { return x.textContent.replace(/\s+/g, ' ').trim(); }) : [];
-                if (li.length !== 3 || !STEPS.every(function (re, i) { return (i || on ? re : STEP1_OFF).test(li[i]); })) throw new Error((on ? 'turned on' : 'turned off') + ', the block does not say how it works in three steps (' + JSON.stringify(li) + ') (J5-2)');
-                if (!ol.getClientRects().length) throw new Error('the three steps are not on show');
+                if (fr.querySelector('.cs-how')) throw new Error((on ? 'turned on' : 'turned off') + ', the block still shows the steps every time (#1243 ST8: “it shouldn’t show you how to use it every single time”)');
                 /* …and step 1 names a control that is really in the block, on show — a step he cannot follow is worse than none. */
                 const step1 = on ? fr.querySelector('.cs-start') : fr.querySelector('.cs-offrow [role=switch]');
-                if (!step1 || !step1.getClientRects().length) throw new Error((on ? 'turned on' : 'turned off') + ', step 1 says “' + li[0] + '” but the block has no ' + (on ? 'Start sharing button' : '“Work with friends” switch') + ' on show');
-                const first = fr.querySelector('.cs-start') || fr.querySelector('[role=switch]');
-                if (first && ol.getBoundingClientRect().bottom > first.getBoundingClientRect().top + 1) throw new Error('the three steps are not at the top of the block, above ' + (first.className || first.tagName));
-                if (on) {
-                  const start = fr.querySelector('.cs-start');
-                  const hint = start && start.nextElementSibling;
-                  if (!hint || !/You’ll get a link, a QR and a short code to send\./.test(hint.textContent)) throw new Error('under Start sharing: “' + (hint && hint.textContent) + '” — it should say what he will get (J1-8)');
-                } else { FM.closeCanvasDialog(); await settle921(80); }
+                if (!step1 || !step1.getClientRects().length) throw new Error((on ? 'turned on' : 'turned off') + ', the block has no ' + (on ? 'Start sharing button' : '“Work with friends” switch') + ' on show for step 1 to name');
+                const q = fr.querySelector('.cs-help');
+                if (!q || !q.getClientRects().length) throw new Error((on ? 'turned on' : 'turned off') + ', the block has no ? to open the steps behind');
+                q.click();   // read in the same task: not shared, the lesson takes the three steps' place once it has loaded
+                const ol = fr.querySelector('.cs-how');
+                const li = ol ? Array.prototype.map.call(ol.children, function (x) { return x.textContent.replace(/\s+/g, ' ').trim(); }) : [];
+                /* the three short steps are drawn at once (the lesson replaces them once it has loaded): read them before it does */
+                if (li.length !== 3 || !STEPS.every(function (re, i) { return (i || on ? re : STEP1_OFF).test(li[i]); })) throw new Error((on ? 'turned on' : 'turned off') + ', behind the ? the block does not say how it works in three steps (' + JSON.stringify(li) + ') (J5-2)');
+                fr.querySelector('.cs-backbtn').click(); await settle921(40);
+                if (!step1.isConnected && !(on ? fr.querySelector('.cs-start') : fr.querySelector('.cs-offrow [role=switch]'))) throw new Error((on ? 'turned on' : 'turned off') + ', ‹ did not bring the block back');
+                if (!on) { FM.closeCanvasDialog(); await settle921(80); }
               }
               /* Start sharing, for real. */
               got.length = 0;
@@ -121584,15 +121621,30 @@
                 .catch(function () { throw new Error('setup: Start sharing did not bring up the Share panel'); });
               await settle921(200);
               if (got.some(function (x) { return /Keep FreeMotion open/.test(x); })) throw new Error('“Keep FreeMotion open” is still a toast — it lands over the short code he is about to read out (J1-13)');
-              const keep = fr.querySelector('.cs-keepopen');
-              if (!keep || !/Keep FreeMotion open — it pauses when your screen locks/.test(keep.textContent) || !keep.getClientRects().length) throw new Error('the Share panel does not say to keep FreeMotion open');
+              /* #1255 (24 Nov, his words on this card: “as little as possible… no explanations at all… a question mark that takes you to the tutorial page”): no standing line any more.
+                 It is said once, in the card's head, on the opening sharing starts in (and is still never a toast, J1-13). */
+              if (fr.querySelector('.cs-keepopen')) throw new Error('“Keep FreeMotion open” still stands in the panel on every opening (#1255)');
+              const keep = fr.querySelector('.cs-head .cs-keepnote');
+              if (!keep || keep.textContent !== 'Keep FreeMotion open while you share' || !keep.getClientRects().length) throw new Error('on the opening sharing starts in, the card’s head does not say to keep FreeMotion open (“' + (keep && keep.textContent) + '”)');
+              /* …and it is not a .cs-note: the first .cs-note in the head is the one-shot line (a knock that gave up, a code that
+                 lapsed), and the 921 S6 tests read it at 380; this line stood in front of it and was read instead (review, 25 Nov). */
+              if (keep.classList.contains('cs-note') || fr.querySelector('.cs-head .cs-note') === keep) throw new Error('the keep-open line in the card’s head is a .cs-note, so it is read as the one-shot note in front of the real one');
               const people = fr.querySelector('.cs-people'), invite = fr.querySelector('.cs-invite'), comments = fr.querySelector('.cs-comments');
               if (!people || people.nextElementSibling !== invite) throw new Error('the invite is not straight under the people — the job comes first (J1-6)');
               if (!comments) throw new Error('setup: no Comments row to place');
               if (!(invite.compareDocumentPosition(comments) & Node.DOCUMENT_POSITION_FOLLOWING)) throw new Error('Comments sits above the invite');
+              /* #1255 (24 Nov, his words on this card: “as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page”): the two lines under the short code (what a friend
+                 does with it, J5-4; when it stops working) went to lesson 17, behind the card's ?. */
               const code = fr.querySelector('.cs-roomrow');
-              const how2 = code && code.nextElementSibling;
-              if (!how2 || how2.textContent.trim() !== 'That’s the short code — they open FreeMotion, tap profile, choose Join a friend’s project, and type it in.') throw new Error('under the short code: “' + (how2 && how2.textContent) + '” — it should say what the friend does (J5-4)');
+              if (!code) throw new Error('setup: the invite has no short code row');
+              const under = fr.querySelector('.cs-invite .cs-codehow, .cs-invite .cs-codehint');
+              if (under) throw new Error('under the short code a line still stands: “' + under.textContent + '” (#1255: the lesson behind the card’s ? says it)');
+              /* …and at the NEXT opening the head does not say it again: it belongs to the moment sharing starts, not to the panel */
+              FM.closeCanvasDialog(); await settle921(80);
+              FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+              if (!fr.querySelector('.cs-stop')) throw new Error('setup: reopened, the block is not the live Share panel');
+              if (fr.querySelector('.cs-keepnote')) throw new Error('reopened, the card says “Keep FreeMotion open while you share” again (#1255: once, when sharing starts)');
+              FM.closeCanvasDialog(); await settle921(80);
             }, 390);
           } finally {
             got.restore();
@@ -121606,7 +121658,62 @@
     });
   });
 
-  test('967 B2 9 with the connection service unreachable the Share panel lights “Connect with a code”, not Copy link — Copy link stops saying just “Link copied”, and “tap Join and type it in” leaves the short code; with it up, Copy link is the lit one', { item: '967', budgetMs: 90000 }, async function () {
+  /* #1255 review (25 Nov): “Keep FreeMotion open while you share” is for the opening sharing starts in. It was also set when sharing
+     started with nobody looking at the block (the stand-alone Share card the tests use, and the quiet resume after a reload), and then
+     showed at whatever later opening of the block came next. CONTROL: in that same opening, Stop sharing and Start sharing in the block
+     itself bring the line up, so the reading can see it. */
+  test('967 B2 8b on a phone, sharing that started with the Friends block closed puts no Keep FreeMotion open in the head of the next opening of the block (CONTROL: that opening is the live Share panel, and Start sharing in the block itself does show the line)', { item: '967', budgetMs: 90000 }, async function () {
+    const C = need921S7('the keep-open line after a start nobody saw');
+    await withFakeNet921(async function () {
+      await withLabs921(async function (ui) {
+        await with945(async function () {
+          const wasHome = FM.home.isOpen(), orig = FM.projects.currentId();
+          if (wasHome) FM.home.close();
+          const made = [await FM.projects.create({ name: 'B2 967 keep open unseen', width: 320, height: 240 })];
+          try {
+            await atPhoneWidth(async function () {
+              const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+              if (!(FM.mobile && FM.mobile.isPhone && FM.mobile.isPhone())) throw new Error('setup: at 390 the app does not read as a phone, and the line is a phone’s only');
+              if (!dlg.classList.contains('hidden')) { FM.closeCanvasDialog(); await settle921(80); }
+              /* THE COG'S LAST OPEN BLOCK WAS FRIENDS (found by mutation, 25 Nov: without this the test could not fail). An opening of
+                 the cog lets go of everything the block held (U.friendsClosed, by js/app.js cvPairSettle) unless Friends was the block it
+                 last had open, and only then is a line that was set with nobody looking still there to be drawn. So he has looked at
+                 Friends once and closed it, as before a trip to Home and back. */
+              FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+              FM.closeCanvasDialog(); await settle921(80);
+              if (!dlg.classList.contains('hidden') || !dlg.classList.contains('cv-fr-big')) throw new Error('CONTROL: closed, the cog does not still say Friends was its open block (' + dlg.className + '), so its next opening lets go of the line before it draws and this test could not see a stale one');
+              await ui.share(); ui.close(); await settle921(80);
+              if (!C.session || !C.session.isOwner) throw new Error('setup: the Share card did not start sharing');
+              FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+              if (!fr.querySelector('.cs-stop') || !fr.querySelector('.cs-head .cs-state')) throw new Error('CONTROL: the opening is not the live Share panel');
+              const stale = fr.querySelector('.cs-keepnote');
+              if (stale) throw new Error('sharing started with the block closed, and the next opening of the block says “' + stale.textContent + '” (#1255: once, on the opening sharing starts in)');
+              /* CONTROL: Stop sharing, then Start sharing in the open block: now the line is said */
+              fr.querySelector('.cs-stop').click();
+              const q = await until921S6('Stop sharing?', ask967b3, 3000);
+              q.ok.click();
+              await until921S6('the block, not shared', function () { return !C.session && fr.querySelector('.cs-start') ? 1 : 0; }, 5000)
+                .catch(function () { throw new Error('setup: Stop sharing did not bring back the not-shared block'); });
+              fr.querySelector('.cs-start').click();
+              await until921S6('the Share panel again', function () { return C.session && fr.querySelector('.cs-invite') ? 1 : 0; }, 8000)
+                .catch(function () { throw new Error('setup: Start sharing in the block did not bring up the Share panel'); });
+              await settle921(120);
+              if (!fr.querySelector('.cs-head .cs-keepnote')) throw new Error('CONTROL: Start sharing in the open block did not say Keep FreeMotion open either, so the reading above saw nothing');
+              FM.closeCanvasDialog(); await settle921(80);
+            }, 390);
+          } finally {
+            const a = ask967b3(); if (a && a.cancel) a.cancel.click();
+            try { C.end(); } catch (e) {}
+            try { localStorage.removeItem('fm.collab.host.' + made[0]); } catch (e) {}
+            ui.close();
+            await q915aCleanup(made, orig, wasHome, [], [], []);
+          }
+        });
+      });
+    });
+  });
+
+  test('967 B2 9 with the connection service unreachable the Share panel lights “Connect with a code”, not Copy link — Copy link stops saying just “Link copied”; with it up, Copy link is the lit one; and no how-to line stands under the short code either way', { item: '967', budgetMs: 90000 }, async function () {
     /* J5-8 (batch 2 review): "When the relays are unreachable on a real network, make the code swap the lit button and stop
        Copy link claiming success." Measured on the builder's commit: every relay refused, Copy link was still the only lit
        button and said "Link copied", and the line under the short code told the friend to type a code that could not work.
@@ -121636,12 +121743,12 @@
             if (want === 'unreachable') {
               if (cl.classList.contains('accent')) throw new Error(what + ': Copy link is still the lit button (lit: ' + JSON.stringify(lit) + ') while the link cannot reach him');
               if (!add.classList.contains('accent')) throw new Error(what + ': “Connect with a code” is not lit — it is the one way in that needs no relay (lit: ' + JSON.stringify(lit) + ')');
-              if (how && how.getClientRects().length) throw new Error(what + ': “' + how.textContent + '” still sits under a short code that cannot work right now');
+              if (how) throw new Error(what + ': “' + how.textContent + '” still stands under the short code (#1255: no how-to line there in any state)');
               if (!said || said === 'Link copied' || !/won’t work/.test(said)) throw new Error(what + ': Copy link said “' + said + '” — it has to say the link won’t work until the service is reachable');
             } else {
               if (!cl.classList.contains('accent')) throw new Error(what + ' (control): Copy link is not the lit button (lit: ' + JSON.stringify(lit) + ')');
               if (add.classList.contains('accent')) throw new Error(what + ' (control): “Connect with a code” is lit while the link works');
-              if (!how || !how.getClientRects().length) throw new Error(what + ' (control): the short code has no “tap Join and type it in” line');
+              if (how) throw new Error(what + ' (control): “' + how.textContent + '” still stands under the short code (#1255: the lesson behind the card’s ? says what a friend does with it)');
               if (said !== 'Link copied') throw new Error(what + ' (control): Copy link said “' + said + '”');
             }
             FM.closeCanvasDialog(); await settle921(80);
@@ -122568,7 +122675,7 @@
     });
   });
 
-  test('967 B4 2 two codes, two nouns — the 9-character one is the “short code” and the FM1 block the “swap code”: “Send your friend the link”, “Link not working? Swap codes instead” (you copy a swap code to them, they copy one back), both steps and the friend’s answer say swap code, and the check says “the same 5 characters” and what “They don’t match” is for', { item: '967', budgetMs: 120000 }, async function () {
+  test('967 B4 2 two codes, two nouns — the 9-character one is the “short code” and the FM1 block the “swap code”: “Send your friend the link”, “Link not working? Swap codes instead” with no line under it, both steps and the friend’s answer say swap code, and the check says “the same 5 characters” and what “They don’t match” is for', { item: '967', budgetMs: 120000 }, async function () {
     /* J5-3 (major), J1-4, J5-10(g): "Invite with a link or a code" meant the short code and "Connect with a code instead", six rows
        lower, the 233-character block; "check these letters match" over G8C8J, and "the same five" without saying five what. */
     const C = need921S7('the two codes');
@@ -122583,12 +122690,17 @@
               if (!fr.querySelector('.cs-stop')) throw new Error('setup: the block is not the live Share panel');
               const lab = fr.querySelector('.cs-invite > .cs-rowlabel');
               if (!lab || lab.textContent !== 'Send your friend the link') throw new Error('the invite is headed “' + (lab && lab.textContent) + '” — “a link or a code” is the short code here and the swap code six rows down');
-              const how = fr.querySelector('.cs-invite .cs-codehow');
-              if (!how || !/^That’s the short code — they open FreeMotion, tap profile, choose Join a friend’s project, and type it in\.$/.test(how.textContent)) throw new Error('under the 9 characters: “' + (how && how.textContent) + '” — it should name them the short code');
+              /* #1255 (24 Nov, his words on this card: “as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page”): the line under the 9 characters went to lesson 17. They are
+                 still NAMED the short code where they stand: to a screen reader, and on the button that resets them. */
+              const how = fr.querySelector('.cs-invite .cs-codehow, .cs-invite .cs-codehint');
+              if (how) throw new Error('under the 9 characters a line still stands: “' + how.textContent + '” (#1255)');
+              const nine = fr.querySelector('#collab-room-code'), rst = fr.querySelector('.cs-invite .cs-reset');
+              if (!nine || !/^Short code /.test(nine.getAttribute('aria-label') || '') || !rst || rst.textContent !== 'Reset link and short code') throw new Error('the 9 characters are not named the short code: “' + (nine && nine.getAttribute('aria-label')) + '” / “' + (rst && rst.textContent) + '”');
               const add = fr.querySelector('.cs-body > .cs-add');
               const main = add && add.firstChild && add.firstChild.nodeType === 3 ? add.firstChild.textContent : '';
               const sub = add && add.querySelector('.cs-add-sub') ? add.querySelector('.cs-add-sub').textContent : '';
-              if (main !== 'Link not working? Swap codes instead' || sub !== 'You copy a swap code to them, they copy one back') throw new Error('the swap door reads “' + main + '” / “' + sub + '”');
+              /* #1255 (24 Nov, his words on this card: “as little as possible… no explanations at all… a question mark that takes you to the tutorial page”): the line under the door went to lesson 17 */
+              if (main !== 'Link not working? Swap codes instead' || sub) throw new Error('the swap door reads “' + main + '”' + (sub ? ' with a line under it: “' + sub + '” (#1255)' : ''));
               bareCode967b4(seen967b4(fr.querySelector('.cs-body')), 'the live Share panel');
               /* The swap step. */
               add.click(); await settle921(100);
@@ -122647,7 +122759,7 @@
     });
   });
 
-  test('967 B4 3 privacy is one plain sentence and “What gets sent? ›” opens the full list, every service named — once on each screen: the Friends block off, the Share panel, Sharing settings, and Settings, whose switch hint is one line', { item: '967', budgetMs: 120000 }, async function () {
+  test('967 B4 3 privacy is one plain sentence and “What gets sent? ›” opens the full list, every service named — once where it is said: the Friends block off, the page behind the Share panel’s ?, and Settings, whose switch hint is one line; the Share panel and Sharing settings themselves print none', { item: '967', budgetMs: 120000 }, async function () {
     /* J1-4, J5-5 (major), J2-12, J4-14: a 68-word paragraph naming PeerJS/EMQX/HiveMQ/Google/Cloudflare led the first card, and a
        57-word variant was the Settings switch's hint. The S6 review rule stays true behind the tap: every service is named. */
     const C = need921S7('the privacy line');
@@ -122694,9 +122806,18 @@
                 const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
                 FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
                 if (!fr.querySelector('.cs-stop')) throw new Error('setup: the block is not the live Share panel');
-                await check(fr, 'the Share panel');
+                /* #1255 (24 Nov, his words on this card: “as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page”): the sentence left the Share panel and Sharing settings;
+                   it is at the foot of the page behind the card's ?, one tap from this head. */
+                if (fr.querySelector('.cs-privacy')) throw new Error('the Share panel still prints the privacy sentence; it is behind its ? now (#1255)');
                 fr.querySelector('.cs-gear').click(); await settle921(100);
-                await check(fr, 'Sharing settings');
+                if (!fr.querySelector('.cs-sstatus')) throw new Error('setup: the gear did not open Sharing settings');
+                if (fr.querySelector('.cs-privacy')) throw new Error('Sharing settings still prints the privacy sentence; it is behind the card’s ? now (#1255)');
+                fr.querySelector('.cs-gear').click(); await settle921(100);
+                const q = fr.querySelector('.cs-head .cs-help');
+                if (!q) throw new Error('the Share panel has no ? to find the privacy sentence behind');
+                q.click(); await settle921(100);
+                await check(fr, 'the page behind the Share panel’s ?');
+                fr.querySelector('.cs-backbtn').click(); await settle921(80);
                 FM.closeCanvasDialog(); await settle921(80);
               }, 390);
             });
@@ -122805,7 +122926,7 @@
     }
   });
 
-  test('967 B4 5 roles and Watch along are explained where they are picked — “Editor — can change anything”, “Commenter — can leave notes only”, “Viewer — can only watch” in every role menu; Follow is “Watch along”, with a line saying your screen follows theirs, and the banner says “Watching along with Sam Lee”', { item: '967', budgetMs: 120000 }, async function () {
+  test('967 B4 5 roles and Watch along are explained where they are picked — “Editor — can change anything”, “Commenter — can leave notes only”, “Viewer — can only watch” in every role menu; Follow is “Watch along”, its menu entry saying your screen follows theirs with no line under the people, and the banner says “Watching along with Sam Lee”', { item: '967', budgetMs: 120000 }, async function () {
     /* J5-9: three bare words in the role menu, and a Follow with no hint of what it does (it drives your playhead to theirs). */
     const C = need921S5('roles and Watch along');
     const ROLES = [/^Editor — can change anything/, /^Commenter — can leave notes only/, /^Viewer — can only watch/];
@@ -122847,8 +122968,10 @@
         if (!mine || mine.textContent !== 'You’re an Editor — you can change anything.') throw new Error('the friend’s role line reads “' + (mine && mine.textContent) + '”');
         const f = card.querySelector('.cs-person[data-mid="m8"] .cs-follow');
         if (!f || f.textContent !== 'Watch along' || f.getAttribute('aria-label') !== 'Watch along with Sam Lee') throw new Error('Sam’s button reads “' + (f && f.textContent) + '” / “' + (f && f.getAttribute('aria-label')) + '”');
+        /* #1255 (24 Nov, his words on this card: “as clean and simple as possible, with no explanations at all… a question mark that takes you to the tutorial page”): the line under the people that said what Watch along does
+           went to lesson 17; the owner's menu entry above still says it, and the banner below says whom he is watching. */
         const hint = card.querySelector('.cs-watchhint');
-        if (!hint || !hint.getClientRects().length || !/your screen follows theirs/.test(hint.textContent)) throw new Error('nothing under the people says what Watch along does (' + (hint ? '“' + hint.textContent + '”' : 'no line') + ')');
+        if (hint) throw new Error('a line still stands under the people: “' + hint.textContent + '” (#1255: no small lines of explanation on the card)');
         f.click(); await settle921(80);
         if (C.presence.following() !== 'm8') throw new Error('setup: Watch along did not start');
         const b = document.getElementById('collab-banner');
@@ -122867,7 +122990,10 @@
     });
   });
 
-  test('967 B4 6 the small lines say what is true — “Nothing’s shared until you tap Start sharing.”, “Not sharing” after a stop, Stop sharing says the link stops too, a friend’s Leave is “Leave (keep my copy)”, Comments drop the export clause, Settings’ footer stops promising everything stays here once the switch is on, and the idle row says You once', { item: '967', budgetMs: 150000 }, async function () {
+  /* #1243 ST8 REWROTE THIS — it was '967 B4 6 the small lines say what is true — “Nothing’s shared until you tap Start sharing.”, … and the
+     idle row says You once'. The bare block (his #1243 "bare bones simple just so it works") has neither the line under Start sharing nor
+     his own row; the promise is said behind the ?, in lesson 17's own words. */
+  test('967 B4 6 the small lines say what is true — behind the Friends block’s ? it says nothing is shared until Start sharing, “Not sharing” after a stop, Stop sharing says the link stops too, a friend’s Leave is “Leave (keep my copy)”, Comments drop the export clause, Settings’ footer stops promising everything stays here once the switch is on, and the bare block has no row of his own', { item: '967', budgetMs: 150000 }, async function () {
     /* J1-8, J3-10, J4-16, J5-10 (b)(c)(d)(e)(f). */
     const C = need921S7('the small lines');
     await withFakeNet921(async function () {
@@ -122884,10 +123010,11 @@
                 /* The idle row, with no name set up yet: "You" once. */
                 localStorage.removeItem('fm.profile');
                 FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
-                const pn = fr.querySelector('.cs-people .cs-pname'), pr = fr.querySelector('.cs-people .cs-prole');
-                if (!pn || pn.textContent !== 'You' || !pr || /^You\b/.test(pr.textContent)) throw new Error('the idle row reads “' + (pn && pn.textContent) + '” / “' + (pr && pr.textContent) + '” — You twice (J1-8)');
-                const hint = fr.querySelector('.cs-fr-hint');
-                if (!hint || hint.textContent !== 'You’ll get a link, a QR and a short code to send. Nothing’s shared until you tap Start sharing.') throw new Error('under Start sharing: “' + (hint && hint.textContent) + '”');
+                if (!fr.querySelector('.cs-start')) throw new Error('setup: the not-shared block has no Start sharing');
+                if (fr.querySelector('.cs-people') || fr.querySelector('.cs-fr-hint')) throw new Error('the bare block still has ' + (fr.querySelector('.cs-people') ? 'his own row' : 'the line under Start sharing') + ' (#1243 ST8: “bare bones simple just so it works”)');
+                fr.querySelector('.cs-help').click();
+                await until921S6('the lesson behind the ?', function () { return /Nothing is shared until you tap Start sharing/.test(fr.textContent.replace(/\s+/g, ' ')) ? 1 : 0; }, 4000)
+                  .catch(function () { throw new Error('behind the ? nothing says it is not shared until Start sharing: “' + fr.textContent.replace(/\s+/g, ' ').slice(0, 300) + '”'); });
                 FM.closeCanvasDialog(); await settle921(80);
                 ui.setProfile('Test Person', ui.PALETTE[0]);
                 FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
@@ -125714,7 +125841,11 @@
         await sleep(80);
         await (width === 'phone' ? atPhoneWidth : atWideWidth)(async function () {
           dlg.classList.add('hidden'); await sleep(40);
-          const O = orb.getBoundingClientRect();
+          /* the + AT REST (24 Nov, a hunt finding): run by itself this test meets Home's first-open entrance still playing on
+             the +, and a + caught mid-rise read [172, 694, 47, 47] against the [171, 690, 48, 48] it has at rest: red, and the
+             measurement's fault. So it is measured once its box has stopped changing (50 ms apart, at most 2 s). */
+          let O = orb.getBoundingClientRect();
+          for (let i = 0; i < 40; i++) { await sleep(50); const q = orb.getBoundingClientRect(); const still = near(q, O, 0.05); O = q; if (still) break; }
           if (!(O.width > 20)) throw new Error(width + ': the + is not on screen (' + box(O) + ') before it is pressed');
           orb.click();
           if (dlg.classList.contains('hidden')) throw new Error(width + ': tapping + did not open the New project card');
@@ -127166,7 +127297,13 @@
      the press, and Home is exactly as it was — open, on the same project, not in Select, the card not opened again.
      On the phone the card covers the first projects, so when Home is too short to reach under the dim below it, copies of
      the open project are added (and deleted after). The frame slides left for the PC presses so both are inside the
-     380-wide window of the phone pass. */
+     380-wide window of the phone pass.
+     v18.53 (#1243 ST7): THE CARD IS TALLER NOW (each shape chip wears the marks of the apps that use it), and on a phone as
+     short as this frame (760 px) it leaves no strip of Home's projects between itself and the tab bar: a finger cannot
+     reach a project under the dim there at all, however many copies are added, and this test stopped in its setup. What a
+     finger CAN still reach under the dim is the tab bar. So when no project shows clear of the card, the press aims at the
+     dim over a tab that is not the open one. Going through there would switch Home's tab, and that is checked for every
+     press now, with the rest of "Home is exactly as it was". A taller phone still shows a project, and gets the project. */
   test('947 review: a real press in the middle of the ripple - on the dim over a Home project, on Cancel, on the turned + - takes the card away at once and never reaches Home', { item: '947', budgetMs: 90000 }, async function () {
     const fe = window.frameElement;
     if (!fe) throw new Error('this test needs run.html’s iframe to bring the app on screen for real input');
@@ -127179,6 +127316,7 @@
     const nm = e => !e ? 'nothing' : (e.id || (typeof e.className === 'string' && e.className.split(' ')[0]) || e.tagName);
     const selecting = () => document.body.classList.contains('hm-selecting') || !!document.getElementById('hm-selbar');
     const ripples = () => document.getAnimations().filter(a => /^np947-/.test(a.id || '') && a.playState === 'running');
+    const tabOn = () => { const a = document.querySelector('#home-screen .hm-tab.active'); return a ? (a.dataset.tab || '') : ''; };
     const made = [];
     try {
       // the PC FIRST (6 Oct, the port audit): a browser that cannot emulate a finger stops this test at its first touch (realInput924)
@@ -127228,7 +127366,23 @@
               found = spot();
             }
             if (!orbFree()) throw new Error(where + ': setup: the + is covered by ' + nm(document.elementFromPoint(X.x, X.y)) + ' even with Home scrolled to its end - a real press cannot reach it');
-            if (!found) throw new Error(where + ': setup: no point on the dim lies over a Home project clear of the card [' + [C.left, C.top, C.right, C.bottom].map(Math.round) + '] - ' + document.querySelectorAll('#home-screen .hm-card').length + ' project cards on Home');
+            /* No project shows clear of the card (a short phone, since v18.53's taller card): the dim over a tab of Home's bar that
+               is not the open one, as far below the card as the tab goes (the card is still rising when the press lands). */
+            let tabUnder = null;
+            if (!found) {
+              if (tabOn() !== 'projects') throw new Error(where + ': setup: Home is on its ' + (tabOn() || 'unknown') + ' tab, not Projects');
+              for (const tb of document.querySelectorAll('#home-screen .hm-tab:not(.active)')) {
+                const r = R(tb), x = r.left + r.width / 2;
+                for (let y = Math.min(r.bottom - 6, innerHeight - 12); y >= r.top + 6 && !found; y -= 4) {
+                  const p = { x: x, y: y };
+                  if (inside(p, C, 16) || inside(p, O, 16) || x < 10 || x > innerWidth - 10) continue;
+                  const hit = document.elementFromPoint(x, y);
+                  if (hit && tb.contains(hit)) { found = { p: p, hc: tb }; tabUnder = tb; }
+                }
+                if (found) break;
+              }
+            }
+            if (!found) throw new Error(where + ': setup: no point on the dim lies over a Home project, or over a tab of Home’s bar, clear of the card [' + [C.left, C.top, C.right, C.bottom].map(Math.round) + '] - ' + document.querySelectorAll('#home-screen .hm-card').length + ' project cards on Home, a ' + innerWidth + ' × ' + innerHeight + ' window');
             const bd = found.p, under = found.hc;
             const touch = where === 'phone';
             const press = (p, after) => touch ? [{ t: 'touchStart', x: p.x, y: p.y, ms: 40 }, { t: 'touchEnd', x: p.x, y: p.y, ms: after }]
@@ -127239,7 +127393,7 @@
                Cancel's resting centre plus 5 px. A press the machine made LATE (the ripple already over) proves nothing
                either way, so that one case is tried again, up to three times; nothing else is retried. */
             const cases = [
-              { what: 'the dim over the Home project ' + (under.dataset.pid || ''), p: bd, want: dlg, gap: 250 },
+              { what: tabUnder ? 'the dim over Home’s ' + (tabUnder.dataset.tab || 'other') + ' tab (no project shows clear of the card on a window this short)' : 'the dim over the Home project ' + (under.dataset.pid || ''), p: bd, want: dlg, gap: 250 },
               { what: 'Cancel', p: { x: K.x, y: K.y + 5 }, want: cancelBtn, gap: 380 },
               { what: 'the + turned into an ×', p: X, want: dlg, gap: 250 }
             ];
@@ -127305,6 +127459,7 @@
                 if (!FM.home.isOpen()) bad.push('Home CLOSED and project ' + FM.storage.openProjectId() + ' opened');
                 else if (FM.storage.openProjectId() !== here) bad.push('project ' + FM.storage.openProjectId() + ' is open instead of ' + here);
                 if (selecting()) bad.push('Home went into Select');
+                if (tabOn() !== 'projects') bad.push('Home switched to its ' + (tabOn() || 'unknown') + ' tab');
                 if (!dlg.classList.contains('hidden')) bad.push('700 ms later the New project card is still open' + (ripples().length ? ' - it OPENED AGAIN' : ''));
                 if (bad.length) throw new Error(at + ', ' + ms + ' ms into the ripple: ' + bad.join('; ') + ' - the card should just have gone');
                 if (document.querySelector('.np-fx') || ripples().length) throw new Error(at + ': the card went but the ripple (' + (ripples().map(a => a.id).join(', ') || 'its ring or scrim') + ') is still there');
@@ -128333,7 +128488,8 @@
         const cancel = $('cv-cancel'), p = backdropPoint($('canvas-dialog')), app = [$('cv-app-bar')].find(reach);   // #1132: the App settings BAR, the cog's one door to Settings in every state (#cv-appset and #cv-mini-app are gone)
         if (reach(cancel)) add('canvas shut', 'Canvas settings → Cancel', () => tapEl(cancel, 'Canvas settings → Cancel', { closes: ['canvas'] }));
         if (p) add('canvas shut', 'a tap outside Canvas settings', () => tapAt(p[0], p[1], { closes: ['canvas'] }));
-        if (app) add('app settings', 'the cog → App settings', () => tapEl(app, 'the App settings bar', { closes: ['canvas'], opens: ['settings'], settle: 380 }));
+        /* settle 450 (#1243 ST5 review E1-R1): the cog's blocks leave first, and a page with no frames puts it away on a 400 ms backstop */
+        if (app) add('app settings', 'the cog → App settings', () => tapEl(app, 'the App settings bar', { closes: ['canvas'], opens: ['settings'], settle: 450 }));
         /* #1132 (the refuter's N1): the cog opens ALL CLOSED, so without these the walk never opened a block — and "Canvas settings →
            Cancel" above could never be reached. Each closed block's ⤢ opens it; the open block's ⤡ closes it to all closed, the cog
            staying up either way (the cog's own close is the walk's other edges). */
@@ -128352,7 +128508,9 @@
       }
       if (is('settings')) {
         const scrim = document.querySelector('.set-scrim.open'), x = scrim && scrim.querySelector('.set-close'), p = scrim && backdropPoint(scrim);
-        if (reach(x)) add('settings shut', 'Settings → ✕', () => tapEl(x, 'Settings → ✕', { closes: ['settings'] }));
+        /* #1243 ST5 (review E1-R1): opened from the cog, the ✕ is ‹ (.set-back) and takes him BACK to the cog, all closed, 200 ms after
+           Settings shuts — so that press opens Canvas settings on purpose. A tap outside and Escape still just shut Settings. */
+        if (reach(x)) add('settings shut', 'Settings → ✕', () => tapEl(x, 'Settings → ✕', x.classList.contains('set-back') ? { closes: ['settings'], opens: ['canvas'], settle: 360 } : { closes: ['settings'] }));
         if (p) add('settings shut', 'a tap outside Settings', () => tapAt(p[0], p[1], { closes: ['settings'] }));
       }
       if (phone) {
@@ -138700,7 +138858,8 @@
   });
 
   test('simple P1 · T20 no company name in any word the Simple editor shows, and the scan catches one', { item: '980' }, function () {
-    const BRANDS = /\b(Apple|Alight ?Motion|After ?Effects|Adobe|Premiere|Final ?Cut|CapCut|Instagram|TikTok|DaVinci|Resolve|iMovie|LumaFusion)\b/i;
+    const PLATFORMS = /\b(Apple|Instagram|TikTok)\b/i;   // these are written out; another editing app is found by its fingerprint (names1264, beside the 1254 tests): no file may write one (#1264)
+    const BRANDS = { test: function (t) { return PLATFORMS.test(t) || !!names1264(t); }, find: function (t) { const m = PLATFORMS.exec(t); return m ? m[0] : names1264(t); } };
     const scan = function (o, path, out) {
       if (typeof o === 'string') { if (BRANDS.test(o)) out.push(path + ': "' + o + '"'); return out; }
       if (typeof o === 'function') { try { scan(String(o.length >= 4 ? o(2, 5, 3.2, 2) : o.length === 1 ? o(1.5) : o(4, 15)), path + '()', out); } catch (e) {} return out; }
@@ -138710,11 +138869,11 @@
     if (!FM.spineWords) throw new Error('FM.spineWords is missing — js/spine-words.js did not load');
     const hits = scan(FM.spineWords, 'spineWords', []);
     if (hits.length) throw new Error('another company’s name is in Simple’s words: ' + hits.join(' · '));
-    const n = scan({ a: 'Lay them out like CapCut' }, 'control', []);
-    if (n.length !== 1) throw new Error('CONTROL: the scan did not catch a planted brand name');
+    const n = scan({ a: 'Lay them out like ZzqControlApp', b: 'as TikTok does', c: 'in a plain row' }, 'control', []);   // a made-up name whose fingerprint is on the list, a platform, and plain words
+    if (n.length !== 2) throw new Error('CONTROL: the scan caught ' + n.length + ' of the 2 planted names (a made-up editing app and a platform), or took plain words for a name');
     const ids = ['btn-sm-link', 'sm-timeline', 'sm-say', 'cv-editor'];   // 1 Oct: the switch is the cog's (#cv-editor, built when the cog opens); #1243 S5 · S34 A: Link took ✂'s place
     const dom = ids.map(id => document.getElementById(id)).filter(Boolean).map(e => e.textContent + ' ' + (e.getAttribute('aria-label') || '') + ' ' + (e.title || '')).join(' ');
-    if (BRANDS.test(dom)) throw new Error('a company name is in the Simple editor’s controls: ' + dom.match(BRANDS)[0]);
+    if (BRANDS.test(dom)) throw new Error('a company name is in the Simple editor’s controls: ' + BRANDS.find(dom));
   });
 
 
@@ -141549,7 +141708,7 @@
      is one row again, so the panel keeps its room, and the second click of a double click never presses a tool that moved
      under it. The phone keeps its one row with More and Delete pinned (finding 22). Each test below but the phone's control
      fails on option A by what it measures.
-     #1243 R RELEASE 8 (R decision 6, his S15 "make it like CapCut where you can scroll it" and S33's section lines) REVERSES his pick B:
+     #1243 R RELEASE 8 (R decision 6, his S15 "make it like [another app] where you can scroll it" and S33's section lines) REVERSES his pick B:
      a PC shows the same single scrolling strip as a phone, More is gone (S4) and Delete scrolls at the strip's end (S31). The tests below
      were rewritten to what that strip promises: one 56 px row, every tool in reach by scrolling (smTrayReach), the band whole. */
   /* A PC window w × h as it first opens: the frame's height as well, because the band's height follows it, and no band height
@@ -150299,7 +150458,7 @@
 
   /* SU1 #12 (r1, r2): reopening a project in Simple brought back the clip selected when he left it — the last one, off the right of the
      screen — while Clip 1 sat under the playhead, so the tray and its 🗑 acted on a clip he could not see. A project opens in Simple
-     with nothing selected (the quiet "clips · length" line), as CapCut does. Full restores its selection exactly as before (§0.4). */
+     with nothing selected (the quiet "clips · length" line), as [another app] does. Full restores its selection exactly as before (§0.4). */
   test('SU1 #12 · at 380 a project reopened in Simple opens with nothing selected, so the tray cannot act on a clip off the screen; Full still restores its selection', { item: '980', budgetMs: 60000 }, async function () {
     smNeedP2();
     const tools = () => Array.from(document.querySelectorAll('#sm-tray .sm-tool')).map(b => b.dataset.tool).join(',');
@@ -154617,7 +154776,7 @@
   // ── end 966 B22 ──
 
   /* ═══ #966 §B33 (refers to #545): BLACK & WHITE MIXER — how bright each colour turns in grey: six sliders (Reds, Yellows,
-     Greens, Cyans, Blues, Magentas, −200..300 %, starting at Photoshop's default mix 40 / 60 / 40 / 60 / 20 / 80), a Colour filter
+     Greens, Cyans, Blues, Magentas, −200..300 %, starting at [another app]'s default mix 40 / 60 / 40 / 60 / 20 / 80), a Colour filter
      row that writes them (Neutral, Red, Orange, Yellow, Green, Blue, Infrared), Contrast, and a Tint with its colour
      (tools/design/plans/fxnew-bwmix/NOTES.md). Every test fails on fb24f68b by NAMING what is missing: _cgNeed (B18's) asks for the
      registry entry and the kernel before anything is measured. The kernel runs on typed arrays through FM._applyPixelFx — the very
@@ -165843,13 +166002,13 @@
     }
   });
 
-  /* ═══ #954 — every effect named away from Alight Motion, and the effect groups in our own order ═══════════════════════════════
-   * His words, 1 Sep: "i want every effect to be named different to what it is in alight motion and also have different ordering
-   * to avoid getting taken down by aligiht motion for copying". The 26 Sep sheet (tools/design/954-options.html; the record with
-   * ids is tools/design/954-effect-names.md) found 40 labels that were distinctly Alight Motion's and drew a new name for each.
+  /* ═══ #954 — every effect named away from [the reference app], and the effect groups in our own order ═══════════════════════════════
+   * His words, 1 Sep: "i want every effect to be named different to what it is in [the reference app] and also have different ordering
+   * to avoid getting taken down by [the reference app] for copying". The 26 Sep sheet (tools/design/954-options.html; the record with
+   * ids is tools/design/954-effect-names.md) found 40 labels that were distinctly [the reference app]'s and drew a new name for each.
    * Decided 11 Oct (#1130): the 40 renames as drawn, the 70 plain craft names kept, the new group order as drawn. LABELS ONLY:
    * every type id is unchanged, so a saved project opens exactly as before, and the old name stays a search word.
-   * Each row: the type id, the old Alight Motion name, the new name as drawn, its category (which does not change). */
+   * Each row: the type id, the old [the reference app] name, the new name as drawn, its category (which does not change). */
   const T954 = [
     ['thermal', 'Hot Colour', 'Heat Map', 'color'],
     ['ripple', 'Circular Ripple', 'Pond Rings', 'distort'],
@@ -165893,7 +166052,7 @@
     ['lightning', 'Lightning', 'Bolts', 'proc'],
   ];
 
-  test('954 none of the 40 effects that carried an Alight Motion name shows it any more, each is named as drawn and still found by typing its old name, and a plain name like Gaussian Blur is unchanged', { item: '954' }, function () {
+  test('954 none of the 40 effects that carried another app’s name shows it any more, each is named as drawn and still found by typing its old name, and a plain name like Gaussian Blur is unchanged', { item: '954' }, function () {
     const R = FM.fxRegistry;
     if (!R || !R.get || !R.all) throw new Error('setup: the effect registry is not reachable');
     if (T954.length !== 40) throw new Error('setup: the table holds ' + T954.length + ' renames, not the 40 on the sheet');
@@ -165908,7 +166067,7 @@
       else if (r.label !== row[2]) bad.push(row[0] + ' is called ' + r.label + ', not ' + row[2] + ' as drawn');
       if (r.category !== row[3]) bad.push(row[2] + ' moved to ' + r.category + ', out of ' + row[3]);
     });
-    if (bad.length) throw new Error(bad.length + ' of the 40 effects still carry their Alight Motion name or are not named as drawn: ' + bad.slice(0, 8).join('; '));
+    if (bad.length) throw new Error(bad.length + ' of the 40 effects still carry their old name or are not named as drawn: ' + bad.slice(0, 8).join('; '));
     /* ONE EFFECT EACH: no other effect is called the new name, and nothing is still called the old one */
     const all = R.all();
     T954.forEach(function (row) {
@@ -165958,7 +166117,7 @@
     if (!same(fx, NEW)) throw new Error('FM.FX_CATEGORIES runs ' + fx.join(', ') + ' - not the order the browser reads');
   });
 
-  test('954 no lesson tells him to type or tap an effect by the Alight Motion name it no longer carries', { item: '954' }, async function () {
+  test('954 no lesson tells him to type or tap an effect by the old name it no longer carries', { item: '954' }, async function () {
     if (!FM.tutorials || typeof FM.tutorials.clean !== 'function') throw new Error('setup: FM.tutorials is not loaded, so the lessons cannot be read the way the app reads them');
     const get = async function (u, json) {
       const r = await fetch(u + '?t=' + Date.now());
@@ -165982,23 +166141,72 @@
     }
     /* CONTROL: the lessons do name effects in bold (lesson 03's Drop Shadow is one), so the bolds are being read */
     if (!effectBolds) throw new Error('CONTROL: not one bold phrase in ' + list.length + ' lessons is an effect name - the lessons are not being read, so finding no old name proves nothing');
-    if (bad.length) throw new Error(bad.length + ' lesson line(s) still name an effect the way Alight Motion does: ' + bad.slice(0, 6).join('; '));
+    if (bad.length) throw new Error(bad.length + ' lesson line(s) still name an effect by its old name: ' + bad.slice(0, 6).join('; '));
   });
 
   /* ═══ #1254 — NOTHING BUT THE APP ON THE LIVE SITE, AND NOTHING IN IT THAT NAMES THE APP IT WAS FIRST MODELLED ON ════════════════════
    * His words, 16 Nov: "I found a really old build … that should not be findable … if there is on the GitHub any old versions that's
-   * really bad because the old versions are clearly copies of a light motion and if anyone can find that ever then they will
+   * really bad because the old versions are clearly copies of [the reference app] and if anyone can find that ever then they will
    * basically you know get us some big trouble". Measured that night: GitHub Pages was publishing every file in the repo (the notes,
    * the request list, these tests, the tools), and the app's own served code named that app 64 times in comments.
    * Three things hold it shut. (1) _config.yml leaves everything but the app off the site, and tools/_public.py (run by ship.sh, with
    * its own self-test) refuses a release whose top-level paths are not all app-or-excluded; this suite pins the file's existence and
-   * its sense. (2) index.html asks search engines not to list the page. (3) No file the site serves may name that app: the comments
-   * say [the reference app], and this test reads every served file so a later session cannot write the name back. The private
-   * record (BEFORE-PUBLISHING.md, REQUESTS.md, tests/) keeps the name; none of it is served. */
-  const NAMED1254 = /a\s*l\s*i\s*g\s*i?\s*h\s*t[\s_-]*motion/i;
-  test('1254 · no file the live site serves names the app FreeMotion was first modelled on: the page, every script and stylesheet it loads, the worker, the manifest and the lessons (CONTROL: the files are really read, and the check finds the name in a planted line)', { item: '1254', budgetMs: 120000 }, async function () {
+   * its sense. (2) index.html asks search engines not to list the page. (3) No file the site serves may name that app, or any
+   * other editing app (#1264, 24 Nov, his words: "absolutely zero trace anywhere in any of our files"): this test reads every served file
+   * so a later session cannot write a name back, and tools/names-gate.py refuses a release in which ANY file names one, these tests included. */
+  /* THE NAMES ARE NOT WRITTEN HERE EITHER (#1264). The tests that must FIND a name (in the effects' words, in Simple's words, in
+   * every served file) know each one only as a FINGERPRINT of its words: two 32-bit sums, sixteen hex digits, made by the list's
+   * keeper outside the repo (tools/names-gate.py holds the same list for the ship, as SHA-256). A name that is also a plain word in
+   * lower case counts only as a proper name is written, with its capitals. names1264(text) gives the first name found, as written,
+   * or ''. The list also holds one made-up name (ZzqControlApp, Zzq Studio) so that a control can plant a name without writing one. */
+  // BEGIN PRINTS 1264
+  const PRINTS1264 = { any: new Set(['078cfb1098ee5430', '0939f08a65c2c7ae', '1c1c55da9f094fff', '1d2baf1531666794', '1e4ff5ab070ea33f', '277162b329f1e348', '30eb8ca0387d3020', '31ddabcf25c42eb0', '33f24e12641923d4', '35fbc5d1c4b060a6', '39dff82147463ac5', '426c6e96e4e92980', '46a77d51416394ab', '49c4c15aabfd7387', '4d583d580c3b0ab4', '4f1f399a723efdb1', '4f465ccea60a1699', '546d573320336348', '6044e9bcd476d940', '641332ece18de0ac', '656d185e37a09157', '6585bf15f2d294c4', '66532efe687d81ad', '6d471ba77179114a', '7306545244fe4f15', '75ca3ee0eeb5f12c', '799734b394760b60', '7f3657fb82f8fcb8', '8140b61ea1aa3057', '8298cfe7b879cf42', '8860645adf164236', '8df14558c2b4541a', '8e96409e125e51b1', '8ef161fd8fd9765d', '8f290fcdb7291708', '9a63d948c4cf8a94', '9ce55424a28b8516', '9f0247b5d9aebe62', 'a136c79dc8c830f4', 'a252d38b0f578111', 'a5329da8a225454f', 'a564c98c649c50d0', 'a5c70ef3e564f6b9', 'a8921113ed7ac214', 'b0661a386d50a107', 'b07ee30241e3f5a7', 'bc08455af43a6365', 'bc8ecff4e9b14b49', 'be973f53bad570e1', 'c3513b499d2fe4f9', 'c56d72099477241e', 'cb4d00c93e9cfab0', 'cbaccaec15dfb4e7', 'd114c7af9ec2bfb5', 'd6acd5665e2ff208', 'd882c09037a156ad', 'd9b2cfb340782937', 'e0d2c12a7bfdeb0a', 'e434ba06913dab15', 'e4d4464444e26c08', 'e53a0d32d2cce7b3', 'e7ca52421d3f050a', 'e95abfe49ac45eb0', 'eb93d51b570a3d92', 'edf67fb6f726566e', 'f3a30c2812cb7e27', 'f4a0741221a4f26c', 'f4ff8fd2c82103ee', 'f577310bc54447fa', 'f7222bbb90bd8333', 'f7da66bba5562976', 'fdb792363426b0ff', 'ff9c6347d64a8a04']), exact: new Set(['040db706dce35a02', '08aa190133b16c53', '0ff12770541115db', '107d16e2a7d7d46e', '12168b1d2ccc7418', '142570d16d6703fc', '22cd2611ccf2b82a', '2bd9df41609a8b1e', '3c391de065e12b8d', '4a8122d875b62ed7', '4e7247dd60cb02a4', '4fb4ced957027279', '5092a0c1f42f2fd9', '67b80e39394d7aaa', '685e51ceab4dc1a4', '6cb63a3ccef568ee', '85f6fdfa68a89d5f', '882288b21a811928', '8de9443f2a1e6305', '8ee27c3a9aed95b5', '94c753024e8b48c2', '9f71e6781a54b697', 'a19ad83c79c58fcd', 'a5f5bf4e2ddadd28', 'bf797841c0acfe56', 'c38191c8f0ad1ca9', 'c75cdd030b1ac1da', 'ee5a75d967f1ba0e', 'f20b94294ad077ff', 'f2f36498a15bdede', 'ffb53d1c5779de04']), lead: new Set(['078cfb1098ee5430', '159ac2b790bef70d', '1e4ff5ab070ea33f', '2f3e125b7af1225e', '30eb8ca0387d3020', '31ddabcf25c42eb0', '34375e0efa74e551', '35fbc5d1c4b060a6', '426c6e96e4e92980', '4349c6e5cfa8bd0e', '46a77d51416394ab', '49c4c15aabfd7387', '4d583d580c3b0ab4', '4f1f399a723efdb1', '4f465ccea60a1699', '546d573320336348', '6044e9bcd476d940', '6122e6af4ba41f49', '641332ece18de0ac', '6585bf15f2d294c4', '66532efe687d81ad', '71e70b9af50f56b9', '7306545244fe4f15', '75ca3ee0eeb5f12c', '799734b394760b60', '8140b61ea1aa3057', '8298cfe7b879cf42', '8dc32e5982d4ec7b', '8df14558c2b4541a', '8e96409e125e51b1', '8ef161fd8fd9765d', '8f290fcdb7291708', '9a63d948c4cf8a94', '9cb0274c2aa6c7e0', '9ce55424a28b8516', '9f0247b5d9aebe62', 'a136c79dc8c830f4', 'a252d38b0f578111', 'a5329da8a225454f', 'a5c70ef3e564f6b9', 'a8921113ed7ac214', 'b0661a386d50a107', 'b77876810dcd167c', 'bc8ecff4e9b14b49', 'be973f53bad570e1', 'c3513b499d2fe4f9', 'c56d72099477241e', 'cb4d00c93e9cfab0', 'cbaccaec15dfb4e7', 'd114c7af9ec2bfb5', 'd6acd5665e2ff208', 'd882c09037a156ad', 'd9b2cfb340782937', 'debf798c121cc800', 'e40c292c2eb4bea1', 'e434ba06913dab15', 'e4d4464444e26c08', 'e53a0d32d2cce7b3', 'edf67fb6f726566e', 'f3a30c2812cb7e27', 'f4a0741221a4f26c', 'f577310bc54447fa', 'f75d512646734fd6', 'f7da66bba5562976', 'fbe6d55088a212ad', 'fc9adf039a9b01b9', 'fdb792363426b0ff', 'ff9c6347d64a8a04']), leadExact: new Set(['002a89fe5ef5d69c', '0b2c214f2313e3df', '0efd073e47f97bd8', '2aad742ec15e040c', '2fbb5e61801e804c', '3468032d2b6b6dcb', '3ef50ad0d3a4fbc0', '41fa4f704bd65065', '454e6cdbd898741d', '51470710581c2cc1', '57cea976d3408e57', '5aedf3b13f5a12f3', '64feed5b4cbaf586', '7537bf3cee8468de', '7d37669771be451b', '82487900c3ff1609', '8e3b4bb8454626fb', '904a17b837b73c14', 'a37f187cf3c04c5d', 'a5309da95818ba6f', 'a7dd3a6930141afc', 'a91b328f43794a12', 'aad076474bd12540', 'b57fc1f87e237aaf', 'b960112c23865556', 'bb56345720efe917', 'be046417ad464e49', 'c749a5e6530075e9', 'd371d44e6cdb7b42']) };
+  // END PRINTS 1264
+  const print1264 = function (s) { let a = 0x811c9dc5, b = 0x9747b28c; for (let i = 0; i < s.length; i++) { const c = s.charCodeAt(i); a = Math.imul(a ^ c, 0x01000193); b = Math.imul(b ^ c, 0x85ebca6b); b ^= b >>> 13; } return ('0000000' + (a >>> 0).toString(16)).slice(-8) + ('0000000' + (b >>> 0).toString(16)).slice(-8); };
+  /* A made-up name that counts only with its capitals (the one tools/names-gate.py's self-test uses), so the 1254 control can
+   * plant one and prove the capitals-only half of the lookup is read (#1264 review, 25 Nov). Made here by the same sum, so it
+   * proves the code path; the keeper's own capitals-only prints are not re-made by it. */
+  PRINTS1264.leadExact.add(print1264('Quiet')); PRINTS1264.exact.add(print1264('cs:Quiet Cutter'));
+  PRINTS1264.leadExact.add(print1264('Zzqlight')); PRINTS1264.exact.add(print1264('cs:Zzqlight'));   // and one of a single word
+  const names1264 = function (text) {
+    const s = String(text).replace(/[A-Za-z0-9+\/=]{120,}/g, function (m) { return ' '.repeat(m.length); }), re = /[A-Za-z0-9]+/g, w = [], at = [];   // an embedded picture (base64) is not prose
+    let m; while ((m = re.exec(s))) { w.push(m[0]); at.push(m.index); }
+    /* #1264 review, the same two rules as tools/names-gate.py: a word that ends in s and is longer than three letters is also read
+     * without that s (a plural, or a possessive with no apostrophe), and a capitals-only name is found in ALL CAPITALS too. Neither
+     * applies to a capitals-only name of one word: its plural, or the word in capitals, is the plain word again */
+    const forms = function (x, last) { return last.length > 3 && /s$/i.test(last) ? [x, x.slice(0, -1)] : [x]; };
+    const loud = function (x) { return /[A-Z]/.test(x) && !/[a-z]/.test(x); };
+    const title = function (x) { return x.split(' ').map(function (y) { return y.charAt(0).toUpperCase() + y.slice(1).toLowerCase(); }).join(' '); };
+    const exactHas = function (set, x, pre) { return set.has(print1264(pre + x)) || (loud(x) && set.has(print1264(pre + title(x)))); };
+    for (let i = 0; i < w.length; i++) {
+      const L = forms(w[i], w[i]).some(function (x) { return PRINTS1264.lead.has(print1264(x.toLowerCase())); });
+      const X = forms(w[i], w[i]).some(function (x) { return exactHas(PRINTS1264.leadExact, x, ''); });
+      if (!L && !X) continue;
+      let g = w[i];
+      for (let n = 1; n <= 3; n++) {
+        if (n > 1) {   // the next word belongs to the same name only across a space, a hyphen or a wrapped comment's edge
+          if (i + n > w.length || !/^[\s*\/#>|_\-]{1,14}$/.test(s.slice(at[i + n - 2] + w[i + n - 2].length, at[i + n - 1]))) break;
+          g += ' ' + w[i + n - 1];
+        }
+        const hit = forms(g, w[i + n - 1]).some(function (x) { return L && PRINTS1264.any.has(print1264(x.toLowerCase())); }) ||
+          (X && (n === 1 ? PRINTS1264.exact.has(print1264('cs:' + g)) : forms(g, w[i + n - 1]).some(function (x) { return exactHas(PRINTS1264.exact, x, 'cs:'); })));
+        if (hit) return s.slice(at[i], at[i + n - 1] + w[i + n - 1].length);
+      }
+    }
+    return '';
+  };
+  // END HELPER 1264
+  test('1254 · no file the live site serves names another editing app: the page, every script and stylesheet it loads, the worker, the lessons and the drawn effect pictures (CONTROL: the files are really read, and the check finds a planted name)', { item: '1254', budgetMs: 120000 }, async function () {
     const get = async function (u) { const r = await fetch(u + (u.indexOf('?') < 0 ? '?t=' : '&t=') + Date.now()); if (!r.ok) throw new Error('setup: ' + u + ' answered ' + r.status); return r.text(); };
-    if (!NAMED1254.test('// the [x] look, like Alight-Motion does') || !NAMED1254.test('alight motions') || NAMED1254.test('a light touch of motion blur')) throw new Error('CONTROL: the name check does not tell a planted line from plain words');
+    if (!names1264('// the [x] look, like Zzq-Studio does') || !names1264('ZZQCONTROLAPP’s') || names1264('a light touch of motion blur, after effects are applied to the final cut')) throw new Error('CONTROL: the name check does not tell a planted line from plain words');
+    /* CONTROL (#1264 review): the forms the first version missed. A plural and a possessive with no apostrophe are the name; a
+     * capitals-only name (Quiet Cutter, made up) is found as written and in ALL CAPITALS, never in lower case or half in capitals;
+     * one of a single word (Zzqlight) only as written; a plain word that ends in s is not read as a name without it */
+    const c1264 = [['two zzq studios', 'zzq studios'], ['the ZzqControlApps panel', 'ZzqControlApps'], ['like Quiet Cutter does', 'Quiet Cutter'],
+      ['/* LIKE QUIET CUTTER’S TIMELINE */', 'QUIET CUTTER'], ['two Quiet Cutters', 'Quiet Cutters'], ['a quiet cutter of film', ''],
+      ['a Quiet cutter and a quiet CUTTER', ''], ['a zzq studious look', ''], ['like Zzqlight does', 'Zzqlight'], ['the Zzqlights, a ZZQLIGHT headline', '']];
+    const off1264 = c1264.filter(function (c) { return names1264(c[0]) !== c[1]; });
+    if (off1264.length) throw new Error('CONTROL: the name check reads ' + off1264.map(function (c) { return '[' + c[0] + '] as [' + names1264(c[0]) + '], not [' + c[1] + ']'; }).join(' · '));
     const html = await get('index.html');
     const refs = [];
     html.replace(/<(?:script|link)\b[^>]*?\b(?:src|href)="([^"#:]+)"/g, function (_, u) { if (/\.(js|css|json)(\?|$)/.test(u)) refs.push(u); return _; });
@@ -166017,11 +166225,11 @@
     for (const f of files) {
       const s = f === 'index.html' ? html : await get(f);
       bytes += s.length;
-      const m = NAMED1254.exec(s);
-      if (m) bad.push(f + ' (“' + s.slice(Math.max(0, m.index - 40), m.index + 30).replace(/\s+/g, ' ') + '”)');
+      const m = names1264(s);
+      if (m) { const at = s.indexOf(m); bad.push(f + ' (“' + s.slice(Math.max(0, at - 40), at + m.length + 30).replace(/\s+/g, ' ') + '”)'); }
     }
     if (bytes < 5e6) throw new Error('CONTROL: ' + files.length + ' served files came to only ' + bytes + ' characters, so they were not really read');
-    if (bad.length) throw new Error(bad.length + ' served file(s) name it — say [the reference app] there; the private notes keep the name: ' + bad.slice(0, 6).join(' · '));
+    if (bad.length) throw new Error(bad.length + ' served file(s) name another editing app (say what the thing does instead; in his own quoted words, [another app]): ' + bad.slice(0, 6).join(' · '));
   });
   test('1254 · the page asks search engines not to list it, and the site config leaves the notes, the request list, the tests and the tools off the live site while the app and the lessons stay on it (CONTROL: the config is read as a list)', { item: '1254' }, async function () {
     const html = await (await fetch('index.html?t=' + Date.now())).text();
@@ -166324,7 +166532,7 @@
 
   /* ═══ queue 985 — THE EXPORT CARD IS OPTION A, “WHAT YOU’LL GET” ═══════════════════════════════════════════════════════
    * His words, 29 Sep: "the export menus settings are honestly a bit daunting for someone who doesnt know how it works. I
-   * dont want to lose any function but i want it to actually make sense at first glance. Capcut does a really good job of
+   * dont want to lose any function but i want it to actually make sense at first glance. [another app] does a really good job of
    * this but dont fully copy". A was decided 11 Oct (#1130); tools/design/985/mapping.md places each of the 34 settings.
    * Clause 2 is the hard rule — no function lost, the same export for the same values — so these tests drive the NEW card
    * and read back the controls the export has always read (#exp-format, #exp-res, #exp-cw, #exp-fps, #exp-quality,
@@ -169847,9 +170055,9 @@
   });
 
   /* ---- Spin: Turns ---- */
-  test('966 opts Spin has Turns (Flat, Flip ↔, Flip ↕), Flat by default: a new one starts on Flat, an absent key fills to the same, the load sanitiser keeps Flip ↔, and on Flat it draws byte for byte what it draws without the key (CONTROL: it turns the layer)', { item: '966', budgetMs: 30000 }, function () {
+  test('966 opts Spin has Turns (Flat, Flip sideways, Flip over), Flat by default: a new one starts on Flat, an absent key fills to the same, the load sanitiser keeps Flip sideways, and on Flat it draws byte for byte what it draws without the key (CONTROL: it turns the layer)', { item: '966', budgetMs: 30000 }, function () {
     _opNeed('spin', ['axis']);
-    const bad = _opRows('spin', [{ key: 'axis', label: 'Turns', options: 'Flat/Flip ↔/Flip ↕', def: 0 }], { axis: 1 });
+    const bad = _opRows('spin', [{ key: 'axis', label: 'Turns', options: 'Flat/Flip sideways/Flip over', def: 0 }], { axis: 1 });   /* #1255: in words; a typed two-way arrow is a colour emoji on an iPhone */
     const W = 200, H = 200, A = () => E1.cv(W, H, g => { g.fillStyle = '#ff0000'; g.fillRect(60, 80, 40, 40); g.fillStyle = '#0000ff'; g.fillRect(100, 80, 40, 40); });
     const P = _opP('spin', { speed: 70 });
     [0.35, 1.2].forEach(tl => {
@@ -200642,45 +200850,33 @@
      way drawSas brings They match in (scrollIntoView, block nearest), lands ABOVE the pinned Done and wins its hit-test — red without
      the body's scroll-padding, where it lands under Done (J3-5: a tap there pressed Done). CONTROL for that reading: at one short
      size at least Start sharing starts below the foot, so the scroll it checks really happened. */
-  test('1132 with Friends open on a short phone the Work with friends switch and Done stay in reach — its body scrolls under a pinned Done — at 380×667, 320×568 and 375×553, Labs on and off; at 390×760 and 390×700 nothing takes a scroll; CONTROL at 390×844', { item: '1132', budgetMs: 210000 }, async function () {
-    const C = need921S7('the open Friends block on a short phone');
+  /* #1243 ST8 REWROTE THIS — it was '1132 with Friends open on a short phone the Work with friends switch and Done stay in reach — its
+     body scrolls under a pinned Done — at 380×667, 320×568 and 375×553, Labs on and off; at 390×760 and 390×700 nothing takes a scroll;
+     CONTROL at 390×844'. His #1243 words: "you have to like scroll this one really weird small spot instead of it like allowing you to
+     scroll the whole thing". On a phone the whole block is the one scroller now at every height and nothing is pinned. Its Done stays
+     at its foot, scrolling with it: his "get rid of the done button in the friends section" (ST9) comes with the cog's one Done for
+     every block, which is not built yet (review, 25 Nov). */
+  test('1132 with Friends open on a phone the Work with friends switch, Start sharing and the block’s Done are in reach by scrolling the one block at 390×844, 390×760, 390×700, 380×667, 320×568 and 375×553, Labs on and off (CONTROL: at a short size the switch starts below the block’s window, so the scroll really happened)', { item: '1132', budgetMs: 210000 }, async function () {
+    const C = need921S7('the open Friends block on a phone');
     const was = FM.settings.get('collabLabs');
-    let needed = 0;   // short sizes where Start sharing began below the pinned foot: the scrollIntoView reading's CONTROL
-    await race1132('1132 with Friends open on a short phone the Work with friends switch and Done stay in reach', 205000, async function () {
+    let needed = 0;   // sizes where the switch began below the block's window: the reach reading's CONTROL
+    await race1132('1132 with Friends open on a phone the Work with friends switch, Start sharing and the block’s Done are in reach', 205000, async function () {
     await withFakeNet921(async function () {
       await editorWithShape(async function () {
         await with945(async function () {
           const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-friends'), body = document.getElementById('cv-fr-body');
           const reach = function (where, el, what) {
             if (!el) throw new Error(where + ': setup: no ' + what + ' in the open Friends block');
-            for (let p = el.parentElement; p && p !== dlg; p = p.parentElement) {
-              const oy = getComputedStyle(p).overflowY;
-              if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 1) {
-                const pr = p.getBoundingClientRect(), r0 = el.getBoundingClientRect();
-                p.scrollTop += (r0.top + r0.height / 2) - (pr.top + pr.height / 2);
-              }
-            }
+            const b0 = fr.getBoundingClientRect(), r0 = el.getBoundingClientRect();
+            if (r0.top + r0.height / 2 > b0.bottom) needed++;
+            el.scrollIntoView({ block: 'nearest' });
             const r = el.getBoundingClientRect(), b = fr.getBoundingClientRect(), vh = vh921();
             const x = r.left + r.width / 2, y = r.top + r.height / 2;
             if (!(r.height > 0) || y < b.top || y > b.bottom || y < 0 || y > vh) throw new Error(where + ': ' + what + ' is out of reach — its centre (' + Math.round(y) + ') is outside the Friends block ' + R978(b) + ' or the ' + Math.round(vh) + ' px screen');
             const at = document.elementFromPoint(x, y);
             if (!at || !el.contains(at)) throw new Error(where + ': ' + what + ' is covered at its centre by ' + (at && (at.id || at.className)) + ' (it ' + R978(r) + ' in Friends ' + R978(b) + ')');
           };
-          /* K1: where the block fits, the control is on screen as it opens — in no scroller with anything to scroll, none scrolled */
-          const still = function (where, el, what) {
-            if (!el) throw new Error(where + ': setup: no ' + what + ' in the open Friends block');
-            for (let p = el.parentElement; p && p !== dlg; p = p.parentElement) {
-              const oy = getComputedStyle(p).overflowY;
-              if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 1) throw new Error(where + ': ' + what + ' sits in a scroller (' + (p.id || p.className) + ') with ' + (p.scrollHeight - p.clientHeight) + ' px to scroll — here the head, the switch and Done fit, so it must be on screen with no scroll at all, as on 82371927 (967 B2 1, 967 2)');
-              if (p.scrollTop > 0.5) throw new Error(where + ': setup: ' + (p.id || p.className) + ' is already scrolled ' + Math.round(p.scrollTop) + ' px as the block opens');
-            }
-            const r = el.getBoundingClientRect(), b = fr.getBoundingClientRect(), vh = vh921();
-            const x = r.left + r.width / 2, y = r.top + r.height / 2;
-            if (!(r.height > 0) || y < b.top || y > b.bottom || y < 0 || y > vh) throw new Error(where + ': ' + what + ' is not on screen as the block opens — its centre (' + Math.round(y) + ') is outside the Friends block ' + R978(b) + ' or the ' + Math.round(vh) + ' px screen');
-            const at = document.elementFromPoint(x, y);
-            if (!at || !el.contains(at)) throw new Error(where + ': as the block opens ' + what + ' is covered at its centre by ' + (at && (at.id || at.className)) + ' (it ' + R978(r) + ' in Friends ' + R978(b) + ')');
-          };
-          const check = async function (label, labs, fits) {
+          const check = async function (label, labs) {
             const where = label + ', Labs ' + (labs ? 'on' : 'off');
             window.__fmStep = '1132 Friends in reach: ' + where;
             FM.settings.set('collabLabs', labs); C.ui.syncLabs(); await sleep(40);
@@ -200690,36 +200886,17 @@
               if (!dlg.classList.contains('cv-none')) throw new Error(where + ': setup: the cog did not open all closed');
               document.getElementById('cv-fr-exp').click(); await land945();
               if (!dlg.classList.contains('cv-fr-big') || !body.children.length) throw new Error(where + ': setup: the Friends ⤢ did not open the block with its content');
-              if (fits) {
-                still(where, body.querySelector('.cs-offrow [role=switch]'), 'the Work with friends switch');
-                still(where, body.querySelector('.cs-foot .cs-done'), 'Done');
-              }
               reach(where, body.querySelector('.cs-offrow [role=switch]'), 'the Work with friends switch');
-              reach(where, body.querySelector('.cs-foot .cs-done'), 'Done');
               reach(where, body.querySelector(labs ? '.cs-start' : '.cs-joinlink'), labs ? 'Start sharing' : 'Got an invite?');
-              if (fits === false && labs) {
-                /* the short sizes: brought in as drawSas brings They match in, it lands above the pinned Done (J3-5) */
-                const st = body.querySelector('.cs-start');
-                body.scrollTop = 0; await sleep(20);
-                const s0 = st.getBoundingClientRect(), f0 = body.querySelector('.cs-foot').getBoundingClientRect();
-                if (s0.bottom > f0.top + 0.5) needed++;
-                st.scrollIntoView({ block: 'nearest' }); await sleep(20);
-                const sr = st.getBoundingClientRect(), ft = body.querySelector('.cs-foot').getBoundingClientRect();
-                if (sr.bottom > ft.top + 0.5) throw new Error(where + ': scrolled into view the way drawSas brings They match in, Start sharing lands under the pinned Done (its bottom ' + sr.bottom.toFixed(1) + ', the foot’s top ' + ft.top.toFixed(1) + ') — a tap there presses Done (J3-5)');
-                const sat = document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2);
-                if (!sat || !st.contains(sat)) throw new Error(where + ': scrolled into view the way drawSas does it, Start sharing is covered at its centre by ' + (sat && (sat.id || sat.className)));
-              }
-              body.scrollTop = 0; await sleep(20);
-              const d = body.querySelector('.cs-foot .cs-done'), dr = d.getBoundingClientRect(), at = document.elementFromPoint(dr.left + dr.width / 2, dr.top + dr.height / 2);
-              if (!at || !d.contains(at)) throw new Error(where + ': with the block back at its top Done is gone (its centre hits ' + (at && (at.id || at.className)) + ') — it is not pinned');
+              /* the block's own Done, until the cog's one Done is built (ST9): the way out a first-timer looks for */
+              reach(where, body.querySelector('.cs-foot .cs-done'), 'the block’s Done');
             } finally { FM.closeCanvasDialog(); await sleep(60); }
           };
           try {
-            /* fits: true — nothing may take a scroll (K1); false — the short sizes, where the body scrolls under a pinned Done */
-            for (const [label, w, h, fits] of [['390×844 (CONTROL)', 390, 844, null], ['390×760', 390, 760, true], ['390×700', 390, 700, true], ['380×667', 380, 667, false], ['320×568', 320, 568, false], ['375×553', 375, 553, false]]) {
-              await atSize921(w, h, async function () { await check(label, true, fits); await check(label, false, fits); });
+            for (const [label, w, h] of [['390×844', 390, 844], ['390×760', 390, 760], ['390×700', 390, 700], ['380×667', 380, 667], ['320×568', 320, 568], ['375×553', 375, 553]]) {
+              await atSize921(w, h, async function () { await check(label, true); await check(label, false); });
             }
-            if (!needed) throw new Error('CONTROL: at none of the short sizes did Start sharing start below the pinned Done, so the scrollIntoView reading scrolled nothing and proved nothing');
+            if (!needed) throw new Error('CONTROL: at no size did the switch start below the Friends block’s window, so the reach reading scrolled nothing and proved nothing');
           } finally { FM.settings.set('collabLabs', !!was); C.ui.syncLabs(); }
         });
       });
@@ -204823,7 +205000,7 @@
 
   /* ═══ #1243 R RELEASE 4 — S15 · S3 · S9 · THE FLOATING LINE · RULE 3 (tools/design/plans/2026-11-08-1243/1243-R.md, row 4 of (c)) ═══════
      His words, 8 Nov: S3 "when you actually tap on a layer, that first row goes away"; S9 "when you open up any of these sub menus, I want
-     the first menu to go away. I don't want two menus at once"; S15 "it should be like scrollable … make it like CapCut where you can
+     the first menu to go away. I don't want two menus at once"; S15 "it should be like scrollable … make it like [another app] where you can
      scroll it". Simple's bar is ONE row whose contents swap by #sm-bar[data-mode] (project · item · sub · panel); every row is one
      strip that scrolls sideways; Simple's lines and the first-run hint float just above the bar; a panel runs from the stage's bottom
      edge on a phone (FM.mobile.sheetLine) and takes the whole band on a PC. Each test fails on v18.36 by what it measures, never by a
@@ -206114,7 +206291,7 @@
 
   /* ═══ #1243 R RELEASE 5 — S5 · S34 A (tools/design/plans/2026-11-08-1243/1243-R.md, row 5 of (c)) ═══════════════════════════════════
      His words, 8 Nov: S5 "for the play button row, get rid of the playback options. Get rid of the split button… put the split button on
-     the row that pops up when you have a layer selected… just so that row is really simple"; S34 "CapCut has… a feature to… turn linking
+     the row that pops up when you have a layer selected… just so that row is really simple"; S34 "[another app] has… a feature to… turn linking
      stuff on and off… just one simple button to like link stuff". R's play row: Link · (Curve, later) · spacer · |◀ — "No ⋯, no ✂". Each
      test fails on v18.39 by what it measures: every probe throws its own sentence first. */
   const r5Link = () => document.getElementById('btn-sm-link');
@@ -206493,7 +206670,7 @@
 
   /* ═══ #1243 R RELEASE 6 — S8 (tools/design/plans/2026-11-08-1243/1243-R.md (a) and row 6 of (c); plan B S8) ═══════════════════════════
      His words, 8 Nov: "when you click on any of the menus, it should open up a sub menu… captions… different like presets… kind of like what
-     CapCut would do". Each test fails on v18.39 by what it measures. */
+     [another app] would do". Each test fails on v18.39 by what it measures. */
   const r6Look = key => document.querySelector('#sm-tray .sm-tool[data-tool="look:' + key + '"]');
   const r6Hl = L => ((L && L.effects) || []).filter(e => e && e.type === 'wordhighlight');
 
@@ -209938,6 +210115,921 @@
     });
   });
 
+  /* ═══ #1243 SETTINGS (ST1–ST9, plan 1243-E.md) ═══════════════════════════════════════════════════════════════════════════
+     #1243 ST7 — his words: "when choosing like your aspect ratio, it would probably be a good idea to like tell people like what it is
+     for… what apps would use what aspect ratio… So just like a little TikTok logo or whatever." His pick (9 Nov): "just do logos without
+     names for the aspect ratios". The marks a person would see are read from the chips themselves (data-plat on each drawn mark), against
+     the table written HERE, not the app's own. */
+  const ST7_WANT = { '9:16': 'tiktok,instagram,youtube', '16:9': 'youtube', '4:5': 'instagram,facebook', '1:1': 'instagram,facebook', '4:3': 'tablet', custom: '' };
+  test('1243 ST7 · every aspect chip in the cog’s Canvas card and in New project shows the little marks of the apps that use that shape (TikTok, Instagram and YouTube on 9:16), drawn by the app with no platform names on screen, each chip on screen, unclipped and its own tap target at 380 and 1280 (CONTROLS: the chip still shows its ratio, and Custom shows no marks)', { item: '1243', budgetMs: 60000 }, async function () {
+    const NAMES = /tiktok|instagram|youtube|facebook/i;
+    const marks = function (chip) { return [].map.call(chip.querySelectorAll('.ac-uses svg[data-plat]'), function (s) { return s.getAttribute('data-plat'); }).join(','); };
+    const readChips = function (where, chips) {
+      if (chips.length !== 6) throw new Error(where + ': setup: ' + chips.length + ' aspect chips, not 6');
+      chips.forEach(function (chip) {
+        const k = chip.getAttribute('data-aspect'), got = marks(chip);
+        if (got !== ST7_WANT[k]) throw new Error(where + ': the ' + k + ' chip shows the marks [' + got + '], not [' + ST7_WANT[k] + '] — his words: “what apps would use what aspect ratio… a little TikTok logo”');
+        if (NAMES.test(chip.textContent)) throw new Error(where + ': the ' + k + ' chip writes a platform name on screen (“' + chip.textContent.trim() + '”) — his pick: “logos without names”');
+        if (chip.querySelector('img')) throw new Error(where + ': the ' + k + ' chip holds an <img> — the marks are drawn by the app, never downloaded brand art');
+        if (k !== 'custom' && chip.textContent.indexOf(k) < 0) throw new Error(where + ': CONTROL: the ' + k + ' chip does not show its ratio (“' + chip.textContent.trim() + '”) — the reader cannot see the chip’s words');
+      });
+    };
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        const look = async function (label) {
+          FM.openCanvasDialog(); await entranceDone(dlg); await land945();
+          try {
+            const chips = [].slice.call(dlg.querySelectorAll('.aspect-chip[data-aspect]'));
+            readChips(label + ', the Canvas card', chips);
+            chips.forEach(function (chip) {
+              const k = chip.getAttribute('data-aspect'), r = chip.getBoundingClientRect();
+              if (!(r.height >= 44 && r.width >= 44)) throw new Error(label + ': the ' + k + ' chip is ' + Math.round(r.width) + '×' + Math.round(r.height) + ' px — under a 44 px tap');
+              if (chip.scrollWidth > chip.clientWidth + 1 || chip.scrollHeight > chip.clientHeight + 1) throw new Error(label + ': the ' + k + ' chip’s marks overflow it (' + chip.scrollWidth + '×' + chip.scrollHeight + ' in ' + chip.clientWidth + '×' + chip.clientHeight + ')');
+              chip.scrollIntoView({ block: 'nearest' });
+              const r2 = chip.getBoundingClientRect(), at = document.elementFromPoint(r2.left + r2.width / 2, r2.top + r2.height / 2);
+              if (!at || !chip.contains(at)) throw new Error(label + ': the ' + k + ' chip is covered at its centre by ' + (at && (at.id || at.className)));
+              const row = chip.querySelector('.ac-uses'), rr = row && row.getBoundingClientRect();
+              if (k !== 'custom' && !(rr && rr.width > 0 && rr.height > 0 && rr.left >= r2.left - 0.5 && rr.right <= r2.right + 0.5 && rr.bottom <= r2.bottom + 0.5)) throw new Error(label + ': the ' + k + ' chip’s marks are not drawn inside it (' + (rr ? [rr.left, rr.top, rr.width, rr.height].map(Math.round) : 'none') + ')');
+            });
+          } finally { FM.closeCanvasDialog(); await sleep(40); }
+        };
+        await atPhoneWidth(function () { return look('380'); }, 380);
+        await atWideWidth(function () { return look('1280'); }, 1280);
+        /* New project (Home's + → the dialog): the same marks, so the two places a ratio is chosen agree */
+        readChips('New project', [].slice.call(document.querySelectorAll('#hm-dialog .hm-aspect[data-aspect]')));
+      });
+    });
+  });
+
+  /* #1243 ST8 — his words: "in the friends menu, for some reason on mobile, you have to like scroll this one really weird small spot instead
+     of it like allowing you to scroll the whole thing. Or you just fitting it in properly. It does have a lot of clutter. Like instead of
+     having a section that's like how to use it… it shouldn't show you how to use it every single time… bare bones simple just so it works,
+     and then have a question mark button… that'll take you to another menu that gives you a tutorial like it will just show you the steps." */
+  test('1243 ST8 · on a phone the open Friends block scrolls as ONE whole under its bar — its head moves with it, nothing pinned — shows no how-to and no hint line, keeps its own Done until the cog has one for every block, and its ? opens the steps with a back arrow, live and not shared; live, the steps for someone already sharing stay on top once the lesson has loaded under them, and a redraw while he reads keeps the page where he scrolled it, at 380×800, 390×844 and 375×553 (CONTROLS: live, there is more than a screen to scroll, the lesson drew its steps, the page was scrolled before the redraw, and ‹ brings Start sharing back)', { item: '1243', budgetMs: 150000 }, async function () {
+    const C = need921S7('the Friends block, bare');
+    const was = FM.settings.get('collabLabs');
+    await withFakeNet921(async function () {
+      await editorWithShape(async function () {
+        await with945(async function () {
+          const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-friends'), body = document.getElementById('cv-fr-body');
+          const scrollers = function () {
+            return [fr].concat([].slice.call(fr.querySelectorAll('*'))).filter(function (n) { const oy = getComputedStyle(n).overflowY; return (oy === 'auto' || oy === 'scroll') && n.getClientRects().length; });
+          };
+          const oneScroller = function (where) {
+            const s = scrollers();
+            if (s.length !== 1) throw new Error(where + ': ' + s.length + ' places scroll inside the Friends block (' + s.map(function (n) { return n.id || n.className; }).join(', ') + ') — his words: “scroll this one really weird small spot instead of… the whole thing”');
+            const bar = document.getElementById('cv-fr-bar').getBoundingClientRect().height, fb = fr.getBoundingClientRect().height;
+            if (s[0].clientHeight < fb - bar - 4) throw new Error(where + ': the one scroller (' + (s[0].id || s[0].className) + ') is ' + s[0].clientHeight + ' px tall in a ' + Math.round(fb) + ' px block — a small spot, not the whole block');
+            return s[0];
+          };
+          const idle = async function (label) {
+            window.__fmStep = '1243 ST8: ' + label + ', not shared';
+            FM.settings.set('collabLabs', true); C.ui.syncLabs();
+            FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+            try {
+              if (!body.querySelector('.cs-start')) throw new Error(label + ': setup: the not-shared block has no Start sharing');
+              oneScroller(label + ', not shared');
+              ['.cs-how', '.cs-fr-hint'].forEach(function (sel) { const n = body.querySelector(sel); if (n && n.getClientRects().length) throw new Error(label + ': the bare block still shows ' + sel + ' — his words: “it shouldn’t show you how to use it every single time”'); });
+              /* ST9 takes this Done away only together with the cog's one Done for every block, which is not built yet */
+              if (!body.querySelector('.cs-foot .cs-done')) throw new Error(label + ': the not-shared block has no Done, and the cog has no Done of its own yet: no plain way out');
+              const q = body.querySelector('.cs-help');
+              if (!q || !/How Work with friends works/.test(q.getAttribute('aria-label') || '')) throw new Error(label + ': the block has no ? button (his words: “have a question mark button”)');
+              const qr = q.getBoundingClientRect(), at = document.elementFromPoint(qr.left + qr.width / 2, qr.top + qr.height / 2);
+              if (!at || !q.contains(at)) throw new Error(label + ': the ? is covered by ' + (at && (at.id || at.className)));
+              q.click(); await settle921(60);
+              const steps = body.querySelectorAll('.tut-steps li, .cs-how li');
+              if (steps.length < 3) throw new Error(label + ': the ? page shows ' + steps.length + ' steps — his words: “it will just show you the steps”');
+              const back = body.querySelector('.cs-backbtn');
+              if (!back) throw new Error(label + ': the ? page has no ‹ back');
+              back.click(); await settle921(60);
+              if (!body.querySelector('.cs-start')) throw new Error(label + ': CONTROL: ‹ did not bring the block (Start sharing) back');
+            } finally { FM.closeCanvasDialog(); await settle921(60); }
+          };
+          try {
+            for (const [label, w, h] of [['380×800', 380, 800], ['390×844', 390, 844], ['375×553', 375, 553]]) {
+              await atSize921(w, h, function () { return idle(label); });
+            }
+            await withLabs921(async function () {
+              await withCollab921([layer921('A')], async function () {
+                await atSize921(390, 844, async function () {
+                  window.__fmStep = '1243 ST8: 390×844, live';
+                  FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                  try {
+                    if (!body.querySelector('.cs-stop')) throw new Error('setup: the block is not the live Share panel');
+                    if (!body.querySelector('.cs-foot .cs-done')) throw new Error('live, the Friends block has no Done, and the cog has no Done of its own yet: no plain way out');
+                    const s = oneScroller('390×844, live');
+                    if (!(s.scrollHeight > s.clientHeight + 40)) throw new Error('CONTROL: live, the block has nothing to scroll (' + s.scrollHeight + ' in ' + s.clientHeight + '), so this reads nothing');
+                    const head = body.querySelector('.cs-head'), t0 = head.getBoundingClientRect().top;
+                    s.scrollTop = 120; await sleep(30);
+                    if (!(head.getBoundingClientRect().top < t0 - 60)) throw new Error('live, scrolling the block left its head pinned (' + Math.round(t0) + ' → ' + Math.round(head.getBoundingClientRect().top) + ') — the whole block should move');
+                    /* review E1-R7: live, the ? page's steps start at the link — he is already sharing. Read as the page opens, and
+                       again once lesson 17 has loaded: the lesson goes UNDER them, it does not take their place (review, 25 Nov: it
+                       did, and the page then told someone already sharing to open the gear and tap Start sharing). */
+                    s.scrollTop = 0;
+                    const lq = body.querySelector('.cs-help');
+                    if (!lq) throw new Error('live, the Share panel has no ? to open the steps behind');
+                    lq.click();
+                    const liveSteps = function (when) {
+                      const lli = [].map.call(body.querySelectorAll('.cs-how li'), function (x) { return x.textContent.replace(/\s+/g, ' ').trim(); });
+                      if (!lli.length) throw new Error('live, ' + when + ', the ? page shows no steps for someone already sharing');
+                      if (lli.some(function (t) { return /Start sharing/.test(t); }) || !/^1\s*Send your friend the link$/.test(lli[0])) throw new Error('live, ' + when + ', the ? page says ' + JSON.stringify(lli) + ' to someone who is already sharing — its first step should be Send your friend the link');
+                    };
+                    liveSteps('as it opens');
+                    await until921S6('lesson 17 behind the live ?', function () { return body.querySelector('.cs-helpbody .tut-steps li') ? 1 : 0; }, 5000)
+                      .catch(function () { throw new Error('CONTROL: live, lesson 17 did not draw its steps behind the ?, so the reading after it proves nothing'); });
+                    liveSteps('once the lesson has loaded');
+                    /* a redraw while he reads (someone joins, a role changes: redrawShare → renderFriends with keepStep) keeps the page */
+                    const page = body.querySelector('.cs-helpbody');
+                    s.scrollTop = 200; await sleep(30);
+                    const top0 = s.scrollTop;
+                    if (!(top0 > 20)) throw new Error('CONTROL: live, the ? page did not scroll (' + top0 + '), so a jump back to the top could not be seen');
+                    C.ui.renderFriends(body, { keepStep: true }); await settle921(40);
+                    if (body.querySelector('.cs-helpbody') !== page) throw new Error('live, a redraw while he reads the ? page drew it again from the start: the lesson flashes back to the short steps and his place is lost');
+                    if (Math.abs(s.scrollTop - top0) > 2) throw new Error('live, a redraw while he reads the ? page moved it from ' + Math.round(top0) + ' to ' + Math.round(s.scrollTop) + ' px');
+                    const lb = body.querySelector('.cs-backbtn'); if (lb) { lb.click(); await settle921(60); }
+                  } finally { FM.closeCanvasDialog(); await settle921(60); }
+                });
+              });
+            });
+          } finally { FM.settings.set('collabLabs', !!was); C.ui.syncLabs(); }
+        });
+      });
+    });
+  });
+
+  /* #1243 ST5 — his words: "when you're in that menu and you press app settings, like, it's fine that the app settings is like on the left,
+     but I think you should make it have like an animation, because all the others have like an animation when you open them, except for
+     app settings. It kind of just boots you out of it. So change that." */
+  test('1243 ST5 · App settings opens with an animation — Settings dims over the cog from its first frame, the cog’s blocks leave one after another instead of vanishing while its own dim fades out and, on a PC, its tail goes at once, then the cog is put away, and Settings’ ‹ brings the cog back all closed, at 380 and 1280 (CONTROL: with reduced motion the cog goes at once, and before the tap the PC reading sees the tail)', { item: '1243', budgetMs: 90000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        const alphaOf = function (s) { const m = /rgba?\(([^)]+)\)/.exec(String(s || '')); const p = m ? m[1].split(',').map(parseFloat) : []; return p.length > 3 ? p[3] : (p.length ? 1 : (/transparent/.test(String(s || '')) ? 0 : 1)); };
+        const alpha = function (el) { return alphaOf(getComputedStyle(el).backgroundColor); };
+        /* the cog's tails, read off its blocks (a tail leaked by another test would answer a document query) */
+        const tailsShown = function () {
+          return [dlg.querySelector('.export-card'), document.getElementById('cv-friends'), document.getElementById('cv-editor'), document.getElementById('cv-app')]
+            .filter(function (b) { return b && b._popTail && b._popTail.isConnected && b._popTail.getClientRects().length && getComputedStyle(b._popTail).visibility !== 'hidden'; });
+        };
+        let unMM = null;
+        const run = async function (label) {
+          window.__fmStep = '1243 ST5: ' + label;
+          FM.openCanvasDialog({ block: 'none' }); await entranceDone(dlg); await land945();
+          const pc = document.body.classList.contains('cv-anchored');
+          try {
+            if (pc && !tailsShown().length) throw new Error(label + ': CONTROL: before the tap the reading sees no tail at the cog, so it could not see one left over Settings either');
+            document.getElementById('cv-app-bar').click();
+            const scrim = document.querySelector('.set-scrim');
+            if (!scrim) throw new Error(label + ': the App settings bar opened no Settings');
+            if (alpha(scrim) < 0.55) throw new Error(label + ': on its first frame Settings’ dim is ' + alpha(scrim).toFixed(2) + ' — the editor shows through as the cog goes (his words: “It kind of just boots you out of it”)');
+            if (dlg.classList.contains('hidden')) throw new Error(label + ': the cog vanished in the same frame — it should leave with an animation');
+            if (pc && tailsShown().length) throw new Error(label + ': as the cog leaves, its tail still points at the cog above Settings’ dim (' + tailsShown().map(function (b) { return b.id || 'the canvas card'; }).join(', ') + ')');
+            /* the cog's own dim fades out under Settings' (a CSS transition on its background), not held at full strength and dropped in one frame */
+            const dimFade = dlg.getAnimations().filter(function (a) { return window.CSSTransition && a instanceof CSSTransition && a.transitionProperty === 'background-color'; })[0];
+            if (!dimFade) throw new Error(label + ': the cog’s own dim (' + alpha(dlg).toFixed(2) + ') does not fade as it leaves, so it drops away in one frame when the cog is put away');
+            const dimKf = dimFade.effect.getKeyframes();
+            const dimEnd = dimKf.length ? alphaOf(dimKf[dimKf.length - 1].backgroundColor) : 1;
+            if (!(dimEnd < 0.02)) throw new Error(label + ': the cog’s own dim fades to ' + dimEnd.toFixed(2) + ', not to clear, so it still drops away in one frame at the end');
+            const leaving = dlg.getAnimations({ subtree: true }).filter(function (a) { return /^cv-leave/.test(a.animationName || ''); });
+            if (leaving.length < 3) throw new Error(label + ': ' + leaving.length + ' of the cog’s blocks animate as it goes');
+            const delays = leaving.map(function (a) { return a.effect.getTiming().delay; }).sort(function (a, b) { return a - b; });
+            if (!(delays[delays.length - 1] - delays[0] >= 40)) throw new Error(label + ': the blocks leave at one instant (delays ' + delays.join(', ') + ' ms), not one after another');
+            await sleep(450);
+            if (!dlg.classList.contains('hidden')) throw new Error(label + ': 450 ms on, the cog is still up under Settings');
+            if (!FM.settings.isOpen()) throw new Error(label + ': Settings is not open');
+            const x = document.querySelector('.set-scrim .set-close');
+            if (!x || x.textContent.trim() !== '‹' || !/settings cog/i.test(x.getAttribute('aria-label') || '')) throw new Error(label + ': opened from the cog, Settings’ close is “' + (x && x.textContent.trim()) + '”, not ‹ back to the cog');
+            x.click(); await sleep(520);
+            if (FM.settings.isOpen()) throw new Error(label + ': ‹ did not close Settings');
+            if (dlg.classList.contains('hidden') || !dlg.classList.contains('cv-none')) throw new Error(label + ': ‹ did not bring the cog back all closed (' + dlg.className + ')');
+          } finally { if (FM.settings.isOpen()) FM.settings.close({ handBack: false }); try { FM.closeCanvasDialog(); } catch (e) {} await sleep(300); }
+        };
+        try {
+          await atPhoneWidth(function () { return run('380'); }, 380);
+          await atWideWidth(function () { return run('1280'); }, 1280);
+          /* CONTROL: with reduced motion nothing animates, so the cog goes at once */
+          unMM = stub1132(window, 'matchMedia', reduce1132(window.matchMedia));
+          await atPhoneWidth(async function () {
+            FM.openCanvasDialog({ block: 'none' }); await sleep(60);
+            document.getElementById('cv-app-bar').click();
+            if (!dlg.classList.contains('hidden')) throw new Error('CONTROL: with reduced motion the cog did not go at once');
+            if (FM.settings.isOpen()) FM.settings.close({ handBack: false });
+            await sleep(300);
+          }, 380);
+        } finally { if (unMM) unMM(); if (FM.settings.isOpen()) FM.settings.close({ handBack: false }); try { FM.closeCanvasDialog(); } catch (e) {} await sleep(300); }
+      });
+    });
+  });
+
+  /* #1243 ST1 — his words: "the animation for in the settings, how we've got the four different settings options, how you've got app settings,
+     canvas, friends, and then the editor mode. Basically, make it so that the animation is just a bit better, like improve it a bit. Like,
+     just put some polish and effort into it." Pick A (recommended): cascade and unfold. */
+  test('1243 ST1 · the cog’s blocks swing in one after another in the order they stand (each at least 30 ms after the last), and each waits unseen until its turn, at 380 and 1280 (CONTROL: the first block does not wait at all, and a landed block reads as seen)', { item: '1243', budgetMs: 90000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        let unMM = null;
+        const run = async function (label) {
+          window.__fmStep = '1243 ST1: ' + label;
+          FM.openCanvasDialog({ block: 'none' });
+          /* on a PC hung UNDER… or OVER the cog, the cascade starts at the cog: bottom up when the column grows up from it */
+          const up = document.body.classList.contains('cv-anchored') && document.body.classList.contains('cv-up');
+          try {
+            const blocks = [dlg.querySelector('.export-card'), document.getElementById('cv-friends'), document.getElementById('cv-editor'), document.getElementById('cv-app')].filter(function (b) { return b && b.getClientRects().length; });
+            const read = blocks.map(function (b) {
+              const a = b.getAnimations().filter(function (x) { return window.CSSAnimation && x instanceof CSSAnimation; })[0];
+              return { b: b, t: b.offsetTop, e: b.offsetTop + b.offsetHeight, d: a ? a.effect.getTiming().delay : null };
+            });
+            if (read.some(function (x) { return x.d === null; })) throw new Error(label + ': setup: a block has no entrance animation (' + read.map(function (x) { return (x.b.id || x.b.className) + ':' + x.d; }).join(' ') + ')');
+            read.sort(function (a, b) { return up ? b.e - a.e : a.t - b.t; });
+            if (read[0].d !== 0) throw new Error(label + ': CONTROL: the first block in the order waits ' + read[0].d + ' ms — the reading is off by a constant, so it says nothing about the order');
+            for (let i = 1; i < read.length; i++) {
+              if (!(read[i].d - read[i - 1].d >= 30)) throw new Error(label + ': the blocks do not swing in one after another in the order they stand (delays ' + read.map(function (x) { return (x.b.id || 'canvas') + ' ' + x.d; }).join(', ') + ' ms) — his words: “put some polish and effort into it”');
+            }
+            /* A block waiting for its turn is not drawn yet. Read in the same task as the open, before any frame: every block after the
+               first is still in its delay. With no backwards fill (a PC's cv-grow had none) it shows at rest, then blinks out, then grows. */
+            const seenEarly = read.slice(1).filter(function (x) { return parseFloat(getComputedStyle(x.b).opacity) > 0.05; });
+            if (seenEarly.length) throw new Error(label + ': before its turn a block is already drawn (' + seenEarly.map(function (x) { return (x.b.id || 'canvas') + ' at ' + getComputedStyle(x.b).opacity + ' after a ' + x.d + ' ms wait'; }).join(', ') + '), so it shows, blinks out, then swings in');
+            /* CONTROL: the same reading sees a block once it has landed */
+            await land945();
+            const last = read[read.length - 1];
+            if (!(parseFloat(getComputedStyle(last.b).opacity) > 0.95)) throw new Error(label + ': CONTROL: landed, ' + (last.b.id || 'canvas') + ' reads ' + getComputedStyle(last.b).opacity + ', so this reading could not tell a drawn block from a waiting one');
+          } finally { FM.closeCanvasDialog(); await sleep(40); }
+        };
+        try {
+          await atPhoneWidth(function () { return run('380'); }, 380);
+          await atWideWidth(function () { return run('1280'); }, 1280);
+        } finally { if (unMM) unMM(); try { FM.closeCanvasDialog(); } catch (e) {} await sleep(40); }
+      });
+    });
+  });
+
+  /* #1243 ST1 (the review's finding the reviewer missed): the cascade's steps (--cv-i) were left on the blocks after the open, so an
+     entrance that starts again while the cog is open (a window crossing the phone breakpoint swaps fm-hinge-panel for cv-grow) waited
+     its 45 ms steps again, unseen. The restart here is the same mechanism: a block off the page for one style pass, then back. */
+  test('1243 ST1 · once the cog’s entrance has played its cascade is cleared, so a block whose entrance starts again while the cog is open swings in at once, at 380 and 1280 (CONTROL: on the open a block waits its turn)', { item: '1243', budgetMs: 60000 }, async function () {
+    await editorWithShape(async function () {
+      await with945(async function () {
+        const dlg = document.getElementById('canvas-dialog');
+        const entrance = function (b) { return b.getAnimations().filter(function (x) { return window.CSSAnimation && x instanceof CSSAnimation; })[0] || null; };
+        const run = async function (label) {
+          window.__fmStep = '1243 ST1 cleared: ' + label;
+          FM.openCanvasDialog({ block: 'none' });
+          let bs = [], keep = [];
+          try {
+            bs = [dlg.querySelector('.export-card'), document.getElementById('cv-friends'), document.getElementById('cv-editor'), document.getElementById('cv-app')].filter(function (b) { return b && b.getClientRects().length; });
+            const d0 = bs.map(function (b) { const a = entrance(b); return a ? a.effect.getTiming().delay : 0; });
+            if (!(Math.max.apply(null, d0) >= 40)) throw new Error(label + ': CONTROL: on the open no block waits its turn (delays ' + d0.join(', ') + ' ms), so this reading could not see a cascade left behind either');
+            await land945();
+            for (let i = 0; i < 20 && bs.some(function (b) { return b.style.getPropertyValue('--cv-i') !== ''; }); i++) await sleep(30);
+            /* start every block's entrance again, with the cog still open */
+            keep = bs.map(function (b) { return b.style.display; });
+            bs.forEach(function (b) { b.style.display = 'none'; });
+            bs.forEach(function (b) { void getComputedStyle(b).display; });
+            bs.forEach(function (b, i) { b.style.display = keep[i]; });
+            keep = [];
+            const d1 = bs.map(function (b) { const a = entrance(b); return { id: b.id || 'canvas', d: a ? a.effect.getTiming().delay : null }; });
+            if (d1.some(function (x) { return x.d === null; })) throw new Error(label + ': setup: a block’s entrance did not start again (' + d1.map(function (x) { return x.id + ' ' + x.d; }).join(', ') + ')');
+            const late = d1.filter(function (x) { return x.d !== 0; });
+            if (late.length) throw new Error(label + ': with the cog open, an entrance that starts again still waits its turn (' + late.map(function (x) { return x.id + ' ' + x.d + ' ms'; }).join(', ') + '): the open’s cascade was never cleared');
+          } finally { if (keep.length) bs.forEach(function (b, i) { b.style.display = keep[i]; }); FM.closeCanvasDialog(); await sleep(40); }
+        };
+        try {
+          await atPhoneWidth(function () { return run('380'); }, 380);
+          await atWideWidth(function () { return run('1280'); }, 1280);
+        } finally { try { FM.closeCanvasDialog(); } catch (e) {} await sleep(40); }
+      });
+    });
+  });
+
+  /* ═══ #1255, his note of 23 Nov 20:53, clauses 6 and 7, THE FULL EDITOR'S FIRST CUT ═══════════════════════════════════════════════
+     His words: "I'm also noticing a pop-up that says tap a clip to split or change its speed. There shouldn't be any explanations like
+     that. We have tutorials for a reason, and there could be a tutorial when the first time you load into the app is, but not, you
+     know, constantly there." The Simple editor's own lines went in Simple release 13; these are Full's that need no drawing: the crop
+     bar's "Drag to crop" and the pop-up each start raised, the touch-up bar's line, the sound effects sheet's line, and "tap to
+     type" on an empty caption cue. (Still to come, listed in the entry: the trackpads' words, the mask tool's lines, the paragraphs
+     under the camera's controls.) CONTROLS: each surface is really open and still works. */
+  test('1255 hints · in the Full editor the crop bar and the touch-up bar hold only their buttons with no gesture line beside them, starting a crop raises no pop-up, the sound effects sheet opens with no line of explanation, and an empty caption cue reads Empty in the list (CONTROL: Done on the crop bar still writes a crop, the touch-up bar still has Cancel and Done, and the sheet still lists sounds)', { item: '1255', budgetMs: 60000 }, async function () {
+    const _isoK = isoKeep(); try {
+    const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId, keepT = FM.time, fails = [];
+    const wasCrop = FM.cropTool.isActive(), wasTouch = FM.touchupTool.isOpen(), wasSfx = !!document.querySelector('.sfx-card');
+    const toastOwn = Object.getOwnPropertyDescriptor(FM, 'toast'), said = [];
+    const words = bar => [].filter.call(bar.childNodes, n => n.nodeType === 3 || (n.nodeType === 1 && n.tagName !== 'BUTTON')).map(n => (n.textContent || '').trim()).filter(Boolean);
+    try {
+      const L = FM.makeLayer('image', { x: 270, y: 480 });
+      FM.media.set(L.id, { el: offscreen(64, 48), width: 64, height: 48 });
+      S.layers = [L]; FM.selectLayer(L.id); FM.time = 0;
+      /* the crop bar, and what starting the tool says */
+      FM.toast = function (m) { said.push(String(m)); };
+      FM.cropTool.start(L.id);
+      if (toastOwn) Object.defineProperty(FM, 'toast', toastOwn); else delete FM.toast;
+      const cb = document.getElementById('crop-bar');
+      if (!FM.cropTool.isActive() || !cb) throw new Error('CONTROL: the crop tool did not open, so its bar says nothing');
+      const cbtn = [].map.call(cb.querySelectorAll('button'), b => b.textContent.trim()).join(', ');
+      if (cbtn !== 'Reset, Cancel, Done') throw new Error('CONTROL: the crop bar’s buttons are ' + cbtn + ', want Reset, Cancel, Done');
+      if (words(cb).length) fails.push('the crop bar says “' + words(cb).join(' ') + '” beside its buttons');
+      if (said.length) fails.push('starting the crop tool raised a pop-up: “' + said.join(' | ') + '”');
+      cb.querySelector('.cb-done').click();
+      if (!L.crop || typeof L.crop.w !== 'number') throw new Error('CONTROL: Done on the crop bar wrote no crop (' + JSON.stringify(L.crop) + '), so the bar that was read is not a working one · ' + fails.join(' · '));
+      /* the touch-up bar */
+      const fx = { type: 'touchup', params: { x: 35, y: 35, w: 30, h: 30 } };
+      L.effects = [fx];
+      FM.touchupTool.open(L.id, fx);
+      const tb = document.getElementById('touchup-bar');
+      if (!FM.touchupTool.isOpen() || !tb) throw new Error('CONTROL: the touch-up tool did not open, so its bar says nothing · ' + fails.join(' · '));
+      const tbtn = [].map.call(tb.querySelectorAll('button'), b => b.textContent.trim()).join(', ');
+      if (tbtn !== 'Cancel, Done') throw new Error('CONTROL: the touch-up bar’s buttons are ' + tbtn + ', want Cancel, Done · ' + fails.join(' · '));
+      if (words(tb).length) fails.push('the touch-up bar says “' + words(tb).join(' ') + '” beside its buttons');
+      FM.touchupTool.close();
+      /* the sound effects sheet */
+      if (!wasSfx) FM.sfx.open();
+      await sleep(260);
+      const card = document.querySelector('.sfx-card');
+      if (!card || !card.querySelectorAll('.sfx-name').length) throw new Error('CONTROL: the sound effects sheet did not open with its sounds listed · ' + fails.join(' · '));
+      const hint = card.querySelector('.sfx-hint'), txt = card.textContent || '';
+      if (hint || /Tap a name to hear it/i.test(txt) || /cost nothing to download/i.test(txt)) fails.push('the sound effects sheet still opens with a line of explanation (“' + ((hint && hint.textContent) || 'Tap a name to hear it…') + '”)');
+      if (!wasSfx) { FM.sfx.close(); await sleep(120); }
+      /* an empty caption cue: the words both lists draw, read from the two files' own source (the typing sheet needs a real caption track) */
+      for (const f of ['js/captions.js', 'js/text-edit.js']) {
+        const src = await (await fetch('/' + f + '?hints1255=' + Date.now())).text();
+        if (src.length < 2000) throw new Error('CONTROL: ' + f + ' could not be read (' + src.length + ' characters)');
+        if (/tap to type/i.test(src.replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, ''))) fails.push(f + ' still writes “tap to type” on an empty caption cue');
+        if (f === 'js/captions.js' && !/\|\| 'Empty'/.test(src)) fails.push(f + ' no longer names an empty cue Empty');
+      }
+    } finally {
+      if (toastOwn) Object.defineProperty(FM, 'toast', toastOwn); else delete FM.toast;
+      try { if (FM.cropTool.isActive() && !wasCrop) FM.cropTool.stop(); } catch (e) {}
+      try { if (FM.touchupTool.isOpen() && !wasTouch) FM.touchupTool.close(); } catch (e) {}
+      try { if (!wasSfx && document.querySelector('.sfx-card')) FM.sfx.close(); } catch (e) {}
+      S.layers = keep; S.selectedId = keepSel; FM.time = keepT;
+    }
+    if (fails.length) throw new Error(fails.join(' · ') + ' — his words: “There shouldn’t be any explanations like that… not, you know, constantly there”');
+    } finally { _isoK.put(); }
+  });
+
+  /* ═══ #1255, his note of 23 Nov 20:53, clauses 1 and 2: NO EMOJI AS AN ICON ════════════════════════════════════════════════════════
+     His words: "The Detect speech button has an emoji on it … no emojis on text or buttons anywhere in the app. Design our own icons
+     instead." A sweep found five places with a real emoji on screen; each now wears the drawing from the design board (Detect speech:
+     DS3, "Speech bubble", his pick of the four on 24 Nov) or plain words. The typed symbols that are not emoji
+     (★ ✓ ✕ ◆ …) change with the redesign's icon set, not here. CONTROLS: the button really starts a detection; the badges are real. */
+  test('1255 emoji · the Detect speech button wears a drawing and no emoji, the button’s own gap from its words, keeps its drawing while its words say Listening, and reads Detect speech again afterwards; a clip with a speed ramp wears a drawn mark and the word ramp on its badge while a 2× clip still reads 2×; and the backup message, the device report and a broken preset row carry no emoji sign (CONTROL: the press started one detection, and both badges are on their clips)', { item: '1255', budgetMs: 45000 }, async function () {
+    const _isoK = isoKeep(); try {
+    const C = FM.captions, B = { id: 'voice-1255', name: 'Talking clip', type: 'video' }, T = { id: 'caption-1255', captions: [] };
+    const saved = { sources: C.audioSources, detect: C.detect, audio: FM.hasAudioTrack, toast: FM.toast, scope: FM._capScope, src: FM._capSrcId, report: FM.reportError,
+      refresh: FM.inspector && FM.inspector.refresh, rebuild: FM.timeline && FM.timeline.rebuild, changed: FM.textEdit && FM.textEdit.cuesChanged };
+    const S = FM.scene, keep = S.layers.slice(), keepSel = S.selectedId, keepT = FM.time;
+    const EMOJI = /[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}️]/u, fails = [];
+    let go = null, entered = 0;
+    try {
+      /* the button */
+      C.audioSources = () => [B]; FM.toast = () => {}; FM.reportError = () => {};
+      if (FM.inspector) FM.inspector.refresh = () => {};
+      if (FM.timeline) FM.timeline.rebuild = () => {};
+      if (FM.textEdit) FM.textEdit.cuesChanged = () => {};
+      FM._capScope = 'clip'; FM._capSrcId = null; FM.hasAudioTrack = () => true;
+      C.detect = async (layer, cand, onP) => { entered++; onP(0.4); await new Promise(r => { go = r; }); layer.captions = [{ a: 0, b: 1, text: '' }]; return { count: 1, stats: {} }; };
+      const row = FM.captionsEditor.detectRow(T, () => {}), btn = row.querySelector('.cap-detect-btn');
+      if (!btn) throw new Error('CONTROL: the detect row has no Detect speech button');
+      const pic = () => btn.querySelector('svg path'), words = () => (btn.textContent || '').trim();
+      if (EMOJI.test(btn.textContent || '')) fails.push('the Detect speech button still carries an emoji (“' + words() + '”) — his words: “Replace it with an icon we design, not an emoji”');
+      if (!pic()) fails.push('the Detect speech button has no drawing of its own');
+      else if ((pic().getAttribute('d') || '').indexOf('19.8V16') < 0) fails.push('the Detect speech button’s drawing is not the speech bubble he picked (DS3): its first path is “' + (pic().getAttribute('d') || '').slice(0, 40) + '…”');
+      if (words() !== 'Detect speech') fails.push('the button reads “' + words() + '”, want Detect speech');
+      /* the drawing stands the button's own gap from its words, not that gap twice (it had a margin of its own on top of the gap) */
+      const gapHost = document.createElement('div');
+      gapHost.style.cssText = 'position:fixed;left:0;top:0;width:360px;opacity:0;pointer-events:none;z-index:-1';
+      gapHost.appendChild(row); document.body.appendChild(gapHost);
+      try {
+        const ic = btn.querySelector('svg.cap-detect-ic'), lab = btn.querySelector('.cap-detect-l');
+        if (!ic || !lab || ic.getBoundingClientRect().width < 10) throw new Error('CONTROL: the Detect speech button has no drawing and words on screen to measure between · ' + fails.join(' · '));
+        const want = parseFloat(getComputedStyle(btn).columnGap) || 0, gap = lab.getBoundingClientRect().left - ic.getBoundingClientRect().right;
+        if (!(want > 0)) throw new Error('CONTROL: the Detect speech button has no gap of its own (' + getComputedStyle(btn).columnGap + ') · ' + fails.join(' · '));
+        if (Math.abs(gap - want) > 1.5) fails.push('the Detect speech drawing stands ' + gap.toFixed(1) + ' px from its words, want the button’s own ' + want + ' px');
+      } finally { gapHost.remove(); }
+      btn.click(); await sleep(60);
+      if (entered !== 1 || !go) throw new Error('CONTROL: the press did not start one detection (' + entered + ' calls), so the button that was read is not the working one · ' + fails.join(' · '));
+      if (!/^Listening/.test(words())) fails.push('while it listens the button reads “' + words() + '”, want Listening… and how far');
+      if (!pic()) fails.push('while it listens the button lost its drawing');
+      go(); await sleep(80);
+      if (words() !== 'Detect speech' || !pic()) fails.push('after the detection the button reads “' + words() + '” ' + (pic() ? 'with' : 'WITHOUT') + ' its drawing, want Detect speech with it');
+      /* the speed badges, on real clips of the timeline */
+      if (FM.timeline) FM.timeline.rebuild = saved.rebuild;
+      const R = FM.makeLayer('video', { name: 'Ramped 1255', x: 270, y: 480, start: 0, duration: 3 }), D = FM.makeLayer('video', { name: 'Double 1255', x: 270, y: 480, start: 0, duration: 3 });
+      R.muted = D.muted = true; D.speed = 2;
+      S.layers = [R, D]; FM.selectLayer(null); FM.time = 0;
+      FM.toggleProp(R, 'speed', 0, 1); FM.time = 1; FM.setProp(R, 'speed', 2, 1); FM.time = 0;
+      if (!FM.isAnimated(R.speed)) throw new Error('CONTROL: the fixture clip’s speed is not a ramp (' + JSON.stringify(R.speed) + '), so no ramp badge can be read · ' + fails.join(' · '));
+      FM.timeline.rebuild(); await sleep(120);
+      const badges = [].slice.call(document.querySelectorAll('.clip-speed'));
+      const ramp = badges.filter(b => /ramp/.test(b.textContent || ''))[0], dbl = badges.filter(b => (b.textContent || '').trim() === '2×')[0];
+      if (!ramp || !dbl) throw new Error('CONTROL: the two clips’ speed badges are not both on the timeline (found ' + badges.map(b => '“' + b.textContent + '”').join(', ') + ') · ' + fails.join(' · '));
+      if (EMOJI.test(ramp.textContent || '')) fails.push('the speed-ramp badge still carries an emoji (“' + ramp.textContent + '”)');
+      if (!ramp.querySelector('svg path')) fails.push('the speed-ramp badge has no drawn mark');
+      if ((ramp.textContent || '').trim() !== 'ramp') fails.push('the speed-ramp badge reads “' + ramp.textContent + '”, want ramp beside its mark');
+      if (dbl.querySelector('svg')) fails.push('a flat 2× badge gained a drawing: only a ramp wears one');
+      /* the three texts, read from the files that write them */
+      for (const [f, bad, what] of [['js/settings.js', /' ⚠️? ' \+/, 'the backup message'], ['js/perf-probe.js', /\u{1F6A8}/u, 'the device report'], ['js/inspector.js', /sub: '⚠ ' \+ why/, 'a broken preset row']]) {
+        const src = await (await fetch('/' + f + '?emoji1255=' + Date.now())).text();
+        if (src.length < 2000) throw new Error('CONTROL: ' + f + ' could not be read (' + src.length + ' characters)');
+        if (bad.test(src)) fails.push(what + ' (' + f + ') still writes an emoji sign');
+      }
+    } finally {
+      if (go) { try { go(); } catch (e) {} }
+      C.audioSources = saved.sources; C.detect = saved.detect; FM.hasAudioTrack = saved.audio;
+      FM.toast = saved.toast; FM.reportError = saved.report; FM._capScope = saved.scope; FM._capSrcId = saved.src;
+      if (FM.inspector) FM.inspector.refresh = saved.refresh;
+      if (FM.timeline) FM.timeline.rebuild = saved.rebuild;
+      if (FM.textEdit) FM.textEdit.cuesChanged = saved.changed;
+      S.layers = keep; S.selectedId = keepSel; FM.time = keepT;
+      try { FM.timeline.rebuild(); } catch (e) {}
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+    } finally { _isoK.put(); }
+  });
+
+  /* ═══ #1255, THE FIRST CUT OF THE APP'S OWN ICONS (his 23 Nov words: "no emojis on text or buttons anywhere in the app. Design our own
+     icons instead"; the drawings are from the set he passed on 24 Nov: "the pen could definitely be different. The rest are fine") ═════
+     A play triangle, a two-way arrow, a cog and a warning sign are ordinary characters on a PC and COLOUR EMOJI on an iPhone, so a typed
+     one is an emoji in practice, and the first sweep (two code ranges) never saw them. Three tests. (1) Nothing of the kind is typed in
+     the app's own code or its lessons: every script the page loads, its markup, the style sheets and every lesson, comments blanked,
+     escapes read too; the reader is proven on a planted line first. FOUR LINES STILL TYPE THE COG and are on an owed list, counted per
+     file, that must shrink when they change: each was last written by a Simple release (the four lines that send him to the cog,
+     v18.18), so their turn is a Simple release. (2) The marks that were
+     typed are drawings where they show, and every mark asked for by name is in the table. (3) A line that names the cog draws it. */
+  test('1255 emoji · no character a phone draws as a colour emoji is typed in the app’s own code or its lessons: every script the page loads, the effect pictures’ code, its markup, the style sheets and every lesson are read with their comments blanked, escapes included, and a line still owed its drawing is counted on a list that must shrink with it (CONTROLS: the reader finds a planted play triangle in a string and as an escape and skips the two in comments; a star, a tick, a digit and the copyright sign are not emoji; a clapper board as two escaped halves or built from its number, a keycap, a style sheet escape in a script and an escape after a hyphen are found, and a range of escapes is not; the app was really read)', { item: '1255', budgetMs: 90000 }, async function () {
+    const CAP = /(?![#*0-9\u00A9\u00AE\u2122])\p{Emoji}/u;   /* the keycap bases are plain digits, and the copyright signs are text on every phone */
+    const read = async function (p, json) { const r = await fetch('/' + p + '?em1255=' + Date.now(), { cache: 'no-store' }); if (!r.ok) throw new Error('CONTROL: ' + p + ' could not be read (' + r.status + ')'); return json ? r.json() : r.text(); };
+    /* comments become spaces (line numbers kept); strings, markup and template text stay */
+    const blank = function (src, kind) {
+      if (kind === 'md') return src.replace(/<!--[\s\S]*?-->/g, function (m) { return m.replace(/[^\n]/g, ' '); });
+      const tok = /['"`]|\/\/|\/\*|<!--/g, out = [], n = src.length;
+      let i = 0;
+      for (;;) {
+        tok.lastIndex = i;
+        const m = tok.exec(src);
+        if (!m) { out.push(src.slice(i)); break; }
+        out.push(src.slice(i, m.index)); i = m.index;
+        const t = m[0];
+        if (t === '//') {
+          if (kind === 'css' || (i > 0 && src[i - 1] === ':')) { out.push(t); i += 2; continue; }
+          let j = src.indexOf('\n', i); if (j < 0) j = n;
+          out.push(' '.repeat(j - i)); i = j;
+        } else if (t === '/*' || t === '<!--') {
+          const end = t === '/*' ? '*/' : '-->';
+          let j = src.indexOf(end, i + t.length); j = j < 0 ? n : j + end.length;
+          out.push(src.slice(i, j).replace(/[^\n]/g, ' ')); i = j;
+        } else {
+          let j = i + 1;
+          while (j < n && src[j] !== t) { if (src[j] === '\\') j++; if (t !== '`' && src[j] === '\n') break; j++; }
+          out.push(src.slice(i, j + 1)); i = j + 1;
+        }
+      }
+      return out.join('');
+    };
+    const ESC = /\\u\{([0-9a-fA-F]{1,6})\}|\\u([0-9a-fA-F]{4})|&#x([0-9a-fA-F]{1,6});|&#([0-9]{1,7});/g, CSSESC = /\\([0-9a-fA-F]{4,6})/g;
+    /* the two escaped halves of one character (a clapper board is \uD83C\uDFAC), and a character built from its number in the code */
+    const PAIR = /\\u([dD][89abAB][0-9a-fA-F]{2})\\u([dD][c-fC-F][0-9a-fA-F]{2})/g;
+    const FROMCP = /String\.fromC(?:odePoint|harCode)\(\s*((?:0[xX][0-9a-fA-F]+|[0-9]+)(?:\s*,\s*(?:0[xX][0-9a-fA-F]+|[0-9]+))*)\s*\)/g;
+    /* an end of a RANGE in a pattern of code points (the one that cuts a line of text into characters) names nothing that is drawn: an
+       escape with a hyphen and ANOTHER ESCAPE beside it is left as written; an escape beside a hyphen alone is read */
+    const ESC_BEFORE = /(?:\\u\{[0-9a-fA-F]{1,6}\}|\\u[0-9a-fA-F]{4}|&#x?[0-9a-fA-F]+;|\\[0-9a-fA-F]{4,6})$/;
+    const ESC_AFTER = /^(?:\\u\{[0-9a-fA-F]{1,6}\}|\\u[0-9a-fA-F]{4}|&#x?[0-9a-fA-F]+;|\\[0-9a-fA-F]{4,6})/;
+    /* a keycap (a digit, # or * with the picture selector and the keycap mark) and a copyright sign asked to be a picture are colour emoji too */
+    const KEYCAP = /[#*0-9\u00A9\u00AE\u2122]\uFE0F\u20E3?|\u20E3/g;
+    const hitsIn = function (text, kind) {
+      const found = [];
+      text.split('\n').forEach(function (raw, k) {
+        const seen = new Set();
+        /* every escape is read IN its line, so what two of them spell together is seen together */
+        const dec = function (line, re, cpsOf) {
+          re.lastIndex = 0;
+          return line.replace(re, function () {
+            const a = arguments, m = a[0], at = a[a.length - 2], src = a[a.length - 1], end = at + m.length;
+            if ((src[at - 1] === '-' && ESC_BEFORE.test(src.slice(0, at - 1))) || (src[end] === '-' && ESC_AFTER.test(src.slice(end + 1)))) return m;
+            const cps = cpsOf(a);
+            return cps.length && cps.every(function (cp) { return cp >= 0 && cp <= 0x10FFFF; }) ? String.fromCodePoint.apply(null, cps) : m;
+          });
+        };
+        let line = dec(raw, PAIR, function (a) { return [((parseInt(a[1], 16) - 0xD800) * 0x400) + (parseInt(a[2], 16) - 0xDC00) + 0x10000]; });
+        line = dec(line, FROMCP, function (a) { return a[1].split(',').map(function (s) { return Number(s.trim()); }); });
+        line = dec(line, ESC, function (a) { const hex = a[1] || a[2] || a[3]; return [hex ? parseInt(hex, 16) : parseInt(a[4], 10)]; });
+        if (kind !== 'md') line = dec(line, CSSESC, function (a) { return [parseInt(a[1], 16)]; });
+        if (CAP.test(line)) for (const ch of line) if (CAP.test(ch)) seen.add(ch);
+        for (const m of line.matchAll(KEYCAP)) seen.add(m[0]);
+        seen.forEach(function (ch) { found.push([k + 1, ch]); });
+      });
+      return found;
+    };
+    const PLANT = 'const a = \'▶ play\'; // ▶ in a comment\n/* ▶ */ const b = \'\\u25B6\';\nconst c = \'★ ✓ 7 # ©\';\n' +
+      'const d = \'\\uD83C\\uDFAC\';\nconst e = String.fromCodePoint(0x1F3AC);\nconst f = \'#\\uFE0F\\u20E3\';\n' +
+      'el.style.setProperty(\'content\', \'"\\\\25B6"\');\nconst g = \'-\\u25B6 play\';\nconst h = /[\\u2600-\\u27BF]/;';
+    const ctl = hitsIn(blank(PLANT, 'js'), 'js').map(function (h) { return h[0] + ':' + Array.from(h[1]).map(function (c) { return c.codePointAt(0).toString(16); }).join('+'); }).join(' ');
+    if (ctl !== '1:25b6 2:25b6 4:1f3ac 5:1f3ac 6:23+fe0f+20e3 7:25b6 8:25b6') throw new Error('CONTROL: the reader should find the planted play triangle in a string (line 1) and as an escape (line 2), skip the two in comments, pass a star, a tick, a digit and the copyright sign, find a clapper board as two escaped halves (4) and built from its number (5), a keycap (6), a style sheet escape in a script (7) and an escape after a hyphen (8), and pass a range of escapes (9); it found “' + ctl + '”');
+
+    const html = await read('index.html'), texts = { 'index.html': html };
+    const scripts = Array.from(new Set(Array.from(html.matchAll(/<script src="(js\/[^"?]+)/g)).map(function (m) { return m[1]; })));
+    if (scripts.length < 40) throw new Error('CONTROL: found ' + scripts.length + ' scripts in index.html, so the app was not read');
+    for (const f of scripts.concat(['sw.js'])) texts[f] = await read(f);
+    /* scripts the app loads later by name (a worker, a lazy module) */
+    const later = new Set();
+    Object.keys(texts).forEach(function (f) { for (const m of texts[f].matchAll(/['"`](js\/[\w.-]+\.js)/g)) if (!texts[m[1]]) later.add(m[1]); });
+    for (const f of later) { try { texts[f] = await read(f); } catch (e) { /* a name in a message, not a file of the app */ } }
+    /* the effect pictures' drawing code, loaded at run time from fx-pics/ (kit.js, then its manifest's files) and never named as js/ */
+    const fxm = await read('fx-pics/manifest.json', true), fxFiles = ['kit.js'].concat((fxm && Array.isArray(fxm.files)) ? fxm.files : []);
+    if (fxFiles.length < 10) throw new Error('CONTROL: the effect pictures’ manifest lists ' + (fxFiles.length - 1) + ' files, so their drawing code was not read');
+    for (const f of fxFiles) texts['fx-pics/' + f] = await read('fx-pics/' + f);
+    const sheets = Array.from(new Set(['styles.css', 'theme-glass.css'].concat(Array.from(html.matchAll(/<link[^>]+href="([^"?:]+\.css)/g)).map(function (m) { return m[1]; }))));
+    for (const f of sheets) texts[f] = await read(f);
+    const lessons = await read('tutorials/index.json', true);
+    if (!lessons || lessons.length < 20) throw new Error('CONTROL: only ' + (lessons && lessons.length) + ' lessons are listed, so the lessons were not read');
+    texts['tutorials/index.json'] = JSON.stringify(lessons);
+    for (const e of lessons) texts['tutorials/' + e.file] = await read('tutorials/' + e.file);
+    const total = Object.keys(texts).reduce(function (a, f) { return a + texts[f].length; }, 0);
+    if (total < 3e6) throw new Error('CONTROL: only ' + total + ' characters of the app were read');
+
+    /* STILL OWED their drawn cog, by how many lines of each file type it: the four lines that send him to the cog (storage full, twice; a big
+       import; the device report). FM.IC.cog is ready for the three shown as a toast or a question (app.js, storage.js), which draw it. The
+       device report's line (perf-probe.js) is plain text that is copied and shown as text, where FM.IC.cog would be a box: its turn is
+       WORDS, see Settings, Canvas. Each was last written by a Simple release, so a Simple release changes it, and
+       this list with it: one line more OR fewer than the count fails. (It was seven: the Simple editor's first-time note, its copy in the
+       words file and the lesson that quoted it went out with v18.52, his rule of 23 Nov that nothing explains itself unasked.) */
+    const COG = '\u2699', OWED = { 'js/app.js': 1, 'js/storage.js': 2, 'js/perf-probe.js': 1 };
+    const bad = [], owedSeen = {};
+    Object.keys(texts).forEach(function (f) {
+      const kind = /\.css$/.test(f) ? 'css' : /\.(md|json)$/.test(f) ? 'md' : /\.html$/.test(f) ? 'html' : 'js';
+      hitsIn(blank(texts[f], kind), kind).forEach(function (h) {
+        if (h[1] === COG && OWED[f] && (owedSeen[f] || 0) < OWED[f]) { owedSeen[f] = (owedSeen[f] || 0) + 1; return; }
+        bad.push(f + ':' + h[0] + ' ' + h[1] + ' (U+' + h[1].codePointAt(0).toString(16).toUpperCase() + ')');
+      });
+    });
+    if (bad.length) throw new Error(bad.length + ' place(s) in the app’s own code or lessons still type a character a phone draws as a colour emoji (his words: “no emojis on text or buttons anywhere in the app. Design our own icons instead”): ' + bad.slice(0, 8).join(' · '));
+    const stale = Object.keys(OWED).filter(function (f) { return (owedSeen[f] || 0) !== OWED[f]; }).map(function (f) { return f + ' types the cog on ' + (owedSeen[f] || 0) + ' line(s), the owed list says ' + OWED[f]; });
+    if (stale.length) throw new Error('a line that was owed its drawn cog has changed and this test’s owed list has not: ' + stale.join(' · '));
+  });
+
+  test('1255 emoji · the marks that were typed characters are the app’s own drawings where they show: a card with no picture and an empty tab of Home wear a drawn mark and no character, every mark Home, the Tutorials tab, the caption list and the scene panel ask for by name is in the icon table, each caption grip is a drawn two-way arrow that keeps its name, Watch a demo run wears a drawn play mark beside its words, the scene panel’s spark stands the title’s own gap from its name, and the top bar’s play mark is a drawing (CONTROLS: each drawing has ink; a name that is not in the table draws nothing; the files that name the marks were read; the scene panel showed its no-key screen)', { item: '1255', budgetMs: 60000 }, async function () {
+    const fails = [], TYPED = /(?![#*0-9])\p{Emoji}|[\u25B7\u25C7\u25F1\u2756\u2726]/u;
+    const host = document.createElement('div');
+    host.style.cssText = 'position:fixed;left:0;top:0;width:340px;opacity:0;pointer-events:none;z-index:-1';
+    const inked = function (svg) {
+      const kids = svg ? svg.querySelectorAll('path,rect,circle') : [];
+      return [].some.call(kids, function (k) { const cs = getComputedStyle(k); return (cs.stroke !== 'none' && parseFloat(cs.strokeWidth) > 0) || (cs.fill !== 'none' && cs.fill !== 'rgba(0, 0, 0, 0)'); });
+    };
+    const drawn = function (box, what) {
+      if (!box) { fails.push(what + ' is not there'); return; }
+      const svg = box.querySelector('svg'), words = (box.textContent || '').trim().slice(0, 14);
+      if (!svg) fails.push(what + ' has no drawing (it reads “' + words + '”)');
+      else if (!inked(svg)) fails.push(what + ' has a drawing with no ink');
+      if (TYPED.test(box.textContent || '')) fails.push(what + ' still types a character (“' + words + '”)');
+    };
+    document.body.appendChild(host);
+    try {
+      if (!FM.ICON || !FM.drawnIcon || !FM.iconHTML) throw new Error('the app has no table of its own drawn icons (FM.ICON, FM.drawnIcon)');
+      if (FM.drawnIcon('no-such-mark-1255') !== null || FM.iconHTML('no-such-mark-1255') !== '') throw new Error('CONTROL: a name that is not in the icon table still draws something');
+      /* every mark asked for by name is in the table: a mistyped name would draw nothing, and nothing else would say so */
+      const src = async function (f) { const r = await fetch('/' + f + '?em1255b=' + Date.now(), { cache: 'no-store' }); const t = r.ok ? await r.text() : ''; if (t.length < 2000) throw new Error('CONTROL: ' + f + ' could not be read (' + t.length + ' characters)'); return t; };
+      const home = await src('js/home.js'), tut = await src('js/tutorials.js'), cap = await src('js/captions.js'), ai = await src('js/ai-panel.js');
+      const asked = [];
+      for (const m of home.matchAll(/emptyState\('([^']*)'/g)) asked.push(['a Home empty state', m[1]]);
+      for (const m of home.matchAll(/drawnMark\('[a-z]+', '[^']+', '([^']*)'\)/g)) asked.push(['a Home card with no picture', m[1]]);
+      for (const m of tut.matchAll(/\bempty\('([^']*)'/g)) asked.push(['a Tutorials empty state', m[1]]);
+      for (const m of (cap + ai).matchAll(/FM\.drawnIcon\('([^']*)'/g)) asked.push(['the caption list or the scene panel', m[1]]);
+      if (asked.length < 14) throw new Error('CONTROL: only ' + asked.length + ' marks asked for by name were read from the four files (want 14 or more), so the names were not checked');
+      asked.forEach(function (a) { if (!Object.prototype.hasOwnProperty.call(FM.ICON, a[1])) fails.push(a[0] + ' asks for “' + a[1] + '”, which is not one of the app’s drawings (' + Object.keys(FM.ICON).join(', ') + ')'); });
+      /* where they show */
+      const card = FM.home._draftCard({ id: 'em1255-no-such-project', name: 'Mark probe 1255', elementDraft: true, libNew: 'element', modified: Date.now() });
+      host.appendChild(card);
+      drawn(card.querySelector('.hm-thumb-empty'), 'a draft card with no picture');
+      if (!FM.home._emptyState) throw new Error('setup: Home has no seam to draw an empty state · ' + fails.join(' · '));
+      ['play', 'tutorial', 'template', 'element'].forEach(function (n) {
+        const es = FM.home._emptyState(n, 'Probe 1255', 'A line.');
+        host.appendChild(es);
+        drawn(es.querySelector('.hm-empty-mark'), 'the empty state’s ' + n + ' mark');
+      });
+      const mk = host.querySelector('.hm-empty-mark svg');
+      if (mk) { const r = mk.getBoundingClientRect(); if (r.width < 20 || r.width > 40 || Math.abs(r.width - r.height) > 0.5) fails.push('an empty state’s mark is ' + r.width.toFixed(1) + ' × ' + r.height.toFixed(1) + ' px, want about 30 px square'); }
+      const layer = { id: 'caption-mark-1255', type: 'text', start: 0, duration: 20, captions: [{ start: 0, end: 1, text: 'One' }, { start: 2, end: 3, text: 'Two' }] };
+      const list = document.createElement('div');
+      host.appendChild(list);
+      FM.captionsEditor.mount(list, layer);
+      const grip = list.querySelector('.cap-grip');
+      if (!grip) throw new Error('CONTROL: the caption list has no grip · ' + fails.join(' · '));
+      drawn(grip, 'the caption grip');
+      if (!(grip.getAttribute('aria-label') || '').trim() || !(grip.title || '').trim()) fails.push('the caption grip lost its name or its title');
+      if (list.querySelectorAll('.cap-grip svg').length !== 2) fails.push('not every caption row’s grip is drawn (' + list.querySelectorAll('.cap-grip svg').length + ' of 2)');
+      /* the scene panel's no-key screen, opened as '690 Aspect on auto …' opens it */
+      if (!FM.aiPanel || !FM.aiKey) throw new Error('setup: no scene panel to read · ' + fails.join(' · '));
+      const hadKey = FM.aiKey.has;
+      try {
+        FM.aiKey.has = function () { return false; };
+        FM.aiPanel.hide(); await sleep(60); FM.aiPanel.show(); await sleep(250);
+        const demo = [].slice.call(document.querySelectorAll('#ai-panel .ai-keyform .ai-link')).filter(function (b) { return /demo/i.test(b.textContent || ''); })[0];
+        if (!demo) throw new Error('CONTROL: the scene panel did not show Watch a demo run · ' + fails.join(' · '));
+        drawn(demo, 'Watch a demo run');
+        if ((demo.textContent || '').trim() !== 'Watch a demo run (no key, no spend)') fails.push('the demo link reads “' + (demo.textContent || '').trim() + '”');
+        /* the title's spark stands the title's own gap from Director, not that gap and a margin of its own */
+        const tw = document.querySelector('#ai-panel .ai-title'), spark = tw && tw.querySelector('.ai-spark-ic'), named = tw && tw.lastElementChild;
+        if (!spark || !named || named.contains(spark) || spark.getBoundingClientRect().width < 10) throw new Error('CONTROL: the scene panel’s title has no spark and name on screen to measure between · ' + fails.join(' · '));
+        const twant = parseFloat(getComputedStyle(tw).columnGap) || 0, tgap = named.getBoundingClientRect().left - spark.getBoundingClientRect().right;
+        if (!(twant > 0)) throw new Error('CONTROL: the scene panel’s title has no gap of its own · ' + fails.join(' · '));
+        if (Math.abs(tgap - twant) > 1.5) fails.push('the scene panel’s spark stands ' + tgap.toFixed(1) + ' px from ' + (named.textContent || '').trim() + ', want the title’s own ' + twant + ' px');
+      } finally { FM.aiKey.has = hadKey; try { FM.aiPanel.hide(); } catch (e) {} await sleep(60); }
+      /* the one in the page's own markup (the Generate button that carried a sparkle went with AI Scene in v18.51, #1243 F2) */
+      const brand = document.querySelector('#topbar .brand');
+      drawn(brand && brand.querySelector('.brand-name'), 'the top bar’s name');
+      if (brand && !/FreeMotion/.test(brand.textContent || '')) fails.push('the top bar no longer says FreeMotion');
+    } finally { host.remove(); }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  test('1255 emoji · a line that names the cog draws the app’s own cog and says Settings to a screen reader: in a toast and in the question box the cog is a drawing with the word Settings hidden beside it, the spoken copy of the toast says Settings, no stand-in character is left on screen, and a plain line is still one piece of plain text (CONTROLS: the toast and the question were shown; Stay closed the question)', { item: '1255', budgetMs: 45000 }, async function () {
+    const t = document.getElementById('toast'), sr = document.getElementById('toast-sr'), fails = [];
+    if (!t || !sr) throw new Error('CONTROL: no toast on the page');
+    if (!FM.IC || !FM.IC.cog || !FM.lineInto || !FM.lineWords) throw new Error('the app has no way to name the cog inside a line (FM.IC.cog, FM.lineInto, FM.lineWords)');
+    const PUA = /[\uE000-\uF8FF]/, ARROW = '\u2192';
+    const frames = function () { return new Promise(function (r) { requestAnimationFrame(function () { requestAnimationFrame(r); }); }); };
+    try {
+      FM.hideToast();
+      FM.toast('Change it in ' + FM.IC.cog + ' ' + ARROW + ' Canvas.', 0);
+      if (t.classList.contains('hidden')) throw new Error('CONTROL: the toast did not show');
+      const ic = t.querySelector('svg.fm-ic'), word = t.querySelector('.fm-sr-only');
+      if (!ic || !ic.querySelector('path')) fails.push('the toast shows no drawn cog');
+      if (PUA.test(t.textContent)) fails.push('the toast still holds the stand-in character');
+      if (t.textContent !== 'Change it in Settings ' + ARROW + ' Canvas.') fails.push('the toast reads “' + t.textContent + '”, want Change it in Settings ' + ARROW + ' Canvas. (the word Settings hidden beside the drawing)');
+      if (!word) fails.push('the cog has no name for a screen reader');
+      else { const r = word.getBoundingClientRect(); if (r.width > 2 || r.height > 2) fails.push('the word Settings beside the cog is on screen (' + Math.round(r.width) + ' × ' + Math.round(r.height) + ' px); it is for a screen reader only'); }
+      if (ic) { const r = ic.getBoundingClientRect(), fs = parseFloat(getComputedStyle(t).fontSize); if (r.width < fs * 0.9 || r.width > fs * 1.6 || Math.abs(r.width - r.height) > 0.5) fails.push('the cog in the line is ' + r.width.toFixed(1) + ' × ' + r.height.toFixed(1) + ' px beside ' + fs + ' px text'); }
+      await frames(); await sleep(80);
+      if (sr.textContent !== 'Change it in Settings ' + ARROW + ' Canvas.') fails.push('the spoken copy of the toast reads “' + sr.textContent + '”');
+      FM.hideToast();
+      FM.toast('Saved 1255', 0);
+      if (t.childNodes.length !== 1 || t.firstChild.nodeType !== 3 || t.textContent !== 'Saved 1255') throw new Error('CONTROL: a plain toast is no longer one piece of text (“' + t.textContent + '”, ' + t.childNodes.length + ' nodes) · ' + fails.join(' · '));
+      FM.hideToast();
+      /* the question box */
+      const answered = FM.ask({ title: 'Probe 1255', message: 'To keep it, use ' + FM.IC.cog + ' ' + ARROW + ' App settings.', ok: 'Leave anyway', cancel: 'Stay' });
+      await sleep(150);
+      const msg = document.getElementById('fm-ask-msg');
+      if (!msg || msg.classList.contains('hidden') || !msg.getBoundingClientRect().width) throw new Error('CONTROL: the question box did not show its message · ' + fails.join(' · '));
+      if (!msg.querySelector('svg.fm-ic path')) fails.push('the question box shows no drawn cog');
+      if (msg.textContent !== 'To keep it, use Settings ' + ARROW + ' App settings.' || PUA.test(msg.textContent)) fails.push('the question reads “' + msg.textContent + '”');
+      const stay = document.querySelector('#fm-ask .fm-ask-cancel');
+      if (stay) stay.click();
+      const got = await Promise.race([answered, sleep(1500).then(function () { return 'still open'; })]);
+      if (got === 'still open') throw new Error('CONTROL: Stay did not close the question · ' + fails.join(' · '));
+      if (FM.lineWords('a' + FM.IC.cog + 'b') !== 'aSettingsb' || FM.lineWords('plain') !== 'plain') fails.push('FM.lineWords does not put the word where the cog stands');
+    } finally {
+      try { FM.hideToast(); } catch (e) {}
+      const left = document.querySelector('#fm-ask:not(.hidden) .fm-ask-cancel');
+      if (left) left.click();
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* ═══ #1255, ONE DRAWING PER THING. His words on the Templates icon, 24 Nov: "I just want them to be consistent"; then, shown every
+     Template redesign again: "Yeah, I picked the recommended one. Just go with the recommended one." (option 1, Stacked cards). Today's app
+     drew Templates two ways (four squares on Home's tab, a dashed stamp on the Add menu's tab) and the first icon cut would have made it
+     three. Now the Stacked cards are in the app's one icon table and every Templates spot draws them; Home's Elements and Tutorials marks
+     are their own tabs' drawings, so an empty tab shows its tab's picture. CONTROL: the Projects tab's house is in no table entry, so the
+     comparison is seen to tell two drawings apart. */
+  test('1255 icons · one drawing per thing: the Templates icon is his Stacked cards on Home’s Templates tab, on the Add menu’s Template tab, on a template there with no picture, on the Add menu’s empty Template tab and on Home’s empty Templates tab alike, and Home’s Elements and Tutorials tabs carry the same drawings as their empty-tab marks, each read against the app’s one icon table (CONTROLS: the tabs and the Add menu’s tab were found; the Projects tab’s house matches no entry of the table; the stand-in template was listed with no picture, and the empty panel is the Template tab’s)', { item: '1255', budgetMs: 30000 }, async function () {
+    if (!FM.ICON || !FM.drawnIcon) throw new Error('the app has no table of its own drawn icons (FM.ICON, FM.drawnIcon)');
+    const inner = function (svg) { return svg ? svg.innerHTML.replace(/\s+/g, ' ').trim() : ''; };
+    const want = function (name) { const s = FM.drawnIcon(name); if (!s) throw new Error('CONTROL: the icon table has no ' + name); return inner(s); };
+    const tabIcon = function (tab) { return document.querySelector('#home-screen .hm-tab[data-tab="' + tab + '"] svg.hm-tab-ico'); };
+    const fails = [];
+    [['templates', 'template'], ['elements', 'element'], ['tutorials', 'tutorial']].forEach(function (p) {
+      const svg = tabIcon(p[0]);
+      if (!svg) throw new Error('CONTROL: Home has no ' + p[0] + ' tab icon');
+      if (inner(svg) !== want(p[1])) fails.push('Home’s ' + p[0] + ' tab draws a different picture from the app’s ' + p[1] + ' mark (“' + inner(svg).slice(0, 44) + '…”)');
+    });
+    const house = tabIcon('projects');
+    if (!house) throw new Error('CONTROL: Home has no Projects tab icon');
+    if (Object.keys(FM.ICON).some(function (n) { return inner(house) === want(n); })) throw new Error('CONTROL: the Projects tab’s house reads as equal to an entry of the icon table, so this comparison cannot tell two drawings apart');
+    const tpl = (FM.addMenu && FM.addMenu._tabs ? FM.addMenu._tabs() : []).filter(function (t) { return t.key === 'template'; })[0];
+    if (!tpl || !tpl.icon) throw new Error('CONTROL: the Add menu has no Template tab icon to read · ' + fails.join(' · '));
+    const box = document.createElement('div');
+    box.innerHTML = tpl.icon;
+    const am = box.querySelector('svg');
+    if (!am) fails.push('the Add menu’s Template tab icon is not a drawing');
+    else {
+      if (inner(am) !== want('template')) fails.push('the Add menu’s Template tab draws a different picture from Home’s (“' + inner(am).slice(0, 44) + '…”)');
+      if (am.querySelector('[stroke-dasharray], linearGradient') || am.getAttribute('stroke') !== 'currentColor') fails.push('the Add menu’s Template tab is not one colour: it still carries the old stamp’s dashes or gradients');
+    }
+    if (!FM.home || !FM.home._emptyState) throw new Error('setup: Home has no seam to draw an empty state · ' + fails.join(' · '));
+    const es = FM.home._emptyState('template', 'Probe 1255');
+    if (inner(es.querySelector('.hm-empty-mark svg')) !== want('template')) fails.push('Home’s empty Templates tab does not draw the Stacked cards');
+    /* INSIDE the Add menu's Template tab: a template with no picture wears the tab's drawing (it wore the old frame with a crossbar), and
+       with no templates the empty panel's mark is that drawing too (it was a typed mark). The template list is stood in for, then put back. */
+    if (!FM.templates || typeof FM.templates.list !== 'function') throw new Error('setup: there is no template list to stand in for · ' + fails.join(' · '));
+    const realList = FM.templates.list;
+    try {
+      FM.templates.list = function () { return [{ id: 'tpl-1255-probe', name: 'No picture 1255', thumb: null }]; };
+      const opt = (tpl.options() || [])[0];
+      if (!opt || opt.label !== 'No picture 1255') throw new Error('CONTROL: the Template tab did not list the stand-in template · ' + fails.join(' · '));
+      if (opt.thumb) throw new Error('CONTROL: the stand-in template has a picture, so its drawing is never seen · ' + fails.join(' · '));
+      const ob = document.createElement('div');
+      ob.innerHTML = opt.icon || '';
+      const os = ob.querySelector('svg');
+      if (!os) fails.push('a template with no picture has no drawing on the Add menu’s Template tab');
+      else if (inner(os) !== want('template')) fails.push('a template with no picture draws a different picture on the Add menu’s Template tab from the tab’s own (“' + inner(os).slice(0, 44) + '…”)');
+      FM.templates.list = function () { return []; };
+      const none = tpl.options() || [], spec = none.length === 1 ? none[0].emptyPanel : null;
+      if (!spec) throw new Error('CONTROL: with no templates the Template tab is not its one empty panel (' + none.length + ' options) · ' + fails.join(' · '));
+      if (!FM.addMenu._emptyPanel) fails.push('the Add menu’s empty Template tab cannot be drawn to be read (no FM.addMenu._emptyPanel), so its mark is not the tab’s drawing as far as anything can tell');
+      else {
+        const ep = FM.addMenu._emptyPanel(spec), mark = ep.querySelector('.am-empty-mark');
+        if (!/No templates yet/.test(ep.textContent || '')) throw new Error('CONTROL: the empty panel drawn is not the Template tab’s (it reads “' + (ep.textContent || '').slice(0, 40) + '”) · ' + fails.join(' · '));
+        if (!mark) fails.push('the Add menu’s empty Template tab has no mark');
+        else {
+          if (inner(mark.querySelector('svg')) !== want('template')) fails.push('the Add menu’s empty Template tab does not draw the Stacked cards');
+          if ((mark.textContent || '').trim()) fails.push('the Add menu’s empty Template tab still types its mark (“' + mark.textContent.trim() + '”)');
+        }
+      }
+    } finally { FM.templates.list = realList; }
+    if (want('template').indexOf('M7.5 7.5V5a2 2 0 0 1 2-2H19') < 0) fails.push('the table’s template drawing is not the Stacked cards he picked (it starts “' + want('template').slice(0, 44) + '…”)');
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* ═══ #1255, his note of 23 Nov 20:53, clauses 6 and 7, THE FULL EDITOR'S SECOND CUT: THE SWIPE PADS AND THE TOOL BARS ═════════════════
+     His words: "There shouldn't be any explanations like that. We have tutorials for a reason… not, you know, constantly there." Every pad
+     you swipe on carried a sentence ("Swipe here to move layer · snaps to centre, edges & earlier keyframes"); it wears a drawn four-way
+     mark now (FM.PAD_MARK, one string for every pad) and the sentence is its name for a screen reader. The Move pad still NAMES a snap
+     while one holds: that says what just happened, it is not a how-to. CONTROLS: the pad really moves the layer; each panel is open. */
+  test('1255 hints · the swipe pads of Move & Transform wear a drawn four-way mark and no sentence: the Move, Anchor and point pads show the mark and are named for a screen reader, the Z pad keeps its two arrows, the Move pad still names a snap while one holds and wears the mark again after it, and the point editor shows no how-to paragraph (CONTROL: a swipe on the Move pad moves the layer)', { item: '1255', budgetMs: 60000 }, async function () {
+    const _isoK = isoKeep(); try {
+    const S = FM.scene, P = S.project, keep = S.layers.slice(), keepSel = S.selectedId, keepT = FM.time, mode0 = FM._mtMode, axis0 = FM._mtAxis, size0 = { w: P.width, h: P.height }, fails = [];
+    const snap0 = FM.timeline && FM.timeline.isSnapping, wasPE = !!(FM.pointEdit && FM.pointEdit.isActive && FM.pointEdit.isActive());
+    const SENTENCE = /swipe|snaps to/i;
+    const shown = n => !!(n && n.getClientRects().length);
+    const padOf = () => [].slice.call(document.querySelectorAll('.mt-trackpad')).filter(shown)[0] || null;
+    const readPad = (what, nameRe) => {
+      const pad = padOf();
+      if (!pad) { fails.push(what + ': no pad on screen'); return null; }
+      const mark = pad.querySelector('.pad-mark'), name = pad.getAttribute('aria-label') || '';
+      if (!mark || !mark.querySelector('path') || !shown(mark)) fails.push(what + ' wears no drawn mark');
+      if (SENTENCE.test(pad.textContent || '')) fails.push(what + ' still carries a sentence (“' + (pad.textContent || '').trim() + '”)');
+      if (!nameRe.test(name)) fails.push(what + ' is named “' + name + '” for a screen reader');
+      return pad;
+    };
+    try {
+      P.width = 1080; P.height = 1920;
+      if (FM.timeline) FM.timeline.isSnapping = function () { return true; };
+      const L = FM.makeLayer('shape', { shape: 'rect', name: 'Pads 1255', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#c04070' });
+      L.start = 0; L.duration = 5;
+      S.layers = [L]; FM.selectLayer(L.id); FM.time = 0;
+      /* MOVE: at rest, then a nudge that stays on the frame's centre (a snap), then a swipe off it */
+      FM._mtMode = 'move'; FM._mtAxis = 'xy'; FM.inspector.openCategory('transform'); FM.inspector.refresh(); await sleep(120);
+      const pad = readPad('the Move pad', /move the layer/i);
+      if (pad) {
+        const r = pad.getBoundingClientRect(), x0 = r.left + r.width / 2, y0 = r.top + r.height / 2;
+        const ev = (type, dx, dy, buttons) => attached(padOf(), 'the Move pad').dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, pointerType: 'mouse', clientX: x0 + dx, clientY: y0 + dy, buttons: buttons == null ? 1 : buttons }));
+        ev('pointerdown', 0, 0);
+        let named = '';
+        for (const d of [1, 2, 3]) { ev('pointermove', d, 0); const ln = padOf() && padOf().querySelector('.mt-trackpad-hint'); named = (ln && ln.textContent) || ''; if (/^Snapped to /.test(named)) break; }
+        if (!/^Snapped to /.test(named)) fails.push('a layer on the frame’s centre, nudged up to 3 px on the pad: the pad names no snap (it says “' + named + '”); it should still say what it caught');
+        else if (shown(padOf().querySelector('.pad-mark'))) fails.push('while the Move pad names a snap (“' + named + '”) its mark is still drawn, over the words');
+        ev('pointermove', 80, 80); ev('pointerup', 80, 80, 0);
+        await sleep(80);
+        const x1 = FM.evalProp(L.transform.x, 0), y1 = FM.evalProp(L.transform.y, 0);
+        if (!(Math.abs(x1 - 540) > 40 && Math.abs(y1 - 960) > 40)) throw new Error('CONTROL: an 80 px swipe down and right on the Move pad left the layer at ' + x1 + ', ' + y1 + ', so the pad that was read is not the working one · ' + fails.join(' · '));
+        const after = padOf(), ln2 = after && after.querySelector('.mt-trackpad-hint'), said = ((ln2 && ln2.textContent) || '').trim();
+        if (said) fails.push('after the swipe let go, off every snap, the Move pad still says “' + said + '”');
+        else if (!shown(after && after.querySelector('.pad-mark'))) fails.push('after the snap let go the Move pad does not wear its mark again');
+      }
+      /* Z: two arrows, no words */
+      FM._mtAxis = 'z'; FM.inspector.refresh(); await sleep(100);
+      const z = document.querySelector('.mt-zpad');
+      if (!shown(z)) fails.push('the Z pad did not open');
+      else {
+        if (z.querySelectorAll('.mt-zpad-arrow').length !== 2) fails.push('the Z pad lost its two arrows, the only sign it has now');
+        if (z.querySelector('.mt-trackpad-hint') || SENTENCE.test(z.textContent || '')) fails.push('the Z pad still carries a sentence (“' + (z.textContent || '').trim() + '”)');
+        if (!/Z position/i.test(z.getAttribute('aria-label') || '')) fails.push('the Z pad is named “' + (z.getAttribute('aria-label') || '') + '” for a screen reader');
+      }
+      /* ANCHOR */
+      FM._mtAxis = 'xy'; FM._mtMode = 'anchor'; FM.inspector.refresh(); await sleep(100);
+      readPad('the Anchor pad', /anchor.*quarter/i);
+      /* THE POINT PAD, in Customise Points, and the paragraph that stood under it */
+      FM._mtMode = 'move';
+      const T = FM.makeLayer('shape', { shape: 'triangle', name: 'Points 1255', x: 540, y: 900, shapeW: 400, shapeH: 400, fill: '#22c55e' });
+      T.start = 0; T.duration = 5;
+      S.layers = [T]; FM.selectLayer(T.id); await sleep(100);
+      FM.inspector.openCategory('element'); await sleep(350);
+      if (!FM.pointEdit || !FM.pointEdit.isActive()) throw new Error('CONTROL: Customise Points did not open the point editor on the triangle, so its pad was not read · ' + fails.join(' · '));
+      readPad('the point pad', /move the point/i);
+      const how = [].slice.call(document.querySelectorAll('.insp-hint')).filter(shown).map(n => (n.textContent || '').trim()).filter(t => /tap a point|double-tap|hollow ring/i.test(t));
+      if (how.length) fails.push('the point editor still shows its how-to paragraph (“' + how[0].slice(0, 60) + '…”)');
+    } finally {
+      try { if (FM.pointEdit && FM.pointEdit.isActive() && !wasPE) FM.pointEdit.stop(); } catch (e) {}
+      if (FM.timeline) FM.timeline.isSnapping = snap0;
+      P.width = size0.w; P.height = size0.h;
+      FM._mtMode = mode0; FM._mtAxis = axis0;
+      S.layers = keep; S.selectedId = keepSel; FM.time = keepT;
+      try { FM.refreshAll(); FM.inspector.openCategory('home'); } catch (e) {}
+    }
+    if (fails.length) throw new Error(fails.join(' · ') + ' — his words: “There shouldn’t be any explanations like that… not, you know, constantly there”');
+    } finally { _isoK.put(); }
+  });
+
+  /* The tool bars: each said how to use its tool all the while it was open. The pen bar keeps the count of points (information, as the
+     count of strokes is: queue 535), the tracker's bar says what IS (a point set, or not yet), the mask bar and Insert your Media
+     hold their controls only. CONTROLS: every bar is really open with its own buttons, and the pen bar's count really counts. */
+  test('1255 hints · the tool bars of the Full editor hold their buttons and no how-to: the pen bar’s pad wears the mark and its line only counts the points, the mask bar has no gesture line with the mask open or closed and its nudge pad wears the mark, the tracker’s bar says only whether a point is set, and Insert your Media opens with no line above its slots (CONTROLS: each bar is open with its own buttons, and the count counts)', { item: '1255', budgetMs: 90000 }, async function () {
+    const _isoK = isoKeep(); try {
+    const S = FM.scene, P = S.project, keep = S.layers.slice(), keepSel = S.selectedId, keepT = FM.time, dur0 = P.duration, size0 = { w: P.width, h: P.height }, fails = [], mediaSet = [];
+    const HOWTO = /tap the canvas|use the pad|land on the first point|tap to add|tap the first point|drag points|double-tap|tap an edge|swipe|tap the head|any feature|tap again|track to follow|tap a slot/i;
+    const shown = n => !!(n && n.getClientRects().length);
+    /* what a bar says outside its buttons and its pad */
+    const says = bar => [].filter.call(bar.childNodes, n => n.nodeType === 3 || (n.nodeType === 1 && n.tagName !== 'BUTTON' && n.tagName !== 'LABEL' && !/\b(db-pad|mk-pad)\b/.test(n.className || ''))).map(n => (n.textContent || '').trim()).filter(Boolean);
+    const wasDraw = !!(FM.drawTool && FM.drawTool.active), wasMask = !!(FM.maskTool && FM.maskTool.isActive()), wasPick = !!(FM.tracker && FM.tracker.isPicking()), wasFill = !!(FM.templateFill && FM.templateFill.isOpen());
+    try {
+      P.width = 1080; P.height = 1920;
+      /* THE PEN BAR (a shape drawn point by point) */
+      S.layers = []; FM.selectLayer(null); FM.time = 0;
+      FM.startDraw('vector'); await sleep(240);
+      const db = document.getElementById('draw-bar'), add = db && db.querySelector('.db-add');
+      if (!FM.drawTool.active || !db || !shown(add) || !shown(db.querySelector('.db-done'))) throw new Error('CONTROL: the pen tool did not open its bar with + Add point and Done');
+      const dpad = db.querySelector('.db-pad'), dline = db.querySelector('.db-hint');
+      if (!dpad || !dline) throw new Error('CONTROL: the pen bar has no pad or no line element (.db-pad, .db-hint)');
+      if (!dpad.querySelector('.pad-mark path')) fails.push('the pen bar’s pad wears no drawn mark');
+      if (dpad.querySelector('.db-pad-hint') || HOWTO.test(dpad.textContent || '')) fails.push('the pen bar’s pad still carries a sentence (“' + (dpad.textContent || '').trim() + '”)');
+      if (!/move the point/i.test(dpad.getAttribute('aria-label') || '')) fails.push('the pen bar’s pad is named “' + (dpad.getAttribute('aria-label') || '') + '” for a screen reader');
+      if ((dline.textContent || '').trim()) fails.push('with no point yet the pen bar says “' + dline.textContent + '”, want nothing');
+      const send = (t, x, y, b) => attached(dpad, 'the pen bar’s pad').dispatchEvent(new PointerEvent(t, { bubbles: true, cancelable: true, clientX: x, clientY: y, pointerId: 1, pointerType: 'touch', isPrimary: true, buttons: b }));
+      send('pointerdown', 100, 100, 1); send('pointerup', 100, 100, 0); add.click(); await sleep(40);
+      const one = (dline.textContent || '').trim();
+      send('pointerdown', 100, 100, 1); send('pointermove', 180, 140, 1); send('pointerup', 180, 140, 0); add.click(); await sleep(40);
+      const two = (dline.textContent || '').trim();
+      if (FM.drawTool.points.length !== 2) throw new Error('CONTROL: two presses of + Add point left ' + FM.drawTool.points.length + ' points, so the count that was read is not of this shape · ' + fails.join(' · '));
+      if (one !== '1 point' || two !== '2 points') fails.push('the pen bar’s line read “' + one + '” after one point and “' + two + '” after two, want 1 point and 2 points and nothing else');
+      if (FM.drawTool._stop) FM.drawTool._stop(); await sleep(120);
+      /* THE MASK BAR: closed, a point selected, and an open path */
+      const M = FM.makeLayer('shape', { shape: 'rect', name: 'Mask 1255', x: 540, y: 960, shapeW: 200, shapeH: 200, fill: '#c04070' });
+      M.start = 0; M.duration = 5;
+      M.masks = [{ id: 'mk1255', enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: true, path: [[100, 100], [300, 100], [300, 300], [100, 300]] },
+                 { id: 'mk1255o', enabled: true, mode: 'add', feather: 0, opacity: 1, invert: false, closed: false, path: [[100, 100], [300, 100]] }];
+      S.layers = [M]; FM.selectLayer(M.id); FM.refreshAll(); await sleep(160);
+      FM.maskTool.open(M.id, 'mk1255'); await sleep(260);
+      let mb = document.getElementById('mask-bar');
+      if (!FM.maskTool.isActive() || !mb || !shown(mb.querySelector('.mk-done'))) throw new Error('CONTROL: the mask tool did not open its bar with Done · ' + fails.join(' · '));
+      if (says(mb).length) fails.push('with a closed mask the mask bar says “' + says(mb).join(' ') + '” beside its buttons');
+      FM.maskTool._select(1); await sleep(160);
+      mb = document.getElementById('mask-bar');
+      const mpad = mb && mb.querySelector('.mk-pad');
+      if (!mpad || !shown(mb.querySelector('.mk-del'))) throw new Error('CONTROL: selecting a mask point did not offer the pad and Delete · ' + fails.join(' · '));
+      if (says(mb).length) fails.push('with a mask point selected the mask bar says “' + says(mb).join(' ') + '” beside its buttons');
+      if (!mpad.querySelector('.pad-mark path')) fails.push('the mask bar’s nudge pad wears no drawn mark');
+      if (HOWTO.test(mpad.textContent || '')) fails.push('the mask bar’s nudge pad still carries words (“' + (mpad.textContent || '').trim() + '”)');
+      if (!/selected point/i.test(mpad.getAttribute('aria-label') || '')) fails.push('the mask bar’s nudge pad is named “' + (mpad.getAttribute('aria-label') || '') + '” for a screen reader');
+      FM.maskTool.open(M.id, 'mk1255o'); await sleep(260);
+      mb = document.getElementById('mask-bar');
+      if (!mb || !mb.querySelector('.mk-close')) throw new Error('CONTROL: an open mask path did not show Close path on the bar · ' + fails.join(' · '));
+      if (says(mb).length) fails.push('with an open mask path the mask bar says “' + says(mb).join(' ') + '” beside its buttons');
+      FM.maskTool.stop(); await sleep(120);
+      /* THE TRACKER'S BAR: before a point is set, and after */
+      const V = FM.makeLayer('video', { name: 'Track 1255', x: 540, y: 960, start: 0, duration: 3 });
+      V.muted = true;
+      S.layers = [V]; FM.media.set(V.id, { el: offscreen(64, 48), width: 64, height: 48 }); mediaSet.push(V.id);
+      FM.selectLayer(V.id); FM.refreshAll(); await sleep(120);
+      FM.tracker.pick(V); await sleep(80);
+      let tb = document.getElementById('trk-bar');
+      const ov = document.getElementById('trk-overlay');
+      if (!FM.tracker.isPicking() || !tb || !ov || !tb.querySelector('button')) throw new Error('CONTROL: the tracker did not open its bar with Cancel · ' + fails.join(' · '));
+      const before = says(tb).join(' ');
+      if (HOWTO.test(before) || before !== 'No point yet') fails.push('before a point is set the tracker’s bar says “' + before + '”, want No point yet (what is, not how)');
+      ov.dispatchEvent(new PointerEvent('pointerdown', { bubbles: false, cancelable: true, pointerId: 41, pointerType: 'touch', isPrimary: true, clientX: 10, clientY: 10, buttons: 1 }));
+      await sleep(60);
+      tb = document.getElementById('trk-bar');
+      if (!tb || !tb.querySelector('.btn-accent')) throw new Error('CONTROL: a tap on the tracker’s overlay set no point (no Track button) · ' + fails.join(' · '));
+      const afterTap = says(tb).join(' ');
+      if (HOWTO.test(afterTap) || afterTap !== 'Point set') fails.push('with a point set the tracker’s bar says “' + afterTap + '”, want Point set');
+      FM.tracker.cancel(); await sleep(60);
+      /* INSERT YOUR MEDIA */
+      const I = FM.makeLayer('image', { name: 'Slot 1255', x: 540, y: 960 }); I.start = 0; I.duration = 3;
+      S.layers = [I]; P.duration = 3; FM.refreshAll(); await sleep(60);
+      if (!FM.templateFill.open()) throw new Error('CONTROL: Insert your Media refused a project with a replaceable picture · ' + fails.join(' · '));
+      await sleep(160);
+      const tf = document.getElementById('tpl-fill');
+      if (!tf || !tf.querySelector('.tfill-slot')) throw new Error('CONTROL: Insert your Media is open with no slot · ' + fails.join(' · '));
+      const lead = tf.querySelector('.tfill-lead');
+      if ((lead && shown(lead)) || /tap a slot/i.test(tf.textContent || '')) fails.push('Insert your Media still opens with a line above its slots (“' + ((lead && lead.textContent) || 'Tap a slot…') + '”)');
+      const rail = tf.querySelector('.tfill-slots'), scrub = tf.querySelector('.tfill-scrub');
+      if (rail && scrub) { const gap = tf.querySelector('.tfill-slot').getBoundingClientRect().top - scrub.getBoundingClientRect().bottom; if (!(gap >= 8)) fails.push('with the line gone the first slot sits ' + gap.toFixed(1) + ' px under the scrub bar, want 8 or more'); }
+      FM.templateFill.close(); await sleep(80);
+    } finally {
+      try { if (FM.drawTool && FM.drawTool.active && !wasDraw && FM.drawTool._stop) FM.drawTool._stop(); } catch (e) {}
+      try { if (FM.maskTool.isActive() && !wasMask) FM.maskTool.stop(); } catch (e) {}
+      try { if (FM.tracker.isPicking() && !wasPick) FM.tracker.cancel(); } catch (e) {}
+      try { if (FM.templateFill.isOpen() && !wasFill) FM.templateFill.close(); } catch (e) {}
+      mediaSet.forEach(id => { try { FM.media.remove(id); } catch (e) {} });
+      P.width = size0.w; P.height = size0.h; P.duration = dur0;
+      S.layers = keep; S.selectedId = keepSel; FM.time = keepT;
+      try { FM.refreshAll(); } catch (e) {}
+    }
+    if (fails.length) throw new Error(fails.join(' · ') + ' — his words: “There shouldn’t be any explanations like that… not, you know, constantly there”');
+    } finally { _isoK.put(); }
+  });
+
   /* #1243 G9 — his words: "you have the friends button with like a plus. In the top left in there, get rid of that. We do not
      need that. All right, and make sure it's gone in everything, like not a single trace of it found." */
   test('1243 G9 · no friends person+ anywhere — at 380 and 1280, in Full and in Simple, the feature off and on, and in a live session with nobody in, there is no #btn-share, no person+ look and no person+ drawing in the page (CONTROLS: with a friend in the faces chip shows, and the people door still opens Friends)', { item: '1243', budgetMs: 120000 }, async function () {
@@ -210401,6 +211493,372 @@
       if (wasOpen && !FM.home.isOpen()) { FM.home.open(); await sleep(300); }
       if (!wasOpen && FM.home.isOpen()) FM.home.close();
     }
+  });
+
+  /* ═══ #1255, THE FULL EDITOR'S THIRD HINTS CUT: THE 3D CAMERA'S PARAGRAPHS ARE BEHIND ONE "?" ═══════════════════════════════════════════
+     His words, 23 Nov 20:53: "There shouldn't be any explanations like that. We have tutorials for a reason"; asked about the camera's
+     paragraphs, 24 Nov: "question marks for the camera are fine for now", and of such a mark: "a question mark that takes you to the
+     tutorial page that explains it all there." Six paragraphs stood under the camera's controls (one on Camera View, two on Focus Blur,
+     two on Fog, one on Motion Blur). The panel now holds its controls and one small "?" beside the tab's name; a press shows the
+     camera's own lesson (tutorials/15-camera.md, which says what the paragraphs said) in the panel, with a way back.
+     What stays, and is checked: queue 595's line that these controls can do nothing on a flat scene. It reports this scene. */
+  test('1255 hints · the camera’s panel holds its controls and no paragraph on any of its four tabs, on or off, with one small ? beside the tab’s name: a press shows the camera’s own lesson in the panel with a way back, the lesson says what the paragraphs said, and back gives the tab he was on; the line that these controls can do nothing on a flat scene still shows (CONTROLS: the panel is the camera’s, with its four tabs and the Focus tab’s four controls; the lesson’s steps were drawn)', { item: '1255', budgetMs: 60000 }, async function () {
+    const _isoK = isoKeep(); try {
+    const S = FM.scene, layers0 = S.layers.slice(), sel0 = S.selectedId, dur0 = S.project.duration, tab0 = FM._camTab, fails = [];
+    const insp = () => document.getElementById('inspector');
+    const paras = () => Array.from(insp().querySelectorAll('.insp-hint:not(.insp-hint-warn)')).map(n => n.textContent.trim()).filter(Boolean);
+    const open = async tab => { FM._camHelp = false; FM._camTab = tab; FM.inspector.openCategory('cameraopts'); await sleep(450); };
+    try {
+      S.layers.length = 0;
+      FM.addShapeLayer('rect');
+      S.layers.forEach(l => { l.start = 0; l.duration = 5; });
+      S.project.duration = 5;
+      if (!FM.addCameraLayer) throw new Error('setup: there is no camera layer to add');
+      FM.addCameraLayer(); await sleep(320);
+      const cam = S.layers.filter(l => l.type === 'camera')[0];
+      if (!cam) throw new Error('setup: the camera layer was not created');
+      cam.start = 0; cam.duration = 5;
+      cam.focus = { enabled: true, distance: 0, dof: 200, blur: 0.5 }; cam.fog = { enabled: true, color: '#ffffff', near: 0, far: 2000 }; cam.motionBlur = { enabled: true, shutter: 0.5, samples: 8 };
+      FM.selectLayer(cam.id); FM.refreshAll(); await sleep(320);
+      await open('focus');
+      const fw = insp() ? insp().textContent : '';
+      if (!insp() || insp().querySelectorAll('.cam-tab').length !== 4 || ['Focus blur', 'Focus distance', 'Depth of field', 'Blur strength'].some(w => fw.indexOf(w) < 0)) throw new Error('CONTROL: the open panel is not the camera’s Focus tab with its four tabs and four controls (“' + fw.trim().slice(0, 80) + '”)');
+      for (const tab of ['view', 'focus', 'fog', 'blur']) {
+        await open(tab);
+        if (paras().length) fails.push('the ' + tab + ' tab still shows a paragraph: “' + paras()[0].slice(0, 50) + '…”');
+        if (insp().querySelectorAll('.cam-help').length !== 1) fails.push('the ' + tab + ' tab has ' + insp().querySelectorAll('.cam-help').length + ' ? buttons beside its name, want one');
+        if (!insp().querySelector('input')) fails.push('the ' + tab + ' tab has no control left');
+      }
+      cam.focus.enabled = false; cam.fog.enabled = false; cam.motionBlur.enabled = false;
+      for (const tab of ['focus', 'fog', 'blur']) {
+        await open(tab);
+        if (paras().length) fails.push('switched off, the ' + tab + ' tab still shows a line: “' + paras()[0].slice(0, 50) + '…”');
+        if (!insp().querySelector('input[type="checkbox"]')) fails.push('switched off, the ' + tab + ' tab lost its switch');
+      }
+      await open('view');
+      if (!insp().querySelector('.insp-hint-warn')) fails.push('on a flat scene the View tab no longer says Field of view and Distance can do nothing: that line reports this scene (queue 595), it is not a how-to');
+      /* the ? and its page */
+      await open('fog');
+      const q = insp().querySelector('.cam-help');
+      if (!q) throw new Error('the camera’s panel has no ? beside the tab’s name · ' + fails.join(' · '));
+      if (!(q.getAttribute('aria-label') || '').trim()) fails.push('the ? has no name for a screen reader');
+      const head = q.parentElement, hr = head.getBoundingClientRect(), qr = q.getBoundingClientRect();
+      if (qr.width < 28 || qr.height < 28 || qr.right > hr.right + 1 || qr.left < hr.left) fails.push('the ? is ' + Math.round(qr.width) + ' × ' + Math.round(qr.height) + ' px and not inside its row');
+      q.click(); await sleep(250);
+      if (!insp().querySelector('.cs-backbtn')) throw new Error('a press on ? showed no page with a way back · ' + fails.join(' · '));
+      if (insp().querySelector('.cam-tab')) fails.push('the ? page still shows the camera’s tabs');
+      for (let i = 0; i < 80 && !insp().querySelector('.tut-steps li'); i++) await sleep(50);
+      if (!insp().querySelector('.tut-steps li')) throw new Error('CONTROL: the camera’s lesson did not draw its steps on the ? page (“' + (insp().textContent || '').trim().slice(0, 70) + '”) · ' + fails.join(' · '));
+      const page = insp().textContent;
+      ['Field of view', 'Depth of field', 'Fog', 'Shutter', 'Samples'].forEach(w => { if (page.indexOf(w) < 0) fails.push('the lesson behind ? does not explain ' + w + ', which the panel’s own paragraph did'); });
+      insp().querySelector('.cs-backbtn').click(); await sleep(350);
+      if (insp().querySelector('.cs-backbtn') || !insp().querySelector('.cam-tab.on') || FM._camTab !== 'fog') fails.push('back did not give the Fog tab again');
+    } finally {
+      FM._camHelp = false; FM._camTab = tab0;
+      S.layers.length = 0; layers0.forEach(l => S.layers.push(l)); S.selectedId = sel0; S.project.duration = dur0;
+      try { FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild(); } catch (e) {}
+      await sleep(60);
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+    } finally { _isoK.put(); }
+  });
+
+  /* #1255, from the v18.53 review. cam-help-sticks: FM._camHelp was cleared only by the page's own ‹, so after the card's back, a tap on
+     another layer or the inspector's back, Camera Options on the same camera opened on the lesson again instead of its controls.
+     MERGE-2: the page fetched lesson 15 and, offline after an update (sw.js keeps only this version's lessons), said only that it could
+     not load. It now opens at once on a short paragraph of its own for the tab he came from, which the lesson replaces when it loads. */
+  test('1255 hints · the camera’s ? page ends with any way out of its card: after the card’s own back, a tap on another layer and the camera again, or the inspector’s back, Camera Options opens on its controls and not the lesson; and the page is never empty: with the lesson unreachable it shows a short paragraph for the Fog tab he came from and no Couldn’t load (CONTROLS: the ? showed the page each time; with the lesson reachable its steps replace the paragraph)', { item: '1255', budgetMs: 60000 }, async function () {
+    const _isoK = isoKeep(); try {
+    const S = FM.scene, layers0 = S.layers.slice(), sel0 = S.selectedId, dur0 = S.project.duration, tab0 = FM._camTab, T = FM.tutorials, load0 = T && T.load, fails = [];
+    const insp = () => document.getElementById('inspector');
+    const onPage = () => !!insp().querySelector('.cam-helpbody');
+    const onControls = () => !onPage() && !!insp().querySelector('.cam-tab');
+    const openCam = async () => { FM.inspector.openCategory('cameraopts'); await sleep(300); };
+    const toControls = async () => { const b = insp().querySelector('.cam-helprow .cs-backbtn'); if (b) { b.click(); await sleep(250); } };
+    const pressQ = async what => {
+      const q = insp().querySelector('.cam-help');
+      if (!q) throw new Error('CONTROL (' + what + '): Camera Options shows no ? · ' + fails.join(' · '));
+      q.click(); await sleep(250);
+      if (!onPage()) throw new Error('CONTROL (' + what + '): a press on ? did not show the page · ' + fails.join(' · '));
+    };
+    try {
+      if (!T || !load0) throw new Error('setup: FM.tutorials.load is missing');
+      if (!FM.addCameraLayer) throw new Error('setup: there is no camera layer to add');
+      S.layers.length = 0;
+      FM.addShapeLayer('rect');
+      S.layers.forEach(l => { l.start = 0; l.duration = 5; });
+      S.project.duration = 5;
+      FM.addCameraLayer(); await sleep(320);
+      const cam = S.layers.filter(l => l.type === 'camera')[0], other = S.layers.filter(l => l.type !== 'camera')[0];
+      if (!cam || !other) throw new Error('setup: the camera or the shape was not created');
+      cam.start = 0; cam.duration = 5;
+      FM._camHelp = false; FM._camTab = 'view';
+      FM.selectLayer(cam.id); FM.refreshAll(); await sleep(320);
+      /* 1: the card's own back */
+      await openCam(); await pressQ('the card’s back');
+      const cb = insp().querySelector('.cat-back');
+      if (!cb) throw new Error('CONTROL: the camera’s card has no back of its own');
+      cb.click(); await sleep(250);
+      await openCam();
+      if (!onControls()) fails.push('after the card’s own back, Camera Options opened on the lesson again, not its controls');
+      await toControls();
+      /* 2: another layer, then the camera again */
+      await pressQ('another layer');
+      FM.selectLayer(other.id); FM.refreshAll(); await sleep(250);
+      FM.selectLayer(cam.id); FM.refreshAll(); await sleep(250);
+      await openCam();
+      if (!onControls()) fails.push('after a tap on another layer and the camera again, Camera Options opened on the lesson, not its controls');
+      await toControls();
+      /* 3: the inspector's back */
+      await pressQ('the inspector’s back');
+      FM.inspector.back(); await sleep(250);
+      await openCam();
+      if (!onControls()) fails.push('after the inspector’s back, Camera Options opened on the lesson, not its controls');
+      await toControls();
+      /* the page is never empty: the lesson cannot be fetched */
+      FM._camTab = 'fog'; FM.inspector.refresh(); await sleep(250);
+      T.load = () => Promise.reject(new Error('offline, for the test'));
+      await pressQ('offline');
+      await sleep(250);
+      const off = (insp().querySelector('.cam-helpbody') || {}).textContent || '';
+      if (/Couldn.t load|Loading/.test(off)) fails.push('with the lesson unreachable the ? page says “' + off.trim().slice(0, 60) + '” and nothing about the camera');
+      if (off.indexOf('Fog') < 0 || off.indexOf('Near distance') < 0) fails.push('with the lesson unreachable the ? page does not say what Fog does (“' + off.trim().slice(0, 60) + '”)');
+      T.load = load0;
+      await toControls();
+      /* CONTROL: reachable, the lesson's steps replace the paragraph */
+      await pressQ('online');
+      for (let i = 0; i < 80 && !insp().querySelector('.cam-helpbody .tut-steps li'); i++) await sleep(50);
+      if (!insp().querySelector('.cam-helpbody .tut-steps li')) throw new Error('CONTROL: with the lesson reachable the ? page did not draw its steps · ' + fails.join(' · '));
+      if (insp().querySelector('.cam-help-own')) fails.push('the lesson drew its steps but the short paragraph is still on the page above it');
+    } finally {
+      if (T) T.load = load0;
+      FM._camHelp = false; FM._camTab = tab0;
+      S.layers.length = 0; layers0.forEach(l => S.layers.push(l)); S.selectedId = sel0; S.project.duration = dur0;
+      try { FM.refreshAll(); if (FM.timeline) FM.timeline.rebuild(); } catch (e) {}
+      await sleep(60);
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+    } finally { _isoK.put(); }
+  });
+
+  /* ═══ #1255, THE THIRD HINTS CUT: THE EDIT-TOGETHER CARD HOLDS NO SMALL LINES OF EXPLANATION ═══════════════════════════════════════════
+     His words, 24 Nov: "you can choose whatever you want for the edit together card, having small lines. Just know that my preference
+     is as little as possible, so as clean and simple as possible, with no explanations at all. And just you can have a question mark
+     that takes you to the tutorial page that explains it all there." Gone from the card: the lines under his name and under Most
+     people at once (Sharing settings), under the link's switch, the two under the short code, the one under a friend's people, and
+     the privacy sentence with its list on the Share panel and in Sharing settings. The "?" in the card's head shows lesson 17, which
+     says what they said, with "What gets sent?" at its foot.
+     ONE LINE IS KEPT ON PURPOSE and checked here: under New people join as, that everyone who joins, Viewers too, sees his notes and
+     reminders. It is the fix of a privacy finding (#1090), a warning about his own project where he picks a role, not a how-to. */
+  test('1255 hints · the edit-together card holds no small lines of explanation: nothing under the short code, the link’s switch or the swap door on the Share panel and no standing Keep FreeMotion open, nothing under his name, under Most people at once or under any switch in Sharing settings, whose head has a ? too, and the privacy sentence on neither; the one ? in the card’s head shows the lesson, which says what those lines said, with What gets sent? at its foot, and back gives the Share panel again; the warning that everyone who joins sees his notes stays under New people join as; and a friend’s panel has the one ? too, with no line under its people, and its page never opens on the owner’s steps; with Swap codes only on, nothing stands under the invite’s label (CONTROLS: the block is the live Share panel with its invite; the gear opened Sharing settings; the lesson’s steps were drawn; the friend’s block is the friend’s panel and its ? opened the page; with Swap codes only the invite says so)', { item: '1255', budgetMs: 150000 }, async function () {
+    const C = need921S7('the bare edit-together card');
+    const fails = [];
+    await withFakeNet921(async function () {
+      await withLabs921(async function () {
+        await with945(async function () {
+          await withCollab921([layer921('A')], async function () {
+            await atPhoneWidth(async function () {
+              const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+              FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+              if (!fr.querySelector('.cs-stop') || !fr.querySelector('.cs-invite #collab-room-code')) throw new Error('CONTROL: the block is not the live Share panel with its invite and short code');
+              const seen = function () { return seen967b4(fr); };
+              [['That’s the short code', 'what a friend does with the short code'], ['stops working', 'when the short code stops working'], ['always asks you first', 'that the short code always asks first'], ['goes straight from phone to phone', 'the privacy sentence']].forEach(function (p) { if (seen().indexOf(p[0]) >= 0) fails.push('the Share panel still says ' + p[1]); });
+              const join = fr.querySelector('.cs-joinrow .cs-rowhint');
+              if (!join || !/notes/i.test(join.textContent) || !join.getClientRects().length) fails.push('the line that everyone who joins sees his notes and reminders is gone from under New people join as: it is a warning about his own project (#1090), not a how-to');
+              if (fr.querySelectorAll('.cs-head .cs-help').length !== 1) fails.push('the Share panel’s head has ' + fr.querySelectorAll('.cs-head .cs-help').length + ' ? buttons, want one');
+              const door = fr.querySelector('.cs-body > .cs-add');
+              if (!door) fails.push('the Share panel lost its Swap codes door'); else if (door.querySelector('.cs-add-sub')) fails.push('the swap door still has a line under it: “' + door.querySelector('.cs-add-sub').textContent + '”');
+              if (fr.querySelector('.cs-keepopen')) fails.push('the Share panel still has its standing Keep FreeMotion open line');
+              fr.querySelector('.cs-gear').click(); await settle921(100);
+              if (!fr.querySelector('.cs-sstatus') || !fr.querySelector('.cs-max')) throw new Error('CONTROL: the gear did not open Sharing settings with its Most people at once control · ' + fails.join(' · '));
+              [['as the others see them', 'a line under his name'], ['Counting you', 'a line under Most people at once'], ['goes straight from phone to phone', 'the privacy sentence']].forEach(function (p) { if (seen().indexOf(p[0]) >= 0) fails.push('Sharing settings still shows ' + p[1]); });
+              /* the rows of the step's own groups: the Work with friends row at the card's foot is not one of them, and keeps its line */
+              const sw = fr.querySelectorAll('.cs-sgroup .cs-srow .set-switch').length, described = fr.querySelectorAll('.cs-sgroup .cs-srow .cs-shint');
+              if (sw < 5) throw new Error('CONTROL: Sharing settings shows ' + sw + ' switches, want its five · ' + fails.join(' · '));
+              if (described.length) fails.push('Sharing settings still describes ' + described.length + ' of its rows: “' + described[0].textContent.slice(0, 50) + '…”');
+              if (fr.querySelectorAll('.cs-head .cs-help').length !== 1) fails.push('Sharing settings’ head has ' + fr.querySelectorAll('.cs-head .cs-help').length + ' ? buttons, want one');
+              fr.querySelector('.cs-gear').click(); await settle921(100);
+              const q = fr.querySelector('.cs-head .cs-help');
+              if (!q) throw new Error('back on the Share panel there is no ? · ' + fails.join(' · '));
+              q.click();
+              await until921S6('the lesson behind the ?', function () { return fr.querySelector('.tut-steps li') ? 1 : 0; }, 5000)
+                .catch(function () { throw new Error('CONTROL: the lesson did not draw its steps behind the ? · ' + fails.join(' · ')); });
+              const page = fr.textContent.replace(/\s+/g, ' ');
+              [[/Everyone who joins sees the whole project/, 'that everyone who joins sees the whole project'], [/12 people.{0,60}computer.{0,20}6 from a phone/, 'how many people a project can hold'],
+                [/short code always has to be let in/, 'that the short code always asks him first'], [/stops working 30 minutes/, 'when the short code stops working'],
+                [/type the short code/, 'what a friend does with the short code'], [/Watch along.{0,60}follow/, 'what Watch along does'], [/Nothing is shared until you tap Start sharing/, 'that nothing is shared until Start sharing'],
+                [/can.t stop a screen recording/, 'that turning export off cannot stop a screen recording'], [/gets straight in/, 'that with Let them in whoever an Editor gives the link to gets straight in'],
+                [/keep FreeMotion open while you share/, 'to keep FreeMotion open on a phone'], [/you copy a swap code to them/, 'how swapping codes goes']
+              ].forEach(function (p) { if (!p[0].test(page)) fails.push('the lesson behind the ? does not say ' + p[1]); });
+              const pv = fr.querySelectorAll('.cs-privacy');
+              if (pv.length !== 1 || !/What gets sent/.test(pv[0].textContent)) fails.push('the page behind the ? has ' + pv.length + ' privacy blocks, want one with What gets sent? at its foot');
+              fr.querySelector('.cs-backbtn').click(); await settle921(80);
+              if (!fr.querySelector('.cs-stop')) fails.push('back from the ? did not give the Share panel again');
+              FM.closeCanvasDialog(); await settle921(80);
+            }, 390);
+          });
+          /* a friend's side of it: the Friends block of someone the project is shared with (the fixture of '967 B4 6') */
+          const fx = guest967(C), wasHome1 = FM.home.isOpen();
+          try {
+            C.attach(fx.G, { autoTick: false });
+            if (wasHome1) FM.home.close();
+            await atPhoneWidth(async function () {
+              const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+              FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+              if (!/Shared with you/.test(fr.textContent)) throw new Error('CONTROL: the friend’s block is not the friend’s panel (“' + fr.textContent.trim().slice(0, 60) + '”) · ' + fails.join(' · '));
+              if (fr.querySelector('.cs-watchhint')) fails.push('a friend’s panel still has a line under its people');
+              const gq = fr.querySelectorAll('.cs-head .cs-help');
+              if (gq.length !== 1) fails.push('a friend’s panel has ' + gq.length + ' ? buttons in its head, want one');
+              else {
+                gq[0].click();
+                /* read as the page opens, before the lesson loads: the short steps are the OWNER's (send the link), not a friend's */
+                if (!fr.querySelector('.cs-helpbody')) fails.push('CONTROL: a friend’s ? did not open the page behind it');
+                const owner = fr.querySelector('.cs-helpbody .cs-how');
+                if (owner) fails.push('the page behind a friend’s ? opens on the owner’s steps (“' + owner.textContent.replace(/\s+/g, ' ').trim().slice(0, 60) + '”)');
+                await until921S6('the lesson behind a friend’s ?', function () { return fr.querySelector('.tut-steps li') ? 1 : 0; }, 5000)
+                  .catch(function () { fails.push('a friend’s ? did not show the lesson'); });
+                if (!/Watch along/.test(fr.textContent)) fails.push('the page behind a friend’s ? does not say what Watch along does');
+                const bk = fr.querySelector('.cs-backbtn');
+                if (bk) { bk.click(); await settle921(80); }
+                if (!/Shared with you/.test(fr.textContent)) fails.push('back from a friend’s ? did not give the panel again');
+              }
+              FM.closeCanvasDialog(); await settle921(80);
+            }, 390);
+          } finally { await dropFixture967(C, [fx.gpid]); if (wasHome1 && !FM.home.isOpen()) FM.home.open(); }
+          /* Swap codes only on: the invite says so in its label, and no line explains it under that (lesson 17 says it) */
+          const wasCO = FM.settings.get('collabCodesOnly');
+          try {
+            FM.settings.set('collabCodesOnly', true);
+            await withCollab921([layer921('A')], async function () {
+              await atPhoneWidth(async function () {
+                const dlg = document.getElementById('canvas-dialog'), fr = document.getElementById('cv-fr-body');
+                FM.openCanvasDialog({ block: 'friends' }); await entranceDone(dlg); await land945();
+                try {
+                  const inv = fr.querySelector('.cs-invite');
+                  if (!fr.querySelector('.cs-stop') || !inv || !/Swap codes only is on/.test(inv.textContent)) throw new Error('CONTROL: with Swap codes only on, the block is not the live Share panel with its invite saying so (“' + (inv ? inv.textContent.trim().slice(0, 60) : 'no invite') + '”) · ' + fails.join(' · '));
+                  const sub = inv.querySelector('.collab-sub');
+                  if (sub) fails.push('with Swap codes only on, a line of explanation still stands under the invite: “' + sub.textContent.slice(0, 60) + '…”');
+                } finally { FM.closeCanvasDialog(); await settle921(80); }
+              }, 390);
+            });
+          } finally { FM.settings.set('collabCodesOnly', !!wasCO); }
+        });
+      });
+    });
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
+
+  /* #1255, HIS WORDS OF 24 NOV 12:29 ON A LINE WITH A LONG DASH: "it just looks written by AI". The Full editor's assistant greeted with
+     two of them, and on a PC its box's hint wrapped and lost its second line (seen in the pictures of 24 Nov).
+     v18.53 review MERGE-5: the greeting was not the only one. The build's Stop button, its three endings, the no-key note, the pasted-key
+     note, the busy note, the moved-project note, the starter scene's note and the key button's tip all carried one. So this reads every
+     word the panel can show, each flow driven with stand-ins that reach no network and change no project.
+     MERGE-4: the assistant opens from the Simple editor too, which never says layer, so its greeting names no layer.
+     CONTROL: every read first finds its own words (the greeting's edit and new video, each note's opening), so a read with no dash is a
+     read of the real line and not of an empty panel. FAILS BEFORE the review's fix by its own sentence: the key button's tip and the
+     no-key note each hold a long dash, and the greeting says Tap a layer first. */
+  test('1255 words · the assistant puts no long dash on screen anywhere (its greeting, the hint in its box, its key button, the no-key and pasted-key notes, a build’s Stop button and its three endings, the busy note, the moved-project note, the starter scene) and its greeting names no layer, and the hint fits the box on one line in the PC column and on a 380 px phone (CONTROL: each read finds its own words first)', { item: '1255', budgetMs: 60000 }, async function () {
+    if (!FM.aiChat || !FM.aiChat.show || !FM.aiChat.hide || !FM.aiChat.reset || !FM.aiChat.send) throw new Error('setup: FM.aiChat is missing — js/ai-chat.js did not load');
+    if (!FM.ai || !FM.aiKey || !FM.aiMock || !FM.aiTemplates || !FM.storage) throw new Error('setup: FM.ai, FM.aiKey, FM.aiMock, FM.aiTemplates or FM.storage is missing, so the flows cannot be driven');
+    const fails = [], DASH = /[‒-―]/, pause = ms => new Promise(r => setTimeout(r, ms));
+    const panel = () => attached(document.getElementById('ai-chat'), 'the Ask & edit panel');
+    const list = () => attached(panel().querySelector('.aic-list'), 'the Ask & edit transcript');
+    /* every word the panel shows: its text, and the tip, label and hint of everything in it */
+    const shown = () => {
+      const c = panel(), out = [c.textContent];
+      c.querySelectorAll('*').forEach(n => ['title', 'aria-label', 'placeholder'].forEach(a => { const v = n.getAttribute(a); if (v) out.push(v); }));
+      return out.join(' | ');
+    };
+    const noDash = (where, s) => { const i = s.search(DASH); if (i >= 0) fails.push(where + ': a long dash on screen (“' + s.slice(Math.max(0, i - 30), i + 30) + '”)'); };
+    const check = (where, words, s) => {
+      if (!words.test(s)) throw new Error('CONTROL ' + where + ': the panel does not show its own words (' + words + '), it shows “' + s.slice(-160) + '”');
+      noDash(where, s);
+    };
+    const read = async where => {
+      FM.aiChat.reset(); FM.aiChat.show(); await pause(400);
+      try {
+        const c = document.getElementById('ai-chat'), inp = c && c.querySelector('.aic-input'), said = c ? Array.from(c.querySelectorAll('.aic-list > *')).map(n => n.textContent).join(' ') : '';
+        if (!inp || !said) throw new Error('setup ' + where + ': the assistant did not open with its greeting and its box');
+        if (!/make the title bigger/.test(said) || !/whole new video/.test(said)) throw new Error('CONTROL ' + where + ': the greeting no longer offers an edit and a whole new video (“' + said.slice(0, 80) + '…”)');
+        if (DASH.test(said)) fails.push(where + ': the greeting holds a long dash (“' + said.slice(Math.max(0, said.search(DASH) - 24), said.search(DASH) + 24) + '”)');
+        if (/\blayers?\b/i.test(said)) fails.push(where + ': the greeting names a layer (“' + said.slice(Math.max(0, said.search(/\blayers?\b/i) - 30), said.search(/\blayers?\b/i) + 30) + '”), a word the Simple editor never uses, and the assistant opens there too');
+        check(where + ', the key button’s tip', /Anthropic key/, (c.querySelector('.aic-keybtn') || {}).title || '');
+        noDash(where + ', the panel’s own words, tips and labels', shown());
+        const hint = inp.placeholder || '';
+        if (!hint) fails.push(where + ': the box has no hint');
+        if (DASH.test(hint)) fails.push(where + ': the hint holds a long dash (“' + hint + '”)');
+        const cs = getComputedStyle(inp), cv = document.createElement('canvas').getContext('2d');
+        cv.font = cs.fontStyle + ' ' + cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+        const words = cv.measureText(hint).width, room = inp.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        if (!(room > 120)) throw new Error('setup ' + where + ': the box is ' + Math.round(room) + ' px wide inside, so nothing here measures a real box');
+        if (words > room - 2) fails.push(where + ': the hint is ' + Math.round(words) + ' px of words in a box with ' + Math.round(room) + ' px of room: it wraps, and the one-row box cuts its second line');
+      } finally { FM.aiChat.hide(); await new Promise(r => setTimeout(r, 300)); }
+    };
+    await atWideWidth(async function () { await read('PC'); }, 1280);
+    await atPhoneWidth(async function () { await read('380'); }, 380);
+
+    /* the lines that only show in a flow: each driven here, its stand-ins put back by descriptor in finally */
+    const dry0 = FM.ai.DRY_RUN;
+    const kept = [[FM.aiKey, 'has'], [FM.aiMock, 'chat'], [FM.ai, 'generateScene'], [FM.ai, 'isRunning'], [FM.storage, 'openProjectId'], [FM.aiTemplates, 'build']]
+      .map(p => [p[0], p[1], Object.getOwnPropertyDescriptor(p[0], p[1])]);
+    const stub = (o, k, fn) => Object.defineProperty(o, k, { configurable: true, writable: true, value: fn });
+    const unstub = (o, k) => { const d = kept.filter(p => p[0] === o && p[1] === k)[0][2]; if (d) Object.defineProperty(o, k, d); else delete o[k]; };
+    try {
+      FM.aiChat.reset(); FM.aiChat.show(); await pause(200);
+      const input = attached(panel().querySelector('.aic-input'), 'the Ask & edit box');
+      const say = async text => { input.value = text; await FM.aiChat.send(); await pause(60); };
+
+      /* his key pasted into the chat by mistake */
+      FM.aiChat.reset(); await say('sk-ant-' + 'x'.repeat(24));
+      check('a key pasted into the chat', /looks like your API key/, shown());
+
+      /* no key: a change, then a whole new video, then its starter scene (the template builder stood in, so no project changes) */
+      FM.ai.DRY_RUN = false; stub(FM.aiKey, 'has', () => false);
+      FM.aiChat.reset(); await say('make the title bigger');
+      check('no key, asked for a change', /Connect your Anthropic key first/, shown());
+      FM.aiChat.reset(); await say('make a 6 second product reel');
+      check('no key, asked for a new video', /Build a scene without a key/, shown());
+      stub(FM.aiTemplates, 'build', () => ({ applied: 4 }));
+      attached(list().querySelector('.aic-tmpl'), 'the Build a scene without a key button').click(); await pause(60);
+      check('the starter scene', /Built a starter scene/, shown());
+      unstub(FM.aiTemplates, 'build'); unstub(FM.aiKey, 'has');
+
+      /* a build asked for in the chat (the dry run's reply stood in): its Stop button, then each of its three endings */
+      FM.ai.DRY_RUN = true;
+      stub(FM.aiMock, 'chat', t => ({ content: [{ type: 'text', text: 'Building that.' }, { type: 'tool_use', id: 'w1255_' + Math.random().toString(36).slice(2), name: 'build_scene', input: { prompt: String(t) } }], stop: 'mock', out: null }));
+      const atStop = [], endings = [{ left: 'Another project' }, { cancelled: true }, { layersAdded: 3 }];
+      let end = null;
+      stub(FM.ai, 'generateScene', async function (prompt, chips, opts) {
+        const sink = opts && opts.sink;
+        if (!sink) return { error: 'no sink' };
+        sink.reset(); atStop.push(shown()); sink.done(end); return {};
+      });
+      for (const e of endings) {
+        end = e; FM.aiChat.reset(); await say('make a 6 second product reel');
+        check('a build ended ' + JSON.stringify(e), e.left ? /Stopped/ : e.cancelled ? /Stopped/ : /Built it/, shown());
+      }
+      if (atStop.length !== 3) throw new Error('CONTROL: the stand-in build ran ' + atStop.length + ' time(s), want three, so the Stop button was not read');
+      check('a build’s Stop button', /keep what/, atStop[0]);
+
+      /* a build asked for while another is still running */
+      stub(FM.ai, 'isRunning', () => true);
+      FM.aiChat.reset(); await say('make a 6 second product reel');
+      unstub(FM.ai, 'isRunning');
+      check('a build asked for while one runs', /already being built/, shown());
+
+      /* he opened another project while it was answering */
+      let pid = 0;
+      stub(FM.storage, 'openProjectId', () => 'w1255-project-' + (pid++));
+      FM.aiChat.reset(); await say('make a 6 second product reel');
+      unstub(FM.storage, 'openProjectId');
+      check('another project opened mid-answer', /Not applied/, shown());
+    } finally {
+      FM.ai.DRY_RUN = dry0;
+      kept.forEach(p => { if (p[2]) Object.defineProperty(p[0], p[1], p[2]); else delete p[0][p[1]]; });
+      try { FM.aiChat.hide(); FM.aiChat.reset(); } catch (e) {}
+      await pause(300);
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
   });
 
   /* #1243 F7 — his words: "the outlines and shadows menu… big buttons… opens up below… scroll deep… when you actually press on one

@@ -12,7 +12,7 @@ picks the look before anything ships; the build did not wait, so every look on t
 
 ## Not built before — checked
 
-`git show ssh/main:REQUESTS.md | grep -i laser`: one hit, #954's rename list (*"Energy Beam → Laser Beam"* — Alight Motion's Energy Beam,
+`git show ssh/main:REQUESTS.md | grep -i laser`: one hit, #954's rename list (*"Energy Beam → Laser Beam"* — [another app]'s Energy Beam,
 to be called Laser Beam here). POLISH-LOG: nothing. No `laserbeam` type in `js/` on 85b71929; the only "laser" there was a search word on
 **Lightning** (`'energy beam', 'laser beam'`), standing in for want of this effect, and the Game sound pack's Laser (sfx.js, a sound).
 Lightning is a different thing: jagged branching bolts, a pixel kernel. This is one straight beam between two points.

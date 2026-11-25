@@ -50,7 +50,7 @@ window.FM = window.FM || {};
 
     var head = el('div', 'ai-head');
     var titleWrap = el('div', 'ai-title');
-    titleWrap.appendChild(el('span', 'ai-spark', '✨'));
+    { const sp = el('span', 'ai-spark'); sp.innerHTML = '<svg class="ai-spark-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 5.5c.7 4.3 2.7 6.3 7 7-4.3.7-6.3 2.7-7 7-.7-4.3-2.7-6.3-7-7 4.3-.7 6.3-2.7 7-7z"/><path d="M18.5 2.8c.25 1.4.9 2.05 2.3 2.3-1.4.25-2.05.9-2.3 2.3-.25-1.4-.9-2.05-2.3-2.3 1.4-.25 2.05-.9 2.3-2.3z"/></svg>'; titleWrap.appendChild(sp); }   // #1255: a drawn spark, no emoji
     titleWrap.appendChild(el('span', null, 'Director'));
     head.appendChild(titleWrap);
     // budget ring
@@ -77,7 +77,8 @@ window.FM = window.FM || {};
     saveBtn.addEventListener('click', openKeySettings);
     keyForm.appendChild(saveBtn);
     var orRow = el('div', 'ai-or');
-    var demoLink = el('button', 'ai-link', '▶ Watch a demo run (no key, no spend)');
+    var demoLink = el('button', 'ai-link');   // #1255: a drawn play mark and the words (a typed triangle is a colour emoji on an iPhone)
+    (function () { var m = FM.drawnIcon && FM.drawnIcon('play'); if (m) demoLink.appendChild(m); demoLink.appendChild(document.createTextNode('Watch a demo run (no key, no spend)')); })();
     demoLink.addEventListener('click', function () { runDemo(); });
     var tmplLink = el('button', 'ai-link', 'Build a scene without a key');
     tmplLink.addEventListener('click', function () { buildTemplate(); });
@@ -107,7 +108,8 @@ window.FM = window.FM || {};
     polishRow.appendChild(fields.deep); polishRow.appendChild(el('span', null, 'Deep polish (extra critic pass — costs a little more)'));
     compose.appendChild(polishRow);
 
-    var genBtn = el('button', 'ai-btn ai-btn-accent ai-generate', '✨  Generate scene');
+    var genBtn = el('button', 'ai-btn ai-btn-accent ai-generate');   // #1255: a drawn spark and the words, no emoji
+    genBtn.innerHTML = '<svg class="ai-spark-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 5.5c.7 4.3 2.7 6.3 7 7-4.3.7-6.3 2.7-7 7-.7-4.3-2.7-6.3-7-7 4.3-.7 6.3-2.7 7-7z"/><path d="M18.5 2.8c.25 1.4.9 2.05 2.3 2.3-1.4.25-2.05.9-2.3 2.3-.25-1.4-.9-2.05-2.3-2.3 1.4-.25 2.05-.9 2.3-2.3z"/></svg>'; genBtn.appendChild(document.createTextNode('Generate scene'));
     genBtn.addEventListener('click', function () { startRun({}); });
     compose.appendChild(genBtn);
     var keyNote = el('button', 'ai-keynote', '');
@@ -262,7 +264,7 @@ window.FM = window.FM || {};
     doneBar.appendChild(refineWrap);
 
     var actions = el('div', 'ai-doneactions');
-    var newBtn = el('button', 'ai-btn', '✨ New scene'); newBtn.addEventListener('click', function () { setMode('compose'); });
+    var newBtn = el('button', 'ai-btn'); newBtn.innerHTML = '<svg class="ai-spark-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.5 5.5c.7 4.3 2.7 6.3 7 7-4.3.7-6.3 2.7-7 7-.7-4.3-2.7-6.3-7-7 4.3-.7 6.3-2.7 7-7z"/><path d="M18.5 2.8c.25 1.4.9 2.05 2.3 2.3-1.4.25-2.05.9-2.3 2.3-.25-1.4-.9-2.05-2.3-2.3 1.4-.25 2.05-.9 2.3-2.3z"/></svg>'; newBtn.appendChild(document.createTextNode('New scene')); newBtn.addEventListener('click', function () { setMode('compose'); });
     var editBtn = el('button', 'ai-btn ai-btn-accent', 'Edit it'); editBtn.addEventListener('click', hide);
     actions.appendChild(newBtn); actions.appendChild(editBtn);
     doneBar.appendChild(actions);

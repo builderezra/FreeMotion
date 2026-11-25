@@ -12,7 +12,7 @@ function readText(p) {
 }
 
 function run(argv) {
-  const dir = (argv && argv[0]) || '/Users/ezrasmith/Claude/FreeMotion/tools/design/plans/simple-mode/vis';
+  const dir = (argv && argv[0]) || '/Users/me/Claude/FreeMotion/tools/design/plans/simple-mode/vis';
   (0, eval)(readText(dir + '/kit.js'));
   const VIS = globalThis.VIS, E = VIS.engine;
   const out = [];

@@ -14,6 +14,10 @@ window.FM = window.FM || {};
     if (text != null) n.textContent = text;
     return n;
   }
+  /* #1255 (his words, 23 Nov: "There shouldn't be any explanations like that… not, you know, constantly there"): a swipe pad wears the
+     drawn four-way mark (FM.PAD_MARK in js/draw-tool.js, one string for every pad) and the sentence it carried becomes its name for
+     a screen reader. The mark is a fixed string. */
+  function padMark(pad, name) { pad.insertAdjacentHTML('beforeend', FM.PAD_MARK || ''); pad.setAttribute('role', 'group'); pad.setAttribute('aria-label', name); return pad; }
   function round(v, dp) { const m = Math.pow(10, dp); return Math.round(v * m) / m; }
   function commitH() { if (FM.history) FM.history.commit(); }
   function keyframeName(button, label, read) {
@@ -218,7 +222,7 @@ window.FM = window.FM || {};
    * that declare a plain numeric param — and until now every one of them was a raw
    * <input type="range">. Two of Ezra's reports are the same complaint about that: "the width and
    * height in here actually need their own sliders" (queue 67) and "some effects use raw sliders"
-   * (queue 31). A browser range input in an app whose every other number is an AM-style ruler is not
+   * (queue 31). A browser range input in an app whose every other number is a ruler is not
    * a slider, it is the absence of one.
    * So this renders the SAME tickStrip the effect params and keyframe rows use: notched, snapping,
    * with the momentum glide, and it is fixed here rather than at 37 call sites so they cannot drift
@@ -558,7 +562,7 @@ window.FM = window.FM || {};
   // The mutation trio every effect change must run (canvas + timeline keyframes + undo).
   function afterFx() { FM.inspector.refresh(); FM.timeline.rebuild(); FM.requestRender(); if (FM.history) FM.history.commit(); }
 
-  // ---- LAYER presets: the whole look + its animations (AM presets), not just the effect stack.
+  // ---- LAYER presets: the whole look + its animations (presets), not just the effect stack.
   // Captures effects, fill/gradient/stroke/shadow/blend/grade and the transform's keyframes.
   // Position keyframes are stored as DELTAS from their first key, then re-based onto the target
   // layer's current position on apply — so a preset animates the layer from where it already is
@@ -713,7 +717,7 @@ window.FM = window.FM || {};
     remove(name) { FM.presetTags.forget('lp:' + name); this._write(this.list().filter(p => p.name !== name)); },
   };
 
-  // ===== AM-style ruler scrubber (ONE implementation shared by fxScrubber + kfNumRow) =====
+  // ===== Ruler scrubber (ONE implementation shared by fxScrubber + kfNumRow) =====
   // A FINITE ruler of tick notches (one per TICK px) scrolls under the fixed green centre line.
   // Notches are REAL snap points: a drag lands on min + n*q (like timeline frame-snap — typed values
   // in the box stay free-form), and the ruler physically ends at min/max so a drag can never leave
@@ -1040,7 +1044,7 @@ window.FM = window.FM || {};
     let drag = null, pend = null, cur = o.read(), lastApplied = null;
     // Push dx SCREEN px through the ruler. `cur` carries the un-quantised position so a slow drag or a
     // decaying glide accumulates sub-notch movement instead of losing it to rounding every frame.
-    // REVERSED (AM): you grab the ruler and push it — drag LEFT to raise the value (a right-side tick
+    // REVERSED: you grab the ruler and push it — drag LEFT to raise the value (a right-side tick
     // slides under the fixed centre line), drag RIGHT to lower it, hence the minus.
     /* `fine` is the second half of queue 253, and the half that actually matters. Slowing the drag
      * rate alone changes nothing you can land on: the applied value snaps to a multiple of the NOTCH
@@ -1203,7 +1207,7 @@ window.FM = window.FM || {};
     return isAudio === !!audio ? fx : null;
   }
 
-  // AM signature control: the ruler scrubber + an editable value box.
+  // Signature control: the ruler scrubber + an editable value box.
   function fxScrubber(fx, p, layer, fxIdx) {
     const row = el('div', 'fx-scrub-row');
     /* Decimals follow the step, and the third tier is not decoration: queue 559 takes the wipes to a
@@ -1242,7 +1246,7 @@ window.FM = window.FM || {};
       eb.addEventListener('click', () => { FM._fxEasing = { fx: fx, at: fxPathOf(layer, fx), fxIdx: fxIdx, key: p.key, label: p.label }; FM.inspector.refresh(); });
       row.appendChild(eb);
     }
-    // The NAME selects the row (AM): tap it and this parameter's keyframes become the live ones on
+    // The NAME selects the row: tap it and this parameter's keyframes become the live ones on
     // the timeline. Only offered where it can mean something — kfScope covers the OPEN effect of the
     // Effects panel, so audio-effect rows (which share this builder) render a plain label.
     const nameEl = paramName('fx-scrub-label', p.label, layer, 'fx:' + p.key);
@@ -1287,7 +1291,7 @@ window.FM = window.FM || {};
     return row;
   }
 
-  // AM segmented control (e.g. Mirror direction) — no slider, no keyframe.
+  // Segmented control (e.g. Mirror direction) — no slider, no keyframe.
   // A tick box for a param that switches a whole behaviour on, rather than picking between two equal
   // options. `note` explains what it does to the controls under it — which is the point of using a
   // tick box here at all: a segmented control implies "one of these two", a tick implies "this takes over".
@@ -1913,7 +1917,7 @@ window.FM = window.FM || {};
     head.addEventListener('touchmove', e => { if (mode === 'reorder' && e.cancelable) e.preventDefault(); }, { passive: false });
   }
 
-  // One effect row (AM): collapsed = ▸ name … eye; expanded = ▾ name … ⋯ + delete, then its editor.
+  // One effect row: collapsed = ▸ name … eye; expanded = ▾ name … ⋯ + delete, then its editor.
   // Reorder = press-hold + drag; delete = swipe left (see attachFxGestures).
   function fxRow(layer, fx, idx, stack) {
     const reg = FM.fxRegistry.get(fx.type) || { label: fx.type, params: [] };
@@ -3992,7 +3996,7 @@ window.FM = window.FM || {};
   }
   FM._styleBlockedReason = styleBlockedReason;   // the suite drives this directly
 
-  // The AM-style picker popup: toggle which style aspects to paste, then Paste.
+  // The picker popup: toggle which style aspects to paste, then Paste.
   FM.openPasteStyle = function (target) {
     document.querySelectorAll('.ps-overlay').forEach(o => o.remove());   // never stack overlays (#10)
     target = target || FM.selectedLayer(FM.scene);
@@ -4060,7 +4064,7 @@ window.FM = window.FM || {};
     document.body.appendChild(overlay);
   };
 
-  // AM-style clip-action quick-row (matches [the reference app]'s selected-layer panel):
+  // Clip-action quick-row (matches [the reference app]'s selected-layer panel):
   // speed/timing · split · trim-start-to-playhead · trim-end-to-playhead · mute.
   // What the clip-action row was last BUILT for. Null until a row exists, so syncPlayhead can't fire
   // before there is anything to keep in sync. Everything that changes which buttons appear (or which
@@ -4125,8 +4129,8 @@ window.FM = window.FM || {};
       return b;
     }
     const onClip = FM.time > layer.start + 1e-4 && FM.time < layer.start + layer.duration - 1e-4;   // playhead inside the clip
-    // AM's media row order: Speed | trim-in | trim-out | Volume. Split keeps a slot between the
-    // trims (AM parks split in its timeline bar; we keep it here so it stays one tap away).
+    // [the reference app]'s media row order: Speed | trim-in | trim-out | Volume. Split keeps a slot between the
+    // trims ([the reference app] parks split in its timeline bar; we keep it here so it stays one tap away).
     // …except Speed and Volume are CARDS now, on every layer kind (queue 45). Ezra, with two
     // screenshots: "some layers look like the first image with the button option layout and some look
     // like the second image. I want them both to look like the second image." A video was the odd one
@@ -4220,7 +4224,7 @@ window.FM = window.FM || {};
     return FM.timeline.clipOp(name);
   }
 
-  // Multi-select bar (AM): Group leads; then trim/split/delete acting on EVERY selected clip; then
+  // Multi-select bar: Group leads; then trim/split/delete acting on EVERY selected clip; then
   // TIMELINE alignment — moves clips in time only (canvas position untouched), keyframes ride along.
   // (The old canvas align/distribute buttons lived here — Ezra: gone, this is about the timeline.)
   function alignRow() {
@@ -4260,7 +4264,7 @@ window.FM = window.FM || {};
       });
     };
 
-    /* ---- clip actions on the whole selection (AM bottom-left) ----
+    /* ---- clip actions on the whole selection (bottom-left) ----
      * PHONE ONLY from v7.74 (queue 169). Ezra: "in the left massive area where its currently got the
      * six small buttons, just get rid of the buttons that are near the play head and then with the
      * align buttons just make them big and fill up the whole section."
@@ -4338,7 +4342,7 @@ window.FM = window.FM || {};
        380px with four layers selected). Both buttons live in the top bar now, on both layouts, so this
        row would be a third door to the same two actions rather than the only one. */
 
-    /* ---- timeline alignment (AM bottom-right): time only, never canvas position ----
+    /* ---- timeline alignment (bottom-right): time only, never canvas position ----
      * "with the align buttons just make them big and fill up the whole section" — the .align-big class
      * is what styles.css hangs that on, desktop only. It is worth being precise about what "the whole
      * section" is here: with a multi-selection this panel holds NOTHING else. Measured at 1440x900
@@ -4571,7 +4575,7 @@ window.FM = window.FM || {};
     return CATEGORIES.some(c => c.key === v);   // color/border/blend/transform/presets/effects apply broadly
   }
   function categoryGrid(layer) {
-    // AM lays the cards out 3-then-rest: Color/Border/Blending on top, the rest in a tighter row below.
+    // [the reference app] lays the cards out 3-then-rest: Color/Border/Blending on top, the rest in a tighter row below.
     const cats = catsFor(layer);
     const wrap = el('div', 'cat-wrap');
     const top = el('div', 'cat-grid cat-grid-top');
@@ -4755,7 +4759,7 @@ window.FM = window.FM || {};
   function fillColorKey(layer) { return layer.type === 'text' ? 'color' : 'fill'; }
   function fillColorGet(layer) { return FM.evalProp(layer[fillColorKey(layer)], FM.time) || (layer.type === 'text' ? '#ffffff' : '#3a7bd5'); }
   function fillColorSet(layer, v) { FM.setProp(layer, fillColorKey(layer), v, FM.time); }
-  // Exposed so the AM-style text-edit overlay (text-edit.js) can drive the text fill through the same
+  // Exposed so the text-edit overlay (text-edit.js) can drive the text fill through the same
   // keyframe-aware accessors instead of clobbering an animated colour.
   FM._fillGet = fillColorGet; FM._fillSet = fillColorSet;
   const FILL_SWATCHES = ['#ffffff', '#000000', '#7c4dff', '#8a8f98', '#e53935', '#ff1744', '#ff4dd2', '#ff6e40', '#ffd740', '#00e5c0', '#18c8ff', '#2979ff', '#00c853', '#b0ff57', '#a1887f', '#5d4037'];
@@ -4865,7 +4869,7 @@ window.FM = window.FM || {};
     if (mode === 'solid') {
       const head = el('div', 'fill-readout');
       head.appendChild(el('span', 'fill-hex', normHex(fillColorGet(layer)).toUpperCase() + '   ' + Math.round((layer.fillOpacity != null ? layer.fillOpacity : 1) * 100) + '%'));
-      // Keyframe diamond — animate the colour over time (AM). Filled when a keyframe sits at the
+      // Keyframe diamond — animate the colour over time. Filled when a keyframe sits at the
       // playhead; toggling on/off converts static ↔ animated exactly like the transform props.
       const ckey = fillColorKey(layer);
       const kfBtn = el('button', 'fill-kf');
@@ -5064,11 +5068,11 @@ window.FM = window.FM || {};
     if (Number.isFinite(opts.min)) val.setAttribute('aria-valuemin', String(opts.min));
     if (Number.isFinite(opts.max)) val.setAttribute('aria-valuemax', String(opts.max));
     const lab = el('div', 'mt-vbox-lab', labelText);
-    // Move mode's X / Y / Z boxes double as the pad's mode switch (v5.43, AM): the label under the
+    // Move mode's X / Y / Z boxes double as the pad's mode switch (v5.43): the label under the
     // number is the target, NOT the number itself — tapping the number already opens the type-in
     // editor, and taking that over would trade one thing for another.
     //
-    // That same name is now also the ROW SELECTOR (AM): tapping it picks which property's keyframes
+    // That same name is now also the ROW SELECTOR: tapping it picks which property's keyframes
     // you are editing. The two live on one tap because they never disagree — the pad axis and the
     // selection are both "this is the channel I'm working on". Where a tap ALSO changes the axis it
     // selects rather than toggles, because that tap is unambiguously "I want this one".
@@ -5077,7 +5081,7 @@ window.FM = window.FM || {};
     if (opts.axis) {
       lab.classList.add('mt-vbox-axis');
       const axisOn = (FM._mtAxis || 'xy') === opts.axis;
-      box.classList.add(axisOn ? 'mt-axis-on' : 'mt-axis-off');   // the VALUE follows the axis too (AM)
+      box.classList.add(axisOn ? 'mt-axis-on' : 'mt-axis-off');   // the VALUE follows the axis too
       if (axisOn) lab.classList.add('on');
     }
     if (selectable) {
@@ -5320,8 +5324,8 @@ window.FM = window.FM || {};
     return strip;
   }
 
-  // ===== AM "Edit Shape" for media (photo/video) = a Size editor =====
-  // AM "Edit Shape" for media = a CROP editor. Width/Height are the crop-frame size in SOURCE pixels;
+  // ===== "Edit Shape" for media (photo/video) = a Size editor =====
+  // "Edit Shape" for media = a CROP editor. Width/Height are the crop-frame size in SOURCE pixels;
   // shrinking them crops the photo/video (the content is NOT scaled — you just see less of it). The two
   // top-right controls (aspect-ratio lock + size-from-edge/center) and a keyframe + easing rail that
   // keyframes the crop. Both toggle states are session tools (like the MT mode), not saved.
@@ -5344,7 +5348,7 @@ window.FM = window.FM || {};
   }
 
   // The two top-right controls (aspect lock + size origin). Built here so the inspector header can
-  // place them at the far top-right, matching AM. Toggling re-renders the panel + canvas.
+  // place them at the far top-right. Toggling re-renders the panel + canvas.
   function cropToggles(layer) {
     const top = el('div', 'es-toprow');
     const aspectBtn = el('button', 'es-toggle' + (_szLock ? ' on' : ''));
@@ -5463,7 +5467,7 @@ window.FM = window.FM || {};
     }
     center.appendChild(control);
 
-    // Free crop (not in AM) — drag a box right on the playback area, iPhone-style.
+    // Free crop (not in [the reference app]) — drag a box right on the playback area, iPhone-style.
     const tools = el('div', 'es-crop-tools');
     const freeBtn = el('button', 'btn es-freecrop'); freeBtn.innerHTML = ES_ICONS.crop + '<span>Free crop</span>';
     freeBtn.title = 'Drag a crop box directly on the video';
@@ -5507,7 +5511,7 @@ window.FM = window.FM || {};
     body.appendChild(panel);
   }
 
-  // ===== AM "Edit Points" panel — edits the point selected on the canvas overlay =====
+  // ===== "Edit Points" panel — edits the point selected on the canvas overlay =====
   // Tap a point on the canvas to select it (green); drag it there, or nudge it here with the X/Y
   // boxes / trackpad. Tap a hollow ring to ADD a point on the curve; ⊖ (or double-tap) deletes.
   // Curve/Corner set whether the outline flows through the point or bends hard at it.
@@ -5573,7 +5577,7 @@ window.FM = window.FM || {};
     const bx = mtVBox('X', () => { const s = pe.getSel(); return s ? s.x : 0; }, v => { const s = pe.getSel(); if (s) pe.setSelPos(v, s.y); }, { dp: 1, scrub: 1 });
     const by = mtVBox('Y', () => { const s = pe.getSel(); return s ? s.y : 0; }, v => { const s = pe.getSel(); if (s) pe.setSelPos(s.x, v); }, { dp: 1, scrub: 1 });
     values.append(bx, by); center.appendChild(values);
-    const pad = el('div', 'mt-trackpad'); pad.appendChild(el('span', 'mt-trackpad-hint', 'Swipe here to move point'));
+    const pad = padMark(el('div', 'mt-trackpad'), 'Swipe here to move the point');   // #1255: the mark, not the sentence
     const sens = ((FM.scene.project.width || 1080) / 300);
     let pd = null;
     /* ⚠️ ONE FINGER MOVES THE POINT (queue 690, real input, round two). This pad steps from the LAST event, so a second
@@ -5591,7 +5595,8 @@ window.FM = window.FM || {};
     pad.addEventListener('pointerup', e => { if (!pd || otherPtFinger(e)) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} pe.commit(); });
     pad.addEventListener('pointercancel', e => { if (!pd || otherPtFinger(e)) return; pd = null; try { pad.releasePointerCapture(e.pointerId); } catch (_) {} pe.commit(); });
     center.appendChild(pad);
-    center.appendChild(el('div', 'insp-hint', 'Tap a point to select it · on a curve point, drag its handles to shape the curve · tap a hollow ring to add a point · double-tap to delete'));
+    /* (#1255: a paragraph stood under the pad every time the point editor was open: "Tap a point to select it · on a curve point, drag its
+       handles to shape the curve · tap a hollow ring to add a point · double-tap to delete". The lesson on custom shapes teaches it.) */
 
     // stroke still belongs to the shape (open drawings need their line width here)
     if (!layer.stroke) layer.stroke = { enabled: false, width: 8, color: '#ffffff' };
@@ -5641,7 +5646,7 @@ window.FM = window.FM || {};
      * now honours it — with a row selected it keys that row alone, and the button's own lit state
      * follows the same scope so it cannot claim a keyframe that belongs to a different channel.
      * Deliberately ADDITIVE: with nothing selected every mode behaves exactly as before, so a plain
-     * position keyframe still keys x and y together, which is right and is what AM does. */
+     * position keyframe still keys x and y together, which is right and is what [the reference app] does. */
     const _selK = (kfSel && kfSel.layerId === layer.id && /^tf:/.test(kfSel.key || '')) ? kfSel.key.slice(3) : null;
     const scoped = (_selK && props.indexOf(_selK) >= 0) ? [_selK] : null;
     const stateProps = scoped || props;
@@ -5744,9 +5749,9 @@ window.FM = window.FM || {};
       const bz = mtVBox('Z', () => mtEval(layer, 'z'), v => mtSet(layer, 'z', Math.round(v)), { dp: 1, scrub: 2, kfKey: 'z', layer: layer, axis: 'z' });
       refreshables.push(bx, by, bz); values.append(bx, by, bz);
 
-      // ---- Z sub-mode (v5.43, AM): tap the Z label and the same pad becomes a depth slider ----
+      // ---- Z sub-mode (v5.43): tap the Z label and the same pad becomes a depth slider ----
       // Ezra: "you just tap on z and then it switches to this version." It is a sub-mode of the move
-      // pad rather than a fifth button on the mode rail, exactly as AM has it — Z is still position.
+      // pad rather than a fifth button on the mode rail, exactly as [the reference app] has it — Z is still position.
       // VERTICAL only, and the sign is chosen so the pad drags the OBJECT and not the number: pushing
       // your finger DOWN pushes the layer back into the scene (z grows = further away, which is the
       // same direction the fog and focus maths already read it), so it shrinks under a camera; pulling
@@ -5754,8 +5759,9 @@ window.FM = window.FM || {};
       if ((FM._mtAxis || 'xy') === 'z') {
         const zpad = el('div', 'mt-trackpad mt-zpad');
         zpad.appendChild(el('i', 'mt-zpad-arrow up'));
-        const zhint = el('span', 'mt-trackpad-hint', 'Swipe here to adjust Z position');
-        zpad.appendChild(zhint);
+        /* (#1255: "Swipe here to adjust Z position" stood between the arrows. The arrows are the pad's sign and the lit Z chip above says
+           which number it moves, so the sentence is the pad's name for a screen reader only.) */
+        zpad.setAttribute('role', 'group'); zpad.setAttribute('aria-label', 'Swipe up or down to change the Z position');
         zpad.appendChild(el('i', 'mt-zpad-arrow down'));
         const zsens = ((FM.scene.project.width || 1080) / 640) * 2;   // depth ranges wider than x/y
         let zd = null;
@@ -5781,7 +5787,10 @@ window.FM = window.FM || {};
 
       // 2D trackpad
       const pad = el('div', 'mt-trackpad');
-      const padHint = el('span', 'mt-trackpad-hint', 'Swipe here to move layer · snaps to centre, edges & earlier keyframes');
+      /* #1255: EMPTY AT REST. It read "Swipe here to move layer · snaps to centre, edges & earlier keyframes" all the while; the pad
+         wears the drawn mark instead (padMark below). This line still NAMES a snap while one holds (showPadSnap): that says what
+         just happened, it is not a how-to; styles.css takes the mark away while it speaks and gives the empty line no room. */
+      const padHint = el('span', 'mt-trackpad-hint', '');
       // Snapping was invisible: the layer just stopped somewhere and you had to guess whether it had
       // actually landed on anything (Ezra: "there should be an indicator of grid snapping when you are
       // using the move and transform move pad"). Now the pad shows a rule on the axis that locked, the
@@ -5789,6 +5798,7 @@ window.FM = window.FM || {};
       // same guide the X/Y boxes already used but the pad never asked for.
       const padVRule = el('i', 'mt-pad-rule v'), padHRule = el('i', 'mt-pad-rule h');
       pad.appendChild(padVRule); pad.appendChild(padHRule); pad.appendChild(padHint);
+      padMark(pad, 'Swipe here to move the layer. It snaps to the centre, the edges and earlier keyframes');
       const PAD_HINT = padHint.textContent;
       const targetName = (v, axis) => {
         const P = FM.scene.project;
@@ -6088,7 +6098,7 @@ window.FM = window.FM || {};
       const bax = mtVBox('Anchor X', () => getA('anchorX') * 100, v => setAnchor(v / 100, getA('anchorY')), { dp: 1, unit: '%', scrub: 0.3, min: -400, max: 500, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
       const bay = mtVBox('Anchor Y', () => getA('anchorY') * 100, v => setAnchor(getA('anchorX'), v / 100), { dp: 1, unit: '%', scrub: 0.3, min: -400, max: 500, onScrub: () => { if (FM.canvasEdit) FM.canvasEdit.update(); } });
       refreshables.push(bax, bay); values.append(bax, bay);
-      const apad = el('div', 'mt-trackpad'); apad.appendChild(el('span', 'mt-trackpad-hint', 'Swipe to place the anchor · snaps to the quarter points'));   // queue 759: the grid is 0 / ¼ / ½ / ¾ / 1 each way — 25 points, not nine
+      const apad = padMark(el('div', 'mt-trackpad'), 'Swipe to place the anchor. It snaps to the quarter points');   // queue 759: the grid is 0 / ¼ / ½ / ¾ / 1 each way — 25 points, not nine. #1255: the sentence is the pad's name now, the mark is on it
       // 260px of swipe crosses the layer, and it snaps to the 25 quarter points (queue 759: the hint used to say nine)
       const SNAP = [0, 0.25, 0.5, 0.75, 1];
       const snapA = v => { if (!magnetOn()) return v; for (let i = 0; i < SNAP.length; i++) if (Math.abs(v - SNAP[i]) < 0.045) return SNAP[i]; return v; };
@@ -6318,7 +6328,7 @@ window.FM = window.FM || {};
     return s;
   }
 
-  // ===== Volume panel — keyframeable audio level + easing (AM-style left rail: ◆ + curve) =====
+  // ===== Volume panel — keyframeable audio level + easing (left rail: ◆ + curve) =====
   /* Volume ceiling (queue 195). Ezra: "I want to be able adjust the volume up to like 1000%." Above
    * unity is Web Audio only — `el.volume` cannot exceed 1 — and the boost stage in audio-fx-live.js
    * clamps to the same number, so the UI cannot ask for a gain the audio path will not honour. */
@@ -6569,7 +6579,7 @@ window.FM = window.FM || {};
     return panel;
   }
 
-  // Advanced text options — everything AM's focused text bar leaves out. Surfaced as the editor's "Aa"
+  // Advanced text options — everything [the reference app]'s focused text bar leaves out. Surfaced as the editor's "Aa"
   // sheet (FM._textExtras) so all text controls live WITH text editing, not scattered. Outline lives in
   // Border & Shadow; text fill lives in Color & Fill — this is Style / Spacing / Line height / Curve /
   // Animate / Captions only. `rerender` rebuilds the host (the inspector, or the editor's Aa popover).
@@ -6684,8 +6694,46 @@ window.FM = window.FM || {};
   // every depth effect (z scaling, parallax, focus falloff) firms up together because all of them
   // divide by f.
   function camLegacyFov(P) { return +(2 * Math.atan((P.height || 1080) / 2 / Math.max(1, (P.height || 1080) * 2)) * 180 / Math.PI).toFixed(1); }
+  /* #1255: THE CAMERA'S PARAGRAPHS ARE BEHIND ONE SMALL "?". His words, 23 Nov: "There shouldn't be any explanations like that. We have
+     tutorials for a reason"; asked about the camera, 24 Nov: "question marks for the camera are fine for now", and of such a mark:
+     "a question mark that takes you to the tutorial page that explains it all there." Six paragraphs stood under these controls every
+     time the panel was open (what Field of view is, what Focus blur and Fog do, on and off, what Shutter and Samples mean). They are
+     gone from the panel and said in the camera's own lesson (tutorials/15-camera.md), which the "?" beside the tab's name shows
+     HERE, in the panel, with ‹ back: the pattern of the cog's Friends block (#1243 ST8), drawn through FM.tutorials (createElement
+     and textContent only), so the panel and the Tutorials tab can never disagree. FM._camHelp is transient, like FM._camTab: never
+     saved, and it belongs to the camera it was opened on.
+     WHAT STAYS: the line that says these controls can do nothing on a flat scene (queue 595). It reports THIS scene, at the moment it
+     matters, and goes away when a layer has depth: not a how-to.
+     THE PAGE IS NEVER EMPTY (review MERGE-2): a lesson is fetched at this version's ?v=, and sw.js drops the last version's copy, so
+     after an update an offline phone could not load it and the page said only "Couldn't load". So the page opens at once on a short
+     paragraph of its own for the tab he came from (CAM_HELP below), and the lesson replaces it when it loads; if it never loads, the
+     paragraph stays. The pattern of the Friends block's page (howItWorks, collab-ui.js drawFriendsHelp). */
+  const CAM_HELP = {
+    view: 'Field of view is the lens: wide pushes layers at different depths apart, narrow flattens the scene. Distance moves the camera in and out. Both only matter when layers sit at different depths.',
+    focus: 'Focus blur softens layers by their depth. Focus distance is the depth that stays sharp, and Depth of field is how far either side of it also stays sharp. It only works when layers sit at different depths.',
+    fog: 'Fog washes far layers towards a colour. A layer at the Near distance is untouched, and at the Far distance it is the fog colour. It only works when layers sit at different depths.',
+    blur: 'Motion blur smears the scene while the camera moves. Shutter is how long the shutter stays open (0.5 is what film uses). More Samples is smoother and slower.',
+  };
+  function camHelp(body) {
+    const row = el('div', 'cs-backrow cam-helprow');
+    const back = el('button', 'cs-backbtn', '‹'); back.type = 'button';
+    back.setAttribute('aria-label', 'Back');
+    back.addEventListener('click', () => { FM._camHelp = false; FM.inspector.refresh(); });
+    row.appendChild(back);
+    row.appendChild(el('div', 'cam-help-title', 'How the camera works'));
+    body.appendChild(row);
+    const page = el('div', 'cs-helpbody cam-helpbody'), art = el('div', 'cs-lesson');
+    const tab = CAM_HELP[FM._camTab] ? FM._camTab : 'view';
+    art.appendChild(el('p', 'tut-intro cam-help-own', CAM_HELP[tab]));   // at once, and the offline answer
+    page.appendChild(art);
+    body.appendChild(page);
+    if (FM.tutorials && FM.tutorials.load && FM.tutorials.render) FM.tutorials.load('15-camera.md').then(src => { if (art.isConnected) FM.tutorials.render(src, art); }, () => {});
+    try { back.focus({ preventScroll: true }); } catch (e) {}
+  }
   function camPanel(layer, body) {
     const P = FM.scene.project;
+    if (FM._camHelp && FM._camHelpFor === layer.id) { camHelp(body); return; }
+    FM._camHelp = false;
     const tab = CAM_TABS.some(c => c.key === FM._camTab) ? FM._camTab : 'view';
     const rail = el('div', 'cam-rail');
     CAM_TABS.forEach(c => {
@@ -6695,7 +6743,13 @@ window.FM = window.FM || {};
       rail.appendChild(b);
     });
     body.appendChild(rail);
-    body.appendChild(el('div', 'insp-sub-label', (CAM_TABS.find(c => c.key === tab) || {}).label));
+    const head = el('div', 'cam-head');
+    head.appendChild(el('div', 'insp-sub-label', (CAM_TABS.find(c => c.key === tab) || {}).label));
+    const q = el('button', 'cs-help cam-help', '?'); q.type = 'button'; q.title = 'How the camera works';   // #1255: where the paragraphs went
+    q.setAttribute('aria-label', 'How the camera works');
+    q.addEventListener('click', () => { FM._camHelp = true; FM._camHelpFor = layer.id; FM.inspector.refresh(); });
+    head.appendChild(q);
+    body.appendChild(head);
     if (tab === 'blur') {
       if (!layer.motionBlur || typeof layer.motionBlur !== 'object') layer.motionBlur = { enabled: false, shutter: 0.5, samples: 8 };
       const mb = layer.motionBlur;
@@ -6706,7 +6760,6 @@ window.FM = window.FM || {};
         body.appendChild(rangeRow('Samples', () => Math.round(mb.samples || 8),
           v => { mb.samples = Math.max(2, Math.min(32, Math.round(v))); FM.requestRender(); }, 2, 32, 1));
       }
-      body.appendChild(el('div', 'insp-hint', 'Smears the whole scene when the CAMERA moves — a pan, a dolly or a spin. It costs nothing while the camera is still, and nothing at all when it has not moved far enough to see, so it is safe to leave on. Shutter is how long the shutter stays open: 0.5 is the 180° shutter film uses. Samples is how many slices are averaged — more is smoother and slower. This does not smear movement INSIDE the picture: a layer\u2019s own keyframes are Motion Blur (Object), and movement made by an effect is Motion Blur (Footage).'));
       return;
     }
     /* ⚠️ ONE ANSWER TO "IS THIS SCENE FLAT", SHARED BY EVERY CAMERA CONTROL THAT NEEDS DEPTH
@@ -6746,7 +6799,6 @@ window.FM = window.FM || {};
          is what made this a bug report in the first place. */
       const w = flatSceneWarning(layer, 'these two do nothing');
       if (w) body.appendChild(w);
-      body.appendChild(el('div', 'insp-hint', 'Field of view is the lens. Wide (90°+) throws depth hard — layers at different Z separate and the camera’s pan gains real parallax. Narrow (20°) flattens the scene almost to 2D. Distance dollies the camera along Z; it is the same value as the camera’s own Z, so keyframing either animates the move.'));
       return;
     }
     if (tab === 'focus') {
@@ -6764,23 +6816,21 @@ window.FM = window.FM || {};
       if (fw) body.appendChild(fw);
       const f = layer.focus;
       body.appendChild(checkRow('Focus blur', !!f.enabled, v => { f.enabled = v; FM.requestRender(); FM.inspector.refresh(); commitH(); }));
-      if (!f.enabled) { body.appendChild(el('div', 'insp-hint', 'Turn this on to defocus layers by their depth. Give layers different Z values (Position / Scale → Move) and everything off the focus plane softens.')); return; }
+      if (!f.enabled) return;
       body.appendChild(rangeRow('Focus distance', () => FM.evalProp(f.distance, FM.time) || 0, v => { f.distance = Math.round(v); FM.requestRender(); }, -2000, 4000, 5));
       body.appendChild(rangeRow('Depth of field', () => FM.evalProp(f.dof, FM.time) || 200, v => { f.dof = Math.max(1, Math.round(v)); FM.requestRender(); }, 1, 3000, 5));
       body.appendChild(rangeRow('Blur strength', () => FM.evalProp(f.blur, FM.time) || 0, v => { f.blur = Math.max(0, Math.min(2, v)); FM.requestRender(); }, 0, 2, 0.05));
-      body.appendChild(el('div', 'insp-hint', 'Focus distance is the Z that stays sharp. Depth of field is how far either side of it also stays sharp — past that the blur ramps up and tops out three widths out.'));
       return;
     }
     if (!layer.fog) layer.fog = { enabled: false, color: '#ffffff', near: 0, far: Math.round((P.height || 1080) * 2) };
     const g = layer.fog;
     body.appendChild(checkRow('Fog', !!g.enabled, v => { g.enabled = v; FM.requestRender(); FM.inspector.refresh(); commitH(); }));
-    if (!g.enabled) { body.appendChild(el('div', 'insp-hint', 'Turn this on to wash distant layers toward a colour — haze, dusk, underwater. Layers need different Z values for it to do anything.')); return; }
+    if (!g.enabled) return;
     const cr = el('div', 'prop-row'); cr.appendChild(el('label', null, 'Colour'));
     cr.appendChild(colorField(() => g.color || '#ffffff', v => { g.color = v; FM.requestRender(); commitH(); }));
     body.appendChild(cr);
     body.appendChild(rangeRow('Near distance', () => FM.evalProp(g.near, FM.time) || 0, v => { g.near = Math.round(v); FM.requestRender(); }, -2000, 4000, 5));
     body.appendChild(rangeRow('Far distance', () => FM.evalProp(g.far, FM.time) || 0, v => { g.far = Math.round(v); FM.requestRender(); }, -2000, 8000, 5));
-    body.appendChild(el('div', 'insp-hint', 'A layer at the near distance is untouched; at the far distance it is the fog colour outright; between the two it fades across. The wash clips to each layer’s own shape, so text stays text.'));
   }
 
   /* TRANSFORM motion blur — Motion Blur (Object) — has NO block here any more, deliberately.
@@ -6816,7 +6866,7 @@ window.FM = window.FM || {};
       body.appendChild(volumePanel(layer));
     } else if (key === 'speed') {
       if (layer.speed == null) layer.speed = 1;
-      // AM-style left rail (◆ keyframe + easing curve) beside the speed control — keyframed speed
+      // Left rail (◆ keyframe + easing curve) beside the speed control — keyframed speed
       // = SPEED RAMPING: playback accelerates/decelerates along the eased curve between keyframes.
       const spRow = el('div', 'mt-panel spd-panel');
       const rail = el('div', 'mt-rail mt-rail-left');
@@ -6841,7 +6891,7 @@ window.FM = window.FM || {};
        * T with its start fixed? The new duration is T − start, so the new speed is span / (T − start).
        * One divide; the value of this feature is that you never work it out yourself.
        *
-       * Above the slider, matching where AM puts them. Two buttons, one per edge, because those are
+       * Above the slider, matching where [the reference app] puts them. Two buttons, one per edge, because those are
        * the two things that can actually be solved — see the note in REQUESTS #184 about the four in
        * his screenshot. Deliberately NOT disabled when the playhead is out of range: the panel does
        * not rebuild while you scrub, so a button greyed out at build time would still be grey after
@@ -6994,7 +7044,7 @@ window.FM = window.FM || {};
         } else {
         head.innerHTML = '<span class="blend-arrow">' + (open ? '▾' : '▸') + '</span><span class="blend-cat-name">' + name + '</span>' +
           (curIn ? '<span class="blend-cur">' + curIn[1] + '</span><span class="blend-check">✓</span>' : '');
-        head.addEventListener('click', () => { const was = !!FM._blendOpen[name]; FM._blendOpen = {}; if (!was) { FM._blendOpen[name] = true; pendingReveal = { sel: '.blend-list' }; } FM.inspector.refresh(); });   // accordion: only ONE dropdown open at a time (AM)
+        head.addEventListener('click', () => { const was = !!FM._blendOpen[name]; FM._blendOpen = {}; if (!was) { FM._blendOpen[name] = true; pendingReveal = { sel: '.blend-list' }; } FM.inspector.refresh(); });   // accordion: only ONE dropdown open at a time
         }
         row.appendChild(head);
         if (open) {
@@ -7170,7 +7220,7 @@ window.FM = window.FM || {};
         return row;
       }
 
-      // LAYER presets first (look + animations — the AM-style ones saved via "Save Preset")
+      // LAYER presets first (look + animations — the ones saved via "Save Preset")
       const lps = byTag(FM.layerPresets.list().map(p => { p._k = 'lp:' + p.name; return p; }))
                     .filter(p => passes(p.name, p._k));
       /* THE SAVE ACTION LEADS ITS SECTION (queue 331 clauses 1-2). Ezra: *"Get rid of explanation and
@@ -7275,7 +7325,7 @@ window.FM = window.FM || {};
             : 'it was saved empty, or in a format this panel doesn’t read';
           const t0 = '“' + p.name + '” can’t be applied — ' + why + '. Applying it would wipe this layer’s effects, so it does nothing. Remove it with ✕.';
           pwrap.appendChild(presetRow({
-            name: p.name, cls: ' broken', title: t0, sub: '⚠ ' + why,
+            name: p.name, cls: ' broken', title: t0, sub: why,
             onTap: () => { if (FM.toast) FM.toast('“' + p.name + '” has no effects to apply — ' + why + '. Your effect stack is untouched.', 3600); },
             onDelete: p.builtin ? null : (() => { FM.fxPresets.remove(p.name); })
           }));
@@ -7353,7 +7403,7 @@ window.FM = window.FM || {};
         rep.addEventListener('click', () => FM.replaceMedia(layer.id));
         body.appendChild(rep);
       }
-      // EVERY layer gets AM's fill selector (None / Solid / Gradient / Media). On a video/image/
+      // EVERY layer gets [the reference app]'s fill selector (None / Solid / Gradient / Media). On a video/image/
       // group, picking Solid (etc.) fully overwrites the content with that fill; None shows the
       // content as-is. A solid colour fills flat — gradients are their own tab, never an accident.
       fillPanel(layer, body);
@@ -7391,7 +7441,7 @@ window.FM = window.FM || {};
       const bsKinds = [];   // what this layer offers, in tile order: { kind, label, on, set, wide }
       const bsRows = el('div', 'bs-page-rows');   // the open page's rows (the blocks below fill it only for their own page)
       const bsGrid = el('div', 'bs-tiles');
-      // ===== BORDER (AM parity, keyframeable) =====
+      // ===== BORDER (parity, keyframeable) =====
       // Reuses layer.stroke as the single border. position = inside/center/outside. Group border = silhouette
       // dilation → outside only. size + colour are keyframeable (◆); position is a plain choice.
       // OPEN KINDS (line / arc / spiral / open pen path) GET THE TOGGLE TOO (queue 780). The renderer's stroke
@@ -7458,7 +7508,7 @@ window.FM = window.FM || {};
           if (!hasStroke) bsRows.appendChild(el('div', 'insp-hint', 'Dashes show on the stroke — turn on Outline too.'));
         }
       }
-      // ===== SHADOW (AM parity, keyframeable) =====
+      // ===== SHADOW (parity, keyframeable) =====
       /* dx/dy DEFAULT TO 0 (queue 386 clause 2). Ezra: "there needs to be a normal shadow not just the
          long drop one". Nothing was missing from the renderer — a shadow hugging the layer has always
          been one offset away — the problem was that every shadow anyone switched on STARTED at 8/8, so
@@ -7562,7 +7612,7 @@ window.FM = window.FM || {};
         sel.addEventListener('change', () => { layer.parent = sel.value || null; FM.requestRender(); FM.inspector.refresh(); if (FM.canvasEdit) FM.canvasEdit.update(); commitH(); });
         row.appendChild(sel); body.appendChild(row);
         if (layer.parent) {
-          // AM parenting rotation mode: how the child responds to the parent's rotation.
+          // Parenting rotation mode: how the child responds to the parent's rotation.
           if (!layer.parentMode) layer.parentMode = 'normal';
           const mr = el('div', 'prop-row'); mr.appendChild(el('label', null, 'Link rotation'));
           const msel = document.createElement('select');
@@ -7583,7 +7633,7 @@ window.FM = window.FM || {};
         buildTextExtras(layer, body);
       }
       if (layer.type === 'shape' && FM.isPointShape && FM.isPointShape(layer)) {
-        // ===== Edit Points (AM) — point shapes replace Edit Shape with this =====
+        // ===== Edit Points — point shapes replace Edit Shape with this =====
         // Auto-enter point editing: overlay on the canvas + this panel edits the selected point.
         if (FM.pointEdit && (!FM.pointEdit.isActive() || FM.pointEdit.layerId() !== layer.id)) FM.pointEdit.start(layer.id, { embedded: true });
         editPointsTools(layer, body);
@@ -7618,7 +7668,7 @@ window.FM = window.FM || {};
         ksel.addEventListener('change', () => { layer.shape = ksel.value; FM.requestRender(); FM.inspector.refresh(); commitH(); });
         kr.appendChild(ksel); body.appendChild(kr);
         const openStroke = isOpenStroke(layer);   // stroked, never filled — queue 759: this list omitted spiral and open paths, so Spiral got mislabelled Stroke controls
-        // Fill/colour now lives in its own "Color & Fill" panel (AM parity) — Edit Shape is geometry + stroke.
+        // Fill/colour now lives in its own "Color & Fill" panel — Edit Shape is geometry + stroke.
         body.appendChild(rangeRow('Width', () => layer.shapeW, v => { layer.shapeW = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.width), 1));
         body.appendChild(rangeRow('Height', () => layer.shapeH, v => { layer.shapeH = Math.max(2, v); if (FM.canvasEdit) FM.canvasEdit.update(); }, 4, Math.max(200, P.height), 1));
         if (layer.shape === 'rect') body.appendChild(rangeRow('Corner radius', () => layer.cornerRadius || 0, v => { layer.cornerRadius = Math.max(0, v); }, 0, Math.round(Math.min(layer.shapeW, layer.shapeH) / 2), 1));
@@ -7654,11 +7704,11 @@ window.FM = window.FM || {};
         }
       }
       if (layer.type === 'video' || layer.type === 'image') {
-        // Media has no path/points to edit — AM's "Edit Shape" for a photo/video is the SIZE editor.
+        // Media has no path/points to edit — [the reference app]'s "Edit Shape" for a photo/video is the SIZE editor.
         mediaSizePanel(layer, body);
       }
       // (Motion blur, Wiggle, Mask and the Start/Duration rows were removed from Edit Shape to match
-      // [the reference app] — none of those live in AM's Edit Shape. Any layer that still carries those
+      // [the reference app] — none of those live in [the reference app]'s Edit Shape. Any layer that still carries those
       // fields from an older save keeps rendering them; there's just no longer UI to add them here.
       // Timing is set on the timeline; masking lives in Blending (mask modes) and masking groups.)
     }
@@ -7667,7 +7717,7 @@ window.FM = window.FM || {};
   // ===== WHICH property am I editing? — panel scope + an optional tapped row ======================
   //
   // v5.42 made keyframe diamonds inert outlines unless their property's editor is open, so "focus"
-  // was implied by which PANEL you had open. Ezra (AM): "to tell what slider you have selected —
+  // was implied by which PANEL you had open. Ezra: "to tell what slider you have selected —
   // hence forth what key frames ur gonna be editing, it shows by making the item ur changing have a
   // different colour on the name of it, you can also tap on the name to select the row." In his
   // screenshot the Offset effect's X was green and its Y was not, so the unit is ONE PROPERTY, not
@@ -7955,7 +8005,7 @@ window.FM = window.FM || {};
       return true;
     },
     // Step BACK one level (Esc / click-off): easing sub-view → its category, category → the grid,
-    // grid → deselect. Returns true if it did something. (AM: Esc doesn't nuke the layer outright.)
+    // grid → deselect. Returns true if it did something. (Esc doesn't nuke the layer outright.)
     back() {
       const layer = FM.selectedLayer(FM.scene);
       if (!layer) return false;
@@ -8060,7 +8110,7 @@ window.FM = window.FM || {};
         return;
       }
       if (!layer) {
-        // AM model: nothing selected → show the Add menu (same one the mobile + button opens).
+        // Model: nothing selected → show the Add menu (same one the mobile + button opens).
         // Selecting a clip swaps this for the property editor (refresh() re-runs on select).
         // Clearing lastLayerId means re-selecting a layer (even the SAME one) reopens at the category
         // GRID, not the sub-menu you last had open — deselecting is a clean reset (Ezra).
@@ -8085,6 +8135,7 @@ window.FM = window.FM || {};
       // to it alone. Left open while a second clip is selected it silently edits one of them, so
       // selecting more drops straight back to the multi actions.
       if (view !== 'home' && FM.selectionIds && FM.selectionIds().length >= 2) { view = 'home'; FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; FM._camTab = 'view'; }
+      if (view !== 'cameraopts') FM._camHelp = false;   // #1255 review cam-help-sticks: the camera's ? page ends with any way out of its card
       /* A FLAG THE VIEW CANNOT HONOUR MUST NOT SURVIVE A REFRESH. The crop easing sub-view is gated on
        * layer.crop existing, and this panel deliberately does not create a crop just to show one — so a
        * _cropEasing left armed with no crop sat waiting and hijacked whatever refresh came next, the
@@ -8204,7 +8255,7 @@ window.FM = window.FM || {};
         const backLabel = (view === 'element') ? elementLabel(layer) : (cat ? cat.label : 'Back');
         const back = el('button', 'cat-back', '‹  ' + backLabel);
         back.addEventListener('click', () => { view = 'home'; clearFilterPreview(); FM._mtEasing = false; FM._volEasing = false; FM._spdEasing = false; FM._opaEasing = null; FM._fxEasing = null; FM._cropEasing = false; FM.inspector.refresh(); });
-        // AM shows the crop controls (aspect lock + size origin) at the top-RIGHT of the Edit Shape
+        // [the reference app] shows the crop controls (aspect lock + size origin) at the top-RIGHT of the Edit Shape
         // header — put them on the header row for media so they sit far right, not buried in the body.
         if (view === 'element' && (layer.type === 'video' || layer.type === 'image') && FM._inspectorCropToggles) {
           const head = el('div', 'cat-head-row');

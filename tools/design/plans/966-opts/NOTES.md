@@ -9,7 +9,7 @@ run but `node --check`** (compositor.js, collab-core.js, tests/tests.js all OK).
 ## 1. Twin check (done before any code)
 
 Effects were picked for being visible in short phone edits (transitions, glows, title looks, motion, text) and thin next to
-AE / Premiere / CapCut / Alight Motion. Every candidate option was checked five ways:
+[another editor] / [another editor] / [another editor] / [another app]. Every candidate option was checked five ways:
 
 | Check | How | Result |
 |---|---|---|

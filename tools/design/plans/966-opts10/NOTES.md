@@ -59,11 +59,11 @@ Shift; T02 and T03's new effects); and these, each considered and dropped:
 | | `color` | Back colour | colour row (`swatch`), greyed except under Solid colour | #ffffff | the paper's colour |
 | Bleach Bypass (`bleachbypass`) | `color` | Silver tint | colour row, live | #ffffff | colours the silver the process lays over the picture — steel blue, sepia; black and white stay black and white |
 | | `skin` | Protect skin | 0–100 %, keyframable | 0 | holds skin-coloured pixels back from the process (Vibrance's wedge), so a face keeps its warmth while the rest goes silver |
-| Colourize (`colorize`) | `sat` | Saturation | 0–200 %, keyframable | 100 | how much colour the tint carries: 0 a grey tone, above 100 % richer than the swatch (Photoshop's Colorize Saturation) |
-| | `light` | Lightness | −100–100, keyframable | 0 | lifts the tint toward white or sinks it toward black (Photoshop's Colorize Lightness) |
+| Colourize (`colorize`) | `sat` | Saturation | 0–200 %, keyframable | 100 | how much colour the tint carries: 0 a grey tone, above 100 % richer than the swatch ([another editor]'s Colorize Saturation) |
+| | `light` | Lightness | −100–100, keyframable | 0 | lifts the tint toward white or sinks it toward black ([another editor]'s Colorize Lightness) |
 | Soften Skin (`softskin`) | `brighten` | Brighten | 0–100 %, keyframable, greyed under Show selection (`liveWhen` 0) | 0 | lifts each pixel toward white as far as it is smoothed — skin brightens, eyes, brows, hair and edges stay (every beauty app's Whiten) |
 | | `view` | Show selection | Off (0) / On (1) | Off | paints how much each pixel is softened, white all, black none, for setting Keep detail and Skin tones; it shows in the export too, and its note says so |
-| Split Toning (`splittone`) | `blending` | Blending | 0–100 %, keyframable | 100 | how widely the two colours overlap (Lightroom's Color Grading Blending): lower narrows the crossover about the Balance point, 0 a hard split |
+| Split Toning (`splittone`) | `blending` | Blending | 0–100 %, keyframable | 100 | how widely the two colours overlap ([another editor]'s Color Grading Blending): lower narrows the crossover about the Balance point, 0 a hard split |
 | Tiles (`tiles`) | `axis` | Fills | All round (0) / Sideways (1) / Up and down (2), greyed under Grid (`liveWhen` 0 on Layout) | All round | Extend's copies in one row (a portrait clip filling a landscape frame) or one column |
 | | `fade` | Fade copies | 0–100 %, keyframable, greyed under Grid | 0 | each ring of copies that much fainter than the one inside it; 100 % leaves the clip alone |
 
@@ -251,7 +251,7 @@ Sideways / Up and down), Fade copies.
 - **Heat Map flows on the project clock on an adjustment layer** (the adjustment path hands no layer); on a clip it is the clip's clock.
 - **Bleach Bypass's Protect skin skips greys** — Vibrance's own wedge lets a grey through at 0.18 (harmless there, since vibrance does
   nothing to a grey); here it would hold greys back, so a grey (r = g = b) is never in the wedge.
-- **Colourize's Lightness −100 is black** at Tone and Amount 1 (Photoshop's end stop) — hence the queue 264 ALLOWED entry.
+- **Colourize's Lightness −100 is black** at Tone and Amount 1 ([another editor]'s end stop) — hence the queue 264 ALLOWED entry.
 - **Soften Skin's Brighten scales with Amount** (it lifts by half of Brighten x w, and w carries Amount): at the default 0.85 the most a
   pixel lifts is 42.5 % of the way to white.
 - **Split Toning's Blending default sits at the top of its range** (100 % = today's widest crossover); it cannot overlap the colours more

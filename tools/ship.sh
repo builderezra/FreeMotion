@@ -637,6 +637,18 @@ if ! python3 tools/_public.py check; then
   echo "❌ THIS RELEASE WOULD PUBLISH SOMETHING THAT IS NOT THE APP — not committing, not pushing."
   exit 1
 fi
+# NO FILE MAY NAME ANOTHER EDITING APP, AND NEITHER MAY THE COMMIT MESSAGE (#1264, 24 Nov). His words: "Just make sure there's
+# absolutely zero trace anywhere in any of our files, any of our GitHubs, anything that it mentions anything about [another app]
+# or any editing software at all. Nowhere to be found." A sweep took the names out once, and a sweep is a thing to remember, so
+# this is the lock: every text file the commit would hold (tracked, and new ones git does not ignore), its path, and the message
+# itself are read, and one name refuses the release. The gate knows the names only as fingerprints, so it carries none itself
+# (tools/names-gate.py says how one is added); it self-tests first; a few seconds. What it does NOT read is the old commits:
+# the history is a separate job that needs his own yes.
+mkdir -p .claude/ship; printf '%s\n' "$MSG" > .claude/ship/names-msg.txt
+if ! python3 tools/names-gate.py check --msg .claude/ship/names-msg.txt; then
+  echo "❌ THIS RELEASE NAMES ANOTHER EDITING APP (a file, a path or the commit message) — not committing, not pushing."
+  exit 1
+fi
 # THE FAILSAFE MUST PROVE ITSELF TOO (12 Sep). tools/rollback.sh is the answer to his question "whats the
 # fail safe if an ai fucks up all the code?" — and on the day it was written it broke TWICE, in opposite
 # directions: untracked (so `git clean -fd` and its own `git stash -u` would eat it), then, once that was
@@ -910,6 +922,11 @@ if [ "${#_DP[@]}" -gt 0 ] && python3 tools/_docsonly.py paths "${_DP[@]}" >/dev/
     echo "   no test names any of them — the gates above are the whole check"
   fi
   ship_phase push
+  # #1264 again, on the tree as it is now (25 Nov review): a note written while the slice ran rides in this commit too
+  if ! python3 tools/names-gate.py check --msg .claude/ship/names-msg.txt; then
+    echo "❌ A FILE WRITTEN WHILE THIS SHIP RAN NAMES ANOTHER EDITING APP: not committing, not pushing."
+    _WHY="a file written during the ship names another editing app"; exit 1
+  fi
   git add -A -- "${_DP[@]}"
   # EXACTLY those paths: anything else already staged (an app file someone added by hand) is not riding out on a fast path
   _EXTRA="$(git diff --cached --name-only | grep -vxF -f <(printf '%s\n' "${_DP[@]}"))"
@@ -1250,6 +1267,17 @@ if grep -qE '^(styles\.css|index\.html|js/)' <<<"$PHONE_RELEVANT"; then
   python3 tools/perf_report.py .claude/ship/suite-phone.out "phone pass"   # #1098 clause 2: PC speed beside phone speed (reported only)
 else
   echo "· no shipped source changed — skipping the phone pass"
+fi
+
+# ─── THE NAMES GATE AGAIN, ON THE TREE ABOUT TO BE COMMITTED (#1264 review, 25 Nov) ────────────────────────────────────
+# The first check ran in the gates phase, hours ago on the laptop, and `git add -A` below commits whatever the tree holds
+# NOW. The app and its tests are held still by the tree hash below; his notes are not, by design, so a request the logging
+# chat appends to INBOX.md during the passes rides in this commit, in his words verbatim. So the gate reads the tree again
+# here, a few seconds before the commit, with only instant checks between the two.
+if ! python3 tools/names-gate.py check --msg .claude/ship/names-msg.txt; then
+  echo "❌ A FILE WRITTEN WHILE THIS SHIP RAN NAMES ANOTHER EDITING APP: not committing, not pushing."
+  _WHY="a file written during the ship names another editing app"
+  exit 1
 fi
 
 # ⚠️ A RELEASE THAT CHANGES WHAT A NOT-RUN TEST PROVES REFUSES (6 Oct, #1071 — his answer: the recommended plan). Elsewhere

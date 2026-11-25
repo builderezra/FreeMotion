@@ -36,8 +36,8 @@ did not wait, so every choice on the sheet is already an option on the effect. H
   **Not in CROP_FX** (the slats are cut from the plate, like Shape Wipe's).
 
 Search words: venetian, venetian blinds, blinds, blind, slats, stripes wipe, blinds wipe, blinds transition, transition, reveal.
-Not "stripes" alone (the Stripes generator's word). Name: "Venetian Blinds" is the craft name (After Effects has one); it is in
-neither Alight Motion list `tools/design/954-effect-names.md` was built from, so nothing there to avoid.
+Not "stripes" alone (the Stripes generator's word). Name: "Venetian Blinds" is the craft name ([another editor] has one); it is in
+neither [another app] list `tools/design/954-effect-names.md` was built from, so nothing there to avoid.
 
 ## The tests (each fails on fb24f68b on its first line, naming the effect)
 1. **`966 B27 Venetian Blinds is in the registry …`** — Keying (CONTROL: Shape Wipe is), routed, not in CROP_FX, label,

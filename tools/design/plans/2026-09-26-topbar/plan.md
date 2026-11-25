@@ -1,7 +1,7 @@
 # #920 reopened (26 Sep): the top of the screen on his iPhone. Plan for the builder
 
 Written by the planning chat. Nothing in the repo was edited. All files referenced as `PLAN/…` live in
-`/Users/ezrasmith/Claude/FreeMotion/tools/design/plans/2026-09-26-topbar/`.
+`/Users/me/Claude/FreeMotion/tools/design/plans/2026-09-26-topbar/`.
 
 ## 0. The short version
 

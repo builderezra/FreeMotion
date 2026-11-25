@@ -1,7 +1,7 @@
 # Plan: the Car shape (INBOX 26 Sep ~17:42)
 
 Planned 26 Sep 2026 by the planning chat, for the builder. Everything in the output dir came from this plan's own tooling:
-`/Users/ezrasmith/Claude/FreeMotion/tools/design/plans/2026-09-26-car/`
+`/Users/me/Claude/FreeMotion/tools/design/plans/2026-09-26-car/`
 (called `$PLAN` below). No repo file was edited.
 
 **Short version.** Three cars traced from published pictograms and converted into `FM.SHAPE_POLYS` format. The data is
@@ -600,7 +600,7 @@ File: `$PLAN/tests_C.js`. Its 34px test is the verified §6a test with only its 
 
 ## 7. Verification (the builder, after the change)
 
-Set `PLAN=/Users/ezrasmith/Claude/FreeMotion/tools/design/plans/2026-09-26-car` first.
+Set `PLAN=/Users/me/Claude/FreeMotion/tools/design/plans/2026-09-26-car` first.
 
 1. **Suite slice, both widths**:
    ```bash

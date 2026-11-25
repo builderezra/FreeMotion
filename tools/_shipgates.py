@@ -54,7 +54,14 @@ FEATURES = [
      # A WORD, not a run of letters (11 Oct): `(?i)…|scan` matched "otherS CAN Edit" inside FM.collab.othersCanEdit and refused
      # v17.38, which touches no QR at all. The words count where a word starts, or where a camelCase name starts a new part
      # (showQR, scanQR, jsQR, BarcodeDetector) — never in the middle of one.
-     "lines": {"js/collab-ui.js": r"(?<![A-Za-z0-9])(?i:qr|barcode|jsqr|scan)|(?<=[a-z0-9])(?:QR|Qr|Barcode|Scan)"}},
+     "lines": {"js/collab-ui.js": r"(?<![A-Za-z0-9])(?i:qr|barcode|jsqr|scan)|(?<=[a-z0-9])(?:QR|Qr|Barcode|Scan)"},
+     # NOT QR CODE, BY ITS WHOLE TEXT (25 Nov, v18.53). A changed line listed here is not counted, and nothing else is let
+     # through. The Friends block lost its hint line (#1243 ST8, his words: the block bare, the how-to behind a "?"): a
+     # sentence on screen that said he would get "a link, a QR and a short code". Taking a sentence away changes no QR code,
+     # and the two QR tests cannot run off the Mac, so v18.53 was refused before its suites with nothing it could do. One
+     # exact line, not a rule: every other line about QR still counts, and so does this one beside a real QR change, or with
+     # a word of it changed (tools/test-port.sh proves all three).
+     "not_code": {"js/collab-ui.js": ["body.appendChild(el('div', 'cs-fr-hint', 'You’ll get a link, a QR and a short code to send. Nothing’s shared until you tap Start sharing.'));"]}},
     {"name": "the app under a real finger (touch emulation)", "reason": r"needs real touch emulation",
      "globs": SHIPPED, "lines": {}},
     {"name": "the pictures and sounds pinned to the Mac (a per-OS baseline)", "reason": r"no baseline recorded for |the \S+ baseline for ",
@@ -132,7 +139,8 @@ def feature_gate(files, diff_text, notrun_lines):
             if label_only(diff_text, p):
                 continue   # a release's own version label and ?v= busters are not code (7 Oct, see label_only)
             pat = f["lines"].get(p)
-            if pat and not any(re.search(pat, l) for l in changed_lines(diff_text, p)):
+            plain = f.get("not_code", {}).get(p, ())   # whole lines known not to be this feature's code (FEATURES says why)
+            if pat and not any(re.search(pat, l) for l in changed_lines(diff_text, p) if l.strip() not in plain):
                 continue
             hit.append(p)
         if not hit:

@@ -430,3 +430,14 @@ Each has the recommended answer. If he does not answer, the recommended answer i
   - in D: "the add-layer row is a thin bar that expands on hover" (now like T1r on PC too); "Today's effect pictures and today's sliders stay" (the pictures stay; the sliders became the Ruler outside Simple);
   - A2 (the switch's colour) is carried here as Q12; A5 to A8 are answered (A5 by rules 11 and 41, A6 M1 phone and M3 PC, A7 E1 with E1D2 on PC, A8 A2r on PC);
   - of its open picks, N, D, O, S, K and P are answered here, while Q (Simple's effect pictures sheet) is Q15.
+
+## 8. Added after the handover (24 Nov, 22:38 to 23:15; his words are in REQUESTS.md / INBOX)
+
+- **Effects panel motion: MO1** (simple4/menus/MO1-dark-phone): one smooth move, about 320 ms, gentle ease-out; the panel rises as the canvas shrinks. With his three notes:
+  1. the flow is Effects, then the layer's effects list (IF2 when it has none), then Add effect, then the browser (B1r / B4r). The drawn MO boards skip the middle step and are to be redrawn;
+  2. on PC the boards are built on the combined PC editor (pcfull/PCF-*), not the old one;
+  3. the shrink starts from the canvas's CURRENT pan and zoom, keeps the same part of the project in view, and puts the pan and zoom back on close.
+- **MOTION RULE (whole design):** every dropdown, menu and pop-up opens with O2's motion family (menus/O2-dark-phone: pointer first, then the panel, short and calm, reduced-motion fade). All alike and all considered, none plain. He makes no more motion choices: the logger decides any other motion question.
+- **Scrub row:** the S1-S3 options "look good". S3 stays his pick.
+- **Intro:** today's intro stutters on his phone (a bug to measure and fix). He wants 3-4 upgraded versions in Cutline built on take 13 (Exploded Stack), with take 14 as one direction, shown moving, one recommended (a design job for the next gap).
+- **Still to come in:** his answers on the questions page (https://claude.ai/artifact/GuWWrTCvyA5dsxKyKiYuna) and the redraws page (https://claude.ai/artifact/7ixNG8qDjA16Kedyw2PzL6); the logger adds them here when he says done.

@@ -9,7 +9,7 @@ picks from options drawn for him. The alternatives below are starting points for
 
 ## Result: no new items
 
-All 7 confirmed findings are still AM-like in the current UI, and **every one is already in
+All 7 confirmed findings are still [another app]-like in the current UI, and **every one is already in
 BEFORE-PUBLISHING.md**. The 2 "unverified leads" are already in it too, as questions for his eye. So there is
 nothing new to log in REQUESTS.md and no new section to add to BEFORE-PUBLISHING.md.
 
@@ -18,12 +18,12 @@ BEFORE-PUBLISHING.md. Both are below, ready to paste in at launch.
 
 | # | ChatGPT item | Verdict | Evidence (current tree) |
 |---|---|---|---|
-| 1 | Phone Home: rows with the thumbnail on the left, meta chips, pill tabs, duration badge | ALREADY LISTED (still AM-like) | `styles.css:5084-5085` list rows (the comment there says "AM-style project LIST rows"); `styles.css:5306,5309` 86px thumb and `.hm-dur`; `js/home.js:1365` (comment says "AM-style timecode badge"); `index.html:696-703` tabs; `styles.css:5603` centred `#hm-new` (comment says "centred like AM's +") |
-| 2 | Phone editor top bar: back / name / cog / export, plus transport and timeline | ALREADY LISTED (still AM-like) | `index.html:336-340` (comment says "Mobile-only AM-style top bar"), `index.html:394-395` |
-| 3 | Add menu: tabs across the top over a tile grid | ALREADY LISTED (still AM-like) | `js/addmenu.js:993-995,1468`; `styles.css:1395,1515`. The right-hand quick-add rail is gone (see stale facts) |
-| 4 | Settings: drawer that slides in from the left, rounded groups, divided rows | ALREADY LISTED (still AM-like) | `styles.css:6352-6361,6368-6370`; the row set in `js/settings.js:575-597` still includes the AM rows |
-| 5 | Camera Options: icon rail switching between View, Focus Blur and Fog | ALREADY LISTED (still AM-like) | `js/inspector.js:5764-5776`. There is now a 4th tab, Motion Blur (#31b), using the same rail |
-| 6 | "Elements" / "Template(s)" as tab names | ALREADY LISTED; partly WEAK | `index.html:697-699`, `js/addmenu.js:238,517`. "Templates" is generic across editors. "Elements" next to "Templates" is the AM pairing |
+| 1 | Phone Home: rows with the thumbnail on the left, meta chips, pill tabs, duration badge | ALREADY LISTED (still [another app]-like) | `styles.css:5084-5085` list rows (the comment there says "[another app]-style project LIST rows"); `styles.css:5306,5309` 86px thumb and `.hm-dur`; `js/home.js:1365` (comment says "[another app]-style timecode badge"); `index.html:696-703` tabs; `styles.css:5603` centred `#hm-new` (comment says "centred like [another app]'s +") |
+| 2 | Phone editor top bar: back / name / cog / export, plus transport and timeline | ALREADY LISTED (still [another app]-like) | `index.html:336-340` (comment says "Mobile-only [another app]-style top bar"), `index.html:394-395` |
+| 3 | Add menu: tabs across the top over a tile grid | ALREADY LISTED (still [another app]-like) | `js/addmenu.js:993-995,1468`; `styles.css:1395,1515`. The right-hand quick-add rail is gone (see stale facts) |
+| 4 | Settings: drawer that slides in from the left, rounded groups, divided rows | ALREADY LISTED (still [another app]-like) | `styles.css:6352-6361,6368-6370`; the row set in `js/settings.js:575-597` still includes the [another app] rows |
+| 5 | Camera Options: icon rail switching between View, Focus Blur and Fog | ALREADY LISTED (still [another app]-like) | `js/inspector.js:5764-5776`. There is now a 4th tab, Motion Blur (#31b), using the same rail |
+| 6 | "Elements" / "Template(s)" as tab names | ALREADY LISTED; partly WEAK | `index.html:697-699`, `js/addmenu.js:238,517`. "Templates" is generic across editors. "Elements" next to "Templates" is the [another app] pairing |
 | 7 | Near-black background with a cyan accent | ALREADY LISTED; WEAK as it stands | `theme-glass.css:24-41`. Now `--accent #5ac7ed` (logo cyan) and `--am-green #5ce0c8` (logo mint). Already drifted toward the logo; only an on-purpose palette (BP item 4) settles it |
 | L1 | Effects browser hold sheet and preset sheet | ALREADY LISTED (as "worth Ezra's own eye") | `js/fx-browser.js:315-329,674`. Needs a screenshot comparison, not code |
 | L2 | Add-tab glyphs: Elements / Shape / Media / Audio | ALREADY LISTED (last bullet of the icons section) | `js/addmenu.js:238,326,377,464`. Needs a 24px comparison |
@@ -78,7 +78,7 @@ Paste each one under its existing BEFORE-PUBLISHING.md entry. These are for draw
 - **Terminology** (`index.html:697-699`, `js/addmenu.js:238,517`)
   - A. "Scene parts" for reusable assets and "Project starters" for templates.
   - B. "Building blocks" and "Recipes", each with a one-line description.
-  - (Renaming "Templates" alone is optional. It is the generic word. The pairing is what reads as AM.)
+  - (Renaming "Templates" alone is optional. It is the generic word. The pairing is what reads as [another app].)
 - **Colour** (`theme-glass.css:24-41`)
   - A. Warm graphite ground, a coral/orange action colour and a muted parchment highlight.
   - B. Light mineral ground, deep indigo controls and a secondary lime accent.
@@ -87,7 +87,7 @@ Paste each one under its existing BEFORE-PUBLISHING.md entry. These are for draw
 - **Effects hold / preset sheet**, if his comparison shows a match (`js/fx-browser.js:315-329,674`)
   - A. Presets in a popover anchored to the effect tile.
   - B. A separate preset workspace with larger previews and a fixed "current effect" header.
-- **Add-tab glyphs**, if any read as AM at 24px (`js/addmenu.js:238,326,377,464`)
+- **Add-tab glyphs**, if any read as [another app] at 24px (`js/addmenu.js:238,326,377,464`)
   - A. Redraw all five as one set in a "motion as layered space" language (same grid and stroke as the
     v10.24 Template redraw).
   - B. Use labelled chips for the categories and keep icons for actions only.

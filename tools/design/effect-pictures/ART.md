@@ -18,7 +18,7 @@ Generated work clusters at the statistical middle. Named tells: neon on dark, ra
 
 **Grounds.** Bone `#e7e2d5`, Ink `#16130f`, Coal `#0c0c0d`; UI navy `#161c28`, hairline `#2b3547`, text `#eef2f8`, dim `#8b96a8`. Cream-by-default is itself a listed tell: Bone on at most a third of tiles.
 
-**Accents, one per tile.** Vermilion `#e4471d`, keyframe yellow `#ffce4a`, teal `#29d9bb`. Teal on dark is close to Alight Motion and the "cyan on dark" tell: controls only, never glow or fill.
+**Accents, one per tile.** Vermilion `#e4471d`, keyframe yellow `#ffce4a`, teal `#29d9bb`. Teal on dark is close to [another app] and the "cyan on dark" tell: controls only, never glow or fill.
 
 **Labels.** Courier Prime bold caps on a flat tab, as in take 13: `CLIP 01`, `MATTE`. Fonts: `"Courier Prime", monospace` or 800 system sans.
 

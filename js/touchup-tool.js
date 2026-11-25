@@ -31,13 +31,10 @@ window.FM = window.FM || {};
     const st = document.createElement('style'); st.id = 'touchup-tool-css';
     st.textContent =
       '#touchup-overlay { position: absolute; z-index: 44; touch-action: none; cursor: crosshair; }' +
-      '#touchup-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px 8px 16px; box-shadow: 0 6px 24px rgba(0,0,0,.5); max-width: 94vw; }' +
-      '#touchup-bar .cb-hint { font-size: 12px; line-height: 1.25; color: var(--text-faint); margin-right: 4px; flex: 1; min-width: 0; }' +   // long hint wraps inside the pill at 380px
+      '#touchup-bar { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(18px, env(safe-area-inset-bottom)); z-index: 60; display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 8px 10px; box-shadow: 0 6px 24px rgba(0,0,0,.5); max-width: 94vw; }' +
       '#touchup-bar button { border: 1px solid var(--line); background: var(--panel-2); color: var(--text); border-radius: 999px; padding: 6px 14px; font-size: 12.5px; cursor: pointer; white-space: nowrap; }' +
       '#touchup-bar .cb-done { background: var(--accent); border-color: var(--accent); color: #06231d; font-weight: 700; }' +
-      '#touchup-bar .cb-cancel { color: var(--text-dim); }' +
-      // phones: the long hint can't share a row with two buttons — stack it above them
-      '@media (max-width: 480px) { #touchup-bar { flex-wrap: wrap; justify-content: flex-end; border-radius: 16px; padding: 10px 12px; width: 94vw; } #touchup-bar .cb-hint { flex-basis: 100%; margin: 0; } }';
+      '#touchup-bar .cb-cancel { color: var(--text-dim); }';   // (the phone rule that stacked the long hint above the buttons went with the hint, #1255)
     document.head.appendChild(st);
   }
 
@@ -201,7 +198,7 @@ window.FM = window.FM || {};
       window.addEventListener('pointerup', onUp, true);
       window.addEventListener('pointercancel', onUp, true);
       bar = document.createElement('div'); bar.id = 'touchup-bar';
-      bar.innerHTML = '<span class="cb-hint">Drag the box over what you want removed</span><button class="cb-cancel" type="button">Cancel</button><button class="cb-done" type="button">Done</button>';
+      bar.innerHTML = '<button class="cb-cancel" type="button">Cancel</button><button class="cb-done" type="button">Done</button>';   // no gesture line (#1255, as the crop bar)
       document.body.appendChild(bar);
       bar.querySelector('.cb-cancel').addEventListener('click', cancel);
       bar.querySelector('.cb-done').addEventListener('click', done);

@@ -354,8 +354,8 @@ window.FM = window.FM || {};
   /* ---- MULTI-SELECT (queue 277) -------------------------------------------------------------
    * Ezra: "when you tap on an effect it doesn't just add it selects it… you can select as many
    * effects as you want so you can just go and like select a bunch of effects every time you select
-   * one it'll put a one or two on it so you know what order they are being added in… I find in a
-   * light motion. Sometimes I want to go through and out a bunch of effects but every time I tap one
+   * one it'll put a one or two on it so you know what order they are being added in… I find in
+   * [the reference app]. Sometimes I want to go through and out a bunch of effects but every time I tap one
    * it takes me out of it and it's kind of slow."
    * PHONE ONLY, because that is what he asked for ("all just for mobile btw") and because the desktop
    * browser is a centred dialog with no timeline-sized space to become. On desktop a tap still adds
@@ -2034,7 +2034,7 @@ window.FM = window.FM || {};
       rebuild();
       paintPicks();
       if (sheet) restartPreview();     // isolate + loop the layer straight away, with an empty stack
-      // one-time discoverability nudge for the hidden gesture (AM users know it; new users don't)
+      // one-time discoverability nudge for the hidden gesture (people who have met it elsewhere know it; new users don't)
       if (FM.toast && !localStorage.getItem('fm.fx.presetHint')) {
         try { localStorage.setItem('fm.fx.presetHint', '1'); } catch (_) {}
         FM.toast('Tip: hold any effect to browse its presets', 2600);

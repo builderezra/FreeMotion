@@ -7,10 +7,10 @@ suite, no prove.sh, no mutate.sh (a v17.57 ship held the laptop). The only progr
 ## His words and the decision
 
 > "the export menus settings are honestly a bit daunting for someone who doesnt know how it works. I dont want to lose any
-> function but i want it to actually make sense at first glance. Capcut does a really good job of this but dont fully copy"
+> function but i want it to actually make sense at first glance. [another editor] does a really good job of this but dont fully copy"
 > (29 Sep, builder chat)
 
-Clauses: (1) make sense at first glance, (2) lose NO function, (3) learn from CapCut, (4) don't copy it, (5) #545 pictures
+Clauses: (1) make sense at first glance, (2) lose NO function, (3) learn from [another editor], (4) don't copy it, (5) #545 pictures
 before it ships. Decision line: ✅ UNBLOCKED 11 Oct (#1130, the PM under his standing rule) — **A**. #917 finding 7 is
 folded in: on a phone the Resolution and Frame rate selects cut off their own values at 380 and 320.
 

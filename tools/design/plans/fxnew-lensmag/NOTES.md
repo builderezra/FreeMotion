@@ -55,7 +55,7 @@ Pure: no state, no Math.random, the clock only through keyframes. Only the lens'
 **Not in CROP_FX** (placed from the plate; its rim and shadow can lie where the layer has no pixels — a cropped buffer would cut
 them off). **Not in PIXEL_ADJ** (a zoomed preview's snapshot is only the slice on screen). Search words: magnifier, magnifying glass,
 magnify, loupe, lens, zoom circle, zoom in, enlarge, zoom lens, close up, spyglass. Name: "Lens Magnifier" is generic, in neither
-Alight Motion list `tools/design/954-effect-names.md` was built from, not a trademark.
+[another app] list `tools/design/954-effect-names.md` was built from, not a trademark.
 
 ## The tests (each fails on fb24f68b on its first line: "no registry entry for lensmag — the effect is not built")
 1. **`966 B29 Lens Magnifier is in the registry …`** — Warping (CONTROL: Pinch / Bulge is), routed, not in CROP_FX or PIXEL_ADJ, no

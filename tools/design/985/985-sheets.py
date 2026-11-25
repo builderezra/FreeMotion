@@ -64,7 +64,7 @@ def fig(src, lab, cap, w, pc=False, head=None):
 REC = '<span class="rec">★ Recommended</span>'
 NOWB = '<span class="now">Today</span>'
 QUOTE = ('<span class="quote">“the export menus settings are honestly a bit daunting for someone who doesnt know how it works. '
-         'I dont want to lose any function but i want it to actually make sense at first glance. Capcut does a really good job of this but dont fully copy”</span> — Ezra, 29 Sep (#985)')
+         'I dont want to lose any function but i want it to actually make sense at first glance. [another app] does a really good job of this but dont fully copy”</span> — Ezra, 29 Sep (#985)')
 
 sheets = {}
 
@@ -132,7 +132,7 @@ sheets['B'] = page('985 — B', (
     '<div class="row">'
     + fig('phone-B.png', 'Phone · first glance', 'six tiles; “Fits Reels &amp; TikTok” only because this project is 9:16.', 340)
     + fig('phone-B-fine.png', 'Phone · Fine-tune opened', '60 fps picked, so the goal says Custom and Fine-tune “1 changed”.', 340)
-    + '<div class="notes"><h3>Good</h3><ul><li>CapCut’s idea of choosing a goal, without its look.</li><li>Every tile says what you will get before you pick it.</li></ul>'
+    + '<div class="notes"><h3>Good</h3><ul><li>[another app]’s idea of choosing a goal, without its look.</li><li>Every tile says what you will get before you pick it.</li></ul>'
     '<h3>Weaker than A</h3><ul><li>A tile hides what it changes (“Smaller to send” is one size down plus Medium quality).</li><li>Six tiles plus Fine-tune means more combinations to explain and to test.</li>'
     '<li>Tiles named after apps would be a trap: FreeMotion never crops, so a “TikTok” tile on a wide project would add black bars.</li><li>On a phone it is the tallest first screen of the three.</li></ul></div>'
     + '</div><div class="row">'
@@ -150,7 +150,7 @@ sheets['C'] = page('985 — C', (
     + fig('phone-C-exact.png', 'Phone · Exact numbers opened', 'W×H and fps boxes under the sliders.', 320)
     + fig('phone-C-more.png', 'Phone · More opened', 'Part, Only one layer (“1 on”, amber under the size), See-through.', 320)
     + '<div class="notes"><h3>Good</h3><ul><li>The size-against-quality trade-off is the easiest to feel.</li><li>The shortest first screen of the three.</li></ul>'
-    '<h3>Weaker than A</h3><ul><li>The closest to CapCut’s own look, which he said not to fully copy.</li>'
+    '<h3>Weaker than A</h3><ul><li>The closest to [another app]’s own look, which he said not to fully copy.</li>'
     '<li>The Sharpness stops change with every project (a 720p project has three), and rates like 24 or 29.97 fall between notches.</li>'
     '<li>Small targets for a thumb at 380 px, and a slider is easy to nudge by accident.</li><li>Part is hidden under More, but it is a real first-timer question.</li></ul></div>'
     + '</div><div class="row">'

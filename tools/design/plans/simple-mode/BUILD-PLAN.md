@@ -987,7 +987,7 @@ window.FM = window.FM || {};
 /* FreeMotion — FM.spine, the Simple editor's engine: READ SIDE ONLY (Simple mode Phase 1, DESIGN.md §2, §5.2, §14.1).
  *
  * WHAT THIS IS. The Simple editor is a second VIEW over the same {project, layers} document. This file answers one
- * question, purely: "drawn the way CapCut shows a project, what is this document?" — which clips make the main track,
+ * question, purely: "drawn the way [another editor] shows a project, what is this document?" — which clips make the main track,
  * in what order, with what seams between them, what every other item is (text, captions, overlay, sound, effect, a
  * block), which clip it follows, and which lane it sits in. It never writes the document, never reads FM.scene inside
  * classify (it is handed a scene), and has no DOM, so the suite drives it headless.
@@ -1707,7 +1707,7 @@ python3 tests/_cdp.py --url 'http://localhost:8777/tests/run.html?only=921%20S1%
   });
 
   test('simple P1 · T20 no company name in any word the Simple editor shows, and the scan catches one', { item: '980' }, function () {
-    const BRANDS = /\b(Apple|Alight ?Motion|After ?Effects|Adobe|Premiere|Final ?Cut|CapCut|Instagram|TikTok|DaVinci|Resolve|iMovie|LumaFusion)\b/i;
+    const BRANDS = /\b(Apple|Instagram|TikTok)\b/i;   // #1264: the editing apps' names are removed from this copy of the plan
     const scan = function (o, path, out) {
       if (typeof o === 'string') { if (BRANDS.test(o)) out.push(path + ': "' + o + '"'); return out; }
       if (typeof o === 'function') { try { scan(String(o.length >= 4 ? o(2, 5, 3.2, 2) : o.length === 1 ? o(1.5) : o(4, 15)), path + '()', out); } catch (e) {} return out; }
@@ -1717,7 +1717,7 @@ python3 tests/_cdp.py --url 'http://localhost:8777/tests/run.html?only=921%20S1%
     if (!FM.spineWords) throw new Error('FM.spineWords is missing — js/spine-words.js did not load');
     const hits = scan(FM.spineWords, 'spineWords', []);
     if (hits.length) throw new Error('another company’s name is in Simple’s words: ' + hits.join(' · '));
-    const n = scan({ a: 'Lay them out like CapCut' }, 'control', []);
+    const n = scan({ a: 'Lay them out like TikTok' }, 'control', []);
     if (n.length !== 1) throw new Error('CONTROL: the scan did not catch a planted brand name');
     const ids = ['btn-sm-split', 'sm-timeline', 'sm-say', 'cv-editor'];   // 1 Oct: the switch is the cog's (#cv-editor, built when the cog opens)
     const dom = ids.map(id => document.getElementById(id)).filter(Boolean).map(e => e.textContent + ' ' + (e.getAttribute('aria-label') || '') + ' ' + (e.title || '')).join(' ');
@@ -3454,7 +3454,7 @@ the #980 entry, so the proof is in the repo's own record.
 | M6 | `js/simple-timeline.js` | the panel docks under the clip row again (`dockBottom` = clip row) | T19 (380) | **caught**: "the docked panel (top 481) covers the Simple timeline or #sm-say (bottom 561)" |
 | M7 | `js/app.js` | `m-editing` set in Simple again (the `!simple &&` removed) | T19 (380) | **caught**: "m-editing is on in Simple" |
 | M8 | `styles.css` | Layers / Add camera no longer hidden in Simple | T21 at 380 | **caught**: "these Full doors show in Simple: vb-layers*, vb-camera*" |
-| M9 | `js/spine-words.js` | "Open in Full like CapCut" | T20 | **caught**: "another company’s name is in Simple’s words: spineWords.lines.openFull" |
+| M9 | `js/spine-words.js` | "Open in Full like [another editor]" | T20 | **caught**: "another company’s name is in Simple’s words: spineWords.lines.openFull" |
 | M10 | `js/editor-mode.js` | the switch commits a history step | T8 | **caught**: "the switch took an undo step" |
 | M11 | `js/collab-core.js` | SM_V taken out of the fingerprint | the collab fingerprint carries the sm rules… | **caught**: "a build with a different SM_V has the same fingerprint" |
 | ~~M12~~ | — | withdrawn 1 Oct with the ⋯ item | — | — |

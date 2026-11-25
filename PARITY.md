@@ -1,6 +1,6 @@
 # FreeMotion — Parity Matrix
 
-_Single source of truth: every Alight Motion feature × FreeMotion status. Originally generated 2026-06-23._
+_Single source of truth: every [another app] feature × FreeMotion status. Originally generated 2026-06-23._
 _**Re-audited 2026-07-10** against the actual source (12 domains in parallel, evidence required for every status,
 adversarial refutation of every "missing" claim). **120 of the 251 then-open rows were wrong** — the June matrix had
 gone badly stale across v2.71→v2.84._
@@ -132,7 +132,7 @@ _Across 342 audited features: 209 ✅ · 52 🟡 · 80 ❌ · 1 ❔_ (was 90 ✅
 | Replace Color | ✅ done | common | Shipped 2026-07-10 (v2.86): `replacecolor` — hue-window swap (From→To colour, tolerance + soft falloff, sat/val kept). |
 | Spot Color | ✅ done | nice | Shipped 2026-07-10 (v2.86): `spotcolor` — keep one hue, desaturate the rest, soft window edge. |
 | Colorize | 🟡 partial | common | Confirmed. FM.EFFECTS 'tint' (compositor.js:47); drawTint (530+) maps luma→color blended by amount; also in applyPixelFx for adjustment layers (line 961). Simplified 0.299/0.587/0.114 luma, single amount param. |
-| Invert | 🟡 partial | common | Confirmed present and functional. FM.EFFECTS 'invert' (compositor.js:38) → CSS invert() (line 176), keyframeable. 'Partial' only because no per-channel toggle vs AM; the core invert itself fully works. |
+| Invert | 🟡 partial | common | Confirmed present and functional. FM.EFFECTS 'invert' (compositor.js:38) → CSS invert() (line 176), keyframeable. 'Partial' only because no per-channel toggle vs [another app]; the core invert itself fully works. |
 | Gradient Map | 🟡 partial | common | Re-audited 2026-07-10: `gradientmap` ships as a real per-pixel shadows->highlights ramp, but it is still TWO-STOP only, not an arbitrary multi-stop map. (Upgraded from missing.) |
 | Channel Remap (RGB) | ✅ done | nice | Re-audited 2026-07-10: `channelremap` with RGB swap/rotate modes. |
 | Channel Remap (HSV) | ✅ done | nice | Shipped 2026-07-10 (v2.86): `channelremap` gained modes 6 'Hue Invert' and 7 'Swap Sat/Val'. |
@@ -177,7 +177,7 @@ _Across 342 audited features: 209 ✅ · 52 🟡 · 80 ❌ · 1 ❔_ (was 90 ✅
 | Omino Diffusion+ | ❌ missing | nice | Confirmed absent. |
 | Copy Background | ✅ done | common | Re-audited 2026-07-10: shipped v2.55. `copybg` effect def + `drawCopyBg` + `FM.hasCopyBg`; featured in the fx browser. |
 | Fill Behind | ✅ done | common | Shipped 2026-08-12: `fillbehind` — a Copy Background SIBLING, dispatched straight out of `drawLayer` and **never** in POSTFX/WARP_FX. Fills the frame the layer does not cover with a blurred, cover-scaled copy of **the layer itself**, sharp layer on top (`destination-over`). Blur / Zoom / Dim; the radius is × `plateScale`; a mean-colour floor keeps non-rectangular layers from leaving bare corners. A layer that already covers the canvas is byte-identical to the effect being off and builds no plate. Costs ~10–14 ms/frame at 1080×1920, 1.2–2.7 ms on a reduced phone preview. |
-| Magnify Background | ✅ done | nice | Shipped 2026-08-12: `magnifybg` — a Copy Background SIBLING (`FM.hasCopyBg` / `BG_SNAP_FX`, never POSTFX), `magnifyPlate` + `copyBgZoom` in compositor.js. One Zoom param (0.1–8×, def 2), magnifies about the layer's own anchor, edge-clamped. Zoom 1 renders byte-identical to plain Copy Background. Costs ~2.2× Copy Background per layer. **Not** AM-complete: no offset/centre control. |
+| Magnify Background | ✅ done | nice | Shipped 2026-08-12: `magnifybg` — a Copy Background SIBLING (`FM.hasCopyBg` / `BG_SNAP_FX`, never POSTFX), `magnifyPlate` + `copyBgZoom` in compositor.js. One Zoom param (0.1–8×, def 2), magnifies about the layer's own anchor, edge-clamped. Zoom 1 renders byte-identical to plain Copy Background. Costs ~2.2× Copy Background per layer. **Not** [another app]-complete: no offset/centre control. |
 | Echo Keyframes (motion trails) | 🟡 partial | nice | Re-audited 2026-07-10: `motionflow`'s Echo style gives long-exposure echo trails; not discrete time-offset keyframe echoes. |
 | Time Quantization | ❌ missing | nice | Confirmed absent. |
 | Particle Emitter | ❌ missing | common | Confirmed: no particle layer type in scene.js, none in FM.EFFECTS. |
@@ -192,10 +192,10 @@ _Across 342 audited features: 209 ✅ · 52 🟡 · 80 ❌ · 1 ❔_ (was 90 ✅
 | Radial Shadow | ✅ done | nice | Shipped 2026-07-10 (v2.86): `radialshadow` — point-light shadow (Light X/Y + Reach, 10-tap march toward the light). |
 | Smooth Bevel | ✅ done | nice | Re-audited 2026-07-10: `smoothbevel` in FM.EFFECTS + POSTFX. |
 | Raster Extrude | ✅ done | nice | Re-audited 2026-07-10: `rasterextrude` in FM.EFFECTS + POSTFX. |
-| Layer Styles Presets | 🟡 partial | common | Confirmed. FM.fxPresets (inspector.js:160-174) with 4 builtins (VHS Glitch/Duotone/Dreamy/Comic) + localStorage user stacks; UI chips with apply/delete/save (lines 207-227). Covers only implemented effects, not full AM style catalog. |
+| Layer Styles Presets | 🟡 partial | common | Confirmed. FM.fxPresets (inspector.js:160-174) with 4 builtins (VHS Glitch/Duotone/Dreamy/Comic) + localStorage user stacks; UI chips with apply/delete/save (lines 207-227). Covers only implemented effects, not full [another app] style catalog. |
 | Blend Modes (20+) | ✅ done | core | Re-audited 2026-07-10: BLEND map is now 17 standard modes (hue/saturation/color/luminosity added) + 2 mask modes = 19 entries. `FM.BLEND_MODES` exposed to every layer type. |
 | Auto-Shake / Random Jitter | ✅ done | common | Confirmed. wiggleOffset() (compositor.js:193-198) applies deterministic incommensurate-sine noise to position; UI inspector.js:608-613 (enabled/amount/speed); applied in drawLayer line 749/750. Procedural, exports identically. |
-| Turbulence (position-based) | ✅ done | common | Confirmed: same wiggleOffset/wnoise system as Auto-Shake; functionally equivalent to AM position turbulence. |
+| Turbulence (position-based) | ✅ done | common | Confirmed: same wiggleOffset/wnoise system as Auto-Shake; functionally equivalent to [another app] position turbulence. |
 
 ## Layers &amp; compositing (layer types, groups/precomps, blend modes, adjustment layers, parenting/null/rig)
 
@@ -280,8 +280,8 @@ _Across 342 audited features: 209 ✅ · 52 🟡 · 80 ❌ · 1 ❔_ (was 90 ✅
 | Cube effect (faux-3D box from layer texture) | ✅ done | common | Re-audited 2026-07-10: `cube3d` textured-mesh effect (hand-rolled triangle painter on 2D canvas). |
 | Box effect (faux-3D box with beveling) | ✅ done | common | Re-audited 2026-07-10: `box3d` effect with Depth/Size/Shading. |
 | Raster Extrude effect | ✅ done | common | Re-audited 2026-07-10: `rasterextrude` effect with Depth/Angle/Side-Darken. |
-| Parenting Helper effect | 🟡 partial | common | Confirmed. Normal/Locked/Weighted rotation modes implemented (inspector.js:494; compositor.js:231-236). No AM 'Auto Rotate' mode — grep for auto.?rotate returns zero. It's a per-layer setting, not a separate effect. |
-| Oscillate effect (camera/layer shake) | ✅ done | common | Re-audited 2026-07-10: addable 'move' effect family: wiggle/shake/swing/spin/pulse/drift/orbit. swing is angular oscillation; amplitude/frequency/twist params cover AM's Oscillate. |
+| Parenting Helper effect | 🟡 partial | common | Confirmed. Normal/Locked/Weighted rotation modes implemented (inspector.js:494; compositor.js:231-236). No [another app] 'Auto Rotate' mode — grep for auto.?rotate returns zero. It's a per-layer setting, not a separate effect. |
+| Oscillate effect (camera/layer shake) | ✅ done | common | Re-audited 2026-07-10: addable 'move' effect family: wiggle/shake/swing/spin/pulse/drift/orbit. swing is angular oscillation; amplitude/frequency/twist params cover [another app]'s Oscillate. |
 | Auto-Shake effect | ✅ done | common | Re-audited 2026-07-10: dedicated addable `shake` effect (amount/speed/twist) on top of the deterministic `wiggleOffset`. |
 | Skew / perspective distortion transform | ✅ done | common | Re-audited 2026-07-10: `skewX`/`skewY` applied via ctx.transform; inspector has a Skew mode (MT_MODES) with X/Y Skew inputs. Plus transform.z perspective. |
 | 3D lighting system (Point/Directional/Spot/Area/Ambient) | ❌ missing | nice | Confirmed. No light types/intensity/shadow/specular. Renderer is pure 2D canvas. |
@@ -312,11 +312,11 @@ _Across 342 audited features: 209 ✅ · 52 🟡 · 80 ❌ · 1 ❔_ (was 90 ✅
 | Text Spacing effect (random / even spacing animation) | ✅ done | common | Re-audited 2026-07-10: a `textspacing` effect sets st.letterSpacing from `FM.evalProp(p.spacing,t)` — keyframeable. Registered text-only. |
 | Text Progress effect (character-by-character typewriter reveal) | ✅ done | common | Re-audited 2026-07-10: a dedicated `textprogress` effect slices the string by a keyframeable 0-1 `progress` param — the continuous control the old note said was missing. |
 | Text Randomizer effect (scramble / matrix-style characters) | ✅ done | common | Re-audited 2026-07-10: a `textrandomizer` effect with a TEXT_SCRAMBLE charset + keyframeable progress and speed. |
-| Text Transform effect (per-letter/word/line animation) | 🟡 partial | nice | Confirmed drawAnimatedText (245-307) staggers char/word/line with 5 reveal presets, but no independent per-unit position/scale/rotation animator. Stagger-reveal, not AE-style text animator. |
+| Text Transform effect (per-letter/word/line animation) | 🟡 partial | nice | Confirmed drawAnimatedText (245-307) staggers char/word/line with 5 reveal presets, but no independent per-unit position/scale/rotation animator. Stagger-reveal, not [another app]-style text animator. |
 | Scrolling text presets (30 built-in scrolling title animations) | ❌ missing | common | Confirmed: no scrolling effect type, no scroll preset list, no ticker logic. Presets are reveals only. |
 | Layer styles for text (30 built-in style presets) | ❌ missing | common | Confirmed FM.fxPresets (inspector.js:160-166) holds 4 builtin EFFECT-stack presets (VHS Glitch/Duotone/Dreamy/Comic), not text fill+stroke+shadow style presets. No 30-style concept. |
 | Keyframe animation of all text properties | 🟡 partial | core | Confirmed transform props (x/y/scale/rotation/opacity) keyframeable via setTransform; effect params via setProp. But color/fontSize/letterSpacing/lineHeight/fontFamily/bold/italic use colorField/rangeRow/textRow with plain field assignment (no setProp, no diamond) -> not keyframeable. |
-| 27 blending modes for text layers | 🟡 partial | common | Confirmed BLEND object (compositor.js:11-25) has 13 modes; FM.BLEND_MODES applied to all layer types incl. text. 13 of AM's 27. |
+| 27 blending modes for text layers | 🟡 partial | common | Confirmed BLEND object (compositor.js:11-25) has 13 modes; FM.BLEND_MODES applied to all layer types incl. text. 13 of [another app]'s 27. |
 | Mask / clipping using text layer outlines | 🟡 partial | common | Re-audited 2026-07-10: mask-include/mask-exclude blend modes are exposed for any layer including text, so a text layer clips layers below to its glyph alpha. No dedicated 'use as matte' toggle, hence partial. |
 | Convert text to vector outline (iOS/iPadOS) | ❌ missing | nice | Confirmed: no Convert-to-Outline / glyph-path extraction anywhere. Canvas 2D has no glyph-outline API. |
 | Curved / arched text via Bend effect | ✅ done | nice | Confirmed inspector.js:530 Curve range (-180..180) -> layer.textCurve; compositor.js drawArcLine (311-333) places chars on a circular arc with per-char rotation; invoked at 796-797 when \|curve\|>0.5. Native arc renderer. (Has quality limitations — see bugs.) |
@@ -346,7 +346,7 @@ _Across 342 audited features: 209 ✅ · 52 🟡 · 80 ❌ · 1 ❔_ (was 90 ✅
 | Palette Map effect (map pixel colors to closest color in a custom palette) | ❌ missing | nice | Confirmed. No palette-map effect. |
 | Spectral Map effect (luminance-to-spectrum color mapping) | ✅ done | nice | Shipped 2026-07-10 (v2.86): `spectralmap` (see Effects section). |
 | Color grading effect presets (saved CC preset stacks) | ✅ done | common | Confirmed. FM.fxPresets (inspector.js:160-174) — 4 builtins + user stacks persisted to localStorage 'fm.fxpresets'; preset chips row (inspector.js:207-229) with apply/delete/save. Wired. |
-| No native project-wide color theme / global swatch system | ✅ done | nice | Confirmed. No project-wide palette/theme system; color is per-layer (fill/color/stroke.color). recentColors is the closest but session-scoped. Matches AM's own absence — correctly treated as 'done by intentional parity'. |
+| No native project-wide color theme / global swatch system | ✅ done | nice | Confirmed. No project-wide palette/theme system; color is per-layer (fill/color/stroke.color). recentColors is the closest but session-scoped. Matches [another app]'s own absence — correctly treated as 'done by intentional parity'. |
 
 ## Export & sharing (formats, resolution, fps, codecs, gif, transparency, quality, project save/load)
 
@@ -369,7 +369,7 @@ _Across 342 audited features: 209 ✅ · 52 🟡 · 80 ❌ · 1 ❔_ (was 90 ✅
 | Audio export: stereo / mono selection | ❌ missing | common | Confirmed. buildAudioMix hardcodes channels=2 / sampleRate=48000 (exporter.js:69); encodeAudio always emits 2 channels (mono source is duplicated). No UI to pick mono. |
 | Render Only Effects isolation | ❌ missing | nice | Confirmed. No 'render only effects' toggle; all layers always composited. |
 | Watermark on free-tier exports | ❌ missing | core | Confirmed N/A. No freemium tiers, no watermark logic. Correct to mark missing-by-design; arguably non-applicable to a free local app. |
-| Project package save (own format, not .alm) | ✅ done | core | UPGRADE from audit's 'partial'. FM.storage.exportFile (storage.js:138-147) serializes the full scene graph + embedded media (≤6MB as base64 dataURLs) to '<name>.fmotion.json', wired to btn-save-proj (app.js:813-814). Round-trips fully via applyScene. It fully works as a project package; only the file extension/spec differs from Alight Motion's .alm — that's by-design for a separate app, not a partial implementation. |
+| Project package save (own format) | ✅ done | core | UPGRADE from audit's 'partial'. FM.storage.exportFile (storage.js:138-147) serializes the full scene graph + embedded media (≤6MB as base64 dataURLs) to '<name>.fmotion.json', wired to btn-save-proj (app.js:813-814). Round-trips fully via applyScene. It fully works as a project package; only the file extension/spec differs from [another app]'s .alm — that's by-design for a separate app, not a partial implementation. |
 | Project package import | ✅ done | core | UPGRADE from audit's 'partial'. FM.storage.importFile (storage.js:149-162) reads .json, validates obj.app==='freemotion', clears stale media (incl. IDB collision guard), rehydrates embedded media, calls applyScene, resets history. Wired to btn-open-proj (app.js:815-816). Fully functional for its own format; only-not-.alm is a naming quibble, not a defect. |
 | Cloud-hosted project share links | ❌ missing | common | Confirmed. Fully local app (localStorage + IndexedDB). No network, no share-URL generation. |
 | Save to device gallery | ❌ missing | core | Confirmed. download() (exporter.js:11-18) and snapshotPNG both trigger anchor-click browser downloads. No Web Share API, no showSaveFilePicker, no gallery write. grep for navigator.share finds nothing. |
@@ -403,7 +403,7 @@ _Across 342 audited features: 209 ✅ · 52 🟡 · 80 ❌ · 1 ❔_ (was 90 ✅
 | Noise reduction | ❌ missing | nice | Confirmed. No noise-reduction processing. |
 | Audio compression | ❌ missing | nice | Confirmed. No DynamicsCompressorNode; no compression UI. |
 | Loop audio clip | ❌ missing | common | Confirmed. No per-clip loop flag; AudioBufferSourceNodes never set loop=true. Only a project-level loop region (P.loopIn/loopOut, app.js 165) loops the whole timeline. |
-| Reverse audio — NOT a native AM feature | ✅ done | nice | Confirmed. audio-play.js reversedBuffer (22-40) synthesizes reversed audio for preview; exporter makeClipBuffer (58) reads source backward on export. Triggered by layer.reversed (inspector checkRow 668; context menu app.js 669). |
+| Reverse audio — NOT a native [another app] feature | ✅ done | nice | Confirmed. audio-play.js reversedBuffer (22-40) synthesizes reversed audio for preview; exporter makeClipBuffer (58) reads source backward on export. Triggered by layer.reversed (inspector checkRow 668; context menu app.js 669). |
 
 ## UI, gestures & workflow (on-canvas direct manipulation, snapping, shortcuts, panels, undo/redo, mobile feel)
 

@@ -4,7 +4,7 @@ Design step 2 of `STATUS.md`. This is one of three independent designs (this one
 29 Sep 2026 against HEAD `2d06a3f5` (v17.11) plus the loop session's uncommitted edits. **Design only: nothing here is
 built, and nothing gets built until Ezra says so** ("don't build it until I say to do it", INBOX.md:28).
 
-Sources: the six research notes in `research/` (cited as `[collab §x]`, `[model §x]`, `[ui §x]`, `[capcut §x]`,
+Sources: the six research notes in `research/` (cited as `[collab §x]`, `[model §x]`, `[ui §x]`, `[[another editor] §x]`,
 `[pro §x]`, `[prefs §x]`). Code is cited `file:line`. I re-read the load-bearing lines myself for this note:
 `js/collab-bridge.js:116,131-139,142-150`, `js/collab-host.js:606-715,826-843,871-872`, `js/collab-diff.js:149-227,491-540`,
 `js/collab-path.js:139-160,251,262`, `js/storage.js:1563-1650`, `js/scene.js:377-380`, `js/timeline.js:5068-5080`. Other
@@ -14,8 +14,8 @@ lines come from the research notes; the tree has uncommitted edits, so a few may
 
 ## 0. The collaboration answer, first
 
-**The question from the brief:** *"how someone using the CapCut version or Premiere Pro version is going to be able to do a
-collab with someone who is also using the After Effects slash a light motion version. Like how are they both going to work
+**The question from the brief:** *"how someone using the [another editor] version or [another editor] version is going to be able to do a
+collab with someone who is also using the [another editor] slash [another app] version. Like how are they both going to work
 on it at the same time and not interfere?"*
 
 **The short answer.** They edit the same project, not two copies. The simple editor never sends "move these twelve clips".
@@ -74,12 +74,12 @@ never has to fight a finger.
 ## 1. The core idea in one paragraph
 
 FreeMotion keeps **one project format and one document**: `{project, layers}`. The simple editor is a second **view and
-command set** over that same document, the way DaVinci Resolve's Cut page and Edit page are two UIs over one timeline with
-one undo history [pro §4]. It is not a second format (Adobe built that twice and both times it was one-way and lossy
-[pro §2]). Two small, optional, per-layer fields turn free layers into a CapCut-style structure without changing anything
+command set** over that same document, the way [another editor]'s Cut page and Edit page are two UIs over one timeline with
+one undo history [pro §4]. It is not a second format ([another editor] built that twice and both times it was one-way and lossy
+[pro §2]). Two small, optional, per-layer fields turn free layers into a [another editor]-style structure without changing anything
 for projects that don't use them:
 - **`main`** puts a clip on the main track, with an order key and an optional gap before it.
-- **`stick`** ties an overlay, text, caption or sound to a clip at an offset into it. This is Final Cut's connected clip
+- **`stick`** ties an overlay, text, caption or sound to a clip at an offset into it. This is [another editor]'s connected clip
   [pro §3], in a word that doesn't clash with FreeMotion's "magnet" (snapping) or "parent" (transform).
 
 A layer on the main track, or stuck to something, **has its start computed, not stored**. Both editors obey this. The
@@ -331,10 +331,10 @@ view simply shows the real order.
 - **What sticks by default in Simple:** anything added while a main clip is under the playhead sticks to that clip, at
   `off = playhead − clip.start`. That covers overlays, text, stickers/shapes, caption tracks, sound effects and voice
   recordings. **Music does not stick.** Imported songs go on the audio lane free, so cutting the video never drags the song
-  (iMovie's background music, LumaFusion's unlinked track [pro §5]). This is where FreeMotion beats CapCut's phone app,
-  which links nothing and leaves captions and overlays drifting after every cut [capcut §13.4].
+  ([another editor]'s background music, [another editor]'s unlinked track [pro §5]). This is where FreeMotion beats [another editor]'s phone app,
+  which links nothing and leaves captions and overlays drifting after every cut [[another editor] §13.4].
 - **It shows:** a thin line from the item's first frame down to its host clip, drawn only while either one is selected
-  (Rush's yellow line [pro §2], LumaFusion's link line [pro §5]).
+  ([another editor]'s yellow line [pro §2], [another editor]'s link line [pro §5]).
 - **Moving the item** changes `off`. **Moving, trimming or reordering the host** carries the item. **Unstick** is on the
   item's tool strip in Simple and in its layer menu in Full.
 - **Deleting a host** deletes what is stuck to it, with an Undo toast that names them. Keeping them instead is decision D5.
@@ -344,7 +344,7 @@ view simply shows the real order.
   today the twin is a free duplicate.
 
 ### 4.2 Why stored and not inferred
-Resolve's Cut page appears to infer "what's over what" at edit time [pro §4 inference]. That is tolerant, but "attached to"
+[another editor]'s Cut page appears to infer "what's over what" at edit time [pro §4 inference]. That is tolerant, but "attached to"
 changes silently when something is nudged over a different clip, and **inference can't be made deterministic across two
 devices mid-edit**: each device infers from its own view. A stored `stick` is one field under LWW, visible and undoable.
 
@@ -364,9 +364,9 @@ exactly the time it last played, and nothing jumps.
 
 ## 5. Opening a Full project in Simple, and back: a view, not a conversion
 
-His question: *"whether we should allow you to turn a project that's already in the After Effects version into the Premiere
-Pro version and so forth."* The precedents are plain [pro §c]: every two-format editor converts one way and loses things.
-Resolve's two pages convert nothing. So:
+His question: *"whether we should allow you to turn a project that's already in the [another editor] version into the [another editor]
+ version and so forth."* The precedents are plain [pro §c]: every two-format editor converts one way and loses things.
+[another editor]'s two pages convert nothing. So:
 
 - **Any project opens in either editor, instantly, with no change to the document.** Switching is a view.
 - **A Full project with no main track** opens in Simple showing everything in its sections: clips in Overlays, text in
@@ -436,7 +436,7 @@ FM.track.adopt(scene, {stickOthers: true}) {
 ```
 
 - **Simple → the media picker straight away** (multi-select; clips land in the order picked, numbered badges), then the
-  Simple editor with the main track filled. This is CapCut's flow [capcut §3]. Cancelling the picker still opens an empty
+  Simple editor with the main track filled. This is [another editor]'s flow [[another editor] §3]. Cancelling the picker still opens an empty
   Simple project whose main track is one big "+ Add clips" (#326: the obvious, big start).
 - **Full → today's flow** unchanged.
 - The last choice is pre-selected next time (decision D2). `FM.projects.create(opts)` (`js/storage.js:2540`) takes
@@ -468,8 +468,8 @@ canvas dialog and collab chrome are all shared.
 ├─────────────────────────────────────┤
 │   ▶  00:03 / 00:15          ↶  ↷  ⛶ │  transport; the complex left cluster is hidden
 ├─────────────────────────────────────┤
-│ T   ──   ───                        │  folded lanes: thin coloured lines (CapCut's "one open category"
-│ ▣   ─────                           │   trick [capcut §2.7]); tap a line to unfold that lane
+│ T   ──   ───                        │  folded lanes: thin coloured lines ([another editor]'s "one open category"
+│ ▣   ─────                           │   trick [[another editor] §2.7]); tap a line to unfold that lane
 │ ┃[▦▦clip1▦▦]▫[▦clip2▦]▫[▦▦clip3▦][+]│  MAIN TRACK: tall filmstrip; ▫ = the cut (transitions later);
 │ ♪   ~~~~~~~~~~~~ song ~~~~~~~~~~~~  │   [+] = add clips at the end
 │ Cc  ▭▭ ▭▭▭    ▭▭                    │  captions
@@ -480,8 +480,8 @@ canvas dialog and collab chrome are all shared.
 ```
 
 With a main clip selected, the bottom strip becomes that clip's tools, and **its first button is always "‹ Tools"** so the
-project tools are never lost. That avoids CapCut's worst trap, "if you can't find a tool, tap an empty area to deselect"
-[capcut §4]. Tapping empty timeline also deselects.
+project tools are never lost. That avoids [another editor]'s worst trap, "if you can't find a tool, tap an empty area to deselect"
+[[another editor] §4]. Tapping empty timeline also deselects.
 
 ```
 │ ‹ Tools  ✂ Split  ⏩ Speed  🔊 Volume  ◐ Filters  ✦ Effects  ⬒ Crop  ⇄ Replace  ⧉ Duplicate  ↥ To overlay  ⟲ Reverse  ♪ Extract audio  🗑 Delete ▸│
@@ -494,7 +494,7 @@ Volume, Filters and Effects reuse the existing builders through `FM.inspector.op
 Gestures on the main track: **tap** selects; **hold 350 ms and drag** reorders, with the others parting to show the slot
 (the existing hold threshold, `js/timeline.js:2190-2240`); the **edge grips** ripple-trim with a length readout; **pinch**
 zooms. Dragging a main clip **up** into the overlay lane is "To overlay", and dragging an overlay **down** onto the main
-track is "To main track". Both are also buttons, so neither is hidden behind a gesture (CapCut buries this [capcut §13.5]).
+track is "To main track". Both are also buttons, so neither is hidden behind a gesture ([another editor] buries this [[another editor] §13.5]).
 
 ### 8.3 PC (≥701px), the same tools in the same order, laid out for the screen (#852)
 
@@ -515,9 +515,9 @@ The inspector band (`#inspector-panel`) shows the tool grid when nothing is sele
 the phone strip. Keys: S split, Delete ripple-deletes, Ctrl/⌘+D duplicates, arrows step one frame, Ctrl/⌘+E switches editor.
 The complex keys (1–5 Add tabs, A/S/D clip keys, `js/app.js:8761-8814`) are rebound or off in Simple.
 
-### 8.4 The feature list against CapCut's (Core = the first shippable Simple editor; Later = a later phase; Never = not in Simple)
+### 8.4 The feature list against [another editor]'s (Core = the first shippable Simple editor; Later = a later phase; Never = not in Simple)
 
-| CapCut | FreeMotion's route for Simple | Tier |
+| [another editor] | FreeMotion's route for Simple | Tier |
 |---|---|---|
 | Magnetic main track, clips in pick order | `main` + layout (§3) | **Core** |
 | Trim edges (ripple), split, delete (ripple), reorder by hold-drag | §3.4 | **Core** |
@@ -548,7 +548,7 @@ The complex keys (1–5 Add tabs, A/S/D clip keys, `js/app.js:8761-8814`) are re
 | Keyframes (the diamond) | Full is one tap away | Never in Simple |
 | Masks, chroma key | effects / `mask-tool.js` from the clip strip "More" | Later |
 | Remove BG, stabilise, retouch, auto reframe, body effects, camera tracking | not in the engine | Never, unless the engine gains them |
-| Overlay cap of 6, branded ending, paywall badges | CapCut's business, not a feature | Never |
+| Overlay cap of 6, branded ending, paywall badges | [another editor]'s business, not a feature | Never |
 
 ---
 
@@ -769,9 +769,9 @@ first (memory: "a negative test needs a control").
     with fresh keys, and their stuck items come too;
   - into one **without**: the first main clip gets `gap = playhead`, so the template's track starts where it was inserted
     and nothing jumps to 0 (`js/storage.js:3333-3345`, `3608-3625`).
-  - "Insert your media" swaps media into main-clip slots, and the slots keep their length (CapCut's Replace).
+  - "Insert your media" swaps media into main-clip slots, and the slots keep their length ([another editor]'s Replace).
 - **Captions:** the Captions tool makes **one caption track per spoken main clip, stuck to it**, so cutting the video
-  carries the words. That is the gap CapCut leaves open [capcut §2.3]. Cues stay clip-local (`js/captions.js:35-37`).
+  carries the words. That is the gap [another editor] leaves open [[another editor] §2.3]. Cues stay clip-local (`js/captions.js:35-37`).
   Splitting a clip splits its caption track (§3.4). Detection finds timing only (`js/captions-vad.js:4`); the words are
   typed. Speech-to-text is Later, and only if it can run on the device (#921 "no servers").
 
@@ -801,7 +801,7 @@ first (memory: "a negative test needs a control").
 12. **3600 s cap:** a ripple can't push the project past the `autoFitDuration` clamp (`js/storage.js:1016`). The layout
     doesn't clamp; the command refuses with "That would make the video longer than an hour".
 13. **Speed change on a clip with stuck items:** offsets are in project seconds, so items keep their offset from the clip's
-    start and don't scale with it. That matches CapCut desktop linkage and FCP.
+    start and don't scale with it. That matches [another editor] desktop linkage and [another editor].
 14. **Reverse:** length unchanged, nothing moves.
 15. **A guest before the media arrives:** `duration` is synced, so the layout is right; the filmstrip shows a placeholder.
 16. **2000-layer cap:** the host refuses `li` past it (`js/collab-host.js:565`); Simple's add shows the same message.
@@ -810,7 +810,7 @@ first (memory: "a negative test needs a control").
 18. **Duplicate in Full of a main clip** (`js/app.js:4313`): in place as today → the copy **drops `main`** and becomes a free
     overlay copy at the same time. In Simple, duplicate → after the original on the track.
 19. **Extract audio twin** (`js/app.js:1007`): it must not copy `main`; it becomes stuck at off 0 (§4.1).
-20. **Markers, loop in/out, comment pins:** absolute times, not moved by a ripple (CapCut doesn't move them either). A clip
+20. **Markers, loop in/out, comment pins:** absolute times, not moved by a ripple ([another editor] doesn't move them either). A clip
     comment (`lid`) could store a clip-relative time later.
 21. **Two tabs on one device** (the `rev` guard, `js/storage.js:50-133`): unchanged; the layout is local to each.
 22. **A negative-start free clip** (supported, `js/storage.js:1565-1580`): untouched.
@@ -876,7 +876,7 @@ first (memory: "a negative test needs a control").
 | `js/collab-presence.js:236, 280, 509` | `ed` in `sample`, `cleanPr`, `hostRoster`; `act` `'arrange'`/`'stick'` |
 | `js/collab-core.js:29, 177-188` | `SCHEMA_REV = 3`; `DERIVED_FIXTURE` gains a track with stuck items |
 | `tests/tests.js` | §10.10's T1–T16, plus model tests for `layout`/`adopt`/`keyBetween` and a label guard that no mode or section label names another company (widening `:68197-68208`, per his "safeguards must be structural") |
-| `BEFORE-PUBLISHING.md` | add the Simple timeline and toolbar as CapCut-derived screens |
+| `BEFORE-PUBLISHING.md` | add the Simple timeline and toolbar as [another editor]-derived screens |
 
 ---
 
@@ -889,7 +889,7 @@ first (memory: "a negative test needs a control").
 | **2. The Simple editor, first version** | the switch pill, `#sm-timeline` (main track + lanes), phone strips and PC grid, Core tools (§8.4), "Make a main track", Full-only content handling (§9), presence `ed` | the thing he asked for, on his phone | 380px screenshots through the app, sent as pictures |
 | **3. Stuck items and the start flow** | `stick` everywhere (Simple default-stick, Full stick/unstick, link line, orphan repair), captions per clip, To overlay / To main, the New project cards, Home chips, T6/T7/T9/T11 | "text follows its clip"; choosing Simple when starting | as above |
 | **4. Collaboration polish** | "keep my frame", cross-editor presence drawing, toasts, T10/T14/T15/T16, soak | two people, two editors, live, not in each other's way | tier-3 run + his Mac↔iPhone test |
-| **5. Make it nice** | Adjust panel, background blur, freeze, clip In/Out animations, speed-curve presets | CapCut's "make it look nice" set | as above |
+| **5. Make it nice** | Adjust panel, background blur, freeze, clip In/Out animations, speed-curve presets | [another editor]'s "make it look nice" set | as above |
 | **6. Transitions** | `main.tr`, the ▫ at each cut, the renderer's cross-blend, apply to all | the white square at the cut | render parity (preview = export) |
 | Later | speech-to-text captions (if on-device), music library, stickers library, shipped templates | — | his call |
 
@@ -915,9 +915,9 @@ new UI, and every later phase stands on it.
    `timeline.js` [ui §5]; reuse every builder through `openCategory`; phases 2–3 are the bulk.
 6. **Phone performance:** the layout on every hot tick. **Mitigation:** skip when no layer has `main`/`stick`; memoise by a
    signature of `(k, gap, duration, stick)`; T16 under the 4× throttle.
-7. **Identity:** a CapCut-shaped screen is borrowing, like the Alight Motion one [prefs §10]. **Mitigation:** logged in
+7. **Identity:** a [another editor]-shaped screen is borrowing, like the [another app] one [prefs §10]. **Mitigation:** logged in
    BEFORE-PUBLISHING.md as it lands; no company names in labels (the widened guard test).
-8. **Captions expectations:** people expect CapCut's words-from-speech. We only find timing. **Mitigation:** say so in one
+8. **Captions expectations:** people expect [another editor]'s words-from-speech. We only find timing. **Mitigation:** say so in one
    line on the Captions tool; STT is Later.
 9. **Three designers, one synthesis:** if the judges pick a project-level track list instead of per-layer keys, §2.5's
    table is the argument, and §10's cases need re-deriving.
@@ -931,9 +931,9 @@ new UI, and every later phase stands on it.
 | **D1** | What are the two editors called? | **A. Simple / Full** · B. Quick / Full · C. Cut / Motion · D. Easy / Studio. ("Pro" is avoided: he already uses it for a paid tier, #856) | **A** |
 | **D2** | How does a new project start? | **A. Two big picture cards every time, remembering the last pick** · B. Always Simple, switch after · C. A setting | **A** |
 | **D3** | Where does the switch live? | **A. A pill on the top-left of the video, on phone and PC, and in the cog** · B. Only in the cog · C. In the top bar (it's full on the phone) | **A** |
-| **D4** | Do text, overlays and sounds stick to the clip they're added over? | **A. Yes by default, with a thin line and "Unstick" (music excluded)** · B. No, like CapCut's phone app · C. Ask each time | **A** |
+| **D4** | Do text, overlays and sounds stick to the clip they're added over? | **A. Yes by default, with a thin line and "Unstick" (music excluded)** · B. No, like [another editor]'s phone app · C. Ask each time | **A** |
 | **D5** | Deleting a clip that has things stuck to it | **A. They go too, with an Undo toast naming them** · B. They stay where they are, unstuck | **A** |
 | **D6** | In Full, dragging a main-track clip | **A. It slides into empty space and pushes neighbours when it touches them** · B. It comes off the main track and moves freely · C. It only reorders | **A** |
 | **D7** | In a live session, can the owner stop others arranging the main track? | **A. No lock; you see who's moving what, and your frame stays put when they do** · B. An owner switch "Only I arrange the main track" | **A** |
-| **D8** | Can a Full project be opened in Simple? | **A. Yes, any project, any time; "Make a main track" builds one without moving anything** · B. Only projects started in Simple · C. A one-way copy (the way Premiere Rush did it, now retired) | **A** |
+| **D8** | Can a Full project be opened in Simple? | **A. Yes, any project, any time; "Make a main track" builds one without moving anything** · B. Only projects started in Simple · C. A one-way copy (the way [another editor] did it, now retired) | **A** |
 | **D9** | Go-ahead to build | **A. Phase 0 + 1 first** (a collab fix plus the track inside Full, no new screens) · B. Phases 0–2 together, so the first thing he sees is the Simple editor · C. Not yet | **B**: he wants to see progress ("I want to feel and see progress", 20 Sep), and 0–1 alone show him nothing new |

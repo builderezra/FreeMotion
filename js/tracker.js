@@ -401,7 +401,10 @@ window.FM = window.FM || {};
     if (bar) bar.remove();
     bar = document.createElement('div'); bar.id = 'trk-bar';
     const msg = document.createElement('span');
-    msg.textContent = picking && picking.seed ? 'Tracking point set — Track to follow it, or tap again to move it' : 'Tap the head (or any feature) to track';
+    /* #1255 (his words, 23 Nov: "There shouldn't be any explanations like that"): the bar says what IS, a point set or not yet, and not how
+       to use the tool. It read "Tap the head (or any feature) to track" and "Tracking point set — Track to follow it, or tap again to
+       move it". */
+    msg.textContent = picking && picking.seed ? 'Point set' : 'No point yet';
     bar.appendChild(msg);
     if (picking && picking.seed) {
       const go = document.createElement('button'); go.className = 'btn btn-accent'; go.textContent = 'Track';

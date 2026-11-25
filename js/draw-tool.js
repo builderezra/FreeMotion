@@ -769,14 +769,16 @@ window.FM = window.FM || {};
          that is information rather than instruction: it tells you how many strokes are in the drawing
          you are building, which is the one thing the bar knows and you cannot see. */
       ? (ns ? (ns + ' stroke' + (ns === 1 ? '' : 's')) : '')
-      : (n < 3 ? 'Tap the canvas or use the pad, then + Add point (' + n + ')' : 'Done / Enter to finish, or land on the first point (' + n + ')');
+      /* #1255: and the same for a shape drawn point by point. Its line read "Tap the canvas or use the pad, then + Add point (2)" and
+         then "Done / Enter to finish, or land on the first point (5)": two how-to sentences, there all the while. The COUNT stays. */
+      : (n ? (n + ' point' + (n === 1 ? '' : 's')) : '');
   }
 
   function buildBar() {
     bar = document.createElement('div');
     bar.id = 'draw-bar'; bar.className = 'hidden';
     bar.innerHTML =
-      '<div class="db-pad"><span class="db-pad-hint">Swipe here to move the point · snaps to the others</span></div>' +
+      '<div class="db-pad" role="group" aria-label="Swipe here to move the point. It snaps to the others">' + FM.PAD_MARK + '</div>' +   /* #1255: the drawn mark; the sentence is the pad's name */
       '<button class="db-add" type="button">+ Add point</button>' +
       '<span class="db-hint"></span>' +
       '<label class="db-color" title="Colour"><input type="color" value="#ffffff"></label>' +
@@ -833,6 +835,14 @@ window.FM = window.FM || {};
       set: function (x, y) { setCursor(x, y); redraw(); updateBar(); },
     });
   }
+
+  /* ═══ #1255 — A SWIPE PAD SAYS WHAT IT IS WITH A DRAWN MARK, NOT A SENTENCE. His words (23 Nov): "There shouldn't be any explanations
+     like that. We have tutorials for a reason… not, you know, constantly there." Every pad you swipe on to move something (this bar's,
+     the mask bar's, and Move & Transform's in js/inspector.js) carried a sentence: "Swipe here to move the point · snaps to the
+     others". The sentence is now the pad's NAME for a screen reader (aria-label) and the pad wears this four-way arrow: our own
+     drawing in the design board's line (24 grid, 1.6 stroke, round ends; its "Move in time" arrow, turned both ways). ONE string for
+     every pad, so they cannot drift apart. A fixed string, never user data. ═══ */
+  FM.PAD_MARK = '<svg class="pad-mark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v16M4 12h16"/><path d="M9.5 6.5 12 4l2.5 2.5"/><path d="M9.5 17.5 12 20l2.5-2.5"/><path d="M6.5 9.5 4 12l2.5 2.5"/><path d="M17.5 9.5 20 12l-2.5 2.5"/></svg>';
 
   /* ---- THE PRECISION PAD, SHARED (queue 321) ----------------------------------------------------
    * Ezra: *"make it when editing the mask and where it actually masks, you can use the touch pad thing

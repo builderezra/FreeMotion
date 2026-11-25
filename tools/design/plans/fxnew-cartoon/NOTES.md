@@ -57,7 +57,7 @@ How it behaves, by construction (js/compositor.js, the block before `FM._FX_TABL
 - Search: cartoon, cartoonify, comic, comic book, toon, cel, cel shading, anime, animated, ink, inked, outline, outlines, drawing.
   Browser tile on the cat photo (fx-thumbs `PHOTO_OF.cat`: one clear animal with a clean outline, and not the dog its Stylize
   neighbours fall back to). Batch 48 in CATEGORY_OF: it leads the NEW row.
-- Names: "Cartoon" and the row names are generic words; none is in `tools/design/954-effect-names.md` (no Alight Motion name) and
+- Names: "Cartoon" and the row names are generic words; none is in `tools/design/954-effect-names.md` (no [another app] name) and
   none is a trade mark.
 
 Files: js/compositor.js (the block), js/fx-registry.js (CATEGORY_OF batch 48, SEARCH_ALIASES), js/fx-thumbs.js (PHOTO_OF.cat),

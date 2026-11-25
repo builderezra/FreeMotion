@@ -35,7 +35,7 @@ from reading the code and from hand arithmetic. The proof is written and waiting
 | Shape | Circle / Square / Polygon | Square is flat-sided; a Polygon stands on a corner (first corner straight up) |
 | Sides | 3–12 (6) | Polygon only |
 | Rotation | −180–180° (0) | Square / Polygon only |
-| Spin | −360–360 °/s (0), keyframable | Square / Polygon only — **each ring turns as it travels** (After Effects' generator does the same) |
+| Spin | −360–360 °/s (0), keyframable | Square / Polygon only — **each ring turns as it travels** ([another editor]'s generator does the same) |
 | Colour | One colour / Rainbow | Rainbow: each ring its own hue, 40° on from the one before (not used by Cut from the layer) |
 | Wave colour | #39c6ff (a bright sky blue) | One colour only |
 | Blend | Normal / Add / Screen | Over the layer only |
@@ -68,8 +68,8 @@ How it behaves, by construction (`js/compositor.js`, the block before `FM._FX_TA
 
 ## Names (#954)
 
-"Radio Waves" is not in either Alight Motion list (`tools/design/954-effect-names.md`) and is not a trademark — it is a plain
-description. **But it is also the name of After Effects' own generator** (Generate → Radio Waves). The Time Echo precedent avoided
+"Radio Waves" is not in either [another app] list (`tools/design/954-effect-names.md`) and is not a trademark — it is a plain
+description. **But it is also the name of [another editor]'s own generator** (Generate → Radio Waves). The Time Echo precedent avoided
 plain "Echo" partly for that reason. Kept, because it is the backlog's name and the plain phrase for the thing; alternatives are in
 the questions. The type id `radiowaves` never shows. Not "Pond Rings" (#954's proposed rename for Circular Ripple).
 
@@ -146,7 +146,7 @@ every photo tile:
 
 1. **The starting look** — the defaults row (recommended), or another row of `radiowaves-rings.jpg`? (Rate, Speed, Width, Fade.)
 2. **First frame** — Already full (recommended: a clip never opens on an empty frame) or Empty (the first wave leaves the centre)?
-3. **The name** — Radio Waves (built; also After Effects' name for its generator), **Signal Rings**, or **Sonar Rings**?
+3. **The name** — Radio Waves (built; also [another editor]'s name for its generator), **Signal Rings**, or **Sonar Rings**?
 4. **Draw's four choices** — keep all four (built), or fold Cut from the layer away to keep the panel short?
 5. **Colour default** — sky blue #39c6ff (built), or white?
 6. **Follow the layer?** The centre is a share of the FRAME, like Shockwave's and Lens Flare's. Should there be a "Centre on: the layer"

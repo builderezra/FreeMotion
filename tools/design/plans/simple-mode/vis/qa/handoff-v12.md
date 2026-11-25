@@ -7,7 +7,7 @@ All ten V12 defects are fixed inside `v12.js`. There is no `v12.css`. Five thing
 1. **Optional: move the small-phone picture out of `v12.js`.** The 380×667 picture is real (the app at v17.12,
    same method as the others). Because this fix could only edit `v12.js`, it is embedded as WebP in base64:
    52 KB on the second-to-last line (`img667()`). To move it out:
-   - copy `/private/tmp/claude-501/-Users-ezrasmith-Claude-FreeMotion/1a172f83-0fdf-4f37-9706-58687655dccd/scratchpad/v12/out667/v12-phone-667.webp`
+   - copy `/private/tmp/claude-501/-Users-me-Claude-FreeMotion/1a172f83-0fdf-4f37-9706-58687655dccd/scratchpad/v12/out667/v12-phone-667.webp`
      to `vis/img/v12-phone-667.webp`;
    - in `v12.js` SHOTS, change the third entry to `file: 'v12-phone-667.webp'` and drop `src: 'embedded'`;
    - delete `img667()` and the `srcOf` special case, and fix the note at the top of the file.

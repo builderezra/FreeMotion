@@ -254,7 +254,7 @@ window.FM = window.FM || {};
           const gb = FM.groupBounds(l, FM.scene, t);
           if (gb && px >= gb.x - gb.w / 2 && px <= gb.x + gb.w / 2 && py >= gb.y - gb.h / 2 && py <= gb.y + gb.h / 2) return l;
         }
-        continue;   // a group acts as ONE object on canvas (AM); its members sit below it in z-order
+        continue;   // a group acts as ONE object on canvas; its members sit below it in z-order
       }
       if (l.visible && !l.locked && FM.isLayerVisibleAt(l, t) && hitTest(l, px, py, t)) return l;
     }

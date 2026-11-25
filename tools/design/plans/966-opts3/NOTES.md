@@ -9,7 +9,7 @@ runner, no node or python running app or test code.
 
 ## 1. Twin check (done before any code)
 
-Picked for what he would SEE in a short phone edit and for being thin next to AE / Premiere / CapCut / Alight Motion / DaVinci: a
+Picked for what he would SEE in a short phone edit and for being thin next to [another editor] / [another editor] / [another editor] / [another app] / [another editor]: a
 transition (Wipe), an opacity look (Flicker), a looping motion (Wrap Shift) and three background generators (Stripes, Checker,
 Dots). Every candidate control was checked six ways — by CONTENT, never by git ancestry:
 
@@ -32,8 +32,8 @@ Hue Shift … — a new control would have to move them off the canvas filter, G
 
 | Effect (type) | Key | Label | Range / choices | Default | What it does |
 |---|---|---|---|---|---|
-| Wipe (`wipe`) | `split` | Opens | One side / From middle | One side (0) | From middle opens both ways at once from a line through the centre (Premiere's Barn Doors); with Invert it closes in to that line |
-| | `border` | Border width | 0–100 px (unit px: pxToPlate scales it), keyframable | 0 | a band of the Border colour along the edge as it travels, on the part still showing (Premiere's Wipe border) |
+| Wipe (`wipe`) | `split` | Opens | One side / From middle | One side (0) | From middle opens both ways at once from a line through the centre ([another editor]'s Barn Doors); with Invert it closes in to that line |
+| | `border` | Border width | 0–100 px (unit px: pxToPlate scales it), keyframable | 0 | a band of the Border colour along the edge as it travels, on the part still showing ([another editor]'s Wipe border) |
 | | `color` | Border colour | colour row, greyed while Border width is 0 (`colorGate` deadAt 0, "0 px") | #ffffff | the band's colour |
 | Flicker (`flicker`) | `smooth` | Smoothness | 0–100 %, keyframable | 0 | glides from each level to the next over the last part of the step instead of jumping — at 100 % it never jumps (a candle, not a faulty bulb) |
 | | `steady` | Stays lit | 0–95 %, keyframable | 0 | about that share of the steps stay fully on; the rest still dip as deep as Amount (a light that mostly holds and now and then drops) |
@@ -202,7 +202,7 @@ Smoothness, Stays lit, Scroll across, Scroll down, Scroll speed, Layout (Grid ·
 - **Nothing was run.** Every claim in the tests is reasoned; the first run may move a marked bound or expose a slip in a worked pixel
   (each is worked through in the test's comment, with the exact arithmetic, so a red can be checked quickly).
 - **Wipe's border sits on the shown side only** (inside the layer's own pixels) — it never paints over what is behind, so a border on a
-  title is drawn on the title, not across the frame. If he wants Premiere's border that also covers the incoming clip, a new choice.
+  title is drawn on the title, not across the frame. If he wants [another editor]'s border that also covers the incoming clip, a new choice.
 - **Wipe From middle with an angle** opens from a line through the centre at that angle; with Fit to Layer, through the layer's middle.
 - **Flicker Stays lit at 95 %** dips rarely by design; the slider stops at 95 so it can never switch the flicker off entirely.
 - **Wrap Shift's scroll** runs on the clip's own clock (as Tile Grid's Scroll and every warp speed do), so splitting or trimming a clip
