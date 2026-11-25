@@ -500,6 +500,15 @@ for line in 'showQR(link);' 'scanQR()' 'const d = new BarcodeDetector({ formats:
   printf 'diff --git a/js/collab-ui.js b/js/collab-ui.js\n--- a/js/collab-ui.js\n+++ b/js/collab-ui.js\n@@ -1 +1 @@\n-var a = 1;\n+%s\n' "$line" > "$TMP/tp.diff"
   v="$(fg js/collab-ui.js "$TMP/tp.diff" "$BD")"; rc=$?; [ "$rc" = 1 ] && ok "“$line” is about QR → refused" || bad "missed a QR line “$line”: rc=$rc $v"
 done
+# ONE EXACT LINE THAT IS NOT QR CODE (25 Nov, v18.53): the Friends block's hint sentence says "a QR", and taking it away refused the
+# release. FEATURES lists it by its whole text ("not_code"); a word of it changed, or a real QR line beside it, still refuses.
+HINT="    body.appendChild(el('div', 'cs-fr-hint', 'You’ll get a link, a QR and a short code to send. Nothing’s shared until you tap Start sharing.'));"
+printf 'diff --git a/js/collab-ui.js b/js/collab-ui.js\n--- a/js/collab-ui.js\n+++ b/js/collab-ui.js\n@@ -1 +0,0 @@\n-%s\n' "$HINT" > "$TMP/hint.diff"
+v="$(fg js/collab-ui.js "$TMP/hint.diff" "$BD")"; rc=$?; [ "$rc" = 0 ] && ok "the Friends block's removed hint sentence (it says a QR) is listed as not QR code → passes" || bad "the listed hint line was counted as QR code: rc=$rc $v"
+printf 'diff --git a/js/collab-ui.js b/js/collab-ui.js\n--- a/js/collab-ui.js\n+++ b/js/collab-ui.js\n@@ -1 +1 @@\n-%s\n+showQR(link);\n' "$HINT" > "$TMP/hint2.diff"
+v="$(fg js/collab-ui.js "$TMP/hint2.diff" "$BD")"; rc=$?; [ "$rc" = 1 ] && ok "…beside a real QR line it is still refused" || bad "the listed line hid a real QR change: rc=$rc $v"
+printf 'diff --git a/js/collab-ui.js b/js/collab-ui.js\n--- a/js/collab-ui.js\n+++ b/js/collab-ui.js\n@@ -1 +0,0 @@\n-%s\n' "${HINT/a QR and/a QR code and}" > "$TMP/hint3.diff"
+v="$(fg js/collab-ui.js "$TMP/hint3.diff" "$BD")"; rc=$?; [ "$rc" = 1 ] && ok "…and with one word changed it is not the listed line → refused" || bad "a line that only resembles the listed one passed: rc=$rc $v"
 v="$(fg js/exporter.js "$TMP/empty.diff" '?\tthe driver result carries no NOT RUN list\n')"; rc=$?; [ "$rc" = 1 ] && ok "an unknown NOT RUN list ('?') counts against the release — unknown is not 'ran'" || bad "unknown list: rc=$rc $v"
 # THE TWO REASONS THE GATE DID NOT KNOW (6 Oct, the port audit, MAJOR). Off the Mac ~80 real-finger tests say NOT RUN for want
 # of touch emulation and 22 pinned tests for want of a baseline — and what they prove is the whole app, not one file. They
