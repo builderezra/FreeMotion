@@ -94853,7 +94853,9 @@
        tiles are 95px wide on a phone. */
     const tile = document.querySelector('.hm-aspect[data-aspect="custom"]');
     if (!tile) throw new Error('the Custom aspect tile is gone');
-    const sub = tile.querySelector('span:last-child');
+    /* v18.53 (#1243 ST7): every aspect chip ends with a row of app marks (.ac-uses; an empty one on Custom), so the sub-label is the
+       tile's span that is neither the frame drawing nor that row, never its last span */
+    const sub = tile.querySelector(':scope > span:not(.ac-frame):not(.ac-uses)');
     if (!sub) throw new Error('the Custom tile has no sub-label');
     if (!/auto adjusts/i.test(sub.textContent || ''))
       throw new Error('the Custom tile still reads "' + (sub.textContent || '') + '"');
@@ -94862,7 +94864,7 @@
          not, and the suite's own queue-497 guard rightly refused two ids I had invented for a variable
          this never used.) */
       const t = document.querySelector('.hm-aspect[data-aspect="custom"]');
-      const sb = t && t.querySelector('span:last-child');
+      const sb = t && t.querySelector(':scope > span:not(.ac-frame):not(.ac-uses)');
       if (!sb) return;
       const r = sb.getBoundingClientRect(), tr = t.getBoundingClientRect();
       if (!r.width || !tr.width) return;          // the dialog is closed in this run; nothing rendered to measure
