@@ -195554,6 +195554,67 @@
     if (room.rec.quick) throw new Error('CONTROL: the full take was cut, not handed over on its end');
   });
 
+  /* #1255 THE INTRO PLAYS ON THE COMPOSITOR (his words, 24 Nov: "the intro still does not run very smoothly on my phone").
+   * The take was painted on its canvas every frame, and the paint is the dear part: MEASURED at 390 x 844, dpr 2, 4x CPU (the
+   * blur already down to one pass), it moved 70 times in its 2.92 s, 46 to 50 of the gaps over 33 ms and up to 117 ms; as
+   * layers on the compositor it moved on all 181 frames, none over 17 ms. Proves, in a booted splash at 390 x 844 once the take
+   * plays: CONTROL, its stage runs the take's own animations (at least 60, every one running and 2.92 s long); every property
+   * any of them animates is transform or opacity; no canvas is painted while it plays (drawImage, fill, fillRect, stroke,
+   * strokeRect, fillText and clip, counted over 400 ms of it); and the layers sit where the take draws its sheets: paused at
+   * five moments that fall between keyframes, each sheet's picture covers the box of the corners seek() strokes, within
+   * 0.75 px (MEASURED: 0.44 px at worst over the whole fall, scanned every 7 ms).
+   * FAILS BEFORE THE FIX: v18.54 paints the take on its canvas every frame and runs no animation on its stage. */
+  test('1255 the intro plays on the compositor: once the take starts, every animation on its stage changes only transform or opacity, no canvas is painted while it plays, and each sheet sits where the take draws it (CONTROL: the take’s own animations are found, running)', { item: '1255' }, async function () {
+    const spy = '(function () { var P = CanvasRenderingContext2D.prototype; window.__paint1255 = 0; [\'drawImage\', \'fill\', \'fillRect\', \'stroke\', \'strokeRect\', \'fillText\', \'clip\'].forEach(function (k) { var f = P[k]; P[k] = function () { window.__paint1255++; return f.apply(this, arguments); }; }); })();';
+    const run = await boot1180({ pre: spy, size: [390, 844] });
+    try {
+      const d = run.d, w = run.w, S = w.FM_SPLASH;
+      if (w.matchMedia('(prefers-reduced-motion: reduce)').matches) notRunHere('this browser asks for reduced motion, so the take does not play here (its end frame is a still)');
+      if (!S) throw new Error('setup: the booted splash block has no take');
+      for (let i = 0; i < 200 && !(S.shown() > 0.15); i++) await sleep(20);
+      if (!(S.shown() > 0.15)) throw new Error('setup: the take never started playing in the booted frame (it shows ' + S.shown() + ' s)');
+      if (S.ended() || S.shown() > 1.6) throw new Error('setup: the take was already at ' + S.shown() + ' s, too late to watch it play');
+      const st = d.getElementById('splash-stage');
+      const anims = d.getAnimations().filter(a => a.effect && a.effect.target && st.contains(a.effect.target));
+      if (anims.length < 60) throw new Error('CONTROL: the take’s stage runs ' + anims.length + ' animations (' + (S.player ? 'player: ' + S.player() : 'no player') + '): the take is painted on the main thread a frame at a time, not played by the compositor');
+      const idle = anims.filter(a => a.playState !== 'running');
+      if (idle.length) throw new Error(idle.length + ' of the take’s ' + anims.length + ' animations are ' + idle[0].playState + ', not running');
+      const odd = anims.filter(a => Math.abs(a.effect.getComputedTiming().duration - 2920) > 1);
+      if (odd.length) throw new Error(odd.length + ' of the take’s animations do not last its 2.92 s (one lasts ' + odd[0].effect.getComputedTiming().duration + ' ms)');
+      const props = new Set();
+      anims.forEach(a => a.effect.getKeyframes().forEach(k => Object.keys(k).forEach(p => props.add(p))));
+      const bad = [...props].filter(p => !['offset', 'computedOffset', 'easing', 'composite', 'transform', 'opacity'].includes(p));
+      if (bad.length) throw new Error('the take animates ' + bad.join(', ') + ': only transform and opacity move on the compositor; anything else is laid out or painted on the main thread every frame');
+      if (!props.has('transform') || !props.has('opacity')) throw new Error('CONTROL: the take’s keyframes name only ' + [...props].join(', ') + ', so the reading above saw no motion at all');
+      const p0 = w.__paint1255, t0 = S.shown();
+      await sleep(400);
+      const p1 = w.__paint1255, t1 = S.shown();
+      if (!(t1 - t0 > 0.2)) throw new Error('setup: over 400 ms the take only went from ' + t0 + ' to ' + t1 + ' s');
+      if (p1 !== p0) throw new Error((p1 - p0) + ' canvas paints (drawImage, fill, stroke and the like) while the take played from ' + t0.toFixed(2) + ' to ' + t1.toFixed(2) + ' s: it is painted on the main thread a frame at a time, which any long task of the boot stalls');
+      const L = S.layers ? S.layers() : null;
+      if (!L || typeof L.pose !== 'function') throw new Error('FM_SPLASH.layers() has no pose(), so where the take puts each sheet cannot be read');
+      anims.forEach(a => a.pause());
+      const sr = st.getBoundingClientRect(), off = [];
+      let worst = 0;
+      for (const t of [0.371, 0.913, 1.523, 1.871, 2.073]) {
+        anims.forEach(a => { a.currentTime = t * 1000; });
+        const P = L.pose(t);
+        for (let i = 0; i < 5; i++) {
+          const el = st.querySelector('[data-take="sheet' + i + '"]');
+          if (!el) throw new Error('the stage has no layer for sheet ' + i);
+          const r = el.getBoundingClientRect(), q = P.q[i], xs = [q[0], q[2], q[4], q[6]], ys = [q[1], q[3], q[5], q[7]];
+          const dv = Math.max(Math.abs(r.left - sr.left - Math.min(...xs)), Math.abs(r.right - sr.left - Math.max(...xs)), Math.abs(r.top - sr.top - Math.min(...ys)), Math.abs(r.bottom - sr.top - Math.max(...ys)));
+          if (dv > worst) worst = dv;
+          if (!(dv <= 0.75)) off.push('sheet ' + i + ' at ' + t + ' s is ' + dv.toFixed(2) + ' px off');
+        }
+      }
+      console.log('1255 the sheets against the take’s own corners at five moments: worst ' + worst.toFixed(3) + ' px');
+      if (off.length) throw new Error('the layers are not where the take draws its sheets: ' + off.join(' · '));
+    } finally {
+      run.restore();
+    }
+  });
+
   /* 1232 clause 2, THE CLAPPER'S LID IS CUT OFF AS IT LIFTS (his words, 7 Nov: "when the lid lifts up, before it snaps down, it
    * gets cut off by an invisible black barrier"). The drawing lived in a 24-unit box and only overflow:visible let the open
    * stick (up to y = -3.4 at the lift) and the impact lines (to x = 26.7) show past it; WebKit clips an animated SVG child to

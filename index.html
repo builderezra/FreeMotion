@@ -30,7 +30,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.54">
+<meta name="fm-build" content="v18.55">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -978,10 +978,19 @@
 
           [colour, clip, wav, headT, maskT, card].forEach((o) => off.g.drawImage(o.img, 0, 0, 1, 1));
           off.g.drawImage(flat.canvas, 0, 0, 1, 1);
+          /* After the hit, for seek() and layers() alike: the beats the rows cut to grey on, the moment the logo is all clean,
+             and the ring of the whole frame (its zoom, and a shake that holds each 24th of a second). fr may be given: the
+             shake as it was just before a 24th turned over, for the keyframe on the near side of that step. */
+          const cut = [0.42, 0.56, 0.62], cleanAt = cut[2] + 0.04;
+          const ring = (q, fr) => {
+            if (fr === undefined) fr = kit.frame(q, 24);
+            const amp = 9 * Math.exp(-15 * q);
+            return { zoom: 1 + 0.085 * Math.exp(-15 * q) * Math.cos(44 * q), jx: (kit.hash(fr, 8) - 0.5) * amp, jy: (kit.hash(fr, 9) - 0.5) * amp };
+          };
           /* most (#1232, his "the intro's good, just fix it, because it's still laggy"): the most motion-blur passes this frame
              may draw. Absent, the frame is the take he picked, pass for pass. The splash lowers it on a device where a pass costs
              more than its budget; the end frame has no blur, so it never changes. Returns the passes drawn (0 after the impact). */
-          return function seek(t, most) {
+          const seek = function seek(t, most) {
             g.setTransform(dpr, 0, 0, dpr, 0, 0);
             g.globalAlpha = 1;
             if (t < tImp) {
@@ -992,15 +1001,11 @@
             }
             // Everything is flat now and only the holes show the pile. The whole frame rings from the hit.
             const q = t - tImp;
-            const zoom = 1 + 0.085 * Math.exp(-15 * q) * Math.cos(44 * q);
-            const fr = kit.frame(q, 24);
-            const amp = 9 * Math.exp(-15 * q);
-            const jx = (kit.hash(fr, 8) - 0.5) * amp, jy = (kit.hash(fr, 9) - 0.5) * amp;
+            const { zoom, jx, jy } = ring(q);
             g.fillStyle = COAL; g.fillRect(0, 0, W, H);
             g.save();
             g.translate(W / 2 + jx, H / 2 + jy); g.scale(zoom, zoom); g.translate(-W / 2, -H / 2);
-            const cut = [0.42, 0.56, 0.62];
-            const allClean = q >= cut[2] + 0.04;
+            const allClean = q >= cleanAt;
             if (allClean) {
               kit.drawF(g, L.cx, L.cy, L.s, { knock: COAL });
             } else {
@@ -1017,6 +1022,234 @@
             kit.wordmark(g, L.wordX, L.wordY, L.wordPx, F.top);
             g.restore();
           };
+
+          /* THE TAKE ON THE COMPOSITOR (#1255; his words, 24 Nov: "the intro still does not run very smoothly on my phone").
+             seek() paints every frame on the main thread, and the paint after it is the dear part. MEASURED on the laptop
+             (390 x 844 at dpr 2, 4x CPU, the take already down to one pass): seek() took 1.5 ms a frame and the frame about
+             50, so in its 2.92 s the take moved 70 times, with 46 to 50 gaps over 33 ms (up to 117), while the compositor
+             drew 240 frames and 170 of them had nothing new; and any long task of the app's boot freezes it as well.
+             layers() builds the same picture ONCE, as layers, and hands the motion to the compositor:
+             - each sheet's texture (the canvases above), its gel, its shadow on the floor, the hard shadow of the sheet over
+               it (only the part that falls on it, so nothing has to clip), the colour sheet's and the matte's sides: each one
+               element, placed by the camera written as CSS, the projection cam.p() does by hand (translate to the middle,
+               perspective(f), translateZ(f - dist), rotateX(pitch), rotateZ(az + twist), translate3d(its corner less the
+               camera's target)), so a sheet is in true perspective where seek() cuts it into 5 x 10 flat cells;
+             - the outlines and the handles, from the very corners seek() strokes, as flat pieces on the screen;
+             - after the hit, on the shaking frame: the flat pile, each row's clean grey, the clean logo and the name.
+             The keyframes are this take's own curves sampled 60 times a second, at every key the curves turn on, and wherever
+             more are needed to keep the picture between two keyframes within half a pixel of the take's own frame, with a
+             keyframe on each side of every step (the matte coming in, the hit, the shake's 24ths, the rows' beats); and
+             TRANSFORM and OPACITY are all they change, so no frame is painted on the main thread. What a compositor cannot do
+             is the motion blur (whole frames averaged), so this plays seek(t, 1)'s frames, the ones a device that could not
+             afford the blur already got (#1232). splash-boot plays it wherever the browser has Web Animations; seek() stays
+             the take everywhere else, and for the still and the tests. The layers are frame 0 from the first paint, and the
+             end frame he reads for 0.7 s is seek(dur) itself on the canvas, laid over them once they have reached it.
+             Returns { pose, prepare, start, settle, zero, anims, pause, drop }. */
+          seek.layers = function () {
+            const D = take.dur, base = g.canvas, x0 = -W / 2, y0 = -H / 2;
+            const C = [[x0, y0], [-x0, y0], [-x0, -y0], [x0, -y0]];   // a sheet's corners in its own plane, in quad()'s order
+            const n = (v) => (Math.abs(v) < 1e-7 ? 0 : +v.toFixed(5));
+            const at = (t) => Math.min(1, Math.max(0, t / D));
+            const root = document.createElement('div');
+            root.style.cssText = 'position:absolute;left:0;top:0;width:' + W + 'px;height:' + H + 'px';
+            const moving = [], fading = [], flat2d = new Set();   // flat2d: the pieces placed straight on the screen
+            const put = (parent, node, css, name) => {
+              node.style.cssText = 'position:absolute;left:0;top:0;transform-origin:0 0;' + css;
+              if (name) node.dataset.take = name;
+              parent.appendChild(node);
+              return node;
+            };
+            const tile = (w, h, bg, name, more) => put(root, document.createElement('div'), 'width:' + w + 'px;height:' + h + 'px;background:' + bg + ';' + (more || ''), name);
+            const move = (el, tf) => { el.style.willChange = 'transform'; moving.push([el, tf]); return el; };
+            const fade = (el, keys) => { el.style.willChange = el.style.willChange ? 'transform, opacity' : 'opacity'; fading.push([el, keys]); return el; };
+            // opacity v0 from the start, then each [t, v] from t on: a keyframe on each side of every step
+            const shows = (v0, ...flips) => {
+              const k = [{ offset: 0, opacity: v0 }];
+              let v = v0;
+              flips.forEach(([t, w]) => { k.push({ offset: at(t), opacity: v }, { offset: at(t), opacity: w }); v = w; });
+              k.push({ offset: 1, opacity: v });
+              return k;
+            };
+            // the camera, as CSS: a point of a plane at (x, y, z) lands where cam.p(x, y, z) puts it
+            const plane = (P, az, x, y, z) => 'translate(' + n(cam.cx) + 'px,' + n(cam.cy) + 'px) perspective(' + n(cam.f) + 'px) translateZ(' + n(cam.f - P.dist) + 'px) rotateX(' + n(P.pitch) + 'deg) rotateZ(' + n(az) + 'deg) translate3d(' + n(x - cam.tx) + 'px,' + n(y - cam.ty) + 'px,' + n(z - P.tz) + 'px)';
+            const upright = (k) => ' rotateZ(' + 90 * k + 'deg) rotateX(-90deg)';   // a side: along edge k, hanging down from it
+
+            // ---- before the hit, in scenery()'s order ----
+            tile(W, H, BONE);
+            for (let i = 0; i < 5; i++) move(tile(W, H, 'rgba(52,44,32,.13)', 'floor' + i), (P) => { const dz = P.pile[i] - zFloor; return plane(P, P.az + P.tw[i], x0 + dz * lightX, y0 + dz * lightY, zFloor); });
+            fade(move(tile(W, H, 'rgba(52,44,32,.32)', 'floor-matte'), (P) => { const dz = P.zc - zFloor; return plane(P, P.az, x0 + dz * lightX, y0 + dz * lightY, zFloor); }), shows(0, [tDrop, 1]));
+            for (let i = 0; i < 5; i++) {
+              const sh = sheets[i], face = (P) => plane(P, P.az + P.tw[i], x0, y0, P.pile[i]);
+              if (sh.solid) for (let k = 0; k < 4; k++) move(tile(k % 2 ? H : W, sh.h, sh.side), (P) => plane(P, P.az + P.tw[i], C[k][0], C[k][1], P.pile[i]) + upright(k));
+              if (sh.gel) fade(move(tile(W, H, sh.gel), face), [{ offset: 0, opacity: 0 }, { offset: at(0.04), opacity: 0 }, { offset: at(0.34), opacity: 1 }, { offset: 1, opacity: 1 }]);
+              move(put(root, sh.t.img, 'width:' + W + 'px;height:' + H + 'px', 'sheet' + i), face);
+              if (i < 4) {
+                move(tile(W, H, 'rgba(30,22,14,.22)'), (P) => {
+                  const dz = P.pile[i + 1] - P.pile[i], dx = dz * lightX, dy = dz * lightY;
+                  return plane(P, P.az + P.tw[i], x0 + Math.max(0, dx), y0 + Math.max(0, dy), P.pile[i]) + ' scale(' + n(Math.max(0, W - Math.abs(dx)) / W) + ',' + n(Math.max(0, H - Math.abs(dy)) / H) + ')';
+                });
+              }
+              for (let k = 0; k < 4; k++) {
+                let was = null;   // the edge's angle at the sample before, so it turns the short way and never spins
+                flat2d.add(moving.length);
+                move(tile(1000, 1.3, INK), (P) => {
+                  const q = P.q[i], ax = q[2 * k], ay = q[2 * k + 1], bx = q[(2 * k + 2) % 8], by = q[(2 * k + 3) % 8];
+                  const len = hypot(bx - ax, by - ay), c = len > 1e-6 ? (bx - ax) / len : 1, s = len > 1e-6 ? (by - ay) / len : 0;
+                  let deg = Math.atan2(s, c) / RAD;
+                  if (was !== null) { while (deg - was > 180) deg -= 360; while (deg - was < -180) deg += 360; }
+                  was = deg;
+                  return 'translate(' + n(ax - 0.65 * c + 0.65 * s) + 'px,' + n(ay - 0.65 * s - 0.65 * c) + 'px) rotate(' + n(deg) + 'deg) scale(' + n((len + 1.3) / 1000) + ',1)';
+                });
+              }
+              if (!sh.solid) for (let k = 0; k < 4; k++) { flat2d.add(moving.length); move(tile(7.2, 7.2, '#fff', '', 'box-sizing:border-box;border:1.2px solid ' + INK), (P) => 'translate(' + n(P.q[i][2 * k] - 3.6) + 'px,' + n(P.q[i][2 * k + 1] - 3.6) + 'px)'); }
+            }
+            for (let k = 0; k < 4; k++) fade(move(tile(k % 2 ? H : W, 12, '#26262a'), (P) => plane(P, P.az, C[k][0], C[k][1], P.zc) + upright(k)), shows(0, [tDrop, 1]));
+            fade(move(put(root, card.img, 'width:' + W + 'px;height:' + H + 'px', 'matte'), (P) => plane(P, P.az, x0, y0, P.zc)), shows(0, [tDrop, 1]));
+
+            // ---- the hit and after: the frame's own ground, then the shaking frame and what is on it ----
+            fade(tile(W, H, COAL, 'coal'), shows(0, [tImp, 1]));
+            const frame = put(root, document.createElement('div'), 'width:' + W + 'px;height:' + H + 'px;will-change:transform', 'ring');
+            // a canvas over [xa, xb] x [ya, yb] on the stage's own pixel grid, so it paints the pixels g would
+            const crisp = (name, xa, ya, xb, yb, paint) => {
+              const X0 = Math.floor(xa * dpr) / dpr, Y0 = Math.floor(ya * dpr) / dpr, X1 = Math.ceil(xb * dpr) / dpr, Y1 = Math.ceil(yb * dpr) / dpr;
+              const c = newCanvas();
+              c.width = Math.max(1, Math.round((X1 - X0) * dpr)); c.height = Math.max(1, Math.round((Y1 - Y0) * dpr));
+              const x = ctx(c);
+              x.setTransform(dpr, 0, 0, dpr, -X0 * dpr, -Y0 * dpr);
+              paint(x);
+              return put(frame, c, 'left:' + X0 + 'px;top:' + Y0 + 'px;width:' + (X1 - X0) + 'px;height:' + (Y1 - Y0) + 'px', name);
+            };
+            fade(put(frame, flat.canvas, 'width:' + W + 'px;height:' + H + 'px', 'flat'), shows(0, [tImp, 1], [tImp + cleanAt, 0]));
+            R.forEach((r, i) => {
+              const c = F.clips[i];
+              fade(crisp('row' + i, r.x - 1, r.y - 1, r.x + r.w + 1, r.y + r.h + 1, (x) => {
+                x.translate(L.X(0), L.Y(0)); x.scale(L.s, L.s);
+                const gr = x.createLinearGradient(0, 20, 0, 100);
+                gr.addColorStop(0, F.top); gr.addColorStop(1, F.bottom);
+                x.fillStyle = gr; x.beginPath(); x.roundRect(c.x, c.y, c.w, c.h, c.r); x.fill();
+              }), shows(0, [tImp + cut[i], 1], [tImp + cleanAt, 0]));
+            });
+            fade(crisp('clean', L.X(F.box.x) - 2, L.Y(F.box.y) - 2, L.X(F.box.x + F.box.w) + 2, L.Y(F.box.y + F.box.h) + 2, (x) => kit.drawF(x, L.cx, L.cy, L.s, { knock: COAL })), shows(0, [tImp + cleanAt, 1]));
+            fade(crisp('name', 0, L.wordY - L.wordPx * 1.25, W, L.wordY + L.wordPx * 0.5, (x) => kit.wordmark(x, L.wordX, L.wordY, L.wordPx, F.top)), shows(0, [tImp, 1]));
+
+            // ---- the keyframes: where scenery() puts everything at each moment ----
+            // q: each sheet's corners on the screen (what seek() strokes), cq: the matte's; the rest is the camera and the pile
+            const pose = (t) => {
+              setCam(t);
+              const P = { t, az: azNow, pitch: pitchNow, dist: cam.dist, tz: cam.tz, zc: zCard(Math.max(t, tDrop)), pile: [], tw: [], q: [] };
+              for (let i = 0; i < 5; i++) { P.pile.push(zOf(i, t)); P.tw.push(twist(i, t)); }
+              for (let i = 0; i < 5; i++) { faceSheet(i, t); P.q.push(quad(P.pile[i]).slice()); }
+              cam.turn(azNow * RAD, pitchNow * RAD);
+              P.cq = quad(P.zc).slice();
+              return P;
+            };
+            // the layers ARE frame 0 from the first paint, as plain styles, before any animation exists (nothing swaps at the start)
+            const P0 = pose(0);
+            moving.forEach(([el, tf]) => { el.style.transform = tf(P0); });
+            fading.forEach(([el, k]) => { el.style.opacity = String(k[0].opacity); });
+            kit.stage.appendChild(root);
+            /* What the browser draws BETWEEN two keyframes: each transform function is interpolated on its own, so for a layer
+               placed in the scene every number of the camera and the pile moves in a straight line and its corners land where
+               cam.p puts them for those numbers (inScene); an outline's and a handle's corners move in a straight line on the
+               screen (onScreen). Each is how far the picture strays from the take's own frame M, u of the way from A to B,
+               worst over every corner. */
+            const inScene = (A, B, u, M) => {
+              const L = (a, b) => a + (b - a) * u;
+              cam.dist = L(A.dist, B.dist); cam.tz = L(A.tz, B.tz);
+              let worst = 0;
+              for (let i = 0; i < 5; i++) {
+                cam.turn((L(A.az, B.az) + L(A.tw[i], B.tw[i])) * RAD, L(A.pitch, B.pitch) * RAD);
+                const c = quad(L(A.pile[i], B.pile[i]));
+                for (let k = 0; k < 8; k += 2) worst = Math.max(worst, hypot(c[k] - M.q[i][k], c[k + 1] - M.q[i][k + 1]));
+              }
+              if (A.t >= tDrop) {
+                cam.turn(L(A.az, B.az) * RAD, L(A.pitch, B.pitch) * RAD);
+                const c = quad(L(A.zc, B.zc));
+                for (let k = 0; k < 8; k += 2) worst = Math.max(worst, hypot(c[k] - M.cq[k], c[k + 1] - M.cq[k + 1]));
+              }
+              return worst;
+            };
+            const onScreen = (A, B, u, M) => {
+              let worst = 0;
+              for (let i = 0; i < 5; i++) for (let k = 0; k < 8; k += 2) worst = Math.max(worst, hypot(A.q[i][k] + (B.q[i][k] - A.q[i][k]) * u - M.q[i][k], A.q[i][k + 1] + (B.q[i][k + 1] - A.q[i][k + 1]) * u - M.q[i][k + 1]));
+              return worst;
+            };
+            const OFF_PX = 0.5;   // the most the picture may stray from the take between two keyframes (a device pixel at dpr 2)
+            let anims = [], made = false, z0 = null;
+            const prepare = () => {
+              anims.forEach((a) => a.cancel()); anims = [];   // a try that broke half-way leaves nothing behind
+              const ts = [];
+              for (let i = 0; i / 60 < tImp; i++) ts.push(i / 60);
+              [0.015, 0.03, 0.04, 0.045, 0.07, 0.1, 0.34, 0.5, 0.6, 0.62, 0.98, 1.3, 1.4, 1.46, tDrop, tDrop + 0.1, tDrop + 0.2, tFlatten, tImp].concat(hitT).forEach((t) => ts.push(t));
+              const grid = Array.from(new Set(ts)).filter((t) => t <= tImp).sort((a, b) => a - b).map(pose);
+              /* 60 a second follows the swing and the hang to a fraction of a pixel in the scene, but not the slam (the matte
+                 falls on in2 curves that start again from rest at every sheet it picks up, and catches each sheet at a moment of
+                 its own), and not the fastest of the swing for the pieces that move straight on the screen while the corners
+                 they follow travel on arcs. Wherever the picture between two keyframes would stray more than OFF_PX (checked a
+                 quarter, half and three quarters of the way), the moment halfway is added, down to a 960th of a second: for
+                 the layers in the scene and the flat pieces separately, so each only pays for the moments it needs. */
+              const finer = (gap) => {
+                const out = [grid[0]];
+                const fill = (A, B, depth) => {
+                  const inside = (u) => pose(A.t + (B.t - A.t) * u);
+                  const Q = [inside(0.25), inside(0.5), inside(0.75)];
+                  if (depth < 4 && Math.max(gap(A, B, 0.25, Q[0]), gap(A, B, 0.5, Q[1]), gap(A, B, 0.75, Q[2])) > OFF_PX) { fill(A, Q[1], depth + 1); fill(Q[1], B, depth + 1); }
+                  else out.push(B);
+                };
+                for (let i = 1; i < grid.length; i++) fill(grid[i - 1], grid[i], 0);
+                return out;
+              };
+              const scene = finer(inScene), screen = finer(onScreen);
+              const kfs = moving.map(([, tf], m) => {
+                const k = (flat2d.has(m) ? screen : scene).map((P) => ({ offset: at(P.t), transform: tf(P) }));
+                k.push({ offset: 1, transform: k[k.length - 1].transform });
+                return k;
+              });
+              const shake = (q, fr) => { const r = ring(q, fr); return 'translate(' + n(W / 2 + r.jx) + 'px,' + n(H / 2 + r.jy) + 'px) scale(' + n(r.zoom) + ') translate(' + n(-W / 2) + 'px,' + n(-H / 2) + 'px)'; };
+              const qs = [];
+              for (let i = 0; i / 120 <= 0.25; i++) qs.push([i / 120]);   // the ring is fastest straight after the hit
+              for (let i = 16; i / 60 <= 0.5; i++) qs.push([i / 60]);
+              for (let b = 1; b / 24 <= 0.5; b++) qs.push([b / 24, b - 1], [b / 24]);   // the shake as it was, then as it turns
+              qs.push([0.6], [0.7], [D - tImp]);
+              qs.sort((a, b) => a[0] - b[0] || b.length - a.length);
+              const zk = [{ offset: 0, transform: shake(0) }].concat(qs.map(([q, fr]) => ({ offset: at(tImp + q), transform: shake(q, fr) })));
+              zk.push({ offset: 1, transform: zk[zk.length - 1].transform });
+              /* every animation made now and held on frame 0, so the start is only play() */
+              const o = { duration: D * 1000, fill: 'both' };
+              moving.forEach(([el], i) => anims.push(el.animate(kfs[i], o)));
+              fading.forEach(([el, k]) => anims.push(el.animate(k, o)));
+              anims.push(frame.animate(zk, o));
+              anims.forEach((a) => a.pause());
+              made = true;
+            };
+            return {
+              pose,
+              /* the keyframes and the animations, held: splash-boot asks for this in a task of its own after the first paint, so
+                 it is done in the boot's own gaps; start() does it then if it has not been */
+              prepare() { if (!made) prepare(); },
+              /* plays every layer. The browser starts them on its next frame, together: a start time taken here, before the
+                 page has even handed them over, would put them part-way in on a main thread that is busy straight after. */
+              start() {
+                if (!made) prepare();
+                anims.forEach((a) => a.play());
+              },
+              /* the end frame is on the canvas now (splash-boot drew seek(dur) on it): it covers the layers, so the finished logo
+                 he reads is the take's own pixels, whatever a compositor's resampling did to the shaking frame's layer */
+              settle() { base.style.zIndex = '1'; },
+              /* when (performance.now's time) the layers started, once the browser has started them, else null; every one of them
+                 is held to the first one's start, so they stay one picture even if one was started a frame late */
+              zero() {
+                if (z0 !== null || !anims.length || anims[0].startTime === null) return z0;
+                z0 = anims[0].startTime;
+                anims.forEach((a) => { if (a.startTime !== z0) a.startTime = z0; });
+                return z0;
+              },
+              anims: () => anims.slice(),
+              pause() { anims.forEach((a) => { try { a.pause(); } catch (e) {} }); },
+              drop() { anims.forEach((a) => { try { a.cancel(); } catch (e) {} }); anims = []; root.remove(); base.style.zIndex = ''; },
+            };
+          };
+          return seek;
         },
         /* THE END FRAME ALONE, for reduced motion and a clock that never starts: what seek(dur) paints once the ring from the
            hit has died away (its zoom and shake are under 1e-6 by then), without making the five sheets and the matte first. A
@@ -1080,6 +1313,9 @@
       stage.style.width = W + 'px'; stage.style.height = H + 'px';
       var DPR = Math.min(window.devicePixelRatio || 1, 2);   // the picker's own: what he saw
       var seek = null, gone = false, stilled = false, dark = false, shown = -1, startedPerf = 0, endedPerf = 0, makeMs = -1;
+      /* #1255: lay is the take as layers on the compositor (seek.layers, the take's own comment says why), built before the
+         load as frame 0, over the canvas; player is the same once it plays. */
+      var lay = null, player = null;
       function ground(t) {
         var d = t >= TAKE.tDark;
         if (d === dark) return;
@@ -1120,17 +1356,37 @@
           shown = t; ground(t); return true;
         } catch (e) { return false; }
       }
+      /* The end frame, on whichever is playing: the canvas draws it, and over the layers (which end on it too) it is laid on
+         top, so the finished logo is the take's own pixels; if it cannot be drawn the layers hold it themselves. */
+      function endFrame() {
+        if (!player) return draw(END_S);
+        if (draw(END_S)) { try { player.settle(); } catch (e) {} } else { shown = END_S; ground(END_S); }
+        return true;
+      }
       /* The test seam: what the splash is showing (a time in seconds, END_S for the still, -1 before anything), whether it is
          the still, when (performance.now) the take's first frame and its end frame were drawn, its stage, and the take
-         itself. Read by tests/tests.js's 1231 tests in a booted frame. */
-      window.FM_SPLASH = { take: TAKE, shown: function () { return shown; }, still: function () { return stilled; }, started: function () { return startedPerf; }, ended: function () { return endedPerf; }, makeMs: function () { return makeMs; }, passes: function () { return most; }, costs: function () { return costs.slice(); }, size: [W, H, DPR] };
+         itself; which player plays it (#1255: 'layers' on the compositor, 'canvas' drawn a frame at a time, '' for the still)
+         and the layers themselves. Read by tests/tests.js's 1231 and 1255 tests in a booted frame. */
+      window.FM_SPLASH = { take: TAKE, shown: function () { return shown; }, still: function () { return stilled; }, started: function () { return startedPerf; }, ended: function () { return endedPerf; }, makeMs: function () { return makeMs; }, passes: function () { return most; }, costs: function () { return costs.slice(); }, size: [W, H, DPR],
+        player: function () { return stilled || !seek ? '' : player ? 'layers' : 'canvas'; }, layers: function () { return player || lay; } };
       if (REDUCE) stilled = paintStill();
       else {
         /* make() before the first paint, so frame 0 is up from the moment the splash is: it paints the five sheets and the
            matte once (cost measured: #1231's entry). The clock does not start until the load (below). */
         var m0 = performance.now();
         try { seek = TAKE.make(stage, TAKE.makeKit(stage, W, H, DPR)); makeMs = performance.now() - m0; } catch (e) { seek = null; }
-        if (!seek || !draw(0, 2) || (most !== 2 && !draw(0))) { seek = null; stilled = paintStill(); }
+        /* #1255: THE COMPOSITOR PLAYS IT wherever the browser has Web Animations: its layers are built now, as frame 0, over
+           the canvas, and play from the take's first frame. The canvas plays it a frame at a time where there are none, and
+           where a test stands in a clock or a blur budget: both are the canvas player's own (the compositor plays on the
+           document's clock and spends nothing a frame). */
+        if (seek && seek.layers && typeof stage.animate === 'function' && !window.__fmSplashClock && typeof window.__fmSplashBudgetMs !== 'number') {
+          try { lay = seek.layers(); } catch (e) { lay = null; }
+        }
+        if (lay) { shown = 0; ground(0); }   // the layers are frame 0 already
+        else if (!seek || !draw(0, 2) || (most !== 2 && !draw(0))) { seek = null; stilled = paintStill(); }
+        /* their keyframes and animations in a task of their own after the first paint (a frame, then a timer): in the boot's
+           gaps, so they cost neither the first sight of frame 0 nor the take's first frame (about 110 ms on the laptop) */
+        if (lay) requestAnimationFrame(function () { setTimeout(function () { if (lay && !gone) { try { lay.prepare(); } catch (e) {} } }, 0); });
       }
       var raf = 0;
       // One speed since #1223: 280ms, because an editor cuts. A tap or the hard cap (`quick`) stops the take where it is and is
@@ -1138,6 +1394,7 @@
       function dismiss(quick) {
         if (gone) return; gone = true;
         try { cancelAnimationFrame(raf); } catch (e) {}
+        if (quick && player) { try { player.pause(); } catch (e) {} }   // the layers stop where they are, as the canvas does
         if (quick) sp.classList.add('splash-cut');
         // splash-kf-out starts the light look's status-strip ramp (splash-css above) in the same style change as the cut.
         try { document.documentElement.classList.add('splash-kf-out'); } catch (e) {}
@@ -1146,7 +1403,8 @@
         try { document.dispatchEvent(new CustomEvent('fm:splash-dismiss', { detail: { quick: !!quick } })); } catch (e) {}
         setTimeout(function () {
           sp.remove();
-          /* the take's canvases are emptied with it: iPhones cap canvas memory and free it late */
+          /* the take's canvases are emptied with it: iPhones cap canvas memory and free it late; its layers' animations go too */
+          try { if (player || lay) (player || lay).drop(); } catch (e) {}
           try { TAKE.free(); } catch (e) {}
           /* Every class the splash put on <html> comes off WITH it (queue 883: one that outlived the splash held the page
              canvas white for the rest of the session — his white bar). 'splash-on-light' is the film's ground ramp; nothing
@@ -1180,16 +1438,28 @@
         var toStill = function () {
           stilled = true;
           try { cancelAnimationFrame(raf); } catch (e) {}
+          if (lay) { try { lay.drop(); } catch (e) {} lay = null; }   // layers that never played: the canvas shows the still
           if (!draw(END_S) && !paintStill()) { dismiss(true); return; }
           setTimeout(function () { whenLanded(function () { dismiss(false); }, LAND_S * 1000 - STILL_MS); }, STILL_MS);
         };
         var tick = function () {
           if (gone || stilled) return;
           var c = clockNow();
-          if (!started) { started = Date.now(); t0 = c; startedPerf = performance.now(); }
+          if (!started) {
+            started = Date.now(); t0 = c; startedPerf = performance.now();
+            /* #1255: the layers take over from frame 0 here, and their clock is the take's: from then on this frame only
+               reads it (what is showing, and the ground), and the compositor moves everything. If they cannot start, the
+               canvas plays on. */
+            if (lay) {
+              try { lay.start(); player = lay; } catch (e) { try { lay.drop(); } catch (x) {} }
+              lay = null;
+            }
+          }
+          if (player) { var z = player.zero(); if (z === null) c = t0; else { t0 = z; c = clockNow(); } }   // frame 0 until they start
           var t = Math.min(END_S, Math.max(0, (c - t0) / 1000));
-          if (!draw(t)) { toStill(); return; }
-          if (t >= END_S) { if (!doneAt) { doneAt = Date.now(); endedPerf = performance.now(); } return; }   // the end frame stays drawn
+          if (player) { shown = t; ground(t); }
+          else if (!draw(t)) { toStill(); return; }
+          if (t >= END_S) { if (!doneAt) { if (player) endFrame(); doneAt = Date.now(); endedPerf = performance.now(); } return; }   // the end frame stays drawn
           raf = requestAnimationFrame(tick);
         };
         var go = function () { loadedAt = Date.now(); if (!gone && !stilled) raf = requestAnimationFrame(tick); };
@@ -1205,7 +1475,8 @@
           var nowW = Date.now(), lag = nowW - lastWatch - 40;
           lastWatch = nowW;
           if (!started && loadedAt && lag > 200) loadedAt += lag;
-          if (started && !doneAt && (clockNow() - t0) / 1000 >= END_S && draw(END_S)) { doneAt = Date.now(); endedPerf = performance.now(); try { cancelAnimationFrame(raf); } catch (e) {} }
+          if (player) { var z0 = player.zero(); if (z0 !== null) t0 = z0; }
+          if (started && !doneAt && (clockNow() - t0) / 1000 >= END_S && endFrame()) { doneAt = Date.now(); endedPerf = performance.now(); try { cancelAnimationFrame(raf); } catch (e) {} }
           var held = doneAt && Date.now() - doneAt >= HOLD_S * 1000;
           if (!started && loadedAt && Date.now() - loadedAt > 1000) toStill();
           else if (held && (landed() || Date.now() - started >= LAND_S * 1000)) dismiss(false);
@@ -1240,7 +1511,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand"><span class="brand-name"><svg class="fm-ic brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M8.5 5.8v12.4a.8.8 0 0 0 1.2.7l9.9-6.2a.8.8 0 0 0 0-1.4L9.7 5.1a.8.8 0 0 0-1.2.7z"/></svg>FreeMotion</span> <span class="ver" title="Tap to force-update to the very latest build">v18.54</span></div>
+      <div class="brand"><span class="brand-name"><svg class="fm-ic brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M8.5 5.8v12.4a.8.8 0 0 0 1.2.7l9.9-6.2a.8.8 0 0 0 0-1.4L9.7 5.1a.8.8 0 0 0-1.2.7z"/></svg>FreeMotion</span> <span class="ver" title="Tap to force-update to the very latest build">v18.55</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row ([the reference app] keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
