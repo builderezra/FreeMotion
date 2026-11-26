@@ -87,6 +87,10 @@ window.FM = window.FM || {};
        on iOS 26, index.html's sharp-top script decides). Read before the first paint by that script straight from this key (only a
        saved true turns it on), and in load()'s whitelist below (the #688 bug). */
     sharpTop: false,
+    /* THE NEW LOOK, AS A PREVIEW (#1255; his READY of 24 Nov). '' is today's look, the default: nothing of the new look is even
+       fetched. 'cutline' is the new dark, 'light' the new light. index.html's new-look script reads this key before the first
+       paint, as its sharp-top script reads sharpTop; load() takes it on a line of its own below (the #688 bug). */
+    newLook: '',
     /* THE SETTINGS' OWN REVISION (#1084, the pre-ship review's refuter, 22 Oct). save() writes the whole state, so every phone that
        saved ANY setting between v17.59 and v17.91 stores addMenuGrow false — the old default, not a choice he made. load() takes a
        saved addMenuGrow only from a blob that carries this revision, so the ON default reaches those phones, and every choice made
@@ -139,6 +143,7 @@ window.FM = window.FM || {};
       ['demoMode', 'showTouches', 'systemFonts', 'homeLight', 'collabLabs', 'collabCursors', 'collabSelections', 'collabCodesOnly', 'addMenuGrow'].forEach(k => { if (typeof saved[k] === 'boolean') state[k] = saved[k]; });   // addMenuGrow: queue 1084
       if (typeof saved.simpleTransitionExtras === 'boolean') state.simpleTransitionExtras = saved.simpleTransitionExtras;   /* Simple 2.7 (#1122): its own line, so the whitelist above stays Full's */
       if (typeof saved.sharpTop === 'boolean') state.sharpTop = saved.sharpTop;   // #1255 clause 4: Sharp top buttons
+      if (saved.newLook === 'cutline' || saved.newLook === 'light') state.newLook = saved.newLook;   // #1255: the new look's preview (anything else is today's look)
       const d = +saved.layerDuration;
       if (isFinite(d) && d > 0 && d <= 60) state.layerDuration = d;
       if (!(saved.settingsRev >= 2)) state.addMenuGrow = DEFAULTS.addMenuGrow;   // #1084: an older blob's addMenuGrow is the old default, not his choice (settingsRev)
@@ -170,6 +175,10 @@ window.FM = window.FM || {};
     touchRipples(state.showTouches);
     /* #1255 clause 4: html.fm-sharp follows the switch (index.html's sharp-top script set it at launch, before the first paint) */
     if (FM.sharpTop && FM.sharpTop.apply) { try { FM.sharpTop.apply(); } catch (e) {} }
+    /* #1255, the new look's preview: html[data-ui], that look's Home (it replaces what the line above just set: the new dark
+       brings a dark Home and the new light a light one) and its stylesheet follow the choice. index.html's new-look script
+       did the same at launch, before the first paint; with the preview off it takes data-ui away and touches nothing else. */
+    if (FM.newLook && FM.newLook.apply) { try { FM.newLook.apply(); } catch (e) {} }
     /* queue 921 S3: the Labs switch owns every piece of collaboration DOM there is, so it is applied
        here — the one place that runs at boot AND on every change — rather than from the row that flips
        it. `syncLabs` builds nothing but the two doors when the switch is off, and ENDS a live session if it goes off
@@ -662,6 +671,9 @@ window.FM = window.FM || {};
       (FM.sharpTop && FM.sharpTop.device && FM.sharpTop.device())
         ? toggleRow('Sharp top buttons', 'On: the top buttons sit a little lower, clear of the iPhone’s blur at the top of the screen. Off: tight to the clock, as before.', 'sharpTop')
         : null,
+      /* #1255: the look he picked, to try on his own phone before it becomes the app (his READY, 24 Nov). A name and three
+         choices, no line under it (his rule of 23 Nov: no explanations). Dark and Light are the new look's two halves. */
+      segmentRow('New look (preview)', 'newLook', [{ label: 'Off', value: '' }, { label: 'Dark', value: 'cutline' }, { label: 'Light', value: 'light' }]),
     ));
     body.appendChild(group(
       toggleRow('Demo mode', 'Hides your photo and video previews (and their filenames) in the Add menu — so a screen recording never shows your camera roll.', 'demoMode'),
@@ -1332,6 +1344,10 @@ window.FM = window.FM || {};
     },
     toggle() { if (FM.settings.isOpen()) FM.settings.close(); else FM.settings.open(); },   // by name, not `this`: callers pass it detached — `(FM.settings.toggle || FM.settings.open)()` — and a detached method has no `this` in strict mode   // a second tap on the button CLOSES it (queue 762)
   };
+
+  /* #1255: the look changed while the app is up (New look (preview)). What a script draws with colours of its own (the
+     timeline's bars and chips, the easing graph, the marks on the picture) is drawn again; CSS needs no telling. */
+  window.addEventListener('fm-look', () => { try { if (FM.refreshAll) FM.refreshAll(); if (FM.requestRender) FM.requestRender(); } catch (e) {} });
 
   load();
 })(window.FM);

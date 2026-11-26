@@ -1,0 +1,6 @@
+# tools/look/MODE — read by tools/look/build.py.
+# The generated stylesheets (theme-cutline.css, theme-light.css) are written WITHOUT the Simple editor's lines until a Simple
+# release has added them: the lock that keeps a Simple release from changing the Full editor lets only a Simple release add a line
+# that names Simple's own ids and classes. A Simple release turns this to yes (and ships the lines the build then adds); it
+# never goes back to no.
+simple-lines: no

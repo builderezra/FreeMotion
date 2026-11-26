@@ -539,7 +539,26 @@ window.FM = window.FM || {};
      you drag a layer — and a second copy of this expression would be the switch and the clip disagreeing
      about which layer you are holding. */
   function clipColorOf(layer) {
-    return (layer.clipColorSet && layer.clipColor) || shapeClipColor(layer) || layer.clipColor || '#3a5a8c';
+    return (layer.clipColorSet && layer.clipColor) || shapeClipColor(layer) || cutlineClipColor(layer) || layer.clipColor || '#3a5a8c';
+  }
+  /* #1255, the new dark look: under html[data-ui="cutline"] a clip whose colour was NOT chosen (it is just the next
+     entry off scene.js's spawn palette) draws in the Cutline layer palette by layer type. A chosen colour and a shape's
+     fill still win above, exactly as today. Display only: nothing is written to the layer. */
+  const CUTLINE_TYPE = { video: '#e9a07a', image: '#86b8dc', text: '#c6a6f0', shape: '#f2c14e', audio: '#ec88a4',
+    group: '#aaa298', adjust: '#93cc9b', adjustment: '#93cc9b', camera: '#aaa298' };
+  const CUTLINE_SPAWN = { '#2bbfa8': '#86b8dc', '#e0913f': '#e9a07a', '#df5b5b': '#ec88a4', '#9b6dff': '#c6a6f0',
+    '#46c98a': '#93cc9b', '#4d8bf0': '#86b8dc', '#e85f9e': '#ec88a4', '#d9b13f': '#f2c14e' };
+  /* #1255 (the design review's H4): the LIGHT look draws by type too, from .fm-light's --layer-* palette, so a layer
+     keeps its colour across a theme switch. */
+  const LIGHT_TYPE = { video: '#e3926a', image: '#7aaed6', text: '#b896ec', shape: '#ecb93e', audio: '#e67b9a',
+    group: '#aba293', adjust: '#86c290', adjustment: '#86c290', camera: '#aba293' };
+  const LIGHT_SPAWN = { '#2bbfa8': '#7aaed6', '#e0913f': '#e3926a', '#df5b5b': '#e67b9a', '#9b6dff': '#b896ec',
+    '#46c98a': '#86c290', '#4d8bf0': '#7aaed6', '#e85f9e': '#e67b9a', '#d9b13f': '#ecb93e' };
+  function cutlineClipColor(layer) {
+    const ui = document.documentElement.getAttribute('data-ui');
+    if (ui === 'light') return LIGHT_TYPE[layer.type] || LIGHT_SPAWN[String(layer.clipColor || '').toLowerCase()] || null;
+    if (ui !== 'cutline') return null;
+    return CUTLINE_TYPE[layer.type] || CUTLINE_SPAWN[String(layer.clipColor || '').toLowerCase()] || null;
   }
   FM._recoverStuckGesture = recoverStuckGesture;   // suite seam (queue 751): drive the real recovery
   FM._ensureTrimHud = ensureTrimHud;               // …and build the two things it must take down, since both are lazy

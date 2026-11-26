@@ -30,7 +30,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.55">
+<meta name="fm-build" content="v18.56">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -46,7 +46,7 @@
      commit since v6.73 can narrow the page. There was never a layout bug, only a colour mismatch.
      Kept inline and FIRST so the earliest possible paint is already the right colour; the themed rule
      in styles.css takes over immediately after and lets classic/glass each set their own. -->
-<style>html,body{background:#060c0f}</style>
+<style>html,body{background:#060c0f}html[data-ui="light"],html[data-ui="light"] body{background:#f3eee5}html[data-ui="cutline"],html[data-ui="cutline"] body{background:#121110}</style>
 <link rel="stylesheet" href="styles.css?v=804">
 <link rel="stylesheet" href="theme-glass.css?v=70">   <!-- additive; only applies under html[data-theme="glass"] (Settings → Appearance) -->
 <!-- SHARP TOP (#1255 clause 4, REOPENED 21 Nov). His words: "some fade overlapping the buttons is still there", and on v18.48
@@ -112,6 +112,115 @@
     var on = false;
     try { on = FM.sharpTop.apply(); } catch (e) {}
     FM.sharpTop.first = { on: on, beforeBody: !document.body };
+  })();
+</script>
+<!-- THE NEW LOOK, AS A PREVIEW (#1255; his READY of 24 Nov: "hand it my pics and just whatever as soon as possible… Take as long
+     as it needs to take just to iron out every issue that gets spotted"). The look he picked (warm charcoal and paper, one
+     vermilion; dark by default, with a light twin) exists as two GENERATED stylesheets, theme-cutline.css and theme-light.css:
+     tools/look/build.py makes them from styles.css, and every rule in them sits under html[data-ui]. They are fetched ONLY when
+     the preview is on: Settings, New look (preview), stored as fm.settings newLook ('cutline' = the new dark, 'light' = the new
+     light; anything else is today's look). With it off this script sets nothing and asks for nothing: today's app is what it was.
+     With it on, the choice is applied BEFORE THE FIRST PAINT, as Sharp top is above: html[data-ui], that look's Home (the new
+     dark brings a dark Home, the new light a light one, whatever Toggle dark mode says) and the stylesheet, written into the head
+     while the head is still being read, so it holds the first paint like any other stylesheet and the app never shows in today's
+     colours first. ?ui=cutline, ?ui=light or ?ui=now in the address turns it on or off for that one opening and stores nothing
+     (the surface crawler and the tests use it). js/settings.js apply() calls FM.newLook.apply() on every change of the setting. -->
+<script id="new-look">
+  (function () {
+    'use strict';
+    var FM = window.FM = window.FM || {};
+    var de = document.documentElement;
+    var FILES = { cutline: 'theme-cutline.css?v=fba671c1ce', light: 'theme-light.css?v=f3e3e75f9c' };   /* each stamped with its own bytes by tools/look/build.py */
+    var BAR = { cutline: '#121110', light: '#fffcf6' };                              /* the browser's own bar (theme-color) under each look */
+    function wanted() {
+      var q = /[?&]ui=(cutline|light|now)(?![\w-])/.exec(window.location.search || '');
+      if (q) return q[1] === 'now' ? '' : q[1];
+      var v = '';
+      try {
+        if (FM.settings && FM.settings.get) v = FM.settings.get('newLook');
+        else { var s = JSON.parse(window.localStorage.getItem('fm.settings')); v = s && s.newLook; }
+      } catch (e) {}
+      return v === 'cutline' || v === 'light' ? v : '';
+    }
+    function sheet(look) {
+      var id = 'new-look-' + look, l = document.getElementById(id);
+      if (l) return l;
+      if (document.readyState === 'loading' && !document.body) {
+        /* the head is still being read: written in place, the stylesheet holds the first paint */
+        document.write('<link rel="stylesheet" id="' + id + '" href="' + FILES[look] + '">');
+        return document.getElementById(id);
+      }
+      l = document.createElement('link');
+      l.rel = 'stylesheet'; l.id = id; l.href = FILES[look];
+      document.head.appendChild(l);
+      return l;
+    }
+    function bar(look) {
+      var m = document.querySelector('meta[name="theme-color"]');
+      if (!m) {      /* at launch this script runs above that tag: the bar follows once the page is read, if the look is still on */
+        if (look) document.addEventListener('DOMContentLoaded', function () { if (de.getAttribute('data-ui') === look) bar(look); }, { once: true });
+        return;
+      }
+      if (FM.newLook.bar0 === null) FM.newLook.bar0 = m.getAttribute('content');
+      m.setAttribute('content', look ? BAR[look] : FM.newLook.bar0);
+    }
+    function told() { try { window.dispatchEvent(new Event('fm-look')); } catch (e) {} }
+    function homeLight() {      /* his own Home switch (on unless he turned it off), for when a look lets go of the Home */
+      try {
+        if (FM.settings && FM.settings.get) return FM.settings.get('homeLight') !== false;
+        var s = JSON.parse(window.localStorage.getItem('fm.settings'));
+        return !(s && s.homeLight === false);
+      } catch (e) { return true; }
+    }
+    FM.newLook = {
+      FILES: FILES,
+      bar0: null,
+      failed: '',            /* the look whose stylesheet last failed to arrive, '' when none has */
+      wanted: wanted,
+      /* the look that is ON right now ('' = today's): what a script asks before it builds a screen the new look lays out
+         differently. Not wanted(): a look he chose whose stylesheet has not arrived is not on. */
+      on: function () { return de.getAttribute('data-ui') || ''; },
+      /* the one place html[data-ui] goes on or comes off: here at launch, and from js/settings.js apply() on every change */
+      apply: function () {
+        var look = wanted(), was = de.getAttribute('data-ui') || '';
+        if (look) {
+          var early = document.readyState === 'loading' && !document.body, l = sheet(look);
+          var on = function () {
+            if (wanted() !== look) return;            /* he changed his mind while the stylesheet was on its way */
+            de.setAttribute('data-ui', look);
+            de.setAttribute('data-home', look === 'light' ? 'light' : 'dark');
+            bar(look);
+            if (was !== look && !early) told();
+          };
+          /* THE STYLESHEET DID NOT ARRIVE (offline and never fetched before, a dropped request): today's look, whole, beats the new
+             one in halves. Its link is taken out, so a later try fetches afresh, and where this look is already on (at launch it
+             goes on at once) it comes off again: data-ui, the browser's bar, and the Home back to his own switch. His choice stays
+             stored: the next launch, or the next change of any setting, tries again. */
+          var fail = function () {
+            if (l && l.parentNode) l.parentNode.removeChild(l);
+            FM.newLook.failed = look;
+            if (de.getAttribute('data-ui') !== look) return;
+            de.removeAttribute('data-ui');
+            de.setAttribute('data-home', homeLight() ? 'light' : 'dark');
+            bar('');
+            told();
+          };
+          if (l && !l.sheet) l.addEventListener('error', fail, { once: true });
+          /* at launch the stylesheet already holds the paint, so the attribute goes on at once; switched on later it waits for the
+             stylesheet, or a frame of the new look's rules with nothing behind them would show */
+          if (early || !l || l.sheet) on();
+          else l.addEventListener('load', on, { once: true });
+        } else if (was) {
+          de.removeAttribute('data-ui');
+          bar('');
+          told();
+        }
+        return look;
+      }
+    };
+    var first = '';
+    try { first = FM.newLook.apply(); } catch (e) {}
+    FM.newLook.first = { look: first, beforeBody: !document.body };
   })();
 </script>
 <link rel="manifest" href="manifest.json?v=4">
@@ -1511,7 +1620,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand"><span class="brand-name"><svg class="fm-ic brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M8.5 5.8v12.4a.8.8 0 0 0 1.2.7l9.9-6.2a.8.8 0 0 0 0-1.4L9.7 5.1a.8.8 0 0 0-1.2.7z"/></svg>FreeMotion</span> <span class="ver" title="Tap to force-update to the very latest build">v18.55</span></div>
+      <div class="brand"><span class="brand-name"><svg class="fm-ic brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M8.5 5.8v12.4a.8.8 0 0 0 1.2.7l9.9-6.2a.8.8 0 0 0 0-1.4L9.7 5.1a.8.8 0 0 0-1.2.7z"/></svg>FreeMotion</span> <span class="ver" title="Tap to force-update to the very latest build">v18.56</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row ([the reference app] keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing
@@ -2419,7 +2528,7 @@
   <script src="js/perf-probe.js?v=16"></script>
   <script src="js/drawn-x.js?v=2"></script>
   <script src="js/variant.js?v=3"></script>   <!-- queue 974: every animation with options plays one AT RANDOM (FM.variant); before timeline/home/app -->
-  <script src="js/settings.js?v=64"></script>
+  <script src="js/settings.js?v=65"></script>
   <!-- queue 921 stage S1: constants only, and nothing in it runs at load (see the file header). The
        rest of the collab modules are pure libraries and sit at the end of the list. -->
   <script src="js/collab-core.js?v=70"></script>
@@ -2435,12 +2544,12 @@
   <script src="js/blend-modes.js?v=3"></script>
   <script src="js/gl-warp.js?v=5"></script>
   <script src="js/gl-color.js?v=6"></script>
-  <script src="js/compositor.js?v=270"></script>
+  <script src="js/compositor.js?v=271"></script>
   <script src="js/fx-registry.js?v=46"></script>
   <script src="js/filters.js?v=25"></script>
   <script src="js/fx-presets.js?v=14"></script>
   <script src="js/fx-thumbs.js?v=65"></script>
-  <script src="js/timeline.js?v=276"></script>
+  <script src="js/timeline.js?v=277"></script>
   <script src="js/simple-timeline.js?v=19"></script>   <!-- Simple mode P1: FM.simpleTimeline, read-only; after timeline.js -->
   <script src="js/tilefit.js?v=1"></script>
   <script src="js/rail-arrows.js?v=2"></script>   <!-- queue 976/977: ‹ › for a mouse on sideways rows; before inspector.js and both browsers -->
@@ -2458,13 +2567,13 @@
   <script src="js/draw-tool.js?v=43"></script>
   <script src="js/point-edit.js?v=24"></script>
   <script src="js/crop-tool.js?v=16"></script>
-  <script src="js/fill-drag.js?v=3"></script>
-  <script src="js/mask-tool.js?v=12"></script>
-  <script src="js/motion-path.js?v=10"></script>
+  <script src="js/fill-drag.js?v=4"></script>
+  <script src="js/mask-tool.js?v=13"></script>
+  <script src="js/motion-path.js?v=11"></script>
   <script src="js/touchup-tool.js?v=7"></script>
   <script src="js/eyedropper.js?v=2"></script>
   <script src="js/text-edit.js?v=29"></script>
-  <script src="js/tracker.js?v=13"></script>
+  <script src="js/tracker.js?v=14"></script>
   <script src="js/frames.js?v=26"></script>
   <script src="js/audio-fx.js?v=25"></script>
   <script src="js/audio-play.js?v=70"></script>
@@ -2475,10 +2584,10 @@
   <script src="js/export-resume.js?v=11"></script>
   <script src="js/medialib.js?v=11"></script>
   <script src="js/template-fill.js?v=7"></script>
-  <script src="js/home-arrow.js?v=5"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
+  <script src="js/home-arrow.js?v=6"></script>   <!-- queue 936: the drawn arrow from the empty Projects screen to the + -->
   <script src="js/tutorials.js?v=2"></script>   <!-- #1082: the lessons in Home's Tutorials tab -->
   <script src="js/home.js?v=214"></script>
-  <script src="js/graph-editor.js?v=22"></script>
+  <script src="js/graph-editor.js?v=23"></script>
   <script src="js/gif-encode.js?v=1"></script>
   <script src="js/zip-write.js?v=1"></script>
   <script src="js/exporter.js?v=146"></script>

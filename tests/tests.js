@@ -65453,7 +65453,7 @@
       if (FM.home.isOpen()) FM.home.close();
       await sleep(250);
       const ED = editorTop();
-      for (const look of ['light', 'dark']) {
+      for (const look of homes1255(['light', 'dark'])) {
         root.setAttribute('data-home', look);
         if (!FM.home.isOpen()) FM.home.open();
         await sleep(250);
@@ -65481,25 +65481,29 @@
         /* Settings over this Home: a panel with a scrim, which WebKit never lets replace the colour. On a PC, and over the dark
            Home on a phone (its panel's top is #0b1922, within two levels), the Home's tab stays. #1255 clause 4: on a phone the
            panel tops the screen, and over the light Home its #f4f6f9 is not the Home's #fafdff, so it has its own tab, in the
-           colour the page paints at the top centre (paint1255). */
+           colour the page paints at the top centre (paint1255). Over the dark Home on a phone the tab is held to that paint too
+           (#1255: under the new dark the panel's top is #1b1a18 over a #121110 Home, so the Home's tab takes the panel's colour
+           there; today the two are within two levels, as above). */
         if (FM.settings && FM.settings.open) {
           const own = look === 'light' && matchMedia('(max-width: 700px)').matches;
           FM.settings.open(); await sleep(320);
           if (own) step(check(window, where + ', Settings over the light Home (the panel’s own tab)', paint1255(innerWidth / 2, 2, false).c, 'home-light-settings'), 'Settings over the light Home');
-          else check(window, where + ', Settings over the ' + look + ' Home (same screen)', hTop, 'home-' + look);
+          else check(window, where + ', Settings over the ' + look + ' Home (the Home’s own tab)', matchMedia('(max-width: 700px)').matches ? paint1255(innerWidth / 2, 2, false).c : hTop, 'home-' + look);
           if (FM.settings.close) FM.settings.close(); await sleep(320);
           if (own) step(check(window, where + ', the light Home after Settings', hTop, 'home-light'), 'Settings closed');
         }
       }
-      /* the light Home, then a project the way he opens one: the editor parked during the load, then the swoop */
-      root.setAttribute('data-home', 'light');
+      /* the light Home (under the new look's preview, that look's own Home), then a project the way he opens one: the editor
+         parked during the load, then the swoop */
+      const h0 = homes1255(['light'])[0];
+      root.setAttribute('data-home', h0);
       await sleep(60);
-      prev = check(window, where + ', the light Home before a project opens', homeTop(), 'home-light');
+      prev = check(window, where + ', the ' + h0 + ' Home before a project opens', homeTop(), 'home-' + h0);
       FM.home._pushAllowed = function () { return true; };
       FM.home.close({ push: true, wait: true });
       await sleep(30);
       if (!app.classList.contains('fm-push-wait')) throw new Error('setup: ' + where + ': the editor was not parked (no two-phase push), so the wait state is not measured');
-      check(window, where + ', the editor parked off the edge while the project loads, Home still up (same screen)', homeTop(), 'home-light');
+      check(window, where + ', the editor parked off the edge while the project loads, Home still up (same screen)', homeTop(), 'home-' + h0);
       FM.home.armPushIn();
       for (let i = 0; i < 80 && !app.classList.contains('fm-push-in'); i++) await sleep(10);
       if (!app.classList.contains('fm-push-in')) throw new Error('setup: ' + where + ': the editor never swooped in');
@@ -168891,6 +168895,10 @@
     for (let i = layers.length - 1; i >= 0; i--) { const c = layers[i]; out = { r: c.r * c.a + out.r * (1 - c.a), g: c.g * c.a + out.g * (1 - c.a), b: c.b * c.a + out.b * (1 - c.a), a: 1 }; }
     return { c: out, top: top, stack: layers.map(function (l) { return desc1255(l.el) + '@' + (+l.a).toFixed(2); }).join(' > ') };
   }
+  /* #1255, the new look's preview: the Homes a top-strip test visits. With no look on, both, in the order given (data-home light
+     and dark, his Toggle dark mode); under a look only that look's own Home, which index.html's new-look script sets whatever
+     Toggle dark mode says (the new dark's Home is dark, the new light's light), so the other is no screen of the app there. */
+  function homes1255(order) { const on = (window.FM && FM.newLook && FM.newLook.on) ? FM.newLook.on() : ''; return on ? [on === 'light' ? 'light' : 'dark'] : order; }
   /* One reading of the top of the screen: which tabs show, the one WebKit's rule takes, and the paint under the clock. */
   function read1255() {
     const W = innerWidth;
@@ -169059,7 +169067,7 @@
         await sleep(380);
         control('editor', 'editor', rgb1255(getComputedStyle(root).backgroundColor));   /* #920: at a phone width <html> wears #topbar-m's colour */
         await run(ED, 'editor', 'editor');
-        for (const look of ['dark', 'light']) {
+        for (const look of homes1255(['dark', 'light'])) {
           root.setAttribute('data-home', look);
           if (!FM.home.isOpen()) FM.home.open();
           await sleep(700);
@@ -213102,5 +213110,162 @@
         await shutRow1084(c);
       }
     }));
+  });
+
+  /* ═══ #1255 · THE NEW LOOK, AS A PREVIEW ════════════════════════════════════════════════════════════════════════════════════
+   * His READY, 24 Nov: "hand it my pics and just whatever as soon as possible… Take as long as it needs to take just to iron out
+   * every issue that gets spotted." The look he picked is two GENERATED stylesheets (tools/look/build.py makes them from
+   * styles.css) that index.html fetches only when Settings, New look (preview) is on. These tests hold a preview's two promises:
+   * OFF is today's app with nothing of the new look in the page, and ON really is on (the attribute, that look's Home, the
+   * browser's bar, the stylesheet applying, the colours a canvas draws). Whether a screen LOOKS right under it is judged against
+   * his picked boards with the surface crawler, not here; and ship.sh refuses a release whose generated files are not what its
+   * own stylesheet makes (tools/look/build.py --check). */
+  const look1255 = {
+    sheets: () => Array.from(document.querySelectorAll('link[rel="stylesheet"]')).filter(l => /theme-(cutline|light)\.css/.test(l.getAttribute('href') || '')),
+    asked: () => performance.getEntriesByType('resource').filter(e => e.initiatorType === 'link' && /\/theme-(cutline|light)\.css/.test(e.name)).map(e => e.name.replace(/^.*\//, '')),
+    ui: () => document.documentElement.getAttribute('data-ui'),
+    /* a look's own stylesheet link, by the id index.html's new-look script gives it ('new-look-' + the look; built, so built
+       here too: test 497's scan of literal ids cannot see it, and these tests check it is there themselves) */
+    link: look => document.getElementById('new-look-' + look),
+    bar: () => { const m = document.querySelector('meta[name="theme-color"]'); return m ? m.getAttribute('content') : null; },
+    /* the page's ground: the body's own colour, or the root's where the body is see-through (the new light paints the root) */
+    ground: () => { const b = getComputedStyle(document.body).backgroundColor.replace(/\s+/g, ''); return (b === 'rgba(0,0,0,0)' || b === 'transparent') ? getComputedStyle(document.documentElement).backgroundColor.replace(/\s+/g, '') : b; },
+    until: async function (fn, what) { for (let i = 0; i < 200; i++) { if (fn()) return; await sleep(25); } throw new Error(what); },
+    /* a selector list cut at its own commas only (never one inside :is(…), :where(…) or [ … ]) */
+    parts: function (s) { const out = []; let d = 0, cur = ''; for (const ch of s) { if (ch === '(' || ch === '[') d++; else if (ch === ')' || ch === ']') d--; if (ch === ',' && d === 0) { out.push(cur); cur = ''; } else cur += ch; } out.push(cur); return out; },
+    row: function () {
+      const rows = Array.from(document.querySelectorAll('.set-row')).filter(r => { const l = r.querySelector('.set-label'); return l && l.textContent.trim() === 'New look (preview)'; });
+      return rows.length === 1 ? rows[0] : null;
+    },
+  };
+  test('1255 look · with New look (preview) off nothing of the new look is in the page: html has no data-ui, neither generated stylesheet is linked or was asked for, and Settings shows the row with Off pressed (CONTROL: the page as shipped names both files, stamped, in its new-look script, and both are served)', { item: '1255' }, async function () {
+    if (FM.settings.get('newLook')) throw new Error('setup: this profile has New look (preview) on (' + FM.settings.get('newLook') + '), so off cannot be judged');
+    if (look1255.ui() !== null) throw new Error('with the preview off html carries data-ui=' + look1255.ui());
+    if (look1255.sheets().length) throw new Error('with the preview off the page links ' + look1255.sheets().map(l => l.getAttribute('href')).join(', '));
+    if (look1255.asked().length) throw new Error('with the preview off the page asked for ' + look1255.asked().join(', '));
+    const html = await (await fetch('index.html?t=' + Date.now())).text();
+    const m = /<script id="new-look">([\s\S]*?)<\/script>/.exec(html);
+    if (!m) throw new Error('CONTROL: index.html has no new-look script');
+    if (!/cutline:\s*'theme-cutline\.css\?v=[0-9a-f]{10}',\s*light:\s*'theme-light\.css\?v=[0-9a-f]{10}'/.test(m[1])) throw new Error('CONTROL: the new-look script does not name both generated files with a stamp of their bytes (tools/look/build.py writes them)');
+    if (/<link[^>]+theme-(cutline|light)\.css/.test(html)) throw new Error('index.html links a generated stylesheet outright: it would be fetched with the preview off');
+    for (const f of ['theme-cutline.css', 'theme-light.css']) {
+      const r = await fetch(f + '?t=' + Date.now());
+      const css = r.ok ? await r.text() : '';
+      if (!r.ok || css.length < 100000) throw new Error('CONTROL: ' + f + ' is not served whole (' + r.status + ', ' + css.length + ' characters)');
+      const tag = '[data-ui="' + (f.indexOf('light') >= 0 ? 'light' : 'cutline') + '"]';
+      const stray = css.replace(/\/\*[\s\S]*?\*\//g, '').split('}').map(x => x.split('{')[0].trim()).filter(s => s && s[0] !== '@' && !/^(from|to|[\d.]+%)(\s*,\s*(from|to|[\d.]+%))*$/.test(s) && look1255.parts(s).some(p => p.indexOf(tag) < 0));
+      if (stray.length) throw new Error(f + ' holds ' + stray.length + ' rule(s) that are not under its own html' + tag + ', so once the file is in the page they would reach the other look and today\'s: ' + stray.slice(0, 3).join(' | ').slice(0, 300));
+    }
+    const wasOpen = FM.settings.isOpen();
+    try {
+      if (!wasOpen) FM.settings.open();
+      await sleep(120);
+      const row = look1255.row();
+      if (!row) throw new Error('Settings has no single row named New look (preview)');
+      const btns = Array.from(row.querySelectorAll('.set-segbtn'));
+      if (btns.map(b => b.textContent.trim()).join('|') !== 'Off|Dark|Light') throw new Error('the row offers ' + JSON.stringify(btns.map(b => b.textContent.trim())) + ', not Off, Dark, Light');
+      const on = btns.filter(b => b.getAttribute('aria-pressed') === 'true').map(b => b.textContent.trim());
+      if (on.join('|') !== 'Off') throw new Error('with the preview off the pressed choice is ' + JSON.stringify(on));
+      if (row.querySelector('.set-hint')) throw new Error('the row carries a line of explanation (his rule of 23 Nov: none)');
+    } finally { if (!wasOpen && FM.settings.isOpen()) FM.settings.close({ handBack: false }); await sleep(300); }
+  });
+  test('1255 look · New look (preview) on Dark puts html[data-ui=cutline] on once its stylesheet is in, brings the dark Home whatever Toggle dark mode says and moves the browser bar; Light does the same for the light look; Off takes data-ui away and gives the Home, the bar and the ground back (CONTROL: under each look the page ground really is that look\'s, so the stylesheet is applying)', { item: '1255', budgetMs: 90000 }, async function () {
+    const de = document.documentElement;
+    const was = { look: FM.settings.get('newLook'), home: FM.settings.get('homeLight') };
+    try {
+      FM.settings.set('newLook', '');
+      FM.settings.set('homeLight', true);
+      const g0 = look1255.ground(), bar0 = look1255.bar();
+      if (de.getAttribute('data-home') !== 'light') throw new Error('setup: with Toggle dark mode off the Home is ' + de.getAttribute('data-home'));
+      FM.settings.set('newLook', 'cutline');
+      await look1255.until(() => look1255.ui() === 'cutline', 'on Dark html never got data-ui=cutline (it is ' + look1255.ui() + ')');
+      const ld = look1255.link('cutline');
+      const bad = [];
+      if (!ld || !ld.sheet) bad.push('data-ui=cutline went on with no dark stylesheet in the page');
+      if (de.getAttribute('data-home') !== 'dark') bad.push('under the new dark the Home is ' + de.getAttribute('data-home') + ', not the dark Home');
+      if (look1255.bar() !== '#121110') bad.push('under the new dark the browser bar is ' + look1255.bar() + ', not #121110');
+      if (look1255.ground() !== 'rgb(18,17,16)') bad.push('CONTROL: under the new dark the page ground is ' + look1255.ground() + ', not rgb(18,17,16)');
+      FM.settings.set('newLook', 'light');
+      await look1255.until(() => look1255.ui() === 'light', 'on Light html never got data-ui=light (it is ' + look1255.ui() + ')');
+      const ll = look1255.link('light');
+      if (!ll || !ll.sheet) bad.push('data-ui=light went on with no light stylesheet in the page');
+      if (de.getAttribute('data-home') !== 'light') bad.push('under the new light the Home is ' + de.getAttribute('data-home') + ', not the light Home');
+      if (look1255.bar() !== '#fffcf6') bad.push('under the new light the browser bar is ' + look1255.bar() + ', not #fffcf6');
+      if (look1255.ground() !== 'rgb(243,238,229)') bad.push('CONTROL: under the new light the page ground is ' + look1255.ground() + ', not rgb(243,238,229)');
+      FM.settings.set('homeLight', false);
+      if (de.getAttribute('data-home') !== 'light') bad.push('under the new light, Toggle dark mode took the light Home away (' + de.getAttribute('data-home') + ')');
+      FM.settings.set('homeLight', true);
+      FM.settings.set('newLook', '');
+      if (look1255.ui() !== null) bad.push('on Off html still carries data-ui=' + look1255.ui());
+      if (de.getAttribute('data-home') !== 'light') bad.push('on Off the Home is ' + de.getAttribute('data-home') + ', not the light Home his own switch asks for');
+      if (look1255.bar() !== bar0) bad.push('on Off the browser bar is ' + look1255.bar() + ', not the ' + bar0 + ' it was');
+      if (look1255.ground() !== g0) bad.push('on Off the page ground is ' + look1255.ground() + ', not the ' + g0 + ' it was');
+      if (bad.length) throw new Error(bad.join(' · '));
+    } finally {
+      FM.settings.set('newLook', (was.look === 'cutline' || was.look === 'light') ? was.look : '');
+      FM.settings.set('homeLight', was.home !== false);
+      await sleep(60);
+    }
+  });
+  test('1255 look · a look whose stylesheet does not arrive is not put on in halves: switched on, html never gets data-ui and the link that failed is taken out again; already on, as at launch, it comes off and the Home goes back to his own switch; his choice stays stored (CONTROL: with the file back the same choice goes on)', { item: '1255', budgetMs: 60000 }, async function () {
+    const de = document.documentElement, NL = FM.newLook;
+    const was = { look: FM.settings.get('newLook'), home: FM.settings.get('homeLight'), file: NL.FILES.cutline };
+    const gone = () => { const l = look1255.link('cutline'); if (l) l.remove(); };
+    try {
+      FM.settings.set('newLook', ''); FM.settings.set('homeLight', true);
+      const bar0 = look1255.bar(), bad = [];
+      // A · switched on while the file cannot be had
+      gone(); NL.failed = '';
+      NL.FILES.cutline = 'no-such-look-1255.css?t=' + Date.now();
+      FM.settings.set('newLook', 'cutline');
+      await look1255.until(() => NL.failed === 'cutline', 'a stylesheet that is not there was never reported as failed (data-ui is ' + look1255.ui() + ')');
+      if (look1255.ui() !== null) bad.push('switched on: html carries data-ui=' + look1255.ui() + ' with no stylesheet behind it');
+      if (look1255.link('cutline')) bad.push('switched on: the link that failed is still in the page, so the next try would never fetch');
+      if (de.getAttribute('data-home') !== 'light') bad.push('switched on: the Home is ' + de.getAttribute('data-home') + ', not the light Home his own switch asks for');
+      if (look1255.bar() !== bar0) bad.push('switched on: the browser bar is ' + look1255.bar() + ', not the ' + bar0 + ' it was');
+      if (FM.settings.get('newLook') !== 'cutline') bad.push('his choice was thrown away (' + JSON.stringify(FM.settings.get('newLook')) + '): a later launch could not try again');
+      // B · already on when the failure comes, as at launch (there the look goes on at once, before its stylesheet has answered)
+      FM.settings.set('newLook', ''); gone(); NL.failed = '';
+      NL.FILES.cutline = 'no-such-look-1255.css?t=b' + Date.now();
+      FM.settings.set('newLook', 'cutline');
+      de.setAttribute('data-ui', 'cutline'); de.setAttribute('data-home', 'dark');
+      await look1255.until(() => NL.failed === 'cutline', 'as at launch: the failure was never reported');
+      if (look1255.ui() !== null) bad.push('as at launch: the look stayed on (data-ui=' + look1255.ui() + ') with no stylesheet behind it');
+      if (de.getAttribute('data-home') !== 'light') bad.push('as at launch: the Home stayed ' + de.getAttribute('data-home') + ', the failed look\'s, not his own light Home');
+      // CONTROL · the file back, the same choice goes on
+      NL.FILES.cutline = was.file;
+      FM.settings.set('newLook', ''); FM.settings.set('newLook', 'cutline');
+      await look1255.until(() => look1255.ui() === 'cutline', 'CONTROL: with the real file back the look never went on (data-ui is ' + look1255.ui() + ')');
+      if (bad.length) throw new Error(bad.join(' · '));
+    } finally {
+      NL.FILES.cutline = was.file;
+      if (look1255.ui() === 'cutline' && FM.settings.get('newLook') !== 'cutline') de.removeAttribute('data-ui');
+      FM.settings.set('newLook', (was.look === 'cutline' || was.look === 'light') ? was.look : '');
+      FM.settings.set('homeLight', was.home !== false);
+      await sleep(60);
+    }
+  });
+  test('1255 look · what a canvas draws follows the look: a text layer\'s bar keeps today\'s colour with the preview off, is the new dark\'s lilac under data-ui=cutline and the new light\'s under data-ui=light, and a colour he chose stays his under all three (CONTROL: today\'s colour is read first and is neither lilac)', { item: '1255' }, function () {
+    const de = document.documentElement, had = de.getAttribute('data-ui');
+    if (typeof FM._clipColorOf !== 'function') throw new Error('setup: FM._clipColorOf is missing');
+    const t = FM.makeLayer('text', { name: 'look bar', text: 'A' }), own = FM.makeLayer('text', { name: 'look own', text: 'B' });
+    own.clipColor = '#123456'; own.clipColorSet = true;
+    try {
+      de.removeAttribute('data-ui');
+      const now = String(FM._clipColorOf(t)).toLowerCase();
+      if (now === '#c6a6f0' || now === '#b896ec') throw new Error('CONTROL: with the preview off the bar is already a new-look colour (' + now + ')');
+      de.setAttribute('data-ui', 'cutline');
+      const dark = String(FM._clipColorOf(t)).toLowerCase(), ownDark = FM._clipColorOf(own);
+      de.setAttribute('data-ui', 'light');
+      const light = String(FM._clipColorOf(t)).toLowerCase(), ownLight = FM._clipColorOf(own);
+      de.removeAttribute('data-ui');
+      const back = String(FM._clipColorOf(t)).toLowerCase();
+      const bad = [];
+      if (dark !== '#c6a6f0') bad.push('under the new dark a text layer\'s bar is ' + dark + ', not #c6a6f0');
+      if (light !== '#b896ec') bad.push('under the new light it is ' + light + ', not #b896ec');
+      if (back !== now) bad.push('with the preview off again it is ' + back + ', not the ' + now + ' it was');
+      if (ownDark !== '#123456' || ownLight !== '#123456') bad.push('a colour he chose became ' + ownDark + ' and ' + ownLight);
+      if (bad.length) throw new Error(bad.join(' · '));
+    } finally { if (had === null) de.removeAttribute('data-ui'); else de.setAttribute('data-ui', had); }
   });
 })();

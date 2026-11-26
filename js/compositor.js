@@ -32580,17 +32580,29 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#0a0c10';
+    /* #1255, the new light look: under the light UI a chip with no picture of its own (text, shape, null, group,
+     * adjustment, camera) is a paper chip with an ink glyph, not a black box. Media keeps its dark letterbox. The text
+     * T keeps the text's own colour unless that colour would vanish on paper (white text), then it is ink. */
+    const LT = document.documentElement.getAttribute('data-ui') === 'light';
+    const LT_CHIP = LT && /^(text|shape|null|group|adjustment|camera)$/.test(layer.type);
+    const LT_GLYPH = LT ? '#6c6256' : '#9aa7bd';
+    ctx.fillStyle = LT_CHIP ? '#efe8dc' : '#0a0c10';
     ctx.fillRect(0, 0, W, H);
     if (layer.type === 'text') {
-      ctx.fillStyle = layer.color || '#fff';
+      let tc = layer.color || '#fff';
+      if (LT_CHIP) {
+        const m = /^#?([0-9a-f]{6})$/i.exec(String(tc).trim());
+        if (m) { const n = parseInt(m[1], 16), r = n >> 16, g = (n >> 8) & 255, b = n & 255;
+          if (0.299 * r + 0.587 * g + 0.114 * b > 168) tc = '#1e1a15'; }
+      }
+      ctx.fillStyle = tc;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = 'bold ' + Math.round(H * 0.56) + 'px sans-serif';
       ctx.fillText('T', W / 2, H / 2 + 1);
       return;
     }
     if (layer.type === 'null') {
-      ctx.strokeStyle = '#8b9bb4'; ctx.lineWidth = 1.5;
+      ctx.strokeStyle = LT ? LT_GLYPH : '#8b9bb4'; ctx.lineWidth = 1.5;
       ctx.beginPath();
       ctx.moveTo(W / 2, 3); ctx.lineTo(W / 2, H - 3);
       ctx.moveTo(5, H / 2); ctx.lineTo(W - 5, H / 2);
@@ -32599,7 +32611,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       return;
     }
     if (layer.type === 'group') {   // folder glyph
-      ctx.strokeStyle = '#9aa7bd'; ctx.lineWidth = 1.6;
+      ctx.strokeStyle = LT_GLYPH; ctx.lineWidth = 1.6;
       const fw = W * 0.6, fh = H * 0.52, fx = (W - fw) / 2, fy = (H - fh) / 2 + 2;
       ctx.beginPath();
       ctx.moveTo(fx, fy); ctx.lineTo(fx + fw * 0.36, fy); ctx.lineTo(fx + fw * 0.48, fy + fh * 0.24); ctx.lineTo(fx + fw, fy + fh * 0.24);
@@ -32607,13 +32619,13 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       return;
     }
     if (layer.type === 'adjustment') {
-      ctx.fillStyle = '#9aa7bd'; ctx.strokeStyle = '#9aa7bd'; ctx.lineWidth = 1.5;
+      ctx.fillStyle = LT_GLYPH; ctx.strokeStyle = LT_GLYPH; ctx.lineWidth = 1.5;
       ctx.beginPath(); ctx.arc(W / 2, H / 2, Math.min(W, H) / 2 - 4, -Math.PI / 2, Math.PI / 2); ctx.fill();   // half-filled circle
       ctx.beginPath(); ctx.arc(W / 2, H / 2, Math.min(W, H) / 2 - 4, 0, Math.PI * 2); ctx.stroke();
       return;
     }
     if (layer.type === 'camera') {
-      ctx.strokeStyle = '#9aa7bd'; ctx.fillStyle = '#9aa7bd'; ctx.lineWidth = 1.5;
+      ctx.strokeStyle = LT_GLYPH; ctx.fillStyle = LT_GLYPH; ctx.lineWidth = 1.5;
       const bw = W * 0.42, bh = H * 0.34, bx = W / 2 - bw / 2, by = H / 2 - bh / 2;
       ctx.strokeRect(bx, by, bw, bh);                                   // camera body
       ctx.beginPath(); ctx.moveTo(bx + bw, H / 2 - bh * 0.28); ctx.lineTo(bx + bw + bw * 0.4, H / 2 - bh * 0.5); ctx.lineTo(bx + bw + bw * 0.4, H / 2 + bh * 0.5); ctx.lineTo(bx + bw, H / 2 + bh * 0.28); ctx.closePath(); ctx.fill();   // lens horn
@@ -32661,6 +32673,7 @@ var eeAdd=eeMag*eeAmt*eeFlick*3.6; if(eeAdd<=0)continue; if(eeAdd>1)eeAdd=1; var
       }
       ctx.fillStyle = (fmode === 'gradient' && layer.fillGradient) ? buildGradient(ctx, layer.fillGradient, { x: ox, y: oy, w: iw, h: ih }, FM.time || 0) : (FM.evalProp(layer.fill, FM.time || 0) || '#3a7bd5');
       ctx.fill();
+      if (LT_CHIP) { ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(30,26,21,.28)'; ctx.stroke(); }   // #1255, the new light look: a white shape still shows on paper
       return;
     }
     const m = FM.media.get(layer.id);

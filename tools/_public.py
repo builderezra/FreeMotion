@@ -27,6 +27,7 @@ SITE = 'https://builderezra.github.io/FreeMotion/'
 # The app, by its top-level paths. Everything the page, the worker or a lazy loader fetches lives under one of these.
 APP = {
     'index.html', 'styles.css', 'theme-glass.css', 'sw.js', 'manifest.json',
+    'theme-cutline.css', 'theme-light.css',   # #1255: the new look's two generated stylesheets (fetched only while its preview is on)
     'js', 'vendor', 'fx-art', 'fx-pics', 'launch', 'tutorials',
     'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'brand-wordmark.png', 'brand-wordmark-m.png',
     'export-btn.png', 'fab-cross.png', 'fab-plus.png', 'open-badge.png', 'splash-poster.png', 'splash.mp4', 'splash-v2.mp4',

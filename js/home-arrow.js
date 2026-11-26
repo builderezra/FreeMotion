@@ -132,10 +132,14 @@ window.FM = window.FM || {};
       for (var key in attrs) e.setAttribute(key, attrs[key]); if (parent) parent.appendChild(e); return e; }
     var svg = el('svg', { id: ID, 'aria-hidden': 'true', width: vw, height: innerHeight });
     svg.style.cssText = 'position:fixed;left:0;top:0;pointer-events:none;overflow:visible;z-index:auto;' +
-      (light ? '' : 'filter:drop-shadow(0 0 5px rgba(150,125,255,.45));');
+      (light || document.documentElement.getAttribute('data-ui') === 'cutline' ? '' : 'filter:drop-shadow(0 0 5px rgba(150,125,255,.45));');   // #1255, the new dark look: no glow
     var defs = el('defs', {}, svg);
     var g = el('linearGradient', { id: ID + '-g', gradientUnits: 'userSpaceOnUse', x1: S[0], y1: S[1], x2: E[0], y2: E[1] }, defs);
-    (light ? ['#1590D4', '#0E9C7E', '#8A3BE6'] : ['#7FD4FF', '#6BF0C8', '#C86BFF']).forEach(function (c, i) {
+    // #1255, the new light look: under the light UI the arrow is drawn in ink running into the vermilion cut.
+    var lightUi = document.documentElement.getAttribute('data-ui') === 'light';
+    // #1255, the new dark look: paper ink running into the vermilion cut, the dark twin of the light arrow.
+    var cutUi = document.documentElement.getAttribute('data-ui') === 'cutline';
+    (lightUi ? ['#2b241d', '#7a2c16', '#c63c1b'] : cutUi ? ['#d6cec3', '#e8957d', '#ff5a36'] : light ? ['#1590D4', '#0E9C7E', '#8A3BE6'] : ['#7FD4FF', '#6BF0C8', '#C86BFF']).forEach(function (c, i) {
       el('stop', { offset: [0, 0.5, 1][i], 'stop-color': c }, g); });
     var mask = el('mask', { id: ID + '-m', maskUnits: 'userSpaceOnUse', x: 0, y: 0, width: vw, height: innerHeight }, defs);
     var ink = el('g', { fill: 'url(#' + ID + '-g)', mask: 'url(#' + ID + '-m)' }, svg);

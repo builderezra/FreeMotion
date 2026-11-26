@@ -1,3 +1,9 @@
+/* #1255, the new light look: the graph is a canvas, so its colours cannot come from CSS. __glC maps each dark-UI
+   literal to its light twin when html[data-ui=light]. (When styles.css is rewritten on tokens, these become token reads.) */
+var __glM = {"#0c1016": "#f8f3ea", "rgba(255,255,255,.06)": "rgba(43,33,22,.08)", "rgba(255,255,255,.18)": "rgba(43,33,22,.24)", "rgba(41,217,187,.4)": "rgba(198,60,27,.32)", "#29d9bb": "#c63c1b", "#fff": "#1e1a15", "#7d8ca5": "#8c8073", "#c2cee0": "#6c6256", "rgba(255,205,84,.55)": "rgba(176,125,0,.55)", "rgba(255,205,84,.75)": "rgba(176,125,0,.8)", "#ffcd54": "#b07d00", "rgba(10,14,20,.8)": "rgba(255,252,246,.95)"};
+/* #1255, the new dark look: the same literal map for the Cutline dark look (warm charcoal, vermilion curve, marker-yellow hold). */
+var __glMC = {"#0c1016": "#121110", "rgba(255,255,255,.06)": "rgba(245,240,232,.06)", "rgba(255,255,255,.18)": "rgba(245,240,232,.18)", "rgba(41,217,187,.4)": "rgba(255,90,54,.4)", "#29d9bb": "#ff5a36", "#fff": "#f5f0e8", "#7d8ca5": "#9a9084", "#c2cee0": "#bdb4a8", "rgba(255,205,84,.55)": "rgba(242,193,78,.55)", "rgba(255,205,84,.75)": "rgba(242,193,78,.75)", "#ffcd54": "#f2c14e", "rgba(10,14,20,.8)": "rgba(10,9,8,.8)"};
+function __glC(c) { var u = document.documentElement.getAttribute('data-ui'); return u === 'light' && __glM[c] ? __glM[c] : u === 'cutline' && __glMC[c] ? __glMC[c] : c; }
 /* FreeMotion — Easing Curve editor ([the reference app]'s graph editor).
  * Rendered INLINE as a sub-view of the Move & Transform panel (same bottom sheet, NOT a separate
  * full-screen screen — [the reference app] doesn't do that). Opened from the panel's left-rail easing button. Edits
@@ -58,8 +64,8 @@ window.FM = window.FM || {};
   function grid(ctx, W, H, lo, hi) {
     if (!Number.isFinite(lo) || !Number.isFinite(hi) || hi - lo < 1e-6) { lo = 0; hi = 1; }
     ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#0c1016'; ctx.fillRect(0, 0, W, H);
-    ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 1;
+    ctx.fillStyle = __glC('#0c1016'); ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = __glC('rgba(255,255,255,.06)'); ctx.lineWidth = 1;
     const gx = x => PAD + x * (W - 2 * PAD);
     const gy = y => (H - PAD) - ((y - lo) / (hi - lo)) * (H - 2 * PAD);
     for (let i = 0; i <= 4; i++) {
@@ -69,7 +75,7 @@ window.FM = window.FM || {};
     // The keyframe band — where 0 and 1 actually are — stays marked even when the view is zoomed out
     // to hold an overshoot, or there is no way to read how far past the ends the curve goes.
     if (lo < -0.02 || hi > 1.02) {
-      ctx.save(); ctx.setLineDash([3, 3]); ctx.strokeStyle = 'rgba(255,255,255,.18)';
+      ctx.save(); ctx.setLineDash([3, 3]); ctx.strokeStyle = __glC('rgba(255,255,255,.18)');
       [0, 1].forEach(v => { ctx.beginPath(); ctx.moveTo(gx(0), gy(v)); ctx.lineTo(gx(1), gy(v)); ctx.stroke(); });
       ctx.restore();
     }
@@ -77,30 +83,30 @@ window.FM = window.FM || {};
   }
   function drawBez(ctx, W, H, bez) {
     const g = grid(ctx, W, H), gx = g.gx, gy = g.gy;
-    ctx.strokeStyle = 'rgba(41,217,187,.4)'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = __glC('rgba(41,217,187,.4)'); ctx.lineWidth = 1.5;
     ctx.beginPath(); ctx.moveTo(gx(0), gy(0)); ctx.lineTo(gx(bez[0]), gy(bez[1])); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(gx(1), gy(1)); ctx.lineTo(gx(bez[2]), gy(bez[3])); ctx.stroke();
-    ctx.strokeStyle = '#29d9bb'; ctx.lineWidth = 3; ctx.beginPath();
+    ctx.strokeStyle = __glC('#29d9bb'); ctx.lineWidth = 3; ctx.beginPath();
     for (let i = 0; i <= 64; i++) { const x = i / 64, y = FM.bezierAt(bez[0], bez[1], bez[2], bez[3], x); const px = gx(x), py = gy(y); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }
     ctx.stroke();
-    ctx.fillStyle = '#29d9bb';
+    ctx.fillStyle = __glC('#29d9bb');
     [[0, 0], [1, 1]].forEach(p => { ctx.beginPath(); ctx.arc(gx(p[0]), gy(p[1]), 4, 0, 7); ctx.fill(); });
-    ctx.fillStyle = '#fff';
+    ctx.fillStyle = __glC('#fff');
     [[bez[0], bez[1]], [bez[2], bez[3]]].forEach(p => { ctx.beginPath(); ctx.arc(gx(p[0]), gy(p[1]), 9, 0, 7); ctx.fill(); });
   }
   function drawHold(ctx, W, H) {
     const g = grid(ctx, W, H), gx = g.gx, gy = g.gy;
-    ctx.strokeStyle = '#7d8ca5'; ctx.lineWidth = 3;
+    ctx.strokeStyle = __glC('#7d8ca5'); ctx.lineWidth = 3;
     ctx.beginPath(); ctx.moveTo(gx(0), gy(0)); ctx.lineTo(gx(1), gy(0)); ctx.lineTo(gx(1), gy(1)); ctx.stroke();
-    ctx.fillStyle = '#fff'; [[0, 0], [1, 1]].forEach(p => { ctx.beginPath(); ctx.arc(gx(p[0]), gy(p[1]), 4, 0, 7); ctx.fill(); });
+    ctx.fillStyle = __glC('#fff'); [[0, 0], [1, 1]].forEach(p => { ctx.beginPath(); ctx.arc(gx(p[0]), gy(p[1]), 4, 0, 7); ctx.fill(); });
   }
   // Sample a non-bezier ease (bounce/elastic) straight from FM.EASES — no draggable handles, just the curve.
   function drawEaseCurve(ctx, W, H, fn) {
     const g = grid(ctx, W, H), gx = g.gx, gy = g.gy;
-    ctx.strokeStyle = '#29d9bb'; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.beginPath();
+    ctx.strokeStyle = __glC('#29d9bb'); ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.beginPath();
     for (let i = 0; i <= 96; i++) { const x = i / 96, y = Math.max(-0.3, Math.min(1.45, fn(x))); const px = gx(x), py = gy(y); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); }
     ctx.stroke();
-    ctx.fillStyle = '#29d9bb'; [[0, 0], [1, 1]].forEach(p => { ctx.beginPath(); ctx.arc(gx(p[0]), gy(p[1]), 4, 0, 7); ctx.fill(); });
+    ctx.fillStyle = __glC('#29d9bb'); [[0, 0], [1, 1]].forEach(p => { ctx.beginPath(); ctx.arc(gx(p[0]), gy(p[1]), 4, 0, 7); ctx.fill(); });
   }
   // Mini preview for a PARAMETERISED preset's button — the same fn the graph uses, at its defaults,
   // so a preset's icon is always a true miniature of what picking it will give you.
@@ -108,7 +114,7 @@ window.FM = window.FM || {};
     const ctx = cv.getContext('2d'), W = cv.width, H = cv.height, pd = 4;
     ctx.clearRect(0, 0, W, H);
     const gx = x => pd + x * (W - 2 * pd), gy = y => (H - pd) - y * (H - 2 * pd);
-    ctx.strokeStyle = '#c2cee0'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.strokeStyle = __glC('#c2cee0'); ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.beginPath();
     for (let i = 0; i <= 48; i++) {
       const x = i / 48, y = Math.max(-0.25, Math.min(1.25, P.fn(x, P.defaults)));
@@ -123,7 +129,7 @@ window.FM = window.FM || {};
     const ctx = cv.getContext('2d'), W = cv.width, H = cv.height, p = 4;
     ctx.clearRect(0, 0, W, H);
     const gx = x => p + x * (W - 2 * p), gy = y => (H - p) - y * (H - 2 * p);
-    ctx.strokeStyle = '#c2cee0'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath();
+    ctx.strokeStyle = __glC('#c2cee0'); ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.beginPath();
     if (key === 'hold') { ctx.moveTo(gx(0), gy(0)); ctx.lineTo(gx(1), gy(0)); ctx.lineTo(gx(1), gy(1)); }
     else if (CURVE_EASES.indexOf(key) >= 0 && FM.EASES && FM.EASES[key]) { const fn = FM.EASES[key]; for (let i = 0; i <= 32; i++) { const x = i / 32, y = Math.max(-0.2, Math.min(1.2, fn(x))); const px = gx(x), py = gy(y); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); } }
     else { const b = FM.EASE_PRESETS[key]; for (let i = 0; i <= 24; i++) { const x = i / 24, y = FM.bezierAt(b[0], b[1], b[2], b[3], x); const px = gx(x), py = gy(Math.max(-0.2, Math.min(1.2, y))); if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py); } }
@@ -232,14 +238,14 @@ window.FM = window.FM || {};
     const pad = (hi - lo) * 0.08 || 0.08;
     lo -= pad; hi += pad;
     const g = grid(ctx, W, H, lo, hi), gx = g.gx, gy = g.gy;
-    ctx.strokeStyle = '#29d9bb'; ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.beginPath();
+    ctx.strokeStyle = __glC('#29d9bb'); ctx.lineWidth = 3; ctx.lineJoin = 'round'; ctx.beginPath();
     for (let i = 0; i <= 160; i++) {
       const x = i / 160, y = P.fn(x, prm);
       const px = gx(x), py = gy(y);
       if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.stroke();
-    ctx.fillStyle = '#29d9bb';
+    ctx.fillStyle = __glC('#29d9bb');
     [[0, 0], [1, 1]].forEach(q => { ctx.beginPath(); ctx.arc(gx(q[0]), gy(q[1]), 4, 0, 7); ctx.fill(); });
 
     ezPts = [];
@@ -248,7 +254,7 @@ window.FM = window.FM || {};
       const px = gx(Math.max(0, Math.min(1, at.x))), py = gy(at.y);
       ctx.save();
       if (pt.rail) {
-        ctx.setLineDash([4, 4]); ctx.strokeStyle = 'rgba(255,205,84,.55)'; ctx.lineWidth = 1.2;
+        ctx.setLineDash([4, 4]); ctx.strokeStyle = __glC('rgba(255,205,84,.55)'); ctx.lineWidth = 1.2;
         ctx.beginPath();
         if (pt.rail === 'h') { ctx.moveTo(gx(0), py); ctx.lineTo(gx(1), py); }
         else { ctx.moveTo(px, gy(0)); ctx.lineTo(px, gy(1.3)); }
@@ -256,14 +262,14 @@ window.FM = window.FM || {};
       } else if (pt.stalk) {
         // a short leader back to the curve, so a point floating off it still reads as attached
         const onY = gy(P.fn(Math.max(0, Math.min(1, at.x)), prm));
-        ctx.strokeStyle = 'rgba(255,205,84,.75)'; ctx.lineWidth = 1.6;
+        ctx.strokeStyle = __glC('rgba(255,205,84,.75)'); ctx.lineWidth = 1.6;
         ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, onY); ctx.stroke();
       }
       ctx.restore();
       ctx.beginPath(); ctx.arc(px, py, 9, 0, 7);
-      ctx.fillStyle = (ezDrag === i) ? '#fff' : '#ffcd54';
+      ctx.fillStyle = (ezDrag === i) ? __glC('#fff') : __glC('#ffcd54');
       ctx.fill();
-      ctx.strokeStyle = 'rgba(10,14,20,.8)'; ctx.lineWidth = 1.5; ctx.stroke();
+      ctx.strokeStyle = __glC('rgba(10,14,20,.8)'); ctx.lineWidth = 1.5; ctx.stroke();
       ezPts.push({ px: px, py: py });
     });
   }

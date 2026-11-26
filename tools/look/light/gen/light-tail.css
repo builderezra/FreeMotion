@@ -1,0 +1,329 @@
+/* ---------------------------------------------------------------------------------------------------------------
+   light-tail.css: the hand-written half of the light UI. Appended after the generated mapping, so it wins on equal
+   specificity. Selectors start with :root[data-ui="light"] (0,2,0) or html[data-ui="light"] so they beat the generated
+   [data-ui="light"] copies of the same rules.
+   Palette: identity 2 "Cutline", light (identity/tokens.css .fm-light). Paper, ink, one vermilion cut.
+   --------------------------------------------------------------------------------------------------------------- */
+
+/* 1. TOKENS. Both the base (:root) and the glass (html[data-theme=glass]) variable sets, re-pointed. */
+:root[data-ui="light"][data-theme] {
+  color-scheme: light;
+  --l-bg: #f3eee5;
+  --l-s1: #fffcf6;
+  --l-s2: #f8f3ea;
+  --l-s3: #ebe3d6;
+  --l-border: #ddd3c3;
+  --l-border-strong: #c3b6a2;
+  --l-t1: #1e1a15;
+  --l-t2: #564d42;
+  --l-t3: #6c6256;
+  --l-accent: #b9381a;   /* tokens' #c63c1b, one step deeper: as TEXT on tinted paper it must still clear 4.5:1 */
+  --l-accent-ink: #b33619;
+  --l-ink-film: rgba(43, 33, 22, .06);
+  --l-ink-film-2: rgba(43, 33, 22, .10);
+  --l-shadow-1: 0 1px 2px rgba(60, 40, 20, .08);
+  --l-shadow-2: 0 10px 22px -10px rgba(60, 40, 20, .35);
+  --l-shadow-3: 0 28px 60px -18px rgba(60, 40, 20, .4);
+  --l-stage: #c8c1b6;    /* L5: was #bdb9b2, a drab grey next to warm paper */
+
+  --bg: var(--l-bg);
+  --stage: var(--l-stage);
+  --panel: var(--l-s1);
+  --panel-2: var(--l-s2);
+  --panel-3: #efe8dc;
+  --line: var(--l-border);
+  --line-soft: #e9e1d4;
+  --text: var(--l-t1);
+  --text-dim: var(--l-t2);
+  --text-faint: var(--l-t3);
+  --accent: var(--l-accent);
+  --accent-2: #a8321a;
+  --am-green: var(--l-accent);
+  --accent-soft: rgba(198, 60, 27, .12);
+  --kf: #b07d00;
+  --good: #2f7a3c;
+
+  --glass-tint: rgba(255, 252, 246, .80);
+  --glass-tint-strong: rgba(255, 252, 246, .94);
+  --glass-rim: rgba(255, 255, 255, .95);
+  --glass-rim-soft: rgba(43, 33, 22, .10);
+  --glass-glow: rgba(198, 60, 27, .16);
+  --glass-blur: saturate(120%) blur(18px);
+
+  --lg-fill: linear-gradient(180deg, #d4492a 0%, #c63c1b 55%, #b13417 100%);
+  --lg-catch: linear-gradient(180deg, rgba(255, 255, 255, .16), rgba(255, 255, 255, 0) 55%);
+  --lg-rim: inset 0 1px 0 rgba(255, 255, 255, .28), inset 0 -1px 0 rgba(80, 20, 6, .25);
+  --lg-lift: 0 1px 2px rgba(60, 40, 20, .18), 0 6px 14px -6px rgba(140, 40, 15, .45);
+  --glass-edge: drop-shadow(0 0 0 transparent);
+  --glass-edge-sm: drop-shadow(0 0 0 transparent);
+  --export-edge: drop-shadow(0 0 0 transparent);
+}
+
+/* 2. THE GROUND. Flat paper, no coloured light from above (the glass theme's cyan wash has no light twin). */
+html[data-ui="light"][data-theme] { background: var(--l-bg); }
+html[data-ui="light"] body { background: transparent; }
+
+/* 3. iOS top strip tabs (index.html #edge-css): each tab must equal its screen's real top colour. */
+/* Measured 20 Nov (tmp/lightfix/edge.sh): the phone editor's real top 4px down is #f8f4eb, not #fffcf6. editor-dim is
+   that under the same .34 warm scrim the Home dialogs measure at (#f0dfcc -> #ada093); not measured itself. */
+html:root[data-ui="light"] .fm-edge[data-edge="editor"] { background-color: #f8f4eb; }
+html:root[data-ui="light"] .fm-edge[data-edge="editor-dim"] { background-color: #b2aca3; }
+@media (min-width: 701px) {
+  /* #1255, the preview's first browser run: on a PC the editor's tab follows the rule today's look and the new dark already
+     keep, and '920 #1243 G12' holds every look to: the glass #topbar's top over the page (its gradient's first stop over
+     <html>), not the stage under it (#c8c1b6 was measured there by the design run; the test never saw it). */
+  html:root[data-ui="light"] .fm-edge[data-edge="editor"] { background-color: #fdfaf3; }
+  html:root[data-ui="light"] .fm-edge[data-edge="editor-dim"] { background-color: #b6b2aa; }   /* a question's dim over it */
+}
+
+/* ================================================================ ROUND 2: per-surface work ================== */
+
+/* 4. EXPORT: the one primary action. A solid vermilion key with a white arrow, no glow. Phone square + PC chip. */
+html:root[data-ui="light"][data-theme] :is(#btn-export, .m-export) {
+  background: var(--l-accent); background-image: linear-gradient(180deg, #d24727, #c63c1b 60%, #b53517);
+  color: #fff; border: none;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 1px 2px rgba(60, 40, 20, .18), 0 6px 14px -8px rgba(150, 45, 15, .55);
+  filter: none;
+}
+html:root[data-ui="light"][data-theme] :is(#btn-export, .m-export):hover { background-color: #b53517; filter: none; }
+html:root[data-ui="light"][data-theme] :is(#btn-export, .m-export)::after { display: none; }
+/* PC: Export lives in the transport row as an icon button; it gets the same key, slightly smaller. */
+
+/* 5. ON-CANVAS HANDLES sit on the picture: white pucks with a vermilion rim read on any frame. */
+html:root[data-ui="light"][data-theme] .sb-handle { background: #fff; border-color: var(--l-accent); box-shadow: 0 1px 3px rgba(30, 20, 10, .35); }
+
+/* 6. SIMPLE TIMELINE: the four item kinds re-tuned for paper (a step deeper, still pastel), labels in dark ink. */
+html:root[data-ui="light"][data-theme] .sm-item { color: #1a1510; }
+html:root[data-ui="light"][data-theme] .sm-k-text, html:root[data-ui="light"][data-theme] .sm-sec-text .sm-glyph { background: #b99af0; }
+html:root[data-ui="light"][data-theme] .sm-k-captions, html:root[data-ui="light"][data-theme] .sm-sec-captions .sm-glyph { background: #f0c142; }
+html:root[data-ui="light"][data-theme] .sm-k-overlay, html:root[data-ui="light"][data-theme] .sm-sec-overlay .sm-glyph { background: #6fb3e0; }
+html:root[data-ui="light"][data-theme] .sm-k-block { background: repeating-linear-gradient(135deg, #6fb3e0 0 5px, #5fa2cf 5px 10px); }
+html:root[data-ui="light"][data-theme] .sm-k-effect { background: #8fcf7e; }
+html:root[data-ui="light"][data-theme] .sm-k-background, html:root[data-ui="light"][data-theme] .sm-sec-behind .sm-glyph {
+  background: repeating-linear-gradient(135deg, #d9cfe9 0 5px, #cdc1e0 5px 10px); color: #4a3d66; }
+html:root[data-ui="light"][data-theme] .sm-glyph { color: #1a1510; }
+html:root[data-ui="light"][data-theme] .sm-item { box-shadow: inset 0 0 0 1px rgba(40, 25, 10, .10); }
+html:root[data-ui="light"][data-theme] .sm-clip { border-color: rgba(40, 25, 10, .22); }
+
+/* 7. FULL TIMELINE BARS: the colours are the project's (inline, from js/timeline.js), so CSS only gives them a
+      paper-world edge: a soft drop instead of the dark-UI bevel. */
+html:root[data-ui="light"][data-theme] .clip { box-shadow: 0 1px 2px rgba(60, 40, 20, .16); }
+
+/* 8. SWITCHES: a white knob on vermilion (on) or on a warm well (off). */
+html:root[data-ui="light"][data-theme] .set-switch { background: #e6ddcf; border-color: #d3c8b6; }
+html:root[data-ui="light"][data-theme] .set-switch.on { background: var(--l-accent); border-color: var(--l-accent); }
+html:root[data-ui="light"][data-theme] .set-switch .set-knob { background: #fff; box-shadow: 0 1px 2px rgba(60, 40, 20, .3); }
+
+/* 9. TUTORIAL READER: Next is the accent key. */
+html:root[data-ui="light"][data-theme] .tut-next { background: var(--l-accent); border-color: var(--l-accent); color: #fff; }
+
+/* 10. NOTEPAD keeps its own paper look; only its scrim joins the light world. */
+html:root[data-ui="light"][data-theme] .np-scrim { background: rgba(30, 24, 16, .34); }
+
+/* 11. ADD MENU + INSPECTOR TILES: the per-card hue stays, deepened so a glyph reads on a pale plate (>= 3:1). */
+html:root[data-ui="light"][data-theme] .addmenu-card > .addmenu-ic { color: color-mix(in srgb, rgb(var(--am-tint, 198, 60, 27)) 58%, #1e1a15); }
+html:root[data-ui="light"][data-theme] .addmenu-card:not([class*="addmenu-card--"]):not(.addmenu-media):not(.has-thumb) {
+  background: linear-gradient(180deg, rgba(var(--am-tint, 220, 200, 180), .16), rgba(var(--am-tint, 220, 200, 180), .07));
+  border-color: rgba(var(--am-tint, 160, 140, 120), .34); box-shadow: 0 1px 1px rgba(60, 40, 20, .05);
+}
+html:root[data-ui="light"][data-theme] .addmenu-tab {
+  background: #f1eadf; border-color: #e1d7c7; box-shadow: none; color: var(--l-t2);
+}
+html:root[data-ui="light"][data-theme] .addmenu-tab.active { background: #fff; border-color: var(--l-accent); color: var(--l-accent-ink);
+  box-shadow: 0 1px 2px rgba(60, 40, 20, .1); }
+
+/* 12. HOME under the light UI: the cool rainbow wash becomes a warm paper light; the + is the vermilion key. */
+html:root[data-ui="light"][data-theme] #hm-bleed {
+  background: linear-gradient(180deg, rgba(240, 214, 190, .55) 0%, rgba(243, 232, 216, .35) 40%, rgba(243, 238, 229, 0) 100%);
+}
+html:root[data-ui="light"][data-theme] #home-screen { background: var(--l-bg); background-image: none; }
+html:root[data-ui="light"][data-theme] #hm-new {
+  background: linear-gradient(180deg, #d24727, #c63c1b 60%, #b53517); color: #fff;
+  box-shadow: 0 0 0 4px rgba(243, 238, 229, .9), 0 2px 4px rgba(60, 40, 20, .2), 0 12px 24px -10px rgba(150, 45, 15, .55);
+  filter: none;
+}
+html:root[data-ui="light"][data-theme] #hm-new::before, html:root[data-ui="light"][data-theme] #hm-new::after { display: none; }
+/* 13. FOCUS, SELECTION, HOVER: visible on paper. Keyboard focus is a vermilion ring with a paper gap (tokens --focus-ring). */
+html:root[data-ui="light"][data-theme] :is(button, [role="button"], a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid #d9411f; outline-offset: 2px;
+}
+html:root[data-ui="light"][data-theme] :is(input, select, textarea):focus { border-color: var(--l-accent); box-shadow: 0 0 0 3px rgba(198, 60, 27, .16); }
+html:root[data-ui="light"][data-theme] ::selection { background: rgba(198, 60, 27, .2); color: inherit; }
+/* 14. THE DRAWN X (js/drawn-x.js): one look everywhere, an ink-brown disc with a paper cross. */
+html:root[data-ui="light"][data-theme] .fm-x .fm-x-disc { fill: #8c8073; }
+html:root[data-ui="light"][data-theme] .fm-x:hover .fm-x-disc { fill: #564d42; }
+html:root[data-ui="light"][data-theme] .fm-x .fm-x-cross { stroke: #fffcf6; }
+
+/* 15. CAPTION / TITLE LOOK SAMPLES keep their dark chip: they preview white text on video. */
+html:root[data-ui="light"][data-theme] .sm-caplook-s { background: #2a2622; }
+html:root[data-ui="light"][data-theme] .sm-caplook[aria-pressed="true"] .sm-caplook-s { box-shadow: 0 0 0 2px var(--l-accent); }
+/* 16. ADD MENU glyphs drawn with white "glass" gradients (js/addmenu.js defs): on paper they take the card's own ink. */
+html:root[data-ui="light"][data-theme] :is(#fm-ic-impau, #fm-ic-imp, #fm-ic-sfx) stop { stop-color: currentColor; }
+html:root[data-ui="light"][data-theme] .addmenu-card.addmenu-card--rainbow > .addmenu-lbl { color: #1e1a15; }
+/* 17. HOME details: the travelling glint (OPEN card, active Add tab, sound + voice panels) is a vermilion spark, the drifting washes are warm. */
+html:root[data-ui="light"][data-theme] :is(.am-glint, .sfx-glint, .vr-glint) > i {
+  background: conic-gradient(transparent 0deg, transparent 208deg, rgba(198, 60, 27, .18) 259deg, rgba(198, 60, 27, .62) 288deg, rgba(198, 60, 27, .18) 317deg, transparent 352deg);
+}
+html:root[data-ui="light"][data-theme] #home-screen::before {
+  background: radial-gradient(78vmax 58vmax at 12% -8%, rgba(235, 190, 140, .22), transparent 62%),
+              radial-gradient(88vmax 62vmax at 62% 108%, rgba(198, 60, 27, .07), transparent 64%);
+}
+html:root[data-ui="light"][data-theme] #home-screen::after {
+  background: radial-gradient(52vmax 44vmax at 34% 72%, rgba(176, 125, 0, .06), transparent 60%);
+}
+/* 18. Contrast audit fixes (tmp/light/audit-light.json): dark-on-accent "Done" keys and the red error line. */
+/* their dark ink is written INLINE by js/mask-tool.js, motion-path.js and touchup-tool.js, hence !important (real build: drop the inline colour) */
+html:root[data-ui="light"][data-theme] :is(.mk-done, .mp-done, .cb-done) { color: #fff !important; }
+html:root[data-ui="light"][data-theme] .vr-msg.vr-msg--bad { color: #a8203f; }html:root[data-ui="light"][data-theme] .ps-cat-cap { color: #9c2f15; }
+html:root[data-ui="light"][data-theme] .shortcuts-sub { opacity: 1; }
+
+/* ================================================================ ROUND 3: light/REVIEW.md fixes (20 Nov) ======== */
+/* Codes (H1, M3, L4 ...) are the REVIEW.md items. "(b)" = the one "this is the chosen one" idiom (M8): a white chip,
+   a 1.5px vermilion ring, the label in --l-accent. A vermilion FILL is kept for the one primary action per screen,
+   and for the Visual / Filters / Audio mode tabs (a tab bar, not a choice; M8's open question, see SUMMARY.md). */
+
+/* H1. Elements browser, computer: the header row is part of the card, not text floating on the scrim over the video. */
+@media (min-width: 701px) {
+  html:root[data-ui="light"][data-theme] #el-browser > .fxb-top {
+    margin-top: 18px; background: var(--l-s1); border: 1px solid var(--l-border); border-bottom: 1px solid var(--line-soft);
+    border-radius: 16px 16px 0 0; box-shadow: 0 -10px 30px -16px rgba(60, 40, 20, .22);
+  }
+  html:root[data-ui="light"][data-theme] #el-browser > :is(.fxb-scroll, .fxb-catview-scroll) { border-top: 0; border-radius: 0 0 16px 16px; }
+}
+
+/* H2. Simple timeline: the selected item is an ink ring, a paper gap and a soft lift (never vermilion: it would clash
+       with a red layer). The pastel bars lost the dark UI's white ring entirely. */
+html:root[data-ui="light"][data-theme] .sm-item.sel {
+  box-shadow: inset 0 0 0 2px #1e1a15, 0 0 0 2px #fffcf6, 0 0 0 3px rgba(30, 26, 21, .35), 0 3px 10px rgba(60, 40, 20, .22);
+}
+/* M15. Simple timeline labels: no pale halo around ink text (it read as a smear on teal). */
+html:root[data-ui="light"][data-theme] :is(.sm-item, .sm-item *, .sm-clip, .sm-clip *) { text-shadow: none; }
+
+/* M1. Keyframe diamonds: a paper ring and an ink hairline, so a diamond reads on ANY layer colour (red, orange, blue). */
+html:root[data-ui="light"][data-theme] .kf-dot { box-shadow: 0 0 0 1.5px #fffcf6, 0 0 0 2.5px rgba(30, 26, 21, .6); }
+html:root[data-ui="light"][data-theme] .kf-dot.kf-here { box-shadow: 0 0 0 1.5px #fffcf6, 0 0 0 3px rgba(30, 26, 21, .85), 0 0 6px 1px rgba(60, 40, 20, .25); }
+html:root[data-ui="light"][data-theme] .kf-dot.kf-idle { background: #fffcf6; }
+
+/* M3. Slider tracks: a track you can see. #968b7e is 3.26:1 on the sheet (#fffcf6) and 3.02:1 on --panel-2, the
+       non-text 3:1 a control's extent needs (it was 1.19:1; REVIEW's #d6ccbc would be 1.55:1). Written at the generated
+       rules' own specificity on purpose, so a slider that paints its own track (hue, opacity, gradients) still wins.
+       A centred 4px LINE, not a fill of the whole box: several sliders (audio react, template fill) are 36px-tall
+       inputs, which read as heavy slabs when filled. A normal 4-6px slider is filled edge to edge either way. */
+[data-ui="light"] input[type=range] { background: linear-gradient(#968b7e, #968b7e) center / 100% 4px no-repeat; }
+[data-ui="light"] input[type=range].sfx-range { background: transparent; }
+[data-ui="light"] input[type=range].sfx-range::-webkit-slider-runnable-track { background: #968b7e; }
+[data-ui="light"] input[type=range].sfx-range::-moz-range-track { background: #968b7e; }
+[data-ui="light"] input[type=range]::-webkit-slider-thumb { box-shadow: 0 0 0 2px #fffcf6, 0 1px 4px rgba(60, 40, 20, .3); }
+[data-ui="light"] input[type=range]::-moz-range-thumb { box-shadow: 0 0 0 2px #fffcf6, 0 1px 4px rgba(60, 40, 20, .3); }
+
+/* M4. Export progress: the empty track is visible at 0%. */
+[data-ui="light"] .progress { background: #e3dacb; box-shadow: inset 0 0 0 1px rgba(30, 26, 21, .24); }
+
+/* M5. OPEN badge: white on the vermilion key (5.2:1; ink on it was 3.35:1 at 8px). */
+html:root[data-ui="light"][data-theme] .hm-open-badge { color: #fff; text-shadow: 0 1px 1px rgba(90, 25, 8, .35); }
+
+/* M6. The OPEN card is not "selected": its rim and travelling glint are ink. Vermilion is kept for selection and pins. */
+html:root[data-ui="light"][data-theme] .hm-card.hm-open { border-color: rgba(30, 26, 21, .22); }
+html:root[data-ui="light"][data-theme] .hm-glint > i {
+  background: conic-gradient(transparent 0deg, transparent 208deg, rgba(30, 26, 21, .10) 259deg, rgba(30, 26, 21, .35) 288deg, rgba(30, 26, 21, .10) 317deg, transparent 352deg);
+  filter: none;
+}
+@media (prefers-reduced-motion: reduce) { html:root[data-ui="light"][data-theme] .hm-glint > i { background: rgba(30, 26, 21, .22); } }
+
+/* M7. The notepad is its own paper object in both looks: its buttons carry .btn, so the light .btn rules reached them.
+       These are styles.css's own values (np-add 8257, np-actions 8263-8265, cc-card 12139). */
+html:root[data-ui="light"][data-theme] .btn.np-add { background: #fffdf7; border: 1px dashed #ddd3b8; color: #6b6144; box-shadow: none; }
+html:root[data-ui="light"][data-theme] .btn.np-add:hover { background: #fff8e2; border-color: #e0ab1d; color: #3a2f05; }
+html:root[data-ui="light"][data-theme] .np-actions .btn { border: 1px solid #ddd3b8; background: #fffdf7; color: #4a4232; box-shadow: none; }
+html:root[data-ui="light"][data-theme] .np-actions :is(.np-done, .np-back) { background: #ffcf47; border-color: #e0ab1d; color: #3a2f05; }
+html:root[data-ui="light"][data-theme] .np-actions .np-anyway { color: #7a6f52; }
+html:root[data-ui="light"][data-theme] .cc-card .np-done { border: 1px solid #3a2f05; background: #1c1a12; color: #fff6d6; }
+
+/* M8 + L7. One idiom for "this one is chosen": (b). Simple export Quality / Smoothness, the export Video|GIF type,
+       the canvas ratio chips, every segmented control (.seg-btn: audio-react band and the inspector's), Paste look. */
+html:root[data-ui="light"][data-theme] :is(.sm-exp-b[aria-pressed="true"], .xa-kind.on, .aspect-chip.on, .seg-btn.on,
+    .es-fam.on, .es-preset.on, .grad-type.on, .mt-mode.on) {
+  background: #fff; color: var(--l-accent); border-color: rgba(198, 60, 27, .62);
+  box-shadow: inset 0 0 0 .5px rgba(198, 60, 27, .62), 0 1px 3px rgba(60, 40, 20, .14);
+}
+html:root[data-ui="light"][data-theme] .sm-exp-b[aria-pressed="true"] { box-shadow: 0 0 0 1.5px rgba(198, 60, 27, .62), 0 1px 3px rgba(60, 40, 20, .14); }
+html:root[data-ui="light"][data-theme] .ps-cat.on {
+  background: #fff; color: var(--l-accent); border-color: rgba(198, 60, 27, .62);
+  box-shadow: inset 0 0 0 .5px rgba(198, 60, 27, .62), 0 1px 3px rgba(60, 40, 20, .12);
+}
+
+/* M9. Computer Home tabs: only the active tab is a chip (white, vermilion ring and label); the others are plain. */
+@media (min-width: 701px) {
+  html:root[data-ui="light"][data-theme] .hm-tab:not(.active) { background: transparent; background-image: none; border-color: transparent; box-shadow: none; color: #564d42;
+    -webkit-backdrop-filter: none; backdrop-filter: none; }
+  html:root[data-ui="light"][data-theme] .hm-tab:not(.active):hover { background: rgba(43, 33, 22, .05); }
+  html:root[data-ui="light"][data-theme] .hm-tab.active {
+    background: #fff; background-image: none; color: var(--l-accent); border-color: transparent;
+    box-shadow: 0 0 0 1.5px rgba(198, 60, 27, .6), 0 1px 3px rgba(60, 40, 20, .12);
+  }
+}
+
+/* M10. The favourite star on the pastel audio tiles is a visible ink star; a lit star stays gold. */
+html:root[data-ui="light"][data-theme] .afxb-thumb .fxb-star:not(.on) { color: rgba(30, 26, 21, .55); text-shadow: 0 1px 0 rgba(255, 252, 246, .6); }
+
+/* M11. Template fill: the video sits on the stage grey, never on paper; on a computer the stage is a full-width band. */
+html:root[data-ui="light"][data-theme] #tpl-fill .tfill-stage { background: var(--l-stage); }
+@media (min-width: 701px) { html:root[data-ui="light"][data-theme] #tpl-fill .tfill-stage { align-self: stretch; width: auto; max-width: none; } }
+
+/* M14. Shortcuts over the light Home: the faint text is the token's faint ink (4.9:1), not the old gold (2.67:1). */
+html:root[data-ui="light"][data-theme][data-home="light"] body.home-open #shortcuts-overlay { --text-faint: #6c6256; }
+
+/* L1. Computer Home top bar: paper with a hairline, no white slab, no shadow, no coloured film. */
+@media (min-width: 701px) {
+  html:root[data-ui="light"][data-theme] #home-screen .hm-top {
+    background: rgba(255, 252, 246, .92); background-image: none; border-bottom: 1px solid var(--line-soft); box-shadow: none;
+    -webkit-backdrop-filter: none; backdrop-filter: none; border-radius: 0;
+  }
+}
+
+/* L2. Tutorial reader bars are paper, not pure white. */
+html:root[data-ui="light"][data-theme] :is(.tut-bar, .tut-pn, .tut-back) { background: var(--l-s1); }
+
+/* L3. Select mode: the empty circle keeps a white outer ring, so it reads on a black thumbnail too. */
+html:root[data-ui="light"][data-theme] .hm-check { box-shadow: 0 0 0 1.5px rgba(255, 255, 255, .9); }
+
+/* L4. The add-row line under the ruler is a quiet ink rule; vermilion only on hover, focus or drag. */
+html:root[data-ui="light"][data-theme] .tl-addrow--line { background: rgba(30, 26, 21, .10); box-shadow: none; }
+html:root[data-ui="light"][data-theme] .tl-addrow--line:is(:hover, :focus-visible, .tl-addrow-dragging) {
+  background: linear-gradient(90deg, rgba(198, 60, 27, .42), rgba(198, 60, 27, .14) 55%, transparent); }
+
+/* L5. Computer stage: a soft lift behind the video instead of one flat grey field (the token itself went warmer). */
+@media (min-width: 701px) {
+  html:root[data-ui="light"][data-theme] #stage { background: radial-gradient(ellipse 70% 80% at 50% 48%, #d3cdc3 0%, var(--l-stage) 70%); }
+}
+
+/* L6. Voice tiles: sage to soft lime instead of acid lime. */
+html:root[data-ui="light"][data-theme] .afxb-thumb[data-cat="voice"] { background: linear-gradient(135deg, rgba(120, 200, 132, .62), rgba(186, 214, 110, .42)); }
+html:root[data-ui="light"][data-theme] .afxb-banner[data-cat="voice"] { background: linear-gradient(120deg, rgba(120, 200, 132, .6), rgba(186, 214, 110, .4)); }
+
+/* L8. Inspector tiles whose glyph is a plain stroke (Captions, Edit Group, Camera Options) take their OWN hue (--c2,
+       set per card by js/inspector.js), deepened to read on paper, instead of the accent. */
+html:root[data-ui="light"][data-theme] .cat-card:not(.cat-card-disabled) > .cat-ico { color: color-mix(in srgb, var(--c2, #c63c1b) 62%, #1e1a15); }
+
+/* L11. Director and Assistant: the wash in the header is warm (peach, rose, lilac), like the rest of the paper UI. */
+html:root[data-ui="light"][data-theme] #ai-panel {
+  background: radial-gradient(115% 62% at 100% -6%, rgba(255, 190, 150, .34), rgba(236, 150, 160, .2) 38%, rgba(200, 165, 230, .14) 62%, transparent 80%), var(--l-s1); }
+html:root[data-ui="light"][data-theme] #ai-chat {
+  background: radial-gradient(120% 58% at 0% -8%, rgba(236, 150, 160, .24), rgba(255, 190, 150, .18) 42%, rgba(200, 165, 230, .12) 66%, transparent 82%), var(--l-s1); }
+
+/* L12. Export dialog and progress: a near-solid card, so the timeline does not show through behind Cancel. */
+html:root[data-ui="light"][data-theme] :is(#export-dialog, #export-overlay, #export-ready) .export-card { background-color: rgba(255, 252, 246, .97); }
+
+/* L13. Add sheet: the active tab's glyph follows its label (one colour, not vermilion beside purple). */
+html:root[data-ui="light"][data-theme] .addmenu-tab.active .addmenu-ic svg [stroke]:not([stroke="none"]) { stroke: currentColor; }
+html:root[data-ui="light"][data-theme] .addmenu-tab.active .addmenu-ic svg [fill^="url"] { fill: currentColor; }
+
+/* L14. Settings over the computer Home: a firmer scrim, so the cards behind stop competing with the panel. */
+@media (min-width: 701px) {
+  html:root[data-ui="light"][data-theme][data-home="light"] body.home-open .set-scrim.open { background: rgba(43, 33, 22, .42); }
+}
+
+/* M13 / #920. The iOS top strip under the light UI: the light Home's real top is the warm bleed over paper, not the
+       old cool #fafdff. (Whether iOS draws the clock dark on it can only be seen on his iPhone: SUMMARY.md.) */
+html:root[data-ui="light"] .fm-edge[data-edge="home-light"] { background-color: #f0dfcc; }        /* measured */
+html:root[data-ui="light"] .fm-edge[data-edge="home-light-dim"] { background-color: #ada093; }    /* measured: New project, Delete */

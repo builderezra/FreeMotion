@@ -649,6 +649,16 @@ if ! python3 tools/names-gate.py check --msg .claude/ship/names-msg.txt; then
   echo "❌ THIS RELEASE NAMES ANOTHER EDITING APP (a file, a path or the commit message) — not committing, not pushing."
   exit 1
 fi
+# THE NEW LOOK'S STYLESHEETS ARE GENERATED FROM THIS TREE'S OWN (#1255). theme-cutline.css and theme-light.css are made from
+# styles.css and theme-glass.css by tools/look/build.py. A release that changed one of those and did not make them again would
+# leave the new look showing today's colours on the new rule, quietly: nothing fails, the suite is green, and the look is
+# wrong on one screen. So the build runs here, into a temp folder, and the release is refused when the tree's files (or the
+# stamps index.html fetches them by) differ. A few seconds; it self-tests first. When the lines that moved are the Simple
+# editor's, the lock gate further down says so: those ship in a Simple release.
+if [ -f tools/look/build.py ] && ! python3 tools/look/build.py --check; then
+  echo "❌ THE NEW LOOK'S GENERATED STYLESHEETS ARE STALE — not committing, not pushing."
+  exit 1
+fi
 # THE FAILSAFE MUST PROVE ITSELF TOO (12 Sep). tools/rollback.sh is the answer to his question "whats the
 # fail safe if an ai fucks up all the code?" — and on the day it was written it broke TWICE, in opposite
 # directions: untracked (so `git clean -fd` and its own `git stash -u` would eat it), then, once that was

@@ -39,7 +39,11 @@
        Same origin as the app frame, so this key reaches its storage.migrate() before it runs. A real device never
        carries it; the #936 test boots a fresh origin without it to measure the real fresh start. -->
   <script>try { localStorage.setItem('fm.test.seedProject', '1'); } catch (e) {}</script>
-  <iframe id="app" src="../index.html"></iframe>
+  <!-- #1255: ?look=cutline or ?look=light in THIS page's address opens the app under the new look's preview (the app's own ?ui=,
+       which stores nothing), so any slice or the whole suite can be run under it. Nothing else is handed through, and with no
+       look named the frame's address is "../index.html", as it always was. -->
+  <iframe id="app"></iframe>
+  <script>(function () { var m = /[?&]look=(cutline|light)(?![\w-])/.exec(location.search); document.getElementById('app').src = '../index.html' + (m ? '?ui=' + m[1] : ''); })();</script>
   <script>
     var frame = document.getElementById('app');
     /* ⚠️ THE APP FRAME MUST NOT RELOAD MID-RUN — AND IF IT DOES, SAY SO BY NAME (30 Sep, found while chasing v17.18's timeouts).

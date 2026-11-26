@@ -98,6 +98,10 @@ window.FM = window.FM || {};
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.clearRect(0, 0, r.width, r.height);
     const map = p => { const o = FM.projectToOverlay(cv, p.x, p.y); return [o.x, o.y]; };
+    // #1255, the new light look: under the light UI the path takes the vermilion cut, not the old teal.
+    const LT = document.documentElement.getAttribute('data-ui') === 'light';
+    const CT = document.documentElement.getAttribute('data-ui') === 'cutline';   // #1255 (the design review's L7)
+    const AC = LT ? '#d9411f' : CT ? '#ffb29f' : '#29d9bb', RIM = LT ? '#3a1408' : CT ? '#2a0d06' : '#06231d';
     // trajectory — sample the REAL evaluated path so Hermite curves (and eases) show live
     const t0 = times[0], t1 = times[times.length - 1], span = t1 - t0;
     if (span > 0) {
@@ -107,7 +111,7 @@ window.FM = window.FM || {};
         const q = map(posAt(l, t0 + span * i / N));
         if (i === 0) g.moveTo(q[0], q[1]); else g.lineTo(q[0], q[1]);
       }
-      g.strokeStyle = 'rgba(41,217,187,.95)'; g.lineWidth = 1.5; g.stroke();
+      g.strokeStyle = LT ? 'rgba(217,65,31,.95)' : CT ? 'rgba(255,178,159,.95)' : 'rgba(41,217,187,.95)'; g.lineWidth = 1.5; g.stroke();
     }
     // tangent handles for the selected dot (under the dots so dots stay tappable)
     const selLive = selT != null && times.some(t => Math.abs(t - selT) < EPS);
@@ -126,8 +130,8 @@ window.FM = window.FM || {};
     times.forEach(t => {
       const q = map(posAt(l, t)), isSel = selT != null && Math.abs(t - selT) < EPS;
       g.beginPath(); g.arc(q[0], q[1], isSel ? 7 : 6, 0, 6.2832);
-      g.fillStyle = isSel ? '#29d9bb' : '#c7d2e2'; g.fill();
-      g.strokeStyle = '#06231d'; g.lineWidth = 1.5; g.stroke();
+      g.fillStyle = isSel ? AC : (LT ? '#fffcf6' : '#c7d2e2'); g.fill();
+      g.strokeStyle = RIM; g.lineWidth = 1.5; g.stroke();
       if (Math.abs(t - now) < EPS) { g.beginPath(); g.arc(q[0], q[1], 10.5, 0, 6.2832); g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 1.5; g.stroke(); }
     });
   }

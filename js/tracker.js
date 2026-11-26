@@ -190,8 +190,9 @@ window.FM = window.FM || {};
           const sp = contentToProj(layer, FM.time, picking.seed.x, picking.seed.y);
           const o = FM.projectToOverlay(cv, sp.x, sp.y);   // queue 770: the crop origin, not origin 0
           const bx = o.x, by = o.y, hw = (picking.boxPx || 60) * k / 2;
-          g.strokeStyle = '#29d9bb'; g.lineWidth = 2; g.strokeRect(bx - hw, by - hw, hw * 2, hw * 2);
-          g.fillStyle = '#29d9bb'; g.beginPath(); g.arc(bx, by, 3, 0, 6.2832); g.fill();
+          const ac = document.documentElement.getAttribute('data-ui') === 'light' ? '#d9411f' : document.documentElement.getAttribute('data-ui') === 'cutline' ? '#ffb29f' : '#29d9bb';   // #1255 (the design review's L7)   // #1255, the new light look
+          g.strokeStyle = ac; g.lineWidth = 2; g.strokeRect(bx - hw, by - hw, hw * 2, hw * 2);
+          g.fillStyle = ac; g.beginPath(); g.arc(bx, by, 3, 0, 6.2832); g.fill();
         }
       };
       picking._paint = paint; paint();

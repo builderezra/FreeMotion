@@ -1,0 +1,283 @@
+/* ---- cutline-tail.css: hand-written, appended LAST by cgen.py.
+   Prefix html:root[data-ui="cutline"][data-theme] = specificity (0,3,1): it ties or beats every generated copy. */
+
+/* 1. TOKENS: today's variable names re-pointed at Cutline dark (identity/tokens.css .fm-dark), plus the Cutline set. */
+html:root[data-ui="cutline"][data-theme] {
+  color-scheme: dark;
+  --bg: #121110;
+  --stage: #171614;            /* one step LIGHTER than --bg on purpose: Ezra's v5.86 ask (see the canvas edge on a black project) */
+  --panel: #1b1a18;
+  --panel-2: #232120;
+  --panel-3: #2d2a27;
+  --line: #33302c;
+  --line-soft: #282624;
+  --text: #f5f0e8;
+  --text-dim: #bdb4a8;
+  --text-faint: #9a9084;
+  --accent: #ff5a36;
+  --accent-2: #e94b29;
+  --am-green: #ff5a36;
+  --accent-soft: rgba(255, 90, 54, .16);
+  --kf: #f2c14e;
+  --good: #86d18f;
+  --radius: 9px;
+  --radius-sm: 6px;
+  /* the glass recipe, emptied: flat opaque chrome, a hairline, no light */
+  --glass-tint: #1b1a18;
+  --glass-tint-strong: #1b1a18;
+  --glass-rim: transparent;
+  --glass-rim-soft: #2d2a27;
+  --glass-glow: transparent;
+  --glass-blur: none;
+  --lg-fill: linear-gradient(#232120, #232120);
+  --lg-catch: linear-gradient(transparent, transparent);
+  --lg-rim: inset 0 0 0 1px #33302c;
+  --lg-lift: none;
+  --glass-edge: drop-shadow(0 0 0 transparent);
+  --glass-edge-sm: drop-shadow(0 0 0 transparent);
+  --export-edge: drop-shadow(0 0 0 transparent);
+  /* Cutline names, for the rules below */
+  --c-bg: #121110; --c-s1: #1b1a18; --c-s2: #232120; --c-s3: #2d2a27; --c-line: #33302c; --c-line-strong: #4a453f;
+  --c-t1: #f5f0e8; --c-t2: #bdb4a8; --c-t3: #9a9084;
+  --c-accent: #ff5a36; --c-accent-ink: #ff7656; --c-on-accent: #1d0904;
+  --c-yellow: #f2c14e; --c-blue: #86b8dc; --c-danger: #ff5c7a; --c-success: #86d18f;
+  --font-ui: 'Instrument Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-display: 'Newsreader', Georgia, serif;
+  background: #121110;
+}
+html:root[data-ui="cutline"][data-theme] body { background: #121110; font-family: var(--font-ui); }
+:where(html[data-ui="cutline"]) :where(button, input, select, textarea) { font-family: inherit; }
+html:root[data-ui="cutline"][data-theme] ::selection { background: rgba(255, 90, 54, .3); }
+
+/* 1b. EDGE: what iOS reads for the status-bar strip is each screen's background-COLOR (queue 920), so under Cutline it
+   is each screen's real top: the Home's flat ground (no glass glow any more), the phone editor's bar, the PC bar.
+   index.html's #edge-css tabs get the same values (measured with tmp/cutline/edge.py). */
+html:root[data-ui="cutline"][data-theme] #home-screen { background-color: #121110; }
+html:root[data-ui="cutline"][data-theme]:not(.splash-on):has(#home-screen:not(.hidden)) { background-color: #121110; }
+html:root[data-ui="cutline"][data-theme] .fm-edge[data-edge="home-dark"] { background-color: #121110; }
+html:root[data-ui="cutline"][data-theme] .fm-edge[data-edge="editor"] { background-color: #232120; }
+html:root[data-ui="cutline"][data-theme] .fm-edge[data-edge="home-dark-dim"] { background-color: #0c0b0a; }
+html:root[data-ui="cutline"][data-theme] .fm-edge[data-edge="editor-dim"] { background-color: #0f0e0d; }   /* measured: a question, Work with friends (#121010 was derived) */
+@media (min-width: 701px) {
+  html:root[data-ui="cutline"][data-theme] .fm-edge[data-edge="editor"] { background-color: #1a1917; }
+  html:root[data-ui="cutline"][data-theme] .fm-edge[data-edge="editor-dim"] { background-color: #0d0c0b; }   /* measured: a question over the PC editor (#0f0e0d was derived) */
+}
+/* 1c. EVERY DIM AND PANEL'S TAB on a phone (#1255, the preview's first browser run). Each colour is what the page paints at the
+   top centre with that screen open, MEASURED at 380 by '1255 · with every dim ...' run under this look (tests/run.html?look=
+   cutline). In today's look several dims share one tab because over its navy bar they land within a level or two of each
+   other; under the new dark their alphas are today's and their ink is warm charcoal, so they land a few levels apart. Where
+   two that share a tab would differ by more than two levels, the tab takes the colour of the one that is up, in the order
+   index.html's table already gives (Notes and Sound effects, then the recorder, then Paste look; Keyboard shortcuts over the
+   grown Add menu; Notes made big over Keyboard shortcuts made big). Only the colour changes: which tab shows is index.html's. */
+html:root[data-ui="cutline"][data-theme] .add-stretch-dim { background-color: rgba(10, 9, 8, .55) !important; }   /* the grown Add menu's dim is written by js/mobile.js (rgba(2,6,10,.55)), so no generator saw it: the identity's scrim ink, its alpha kept */
+@media (max-width: 700px) {
+  html:root[data-ui="cutline"][data-theme] .fm-edge[data-edge="editor-card-dim"] { background-color: #101010; }   /* Notes, Before you export, Sound effects */
+  html:root[data-ui="cutline"][data-theme] > body:has(> #vr-overlay:not(.hidden)):not(:has(> .np-scrim:not(.np-closing), > .sfx-scrim)) > .fm-edge[data-edge="editor-card-dim"] { background-color: #100f0e; }   /* the recorder */
+  html:root[data-ui="cutline"][data-theme] > body:has(> .ps-overlay):not(:has(> .np-scrim:not(.np-closing), > .sfx-scrim, > #vr-overlay:not(.hidden))) > .fm-edge[data-edge="editor-card-dim"] { background-color: #151312; }   /* Paste look */
+  html:root[data-ui="cutline"][data-theme] .fm-edge[data-edge="editor-export-dim"] { background-color: #100f0e; }   /* Export, Canvas settings, the progress, the ready card */
+  html:root[data-ui="cutline"][data-theme] .fm-edge[data-edge="editor-thin-dim"] { background-color: #151413; }   /* the grown Add menu */
+  html:root[data-ui="cutline"][data-theme] > body:has(> #shortcuts-overlay:not(.hidden):not(.pb-closing)) > .fm-edge[data-edge="editor-thin-dim"] { background-color: #11100f; }   /* Keyboard shortcuts */
+  html:root[data-ui="cutline"][data-theme] .fm-edge[data-edge="editor-settings"] { background-color: #1b1a18; }   /* the Settings panel's own top */
+  html:root[data-ui="cutline"][data-theme] .fm-edge[data-edge="editor-panel"] { background-color: #1b1a18; }   /* Elements, the template fill */
+  html:root[data-ui="cutline"][data-theme] > body:has(> #shortcuts-overlay.pb-host-big:not(.hidden):not(.pb-closing)):not(:has(> .np-scrim.pb-host-big:not(.np-closing))) > :is(#app ~ #home-screen.hidden, #app.fm-push-in) ~ .fm-edge[data-edge="deep-dim"] { background-color: #11100f; }   /* Keyboard shortcuts made big (Notes made big keeps today's #04080b: its dim is today's) */
+  html:root[data-ui="cutline"][data-theme] > body:has(> #shortcuts-overlay.pb-host-big:not(.hidden):not(.pb-closing)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden) ~ .fm-edge[data-edge="deep-dim"] { background-color: #0f0e0d; }   /* the same over the Home */
+  html:root[data-ui="cutline"][data-theme] > body:has(> #fm-ask:not(.hidden)) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden):has(#hm-reframe:not(.hidden)) ~ .fm-edge[data-edge="deep-dim"] { background-color: #0a0908; }   /* a question over the photo sheet */
+  html:root[data-ui="cutline"][data-theme] > body:has(> .set-scrim.open) > #app:not(.fm-push-in) ~ #home-screen:not(.hidden) ~ .fm-edge[data-edge="home-dark"] { background-color: #1b1a18; }   /* Settings over the Home: its panel tops the screen (today's #0b1922 was within two levels of the Home; #1b1a18 is not) */
+  html:root[data-ui="cutline"][data-theme] .fm-edge[data-edge="home-dark-shortcuts-dim"] { background-color: #0c0b0a; }
+  html:root[data-ui="cutline"][data-theme] .fm-edge[data-edge="home-dark-reframe-dim"] { background-color: #0b0a09; }   /* the photo sheet (Move and scale) */
+}
+
+/* 2. NO BLUR ANYWHERE: the identity's rule (and the iPhone's battery). Materials are opaque in the generated part. */
+html:root[data-ui="cutline"][data-theme] *,
+html:root[data-ui="cutline"][data-theme] *::before,
+html:root[data-ui="cutline"][data-theme] *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+
+/* 3. FOCUS: one ring, the identity's pale vermilion */
+html:root[data-ui="cutline"][data-theme] :focus-visible { outline: 2px solid #ffb29f; outline-offset: 2px; }
+
+/* 4. THE ACCENT RULE. Vermilion means "do it" or "you are here": Export, the + buttons, the playhead, a primary
+   button, a switch that is on, a slider. A CHOSEN OPTION in a row of options is paper-on-charcoal instead
+   (light chip, dark ink), so a sheet never carries two vermilion things fighting each other. */
+html:root[data-ui="cutline"][data-theme] :is(.seg-btn.on, .fx-seg-btn.on, .set-segbtn.on, .cs-segbtn.on, .xa-kind.on, .aspect-chip.on,
+  .preset-chip.on, .fxmode-btn.on, .hm-tab.active, .hm-ln-chip.on, .cj-fieldrow .cj-scan.on) {
+  background: #ebe4d8; border-color: #ebe4d8; color: #14110d; box-shadow: none;
+}
+html:root[data-ui="cutline"][data-theme] :is(.seg-btn.on, .fx-seg-btn.on, .set-segbtn.on, .xa-kind.on, .aspect-chip.on, .hm-tab.active) :is(svg, .ico) { color: #14110d; }
+/* the same rule for the inspector's one-of-several pickers (found by the accent probe, tmp/cutline/accent-sum.txt) */
+html:root[data-ui="cutline"][data-theme] :is(.es-fam.on, .es-preset.on, .grad-type.on, .fill-tab.on, .mt-mode.on, .fxb-sortbtn.on,
+  .sm-look-tab.on, .sm-look-chip.on, .sm-look-tab.active, .sm-look-chip.active, .ps-cat.on) {
+  background: #ebe4d8; border-color: #ebe4d8; color: #14110d; box-shadow: none;
+}
+html:root[data-ui="cutline"][data-theme] :is(.es-fam.on, .es-preset.on, .grad-type.on, .fill-tab.on, .mt-mode.on, .fxb-sortbtn.on, .ps-cat.on) :is(svg, svg *, span) { color: #14110d; stroke: #14110d; }
+html:root[data-ui="cutline"][data-theme] :is(.grad-type.on, .fill-tab.on) svg [fill]:not([fill="none"]) { fill: #14110d; }
+html:root[data-ui="cutline"][data-theme] .hm-aspect.active { border-color: #ebe4d8; color: #f5f0e8; background: #2d2a27; }
+html:root[data-ui="cutline"][data-theme] .hm-aspect.active :is(span, .ac-frame) { color: #f5f0e8; border-color: #f5f0e8; }
+/* contrast fixes from the audit (tmp/light/audit.js run under Cutline: 1,431 text runs on 110 phone surfaces) */
+html:root[data-ui="cutline"][data-theme] .mt-trackpad-hint { color: #a39a8e; }
+/* values are read, not pressed: ink, not accent */
+html:root[data-ui="cutline"][data-theme] .mt-vbox-val { color: #f5f0e8; }
+html:root[data-ui="cutline"][data-theme] .mt-vbox-lab.mt-vbox-axis.on { background: #ebe4d8; color: #14110d; }
+/* back links and pagers: quiet ink; the sheet's Done stays the one accent */
+html:root[data-ui="cutline"][data-theme] :is(.cat-back, .fxb-back:not(.fxb-subdone), .afxb-catnav-btn) { color: #bdb4a8; }
+html:root[data-ui="cutline"][data-theme] :is(.fxb-search-btn, .fxb-search-btn svg, .fxb-search-btn svg *) { color: #bdb4a8; stroke: #bdb4a8; border-color: #33302c; box-shadow: none; }
+/* numbered steps and empty-state marks: quiet chips */
+html:root[data-ui="cutline"][data-theme] :is(.cs-how b, .elb-way-n, .tfill-slot-n) { background: #2d2a27; color: #f5f0e8; }
+html:root[data-ui="cutline"][data-theme] .tfill-slot.is-sel .tfill-slot-n { background: #ff5a36; color: #1d0904; }
+html:root[data-ui="cutline"][data-theme] .tut-steps li::before { background: #2d2a27; color: #f5f0e8; }
+html:root[data-ui="cutline"][data-theme] :is(.hm-empty-mark, .am-empty-mark, .elb-empty-mark, .elb-empty-mark svg, .elb-empty-mark svg *) { color: #9a9084; stroke: #9a9084; }
+/* the canvas dialog's row icons are wayfinding, not actions */
+html:root[data-ui="cutline"][data-theme] :is(.cv-mini-ico, .cv-mini-ico svg, .cv-mini-ico svg *) { color: #bdb4a8; stroke: #bdb4a8; }
+html:root[data-ui="cutline"][data-theme] .cv-mini-ico { background: #232120; border-color: #33302c; box-shadow: none; }
+/* the pin on a pinned project: ink */
+html:root[data-ui="cutline"][data-theme] :is(.hm-pin svg, .hm-pin svg *) { color: #f5f0e8; fill: #f5f0e8; stroke: #f5f0e8; }
+/* travelling glints and sheens are decoration: gone */
+html:root[data-ui="cutline"][data-theme] :is(.hm-glint, .sfx-glint, .vr-glint, .hm-glint i, .sfx-glint i, .vr-glint i) { display: none !important; animation: none !important; }
+/* the selected layer's track head: a quiet raised cell (the bar itself already says which layer) */
+html:root[data-ui="cutline"][data-theme] .track-head.sel { background: #2d2a27 !important; box-shadow: inset 0 0 0 1px #4a453f; }
+/* tool bars over the canvas: a hairline, not a vermilion outline */
+html:root[data-ui="cutline"][data-theme] :is(#draw-bar, #crop-bar, #mask-bar, #mpath-bar, #touchup-bar) { border-color: #33302c; box-shadow: 0 8px 20px rgba(0, 0, 0, .45); }
+/* the tutorials list: one quiet tile per step, the number in ink, "Start here" keeps the cut */
+html:root[data-ui="cutline"][data-theme] .hm-thumb.tut-thumb { background: #2d2a27 !important; color: #f5f0e8; box-shadow: inset 0 0 0 1px #33302c; }
+
+/* …except the phone Home's bottom tab bar, where the active tab is vermilion ink with no chip (it is navigation) */
+@media (max-width: 700px) {
+  html:root[data-ui="cutline"][data-theme] #home-screen .hm-tabs .hm-tab.active { background: transparent; border: 0; color: #ff7656; }
+  html:root[data-ui="cutline"][data-theme] #home-screen .hm-tabs .hm-tab.active :is(svg, .hm-tab-ico, .hm-tab-label) { color: #ff7656; }
+}
+
+/* Export: the one filled vermilion key on the editor's top bar */
+html:root[data-ui="cutline"][data-theme] :is(#btn-export, .m-export) {
+  background: #ff5a36; border: none; color: #1d0904; box-shadow: none; filter: none;
+}
+html:root[data-ui="cutline"][data-theme] :is(#btn-export, .m-export):hover { background: #ff6c4b; }
+html:root[data-ui="cutline"][data-theme] :is(#btn-export, .m-export) :is(svg, .ico) { color: #1d0904; stroke: currentColor; }
+
+/* The + buttons (Home and editor): a flat vermilion disc with a dark +. No orb, no sheen, no glow, no ring. */
+html:root[data-ui="cutline"][data-theme] :is(#hm-new, #add-fab) {
+  background: #ff5a36 !important; color: #1d0904; border: none;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .45); filter: none;
+}
+html:root[data-ui="cutline"][data-theme] :is(#hm-new, #add-fab):hover { background: #ff6c4b !important; box-shadow: 0 6px 16px rgba(0, 0, 0, .45); filter: none; }
+html:root[data-ui="cutline"][data-theme] :is(#hm-new, #add-fab):active { box-shadow: 0 3px 8px rgba(0, 0, 0, .45); filter: none; }
+html:root[data-ui="cutline"][data-theme] :is(#hm-new, #add-fab)::before,
+html:root[data-ui="cutline"][data-theme] :is(#hm-new, #add-fab)::after,
+html:root[data-ui="cutline"][data-theme] #add-fab .fab-aura { display: none !important; animation: none !important; }
+html:root[data-ui="cutline"][data-theme] :is(#hm-new, #add-fab) > svg { display: block !important; opacity: 1 !important; visibility: visible !important; color: #1d0904; stroke: #1d0904; width: 26px; height: 26px; position: relative; z-index: 1; }
+
+/* 5. HOME. THE WORDMARK IS THE APP'S OWN PICTURE, RECOLOURED ONLY. His rule (21 Nov): the real logo is used and never
+   redrawn. The design run had typed the name in a new face; that is gone. The picture is white on nothing, so the new dark
+   shows it as it is, a touch softer than pure white; the glow, the halo, the glint and the two light catches behind it go. */
+html:root[data-ui="cutline"][data-theme] .hm-brand-img { visibility: visible; filter: none; opacity: .96; }
+html:root[data-ui="cutline"][data-theme] :is(.hm-brand-halo, .hm-brand-glint) { display: none !important; }
+html:root[data-ui="cutline"][data-theme] .hm-brand-wm::before,
+html:root[data-ui="cutline"][data-theme] .hm-brand-wm::after { display: none !important; content: none; animation: none; }
+/* the pinned project: a quiet strong hairline, not a lit ring (vermilion is kept for the OPEN tag) */
+html:root[data-ui="cutline"][data-theme] .hm-card.is-pinned { border-color: #4a453f; box-shadow: none; background: #1b1a18; }
+html:root[data-ui="cutline"][data-theme] .hm-card { background: #1b1a18; border-color: #2d2a27; box-shadow: none; }
+html:root[data-ui="cutline"][data-theme] .hm-card::before,
+html:root[data-ui="cutline"][data-theme] .hm-card::after { animation: none !important; opacity: 0 !important; }
+
+/* 6. QUIET TILES. The Add sheet: one ink for every glyph (the per-tool tint is overridden at its source, the
+   --am-tint the JS writes inline), one surface for every card, the active tab is the only colour. */
+html:root[data-ui="cutline"][data-theme] .addmenu-card,
+html:root[data-ui="cutline"][data-theme] .addmenu-tab { --am-tint: 214, 206, 195 !important; }
+html:root[data-ui="cutline"][data-theme] .addmenu-card:not(.has-thumb) {
+  background: #1b1a18; border: 1px solid #2d2a27; box-shadow: none;
+}
+html:root[data-ui="cutline"][data-theme] .addmenu-card:not(.has-thumb):hover { background: #232120; border-color: #4a453f; }
+html:root[data-ui="cutline"][data-theme] .addmenu-card::before,
+html:root[data-ui="cutline"][data-theme] .addmenu-card::after { display: none !important; animation: none !important; }
+html:root[data-ui="cutline"][data-theme] .addmenu-card .addmenu-lbl { color: #bdb4a8; }
+html:root[data-ui="cutline"][data-theme] .addmenu-card .addmenu-ic { color: #d6cec3; }
+html:root[data-ui="cutline"][data-theme] .addmenu-card .addmenu-ic svg [stroke^="url"] { stroke: currentColor; }
+html:root[data-ui="cutline"][data-theme] .addmenu-card .addmenu-ic svg [fill^="url"] { fill: currentColor; }
+html:root[data-ui="cutline"][data-theme] .addmenu-tab { background: transparent; border-color: transparent; box-shadow: none; }
+html:root[data-ui="cutline"][data-theme] .addmenu-tab.active { --am-tint: 255, 118, 86 !important; background: rgba(255, 90, 54, .14); border-color: rgba(255, 90, 54, .55); color: #ff7656; }
+html:root[data-ui="cutline"][data-theme] .am-glint { display: none !important; }
+html:root[data-ui="cutline"][data-theme] .addmenu-tab:not(.active) :is(svg, svg *) { stroke: #bdb4a8; color: #bdb4a8; }
+html:root[data-ui="cutline"][data-theme] .addmenu-tab:not(.active) svg [fill^="url"] { fill: #bdb4a8; }
+html:root[data-ui="cutline"][data-theme] .addmenu-tab.active :is(svg, svg *) { stroke: #ff7656; color: #ff7656; }
+html:root[data-ui="cutline"][data-theme] .addmenu-tab.active svg [fill^="url"] { fill: #ff7656; }
+/* the Media glyph is a FILLED sky with a hill: in one ink the sky becomes an outline, or the picture reads as a blob */
+html:root[data-ui="cutline"][data-theme] .addmenu-ic svg [fill="url(#fm-ic-sky)"] { fill: none !important; stroke: currentColor !important; stroke-width: 1.7; }
+html:root[data-ui="cutline"][data-theme] .addmenu-tab:not(.active) .addmenu-ic svg [fill="url(#fm-ic-sky)"] { stroke: #bdb4a8 !important; }
+html:root[data-ui="cutline"][data-theme] .addmenu-tab.active .addmenu-ic svg [fill="url(#fm-ic-sky)"] { stroke: #ff7656 !important; }
+
+/* The inspector's category cards: no gradient ring, no shine, no breathing glow (his #339 look, retired for
+   minimalism and listed as a decision for him). One surface, one hairline, one ink. */
+html:root[data-ui="cutline"][data-theme] .cat-card { animation: none !important; box-shadow: none; background: #1b1a18; border-color: #2d2a27; }
+html:root[data-ui="cutline"][data-theme] .cat-card::before { display: none !important; }
+html:root[data-ui="cutline"][data-theme] .cat-card:hover { background: #232120; border-color: #4a453f; }
+html:root[data-ui="cutline"][data-theme] .cat-ico { color: #d6cec3 !important; }
+html:root[data-ui="cutline"][data-theme] .cat-ico svg *:not([stroke="none"]) { stroke: currentColor; }
+html:root[data-ui="cutline"][data-theme] .cat-ico svg [fill]:not([fill="none"]) { fill: currentColor; }
+html:root[data-ui="cutline"][data-theme] .cat-ico svg stop { stop-color: currentColor; }
+html:root[data-ui="cutline"][data-theme] .cat-label { color: #bdb4a8; }
+
+/* 7. SETTINGS: group titles are quiet labels, not vermilion headlines */
+html:root[data-ui="cutline"][data-theme] .set-grouptitle { color: #9a9084; }
+
+/* 8. EFFECTS: the gold FAVES slab becomes a quiet row with a yellow star */
+html:root[data-ui="cutline"][data-theme] .fxb-favmore-face { background: #232120; border: 1px solid #33302c; color: #f5f0e8; box-shadow: none; text-shadow: none; }
+html:root[data-ui="cutline"][data-theme] .fxb-favmore-star { filter: none; color: #f2c14e; fill: #f2c14e; }
+
+/* 9. SIMPLE: the lane colours are the Cutline layer palette */
+html:root[data-ui="cutline"][data-theme] :is(.sm-k-captions, .sm-sec-captions .sm-glyph) { background: #f2c14e; }
+html:root[data-ui="cutline"][data-theme] :is(.sm-k-text, .sm-sec-text .sm-glyph) { background: #c6a6f0; }
+html:root[data-ui="cutline"][data-theme] :is(.sm-k-overlay, .sm-sec-overlay .sm-glyph) { background: #86b8dc; }
+html:root[data-ui="cutline"][data-theme] .sm-k-block { background: repeating-linear-gradient(135deg, #86b8dc 0 5px, #76a6c9 5px 10px); }
+html:root[data-ui="cutline"][data-theme] .sm-k-effect { background: #93cc9b; }
+html:root[data-ui="cutline"][data-theme] .sm-snd { background: #93cc9b; color: #14110d; }
+html:root[data-ui="cutline"][data-theme] .sm-item:not(.sm-clip) { color: #14110d; }
+
+/* 10. FULL TIMELINE: the add row is quiet (the playhead is this region's one accent) */
+html:root[data-ui="cutline"][data-theme] .tl-addrow:not(.tl-addrow--line)::before { border-color: rgba(245, 240, 232, .16); background: rgba(245, 240, 232, .035); box-shadow: none; }
+html:root[data-ui="cutline"][data-theme] .tl-addrow-plus { color: #bdb4a8; border-color: #4a453f; background: transparent; box-shadow: none; }
+html:root[data-ui="cutline"][data-theme] .tl-addrow-grip span { background: #6c645b; }
+/* the PC's thin add-a-layer line (his "thin but noticeable"): kept, in paper instead of a cyan glow */
+html:root[data-ui="cutline"][data-theme] .tl-addrow--line { background: linear-gradient(90deg, rgba(245, 240, 232, .26), rgba(245, 240, 232, .09) 45%, transparent); box-shadow: none; }
+html:root[data-ui="cutline"][data-theme] :is(.tl-addrow--line:hover, .tl-addrow--line:focus-visible, .tl-addrow--line.tl-addrow-dragging) { background: linear-gradient(90deg, rgba(245, 240, 232, .14), rgba(245, 240, 232, .05) 55%, transparent); box-shadow: none; }
+
+/* the PC's Export sits in the transport row as an icon key: the same vermilion key (ids outrank the rule above) */
+html:root[data-ui="cutline"][data-theme] #transport #btn-export { background: #ff5a36 !important; color: #1d0904 !important; border: none !important; box-shadow: none !important; }
+html:root[data-ui="cutline"][data-theme] #transport #btn-export:hover { background: #ff6c4b !important; }
+
+/* ================================================================ 11. reskin/REVIEW.md fixes (21 Nov) ===============
+   Codes are REVIEW.md's. One idiom for "chosen" in every tray: paper ink (a paper chip or a paper ring; never a line under
+   it: his rule of 23 Nov). Vermilion stays for actions. Nothing here moves a control: colour, weight, radius and rings only. */
+/* M1. Simple trays: a chosen tool (None, 1x, a speed, a transition) is paper ink on a soft chip, not vermilion. The design
+       run gave it a paper underline; his rule (23 Nov, seen on the Speed row: "a line underneath where it says times 1")
+       forbids a line under a chosen item anywhere. */
+html:root[data-ui="cutline"][data-theme] .sm-tool[aria-pressed="true"] { color: #f5f0e8; background: #2d2a27; box-shadow: none; border-radius: 9px; }
+html:root[data-ui="cutline"][data-theme] .sm-tool[aria-pressed="true"] :is(svg, .sm-ico) { color: #f5f0e8; }
+html:root[data-ui="cutline"][data-theme] :is(.sm-look-tab, .sm-look-chip)[aria-pressed="true"] { background: #ebe4d8; color: #14110d; border-color: transparent; }
+html:root[data-ui="cutline"][data-theme] .sm-look-tile[aria-pressed="true"] .sm-look-th,
+html:root[data-ui="cutline"][data-theme] .sm-fx-tile[aria-pressed="true"] .sm-fx-th { box-shadow: 0 0 0 2px #ebe4d8; }
+html:root[data-ui="cutline"][data-theme] :is(.sm-look-tile, .sm-fx-tile)[aria-pressed="true"] { color: #f5f0e8; }
+/* M3. The Simple clip label: dark ink on a bare clip bar (no filmstrip painted yet); white + shadow only over frames
+       (queue 674's reason). Lane labels a step firmer, so the 11px face reads like today's. */
+html:root[data-ui="cutline"][data-theme] .sm-clip:not(:has(> .sm-strip)) { color: #14110d; text-shadow: none; }
+html:root[data-ui="cutline"][data-theme] #sm-timeline .sm-item { font-weight: 700; }
+/* M5. Paste look: a chosen tile is a raised charcoal tile with a paper hairline, not a bright paper slab */
+html:root[data-ui="cutline"][data-theme] .ps-cat { background: #1b1a18; border-color: #33302c; color: #9a9084; }
+html:root[data-ui="cutline"][data-theme] .ps-cat.on { background: #2d2a27; border-color: #ebe4d8; color: #f5f0e8; box-shadow: none; }
+html:root[data-ui="cutline"][data-theme] .ps-cat.on :is(svg, svg *, span) { color: #f5f0e8; stroke: #f5f0e8; }
+/* M7. Full editor, "Tap to add a layer": the + keeps a quiet box (a 1px hairline ring, today's 26x18 size) */
+html:root[data-ui="cutline"][data-theme] .tl-addrow-plus { color: #f5f0e8; background: transparent; border-radius: 6px; box-shadow: inset 0 0 0 1px #4a453f; }
+/* L1 (the typed wordmark's size on a computer) went with the typed wordmark: the picture keeps the size styles.css gives it. */
+/* L2. The OPEN tag: paper and ink in both looks (vermilion is kept for actions) */
+html:root[data-ui="cutline"][data-theme] .hm-open-badge { background: #ebe4d8; background-image: none; color: #14110d; box-shadow: none; text-shadow: none; }
+/* L3. Director: the key button stays the accent; the links are dim ink, underlined */
+html:root[data-ui="cutline"][data-theme] :is(.ai-link, .ai-getkey) { color: #bdb4a8; text-decoration: underline; text-underline-offset: 2px; }
+/* L4. Simple tool bar labels: 11px (from 10) so Instrument Sans reads like today's face; the bar's height is unchanged */
+html:root[data-ui="cutline"][data-theme] #sm-tools .sm-tool { font-size: 11px; }
+/* M1. The Simple editor's Extras sheet: the chosen tab is the paper chip, like every other Simple tray */
+html:root[data-ui="cutline"][data-theme] body.ed-simple .addmenu-tab.active { background: #ebe4d8; border-color: #ebe4d8; color: #14110d; }
+html:root[data-ui="cutline"][data-theme] body.ed-simple .addmenu-tab.active :is(svg, svg *, .addmenu-lbl) { stroke: #14110d; color: #14110d; }
+html:root[data-ui="cutline"][data-theme] body.ed-simple .addmenu-tab.active svg [fill^="url"] { fill: #14110d; }
+html:root[data-ui="cutline"][data-theme] body.ed-simple .addmenu-tab.active .addmenu-ic svg [fill="url(#fm-ic-sky)"] { stroke: #14110d !important; }
+/* two more "chosen" states the probe found: the element toolbar's toggle and the active blend group (paper, as light's ink) */
+html:root[data-ui="cutline"][data-theme] .es-toggle.on { background: #ebe4d8; border-color: #ebe4d8; color: #14110d; box-shadow: none; }
+html:root[data-ui="cutline"][data-theme] .es-toggle.on :is(svg, svg *) { color: #14110d; stroke: #14110d; }
+html:root[data-ui="cutline"][data-theme] .blend-cat.active { border-color: #ebe4d8; }
+html:root[data-ui="cutline"][data-theme] .blend-cat.active .blend-check { color: #f5f0e8; }

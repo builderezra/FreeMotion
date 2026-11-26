@@ -1,0 +1,236 @@
+/* ---------------------------------------------------------------------------------------------------------------
+   light-cutline-tail.css: reskin/REVIEW.md fixes for the LIGHT look (21 Nov). Appended LAST by reskin/gen/lmin.py,
+   after light-tail.css, at the same (0,3,1) prefix, so it wins. Goal: light is Cutline dark's true mirror.
+     paper where dark has charcoal · an INK chip where dark has a paper chip · the same single vermilion
+   Palette (identity/tokens.css .fm-light): ground #f3eee5, surfaces #fffcf6 / #f8f3ea / #ebe3d6, hairline #ddd3c3,
+   strong #c3b6a2, ink #1e1a15 / #564d42 / #6c6256, vermilion #c63c1b. Nothing here moves a control.
+   --------------------------------------------------------------------------------------------------------------- */
+
+/* 0. TOKENS: the glass recipe emptied, as in dark: flat opaque chrome, a hairline, no light, no blur. */
+html:root[data-ui="light"][data-theme] {
+  --glass-tint: #fffcf6;
+  --glass-tint-strong: #fffcf6;
+  --glass-rim: transparent;
+  --glass-rim-soft: #ddd3c3;
+  --glass-glow: transparent;
+  --glass-blur: none;
+  --lg-fill: linear-gradient(#c63c1b, #c63c1b);
+  --lg-catch: linear-gradient(transparent, transparent);
+  --lg-rim: inset 0 0 0 1px rgba(30, 26, 21, .08);
+  --lg-lift: none;
+  --l-shadow-2: 0 6px 16px -10px rgba(60, 40, 20, .28);
+  --l-shadow-3: 0 18px 40px -18px rgba(60, 40, 20, .32);
+  --scrim: rgba(30, 24, 16, .34);
+  --font-ui: 'Instrument Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-display: 'Newsreader', Georgia, serif;
+}
+/* H1. TYPE: Instrument Sans for the whole UI (every stack is also re-pointed in lmin.py's TYPE block) */
+html:root[data-ui="light"][data-theme] body { font-family: var(--font-ui); }
+:where(html[data-ui="light"]) :where(button, input, select, textarea) { font-family: inherit; }
+
+/* H3. NO BLUR ANYWHERE: the identity's rule (and the iPhone's battery). */
+html:root[data-ui="light"][data-theme] *,
+html:root[data-ui="light"][data-theme] *::before,
+html:root[data-ui="light"][data-theme] *::after { -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+
+/* H1. THE WORDMARK is the app's own picture, recoloured only, as in dark (his rule of 21 Nov: the real logo is never redrawn;
+   the design run had typed the name). On paper it is ink: the white picture turned black, a touch see-through so it sits at
+   the ink's own weight. The halo, the glint and the two catches stay off, as today's light Home has them. */
+html:root[data-ui="light"][data-theme] .hm-brand-img { visibility: visible; filter: brightness(0); opacity: .9; }
+html:root[data-ui="light"][data-theme] :is(.hm-brand-halo, .hm-brand-glint) { display: none !important; }
+html:root[data-ui="light"][data-theme] .hm-brand-wm::before,
+html:root[data-ui="light"][data-theme] .hm-brand-wm::after { display: none !important; content: none; animation: none; }
+
+/* H2. ONE IDIOM FOR "CHOSEN": an ink chip (dark's paper chip, mirrored). Replaces light-tail's white chip with a
+       vermilion ring (its M8 "(b)") and the filled vermilion mode tabs. Vermilion is kept for actions only. */
+html:root[data-ui="light"][data-theme] :is(.seg-btn.on, .fx-seg-btn.on, .set-segbtn.on, .cs-segbtn.on, .xa-kind.on, .aspect-chip.on,
+  .preset-chip.on, .fxmode-btn.on, .hm-ln-chip.on, .cj-fieldrow .cj-scan.on,
+  .es-fam.on, .es-preset.on, .grad-type.on, .fill-tab.on, .mt-mode.on, .fxb-sortbtn.on, .es-toggle.on,
+  .sm-exp-b[aria-pressed="true"], .sm-look-tab[aria-pressed="true"], .sm-look-chip[aria-pressed="true"]) {
+  background: #1e1a15; background-image: none; border-color: #1e1a15; color: #fffcf6; box-shadow: none;
+}
+html:root[data-ui="light"][data-theme] :is(.seg-btn.on, .fx-seg-btn.on, .set-segbtn.on, .xa-kind.on, .aspect-chip.on, .fxmode-btn.on,
+  .es-fam.on, .es-preset.on, .grad-type.on, .fill-tab.on, .mt-mode.on, .fxb-sortbtn.on, .es-toggle.on) :is(svg, svg *, span, .ico) {
+  color: #fffcf6; stroke: #fffcf6; border-color: #fffcf6;
+}
+html:root[data-ui="light"][data-theme] :is(.grad-type.on, .fill-tab.on) svg [fill]:not([fill="none"]) { fill: #fffcf6; }
+html:root[data-ui="light"][data-theme] .mt-vbox-lab.mt-vbox-axis.on { background: #1e1a15; color: #fffcf6; }
+html:root[data-ui="light"][data-theme] .mt-vbox-val { color: #1e1a15; }
+html:root[data-ui="light"][data-theme] .blend-cat.active { border-color: #1e1a15; }
+html:root[data-ui="light"][data-theme] .blend-cat.active .blend-check { color: #1e1a15; }
+/* the computer Home tabs: the active one is the ink chip (dark: the paper chip) */
+@media (min-width: 701px) {
+  html:root[data-ui="light"][data-theme] #home-screen .hm-tab.active { background: #1e1a15; background-image: none; color: #fffcf6; border-color: transparent; box-shadow: none; }
+  html:root[data-ui="light"][data-theme] #home-screen .hm-tab.active :is(svg, svg *, .hm-tab-ico, .hm-tab-label) { color: #fffcf6; }
+}
+/* the canvas and New-project aspect tiles (L6): a chosen tile is ink-outlined paper, the label in ink */
+html:root[data-ui="light"][data-theme] .hm-aspect.active { background: #ebe3d6; background-image: none; border-color: #1e1a15; color: #1e1a15; box-shadow: none; }
+html:root[data-ui="light"][data-theme] .hm-aspect.active :is(span, .ac-frame) { color: #1e1a15; border-color: #1e1a15; }
+html:root[data-ui="light"][data-theme] .aspect-chip.on .ac-frame { border-color: #fffcf6; }
+html:root[data-ui="light"][data-theme] .hm-bg-sw.active { border-color: #1e1a15; box-shadow: 0 0 0 2px #fffcf6, 0 0 0 3.5px #1e1a15; }
+/* M1 mirrored: Simple trays. A chosen tool is ink on a soft chip (never a line under it: his rule of 23 Nov); a chosen look
+   or effect tile has an ink ring */
+html:root[data-ui="light"][data-theme] .sm-tool[aria-pressed="true"] { color: #1e1a15; background: #ebe3d6; box-shadow: none; border-radius: 9px; }
+html:root[data-ui="light"][data-theme] .sm-look-tile[aria-pressed="true"] .sm-look-th,
+html:root[data-ui="light"][data-theme] .sm-fx-tile[aria-pressed="true"] .sm-fx-th { box-shadow: 0 0 0 2px #1e1a15; }
+html:root[data-ui="light"][data-theme] .sm-caplook[aria-pressed="true"] .sm-caplook-s { box-shadow: 0 0 0 2px #1e1a15; }
+/* M5 mirrored: Paste look. Off tiles are paper; a chosen tile is a deeper paper with an ink hairline */
+html:root[data-ui="light"][data-theme] .ps-cat { background: #fffcf6; border-color: #ddd3c3; color: #6c6256; box-shadow: none; }
+html:root[data-ui="light"][data-theme] .ps-cat.on { background: #ebe3d6; border-color: #1e1a15; color: #1e1a15; box-shadow: none; }
+html:root[data-ui="light"][data-theme] .ps-cat.on :is(svg, svg *, span, .ps-cat-cap) { color: #1e1a15; stroke: #1e1a15; }
+
+/* H3. QUIET TILES, as dark: the Add sheet is one surface, one hairline, one ink; the active tab is the only colour. */
+html:root[data-ui="light"][data-theme] .addmenu-card,
+html:root[data-ui="light"][data-theme] .addmenu-tab { --am-tint: 86, 77, 66 !important; }
+html:root[data-ui="light"][data-theme] .addmenu-card:not(.has-thumb),
+html:root[data-ui="light"][data-theme] .addmenu-card:not([class*="addmenu-card--"]):not(.addmenu-media):not(.has-thumb) {
+  background: #fffcf6; background-image: none; border: 1px solid #ddd3c3; box-shadow: none;
+}
+html:root[data-ui="light"][data-theme] .addmenu-card:not(.has-thumb):hover { background: #f8f3ea; border-color: #c3b6a2; }
+html:root[data-ui="light"][data-theme] .addmenu-card::before,
+html:root[data-ui="light"][data-theme] .addmenu-card::after { display: none !important; animation: none !important; }
+html:root[data-ui="light"][data-theme] .addmenu-card .addmenu-lbl { color: #564d42; }
+html:root[data-ui="light"][data-theme] .addmenu-card > .addmenu-ic,
+html:root[data-ui="light"][data-theme] .addmenu-card .addmenu-ic { color: #564d42; }
+html:root[data-ui="light"][data-theme] .addmenu-card .addmenu-ic svg [stroke^="url"] { stroke: currentColor; }
+html:root[data-ui="light"][data-theme] .addmenu-card .addmenu-ic svg [fill^="url"] { fill: currentColor; }
+html:root[data-ui="light"][data-theme] .addmenu-card.addmenu-card--ico { background: #fffcf6; border-color: #ddd3c3; }
+html:root[data-ui="light"][data-theme] .addmenu-tab { background: transparent; border-color: transparent; box-shadow: none; color: #564d42; }
+html:root[data-ui="light"][data-theme] .addmenu-tab.active { --am-tint: 198, 60, 27 !important; background: rgba(198, 60, 27, .08); border-color: rgba(198, 60, 27, .5); color: #b33619; box-shadow: none; }
+html:root[data-ui="light"][data-theme] .am-glint { display: none !important; }
+html:root[data-ui="light"][data-theme] .addmenu-tab:not(.active) :is(svg, svg *) { stroke: #564d42; color: #564d42; }
+html:root[data-ui="light"][data-theme] .addmenu-tab:not(.active) svg [fill^="url"] { fill: #564d42; }
+html:root[data-ui="light"][data-theme] .addmenu-tab.active :is(svg, svg *) { stroke: #c63c1b; color: #c63c1b; }
+html:root[data-ui="light"][data-theme] .addmenu-tab.active svg [fill^="url"] { fill: #c63c1b; }
+html:root[data-ui="light"][data-theme] .addmenu-ic svg [fill="url(#fm-ic-sky)"] { fill: none !important; stroke: currentColor !important; stroke-width: 1.7; }
+/* the inspector category cards: no ring, no shine, no per-card hue; one surface, one hairline, one ink */
+html:root[data-ui="light"][data-theme] .cat-card { animation: none !important; box-shadow: none; background: #fffcf6; background-image: none; border-color: #ddd3c3; }
+html:root[data-ui="light"][data-theme] .cat-card::before { display: none !important; }
+html:root[data-ui="light"][data-theme] .cat-card:hover { background: #f8f3ea; border-color: #c3b6a2; }
+html:root[data-ui="light"][data-theme] .cat-card:not(.cat-card-disabled) > .cat-ico,
+html:root[data-ui="light"][data-theme] .cat-ico { color: #564d42 !important; }
+html:root[data-ui="light"][data-theme] .cat-ico svg *:not([stroke="none"]) { stroke: currentColor; }
+html:root[data-ui="light"][data-theme] .cat-ico svg [fill]:not([fill="none"]) { fill: currentColor; }
+html:root[data-ui="light"][data-theme] .cat-ico svg stop { stop-color: currentColor; }
+html:root[data-ui="light"][data-theme] .cat-label { color: #564d42; }
+/* tutorial tiles: one quiet tile with the number in ink ("Start here" keeps its vermilion cut) */
+html:root[data-ui="light"][data-theme] .hm-thumb.tut-thumb { background: #ebe3d6 !important; color: #1e1a15; box-shadow: inset 0 0 0 1px #ddd3c3; }
+/* the canvas dialog's and Share live's row icons: no disc, an ink glyph */
+html:root[data-ui="light"][data-theme] .cv-mini-ico { background: transparent; background-image: none; border-color: transparent; box-shadow: none; }
+html:root[data-ui="light"][data-theme] :is(.cv-mini-ico, .cv-mini-ico svg, .cv-mini-ico svg *) { color: #564d42; stroke: #564d42; }
+/* travelling glints and sheens are decoration: gone */
+html:root[data-ui="light"][data-theme] :is(.hm-glint, .sfx-glint, .vr-glint, .hm-glint i, .sfx-glint i, .vr-glint i) { display: none !important; animation: none !important; }
+
+/* H3. HOME: flat paper ground, flat cards with a hairline, no wash, no shadowed glass. */
+html:root[data-ui="light"][data-theme] #hm-bleed { background: none; }
+html:root[data-ui="light"][data-theme] #home-screen::before,
+html:root[data-ui="light"][data-theme] #home-screen::after { background: none; }
+html:root[data-ui="light"][data-theme] #home-screen { background: #f3eee5; background-image: none; }
+html:root[data-ui="light"][data-theme] .hm-card { background: #fffcf6; background-image: none; border-color: #ddd3c3; box-shadow: none; }
+html:root[data-ui="light"][data-theme] .hm-card::before,
+html:root[data-ui="light"][data-theme] .hm-card::after { animation: none !important; opacity: 0 !important; }
+/* M8. The pinned card is the same card; the pin glyph alone marks it (selection keeps the vermilion) */
+html:root[data-ui="light"][data-theme] .hm-card.is-pinned,
+html:root[data-ui="light"][data-theme] .hm-card.is-pinned:hover:not(.fm-card-press) { background: #fffcf6; background-image: none; border-color: #ddd3c3; box-shadow: none; }
+html:root[data-ui="light"][data-theme] .hm-card.is-pinned .hm-name { color: #1e1a15; }
+html:root[data-ui="light"][data-theme] :is(.hm-pin svg, .hm-pin svg *) { color: #1e1a15; fill: #1e1a15; stroke: #1e1a15; }
+html:root[data-ui="light"][data-theme] .hm-card.hm-open { border-color: #ddd3c3; }
+/* L2. The OPEN tag: ink and paper (dark: paper and ink) */
+html:root[data-ui="light"][data-theme] .hm-open-badge { background: #1e1a15; background-image: none; color: #fffcf6; box-shadow: none; text-shadow: none; }
+/* the + : a flat vermilion disc with a white +, a small neutral drop (no ring, no glow) */
+html:root[data-ui="light"][data-theme] :is(#hm-new, #add-fab) {
+  background: #c63c1b !important; background-image: none !important; color: #fff; border: none;
+  box-shadow: 0 4px 12px -4px rgba(60, 40, 20, .35); filter: none;
+}
+html:root[data-ui="light"][data-theme] :is(#hm-new, #add-fab):hover { background: #b53517 !important; filter: none; }
+html:root[data-ui="light"][data-theme] :is(#hm-new, #add-fab)::before,
+html:root[data-ui="light"][data-theme] :is(#hm-new, #add-fab)::after,
+html:root[data-ui="light"][data-theme] #add-fab .fab-aura { display: none !important; animation: none !important; }
+html:root[data-ui="light"][data-theme] :is(#hm-new, #add-fab) > svg { color: #fff; stroke: #fff; }
+/* the iOS top strip (#920): the light Home's real top is now the flat ground, not the old peach bleed */
+html:root[data-ui="light"] .fm-edge[data-edge="home-light"] { background-color: #f3eee5; }
+html:root[data-ui="light"] .fm-edge[data-edge="home-light-dim"] { background-color: #afaaa3; }   /* measured: a question's dim over #f3eee5 */
+/* #1255, the preview's first browser run: <html> under the Home is the same flat ground (queue 920's split: its COLOUR is
+   the top iOS reads). The generated part kept today's split (#fdfdfc under a #fffcf6 layer) while #home-screen went flat
+   #f3eee5 above, so <html> and the Home disagreed. */
+html:root[data-ui="light"][data-theme]:not(.splash-on):has(#home-screen:not(.hidden)) { background-color: #f3eee5; background-image: none; }
+/* EVERY DIM AND PANEL'S TAB on a phone (#1255, the preview's first browser run). Each colour is what the page paints at the top
+   centre with that screen open, MEASURED at 380 by '1255 · with every dim ...' run under this look (tests/run.html?look=light).
+   Today's dims share a few tabs because over the navy bar they land within a level or two; on paper their alphas spread them
+   far apart, so where two that share a tab differ the tab takes the colour of the one that is up, in the order index.html's
+   table already gives (Notes, then Sound effects, the recorder, Paste look; Keyboard shortcuts over the grown Add menu; Notes
+   made big over Keyboard shortcuts made big; a question over Notes or Settings is two dims). Which tab shows is index.html's. */
+html:root[data-ui="light"][data-theme] .add-stretch-dim { background-color: rgba(30, 24, 16, .34) !important; }   /* the grown Add menu's dim is written by js/mobile.js (a .55 cold black), so no generator saw it: the identity's light scrim */
+html:root[data-ui="light"] .fm-edge[data-edge="home-light-settings"] { background-color: #f9f7f4; }   /* Settings over the Home: its panel's top */
+html:root[data-ui="light"] .fm-edge[data-edge="home-light-reframe-dim"] { background-color: #8f8a84; }   /* the photo sheet (Move and scale) */
+html:root[data-ui="light"] .fm-edge[data-edge="home-light-reframe-ask"] { background-color: #6c6862; }   /* a question over it */
+@media (max-width: 700px) {
+  html:root[data-ui="light"] .fm-edge[data-edge="editor-card-dim"] { background-color: #aea9a1; }   /* Notes, Before you export */
+  html:root[data-ui="light"] > body:has(> .sfx-scrim):not(:has(> .np-scrim:not(.np-closing))) > .fm-edge[data-edge="editor-card-dim"] { background-color: #bbb5ac; }   /* Sound effects */
+  html:root[data-ui="light"] > body:has(> #vr-overlay:not(.hidden)):not(:has(> .np-scrim:not(.np-closing), > .sfx-scrim)) > .fm-edge[data-edge="editor-card-dim"] { background-color: #b7b1a7; }   /* the recorder */
+  html:root[data-ui="light"] > body:has(> .ps-overlay):not(:has(> .np-scrim:not(.np-closing), > .sfx-scrim, > #vr-overlay:not(.hidden))) > .fm-edge[data-edge="editor-card-dim"] { background-color: #c7c1b8; }   /* Paste look */
+  html:root[data-ui="light"] .fm-edge[data-edge="editor-export-dim"] { background-color: #aea9a1; }   /* Export, Canvas settings, the progress, the ready card */
+  html:root[data-ui="light"] .fm-edge[data-edge="editor-thin-dim"] { background-color: #aea9a1; }   /* the grown Add menu, under the light scrim above */
+  html:root[data-ui="light"] > body:has(> #shortcuts-overlay:not(.hidden):not(.pb-closing)) > .fm-edge[data-edge="editor-thin-dim"] { background-color: #bbb5ac; }   /* Keyboard shortcuts */
+  html:root[data-ui="light"] .fm-edge[data-edge="deep-dim"] { background-color: #aea9a1; }   /* Notes made big */
+  html:root[data-ui="light"] > body:has(> #shortcuts-overlay.pb-host-big:not(.hidden):not(.pb-closing)):not(:has(> .np-scrim.pb-host-big:not(.np-closing))) > .fm-edge[data-edge="deep-dim"] { background-color: #f2ece3; }   /* Keyboard shortcuts made big: on paper a sheet, not a dim */
+  html:root[data-ui="light"] .fm-edge[data-edge="editor-settings"] { background-color: #fffcf6; }   /* the Settings panel's own top */
+  html:root[data-ui="light"] .fm-edge[data-edge="editor-panel"] { background-color: #fffcf6; }   /* Elements, the template fill */
+  html:root[data-ui="light"] > body:has(> #fm-ask:not(.hidden)):has(> .np-scrim:not(.np-closing)) > .fm-edge[data-edge="editor-dim"] { background-color: #827b72; }   /* a question over Notes */
+  html:root[data-ui="light"] > body:has(> #fm-ask:not(.hidden)):has(> .set-scrim.open) > .fm-edge[data-edge="editor-dim"] { background-color: #b8b2ab; }   /* a question over Settings */
+}
+
+/* H3 + L5. Inspector, Settings, Director: flat paper panels (no corner wash). Stage: flat. */
+html:root[data-ui="light"][data-theme] #inspector-panel::after { background: none; }
+html:root[data-ui="light"][data-theme] :is(#ai-panel, #ai-chat) { background: #fffcf6; background-image: none; }
+@media (min-width: 701px) { html:root[data-ui="light"][data-theme] #stage { background: var(--l-stage); background-image: none; } }
+
+/* EXPORT: a flat vermilion key with a white arrow (no gradient, no glow), phone and computer. M4: on a computer the
+   transport row's Export is the same filled key (ids outrank the rule above). */
+html:root[data-ui="light"][data-theme] :is(#btn-export, .m-export) { background: #c63c1b; background-image: none; color: #fff; border: none; box-shadow: none; filter: none; }
+html:root[data-ui="light"][data-theme] :is(#btn-export, .m-export):hover { background: #b53517; }
+html:root[data-ui="light"][data-theme] :is(#btn-export, .m-export) :is(svg, .ico) { color: #fff; stroke: currentColor; }
+html:root[data-ui="light"][data-theme] #transport #btn-export { background: #c63c1b !important; background-image: none !important; color: #fff !important; border: none !important; box-shadow: none !important; border-radius: 9px; }
+html:root[data-ui="light"][data-theme] #transport #btn-export:hover { background: #b53517 !important; }
+/* every other primary key: one flat vermilion */
+html:root[data-ui="light"][data-theme] :is(.btn-accent, .accent.fm-ask-ok, #hm-create, .tut-next, .cs-start.accent) { background-color: #c63c1b; background-image: none; box-shadow: none; color: #fff; }
+
+/* M6. Numbered steps are ink chips; section headers and back links are dim ink (dark: ink chips and dim ink) */
+html:root[data-ui="light"][data-theme] :is(.cs-how b, .elb-way-n, .tfill-slot-n) { background: #ebe3d6; color: #1e1a15; }
+html:root[data-ui="light"][data-theme] .tfill-slot.is-sel .tfill-slot-n { background: #c63c1b; color: #fff; }
+html:root[data-ui="light"][data-theme] .tut-steps li::before { background: #ebe3d6; color: #1e1a15; }
+html:root[data-ui="light"][data-theme] .set-grouptitle { color: #564d42; }
+html:root[data-ui="light"][data-theme] :is(.cat-back, .fxb-back:not(.fxb-subdone), .afxb-catnav-btn) { color: #564d42; }
+html:root[data-ui="light"][data-theme] :is(.fxb-search-btn, .fxb-search-btn svg, .fxb-search-btn svg *) { color: #564d42; stroke: #564d42; box-shadow: none; }
+html:root[data-ui="light"][data-theme] :is(.hm-empty-mark, .am-empty-mark, .elb-empty-mark, .elb-empty-mark svg, .elb-empty-mark svg *) { color: #6c6256; stroke: #6c6256; }
+/* L3. Director: the key stays the accent; the links are dim ink, underlined */
+html:root[data-ui="light"][data-theme] :is(.ai-link, .ai-getkey) { color: #564d42; text-decoration: underline; text-underline-offset: 2px; }
+
+/* H4. LAYER COLOURS follow the layer TYPE in both looks (js/timeline.js's cutlineClipColor now runs under light too,
+       reading this palette), and the Simple lanes use the same palette. Labels are ink. */
+html:root[data-ui="light"][data-theme] :is(.sm-k-text, .sm-sec-text .sm-glyph) { background: #b896ec; }
+html:root[data-ui="light"][data-theme] :is(.sm-k-captions, .sm-sec-captions .sm-glyph) { background: #ecb93e; }
+html:root[data-ui="light"][data-theme] :is(.sm-k-overlay, .sm-sec-overlay .sm-glyph) { background: #7aaed6; }
+html:root[data-ui="light"][data-theme] .sm-k-block { background: repeating-linear-gradient(135deg, #7aaed6 0 5px, #6b9fc8 5px 10px); }
+html:root[data-ui="light"][data-theme] .sm-k-effect { background: #86c290; }
+html:root[data-ui="light"][data-theme] .sm-snd { background: #86c290; color: #14110d; }
+html:root[data-ui="light"][data-theme] .sm-clip:not(:has(> .sm-strip)) { color: #14110d; text-shadow: none; }
+html:root[data-ui="light"][data-theme] #sm-timeline .sm-item { font-weight: 700; }
+/* the Full timeline's selected track head: a quiet raised cell (the bar already says which layer), as dark */
+html:root[data-ui="light"][data-theme] .track-head.sel { background: #ebe3d6 !important; background-image: none !important; box-shadow: inset 0 0 0 1px #c3b6a2; }
+/* the "Tap to add a layer" +: a quiet ink box (as dark's M7), no vermilion */
+html:root[data-ui="light"][data-theme] .tl-addrow-plus { color: #1e1a15; background: transparent; border-radius: 6px; box-shadow: inset 0 0 0 1px #c3b6a2; }
+/* L4, both looks: Simple tool bar labels at 11px */
+html:root[data-ui="light"][data-theme] #sm-tools .sm-tool { font-size: 11px; }
+/* EFFECTS: the gold FAVES slab is a quiet paper row with a gold star (as dark) */
+html:root[data-ui="light"][data-theme] .fxb-favmore-face { background: #f8f3ea; background-image: none; border: 1px solid #ddd3c3; color: #1e1a15; box-shadow: none; text-shadow: none; }
+html:root[data-ui="light"][data-theme] .fxb-favmore-star { filter: none; color: #b07d00; fill: #b07d00; }
+/* M1 (light mirror): the Simple editor's Extras sheet: the chosen tab is the ink chip, not a vermilion tile */
+html:root[data-ui="light"][data-theme] body.ed-simple .addmenu-tab.active { background: #1e1a15; border-color: #1e1a15; color: #fffcf6; }
+html:root[data-ui="light"][data-theme] body.ed-simple .addmenu-tab.active :is(svg, svg *, .addmenu-lbl) { stroke: #fffcf6; color: #fffcf6; }
+html:root[data-ui="light"][data-theme] body.ed-simple .addmenu-tab.active svg [fill^="url"] { fill: #fffcf6; }
+/* the probe's last stragglers: Settings group titles over the Home, and the draw bar's outline (a hairline, as dark) */
+html:root[data-ui="light"][data-theme] :is(.set-group, #set-friends) > .set-grouptitle { color: #564d42; }
+html:root[data-ui="light"][data-theme] :is(#draw-bar, #crop-bar, #mask-bar, #mpath-bar, #touchup-bar) { border-color: #ddd3c3; box-shadow: 0 8px 20px -8px rgba(60, 40, 20, .3); }
+/* H3. Editor dialogs: the identity's solid scrim (--scrim), no blur behind it */
+html:root[data-ui="light"][data-theme] :is(#export-dialog, #export-overlay, #export-ready, #canvas-dialog) { background-color: rgba(30, 24, 16, .34); }

@@ -106,14 +106,15 @@ window.FM = window.FM || {};
     const home = toDisp(l, 0.5, 0.5);                    // the fill box's centre
     const now = toDisp(l, 0.5 + o.x, 0.5 + o.y);         // where the drag has put it
     // a leash back to the untouched position, so "how far have I moved this" is answerable at a glance
+    const UI = document.documentElement.getAttribute('data-ui'), LT = UI === 'light', CT = UI === 'cutline';   // #1255, the new light look: vermilion, not teal
     if (Math.abs(o.x) > 1e-4 || Math.abs(o.y) > 1e-4) {
-      g.save(); g.setLineDash([4, 4]); g.strokeStyle = 'rgba(41,217,187,.55)'; g.lineWidth = 1.2;
+      g.save(); g.setLineDash([4, 4]); g.strokeStyle = LT ? 'rgba(226,82,44,.6)' : CT ? 'rgba(255,178,159,.6)' : 'rgba(41,217,187,.55)'; g.lineWidth = 1.2;
       g.beginPath(); g.moveTo(home.x, home.y); g.lineTo(now.x, now.y); g.stroke(); g.restore();
     }
     g.lineWidth = 1.8; g.strokeStyle = '#0b1016';
     g.beginPath(); g.arc(now.x, now.y, 11, 0, 6.2832);
     g.fillStyle = 'rgba(10,16,24,.42)'; g.fill(); g.stroke();
-    g.strokeStyle = '#29d9bb'; g.lineWidth = 1.6;
+    g.strokeStyle = LT ? '#e2522c' : CT ? '#ffb29f' : '#29d9bb'; g.lineWidth = 1.6;
     g.beginPath(); g.arc(now.x, now.y, 11, 0, 6.2832); g.stroke();
     // four little arrows = "drag me"; a ring alone reads as a handle you are meant to grab precisely
     g.beginPath();

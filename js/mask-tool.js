@@ -139,12 +139,16 @@ window.FM = window.FM || {};
     const k = dispScale();
     const map = p => { const o = FM.projectToOverlay(cv, p[0], p[1]); return [o.x, o.y]; };   // queue 561: through the crop origin, same as the point editor
     if (!pts.length) return;
+    // #1255, the new light look: under the light UI the marks take the vermilion cut, not the old teal.
+    const LT = document.documentElement.getAttribute('data-ui') === 'light';
+    const CT = document.documentElement.getAttribute('data-ui') === 'cutline';   // #1255 (the design review's L7): Cutline dark marks in its --focus
+    const AC = LT ? '#d9411f' : CT ? '#ffb29f' : '#29d9bb', ACR = LT ? '217,65,31' : CT ? '255,178,159' : '41,217,187', RIM = LT ? '#3a1408' : CT ? '#2a0d06' : '#06231d';
     // filled preview of the reveal region (real curve, smooth flags honoured)
     g.beginPath();
     FM.buildSubPath(g, pts, closed, map);
-    g.fillStyle = 'rgba(41,217,187,.14)';
+    g.fillStyle = 'rgba(' + ACR + ',.14)';
     if (closed) g.fill();
-    g.strokeStyle = 'rgba(41,217,187,.95)'; g.lineWidth = 1.5; g.stroke();
+    g.strokeStyle = 'rgba(' + ACR + ',.95)'; g.lineWidth = 1.5; g.stroke();
     // edge insert rings (edit mode only) — sit ON the curve
     if (closed) {
       g.lineWidth = 1.25;
@@ -161,11 +165,11 @@ window.FM = window.FM || {};
       const q = map(p), isSel = pi === sel, smooth = p[2] === 1;
       const closeTarget = !closed && pi === 0 && pts.length >= 3;
       g.beginPath();
-      if (closeTarget) { g.arc(q[0], q[1], 8, 0, 6.2832); g.fillStyle = 'rgba(10,14,20,.6)'; g.fill(); g.lineWidth = 2; g.strokeStyle = '#29d9bb'; g.stroke(); return; }
+      if (closeTarget) { g.arc(q[0], q[1], 8, 0, 6.2832); g.fillStyle = 'rgba(10,14,20,.6)'; g.fill(); g.lineWidth = 2; g.strokeStyle = AC; g.stroke(); return; }
       if (smooth) g.arc(q[0], q[1], isSel ? 6 : 5, 0, 6.2832);
       else g.rect(q[0] - (isSel ? 5.5 : 4.5), q[1] - (isSel ? 5.5 : 4.5), isSel ? 11 : 9, isSel ? 11 : 9);
-      g.fillStyle = isSel ? '#29d9bb' : '#c7d2e2'; g.fill();
-      g.strokeStyle = '#06231d'; g.lineWidth = 1.5; g.stroke();
+      g.fillStyle = isSel ? AC : (LT ? '#fffcf6' : '#c7d2e2'); g.fill();
+      g.strokeStyle = RIM; g.lineWidth = 1.5; g.stroke();
     });
   }
   function loop() { if (!active) return; draw(); raf = requestAnimationFrame(loop); }
