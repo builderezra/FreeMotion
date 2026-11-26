@@ -3259,20 +3259,76 @@ window.FM = window.FM || {};
      edit works in a live session as Full's do (D14 A). A keyed value moves as a whole through FM.shiftProp, so the key count never
      changes (§8.5 "a panel row never adds a keyframe in Simple"). No DOM here: js/simple-tools.js draws the panel. */
   const ADJ_NAME = 'Adjust';
-  /* the six Adjust controls: the panel's number u (−100…100, Vignette 0…100; 0 = untouched) stands for the effect's own value
-     zero + u / 100 × span, inside every registry range (brightness / contrast / saturate 0–3, exposure ±5 EV, temperature ±100, vignette 0–1) */
+  /* THE ADJUST CONTROLS. Six until #1243 S19 (his words: "its adjust menu… way more options… film grain… fade, temperature, blacks,
+     whites…"), sixteen since, in the PANEL's order under its three headings (`g`). The panel's number u (−100…100, or 0…100 where `lo`
+     is 0; 0 = untouched) stands for the effect's own value zero + u / 100 × span, inside every registry range (brightness / contrast /
+     saturate 0–3, exposure ±5 EV, Highlights & Shadows' four ±100, temperature and its tint ±100, vibrance 0–8 where 1 changes
+     nothing, faded 0–1, film grain 0–100, sharpen 0–3, clarity ±100, vignette 0–1).
+     SEVERAL CONTROLS MAY SHARE ONE EFFECT: Highlights, Shadows, Whites and Blacks are one Highlights & Shadows, Temperature and Tint
+     one Colour Temperature. Each reads and writes its own param of the one instance (adjChild finds it by type). `warmth` keeps its
+     key, which the looks saved before this carry; its word is Temperature now, his word. */
   const LOOK_ADJ = [
-    { key: 'bright', type: 'brightness', p: 'amount', zero: 1, span: 0.5, lo: -100, word: 'adjBright' },
-    { key: 'contrast', type: 'contrast', p: 'amount', zero: 1, span: 0.5, lo: -100, word: 'adjContrast' },
-    { key: 'sat', type: 'saturate', p: 'amount', zero: 1, span: 1, lo: -100, word: 'adjSat' },
-    { key: 'exposure', type: 'exposure', p: 'stops', zero: 0, span: 2, lo: -100, word: 'adjExposure' },
-    { key: 'warmth', type: 'temperature', p: 'amount', zero: 0, span: 100, lo: -100, word: 'adjWarmth' },
-    { key: 'vignette', type: 'vignette', p: 'amount', zero: 0, span: 1, lo: 0, word: 'adjVignette' }
+    { key: 'exposure', g: 'light', type: 'exposure', p: 'stops', zero: 0, span: 2, lo: -100, word: 'adjExposure' },
+    { key: 'bright', g: 'light', type: 'brightness', p: 'amount', zero: 1, span: 0.5, lo: -100, word: 'adjBright' },
+    { key: 'contrast', g: 'light', type: 'contrast', p: 'amount', zero: 1, span: 0.5, lo: -100, word: 'adjContrast' },
+    { key: 'highlights', g: 'light', type: 'highlightsshadows', p: 'highlights', zero: 0, span: 100, lo: -100, word: 'adjHighlights' },
+    { key: 'shadows', g: 'light', type: 'highlightsshadows', p: 'shadows', zero: 0, span: 100, lo: -100, word: 'adjShadows' },
+    { key: 'whites', g: 'light', type: 'highlightsshadows', p: 'whites', zero: 0, span: 100, lo: -100, word: 'adjWhites' },
+    { key: 'blacks', g: 'light', type: 'highlightsshadows', p: 'blacks', zero: 0, span: 100, lo: -100, word: 'adjBlacks' },
+    { key: 'warmth', g: 'colour', type: 'temperature', p: 'amount', zero: 0, span: 100, lo: -100, word: 'adjWarmth' },
+    { key: 'tint', g: 'colour', type: 'temperature', p: 'tint', zero: 0, span: 100, lo: -100, word: 'adjTint' },
+    { key: 'sat', g: 'colour', type: 'saturate', p: 'amount', zero: 1, span: 1, lo: -100, word: 'adjSat' },
+    { key: 'vibrance', g: 'colour', type: 'vibrance', p: 'amount', zero: 1, span: 1, lo: -100, word: 'adjVibrance' },
+    { key: 'fade', g: 'finish', type: 'faded', p: 'amount', zero: 0, span: 1, lo: 0, word: 'adjFade' },
+    { key: 'grain', g: 'finish', type: 'filmgrain', p: 'amount', zero: 0, span: 100, lo: 0, word: 'adjGrain' },
+    { key: 'sharpen', g: 'finish', type: 'sharpen', p: 'amount', zero: 0, span: 2, lo: 0, word: 'adjSharpen' },
+    { key: 'clarity', g: 'finish', type: 'clarity', p: 'clarity', zero: 0, span: 100, lo: -100, word: 'adjClarity' },
+    { key: 'vignette', g: 'finish', type: 'vignette', p: 'amount', zero: 0, span: 1, lo: 0, word: 'adjVignette' }
   ];
   S.LOOK_ADJ = LOOK_ADJ;
+  /* WHAT MAKES A NEW SHARED INSTANCE DO NOTHING until its own controls move. The registry's defaults are a look, not a zero
+     (Highlights & Shadows opens at −40 / +50, Colour Temperature at +40), so without this Shadows +20 on its own would also pull the
+     highlights down, and Tint alone would warm the picture. Written once, when the instance is made. */
+  const ADJ_IDENT = { highlightsshadows: { highlights: 0, shadows: 0, whites: 0, blacks: 0, radius: 0 }, temperature: { amount: 0, tint: 0 } };
+  /* THE ORDER THE BOX RUNS ITS EFFECTS IN, which is not the panel's: Auto first (the hand controls then work on the corrected
+     picture), light and colour, detail before grain (a sharpen after the grain would sharpen the grain), the vignette last. The six
+     types Adjust had before S19 keep their order among themselves, so a look made before draws as it did. */
+  const ADJ_RUN = ['autograde', 'brightness', 'contrast', 'saturate', 'exposure', 'highlightsshadows', 'temperature', 'vibrance', 'sharpen', 'clarity', 'faded', 'filmgrain', 'vignette'];
   const lookBox = f => !!(f && f.type === FM.FX_CONTAINER && Array.isArray(f.effects) && f.sm === 1);
   const adjDef = key => LOOK_ADJ.filter(d => d.key === key)[0] || null;
   const adjChild = (box, d) => (box && d) ? (box.effects.filter(c => c && c.type === d.type)[0] || null) : null;
+  /* another control of the same instance is off its zero, or keyed: the instance has work to do without this one */
+  const adjBusy = (c, d, t) => LOOK_ADJ.some(q => q.type === d.type && q.key !== d.key && c.params && c.params[q.p] != null
+    && (FM.isAnimated(c.params[q.p]) || Math.abs(FM.evalProp(c.params[q.p], t) - q.zero) > 1e-9));
+  /* the layer's Adjust box, made (empty, Simple-made, after the filter) when there is none */
+  function adjBox(L, lk) {
+    if (lk.adjust) return lk.adjust;
+    const box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER);
+    if (!box) return null;
+    box.effects = []; box.name = ADJ_NAME; box.sm = 1;
+    L.effects.push(box);
+    return box;
+  }
+  /* a new effect goes in at its place in ADJ_RUN, among whatever the box already holds */
+  function adjPlace(box, c) {
+    const rank = x => { const i = ADJ_RUN.indexOf(x && x.type); return i < 0 ? ADJ_RUN.length : i; };
+    let at = box.effects.length;
+    while (at > 0 && rank(box.effects[at - 1]) > rank(c)) at--;
+    box.effects.splice(at, 0, c);
+  }
+  /* AUTO (#1243 S19, his words: "one slider… automatically making it look good… auto adjust"): Auto Grade on Levels inside the Adjust
+     box. It sets black, white and each colour from the picture itself, frame by frame, and starts again at a cut, so one of it over
+     the whole video suits every clip. The toggle is "it is there"; the one slider, Auto fix, is its strength. */
+  const autoChild = box => box ? (box.effects.filter(c => c && c.type === 'autograde')[0] || null) : null;
+  S.lookAuto = function (L) { return !!autoChild(S.lookOf(L).adjust); };
+  /* would this write leave the layer with no look at all (no filter, no Adjust box)? Worked out on a copy of its effects */
+  function lookEmptied(L, op) {
+    if (!L) return false;
+    const sim = { effects: JSON.parse(JSON.stringify(Array.isArray(L.effects) ? L.effects : [], FM.jsonReplacer)) };
+    S.lookApply(sim, op);
+    const now = S.lookOf(sim);
+    return !now.filter && !now.adjust;
+  }
   /* The clip's Simple-made filter (a library or saved look: it has a fid) and its Adjust box; null when there is none */
   S.lookOf = function (L) {
     const out = { filter: null, adjust: null };
@@ -3292,6 +3348,12 @@ window.FM = window.FM || {};
       const v = s == null ? 1 : FM.evalProp(s, t);
       return Math.round((isFinite(v) ? v : 1) * 100);
     }
+    if (key === 'autofix') {
+      const a = autoChild(lk.adjust);
+      if (!a) return 0;
+      const v = (a.params && a.params.strength != null) ? FM.evalProp(a.params.strength, t) : 100;
+      return Math.round(isFinite(v) ? Math.max(0, Math.min(100, v)) : 100);
+    }
     const d = adjDef(key), c = adjChild(lk.adjust, d);
     if (!c || !c.params || c.params[d.p] == null) return 0;
     const v = FM.evalProp(c.params[d.p], t);
@@ -3301,12 +3363,14 @@ window.FM = window.FM || {};
   S.lookKeyed = function (L, key) {
     const lk = S.lookOf(L);
     if (key === 'strength') return !!(lk.filter && lk.filter.params && FM.isAnimated(lk.filter.params.strength));
+    if (key === 'autofix') { const a = autoChild(lk.adjust); return !!(a && a.params && FM.isAnimated(a.params.strength)); }
     const d = adjDef(key), c = adjChild(lk.adjust, d);
     return !!(c && c.params && FM.isAnimated(c.params[d.p]));
   };
   /* THE ONE WRITE for Strength and Adjust: the runner's plans call it, and the panel calls it on the live layer while a finger is
      still on a slider (a preview the panel takes back, to the byte, before the one step runs). op: {kind: 'strength', v} with v in
-     percent, {kind: 'adjust', key, v} with v the control's u, or {kind: 'reset'}. Returns true when it wrote. */
+     percent, {kind: 'adjust', key, v} with v the control's u, {kind: 'auto', on} (the toggle: on is Auto fix at 100), {kind: 'autofix', v}
+     with v in percent (0 takes Auto off), or {kind: 'reset'}. Returns true when it wrote. */
   S.lookApply = function (L, op) {
     if (!L || !op || !FM.fxRegistry) return false;
     if (!Array.isArray(L.effects)) L.effects = [];
@@ -3323,14 +3387,36 @@ window.FM = window.FM || {};
       if (i >= 0) L.effects.splice(i, 1);
       return i >= 0;
     }
+    if (op.kind === 'auto' || op.kind === 'autofix') {
+      const v = op.kind === 'auto' ? (op.on ? 100 : 0) : Math.max(0, Math.min(100, Math.round(+op.v || 0)));
+      let box = lk.adjust, a = autoChild(box);
+      const keyedA = !!(a && a.params && FM.isAnimated(a.params.strength));
+      if (!v && !keyedA) {
+        if (a) box.effects.splice(box.effects.indexOf(a), 1);
+        if (box && !box.effects.length) L.effects.splice(L.effects.indexOf(box), 1);
+        return !!a;
+      }
+      if (!a) {
+        a = FM.fxRegistry.makeInstance('autograde');
+        if (!a) return false;
+        if (!a.params || typeof a.params !== 'object') a.params = {};
+        a.params.mode = 0;   // Levels
+        box = adjBox(L, lk);
+        if (!box) return false;
+        adjPlace(box, a);
+      }
+      FM.shiftProp(a.params, 'strength', v, t, { min: 0, max: 100 });
+      return true;
+    }
     if (op.kind !== 'adjust') return false;
     const d = adjDef(op.key);
     if (!d) return false;
     const u = Math.max(d.lo, Math.min(100, Math.round(+op.v || 0)));
     let box = lk.adjust, c = adjChild(box, d);
     const keyed = !!(c && c.params && FM.isAnimated(c.params[d.p]));
-    /* back to zero: its effect goes, and an empty box with it */
-    if (!u && !keyed) {
+    /* back to zero: its effect goes, and an empty box with it. An effect several controls share (ADJ_IDENT) stays while another of them
+       is off zero or keyed, and then only this control's own value goes back to its zero, by the write below */
+    if (!u && !keyed && !(c && adjBusy(c, d, t))) {
       if (c) box.effects.splice(box.effects.indexOf(c), 1);
       if (box && !box.effects.length) L.effects.splice(L.effects.indexOf(box), 1);
       return true;
@@ -3338,21 +3424,126 @@ window.FM = window.FM || {};
     if (!c) {
       c = FM.fxRegistry.makeInstance(d.type);
       if (!c) return false;
-      if (!box) {
-        box = FM.fxRegistry.makeInstance(FM.FX_CONTAINER);
-        if (!box) return false;
-        box.effects = []; box.name = ADJ_NAME; box.sm = 1;
-        L.effects.push(box);
-      }
-      const rank = x => LOOK_ADJ.findIndex(q => q.type === (x && x.type));
-      let at = box.effects.length;
-      while (at > 0 && rank(box.effects[at - 1]) > rank(c)) at--;
-      box.effects.splice(at, 0, c);
+      if (!c.params || typeof c.params !== 'object') c.params = {};
+      const ident = ADJ_IDENT[d.type];
+      if (ident) Object.keys(ident).forEach(k => { c.params[k] = ident[k]; });
+      box = adjBox(L, lk);
+      if (!box) return false;
+      adjPlace(box, c);
     }
     if (!c.params || typeof c.params !== 'object') c.params = {};
     const row = (FM.fxRegistry.paramsOf(d.type) || []).filter(q => q && q.key === d.p)[0] || {};
     FM.shiftProp(c.params, d.p, d.zero + u / 100 * d.span, t, { min: row.min, max: row.max });
     return true;
+  };
+  /* ═══ #1243 S18: HIS OWN SAVED LOOKS. His words: "the ability to have your own like preset filters… filters, then adjust, and then
+     video quality, and then you can save it as a preset." A saved look is a RECIPE of values that is re-applied (the plan's pick A, the
+     recommended one), not a baked filter: the filter's id and its Strength, every Adjust control that is off zero, and Auto fix. So a
+     filter's Strength never fades Adjust, an effect that is improved later improves the saved look with it, and `quality` has a place
+     for S20. It belongs to the DEVICE, as his favourites do (localStorage, 60 at most), not to a project.
+     ONE VALIDATOR reads every recipe, whatever wrote it. The Adjust keys it keeps are LOOK_ADJ's own, never a copy of the list (a
+     control added there is kept here with no second list to forget: the whitelist-drift lesson); each value is held inside its
+     control's range; anything it does not know is dropped; and a recipe that would change nothing is not a recipe. The filter's id is
+     only ever a key FM.filters.get is asked for (the filter put on a layer carries the id of the definition that was found, never
+     this string), so any short id with no space in it is kept: a filter whose id the validator refused would be saved without it,
+     and nothing would say so. */
+  const LOOKS_KEY = 'fm.sm.looks', LOOKS_MAX = 60, LOOK_NAME_MAX = 40;
+  const lookName = s => typeof s === 'string' ? Array.from(s.replace(/\s+/g, ' ').trim()).slice(0, LOOK_NAME_MAX).join('').trim() : '';
+  function cleanRecipe(r) {
+    if (!r || typeof r !== 'object' || Array.isArray(r)) return null;
+    const id = (typeof r.id === 'string' && /^l[a-z0-9]{1,24}$/.test(r.id)) ? r.id : '', name = lookName(r.name);
+    if (!id || !name) return null;
+    const int = (v, lo, hi) => { const n = Math.round(+v); return ((typeof v === 'number' || typeof v === 'string') && isFinite(n)) ? Math.max(lo, Math.min(hi, n)) : 0; };
+    const fid = (typeof r.fid === 'string' && /^[^\s\x00-\x1f\x7f]{1,64}$/.test(r.fid)) ? r.fid : null;
+    const src = (r.adjust && typeof r.adjust === 'object' && !Array.isArray(r.adjust)) ? r.adjust : {}, adjust = {};
+    LOOK_ADJ.forEach(d => { if (Object.prototype.hasOwnProperty.call(src, d.key)) { const u = int(src[d.key], d.lo, 100); if (u) adjust[d.key] = u; } });
+    const auto = int(r.auto, 0, 100);
+    if (!fid && !Object.keys(adjust).length && !auto) return null;
+    return { id: id, name: name, fid: fid, strength: fid ? (r.strength == null ? 100 : int(r.strength, 0, 100)) : 100, adjust: adjust, auto: auto, quality: {}, v: 1 };
+  }
+  /* every saved look on this device, newest first, each through the validator; a bad store reads as none */
+  S.looksRead = function () {
+    let raw = null;
+    try { raw = JSON.parse(localStorage.getItem(LOOKS_KEY) || '[]'); } catch (e) { raw = null; }
+    const seen = Object.create(null), list = [];
+    (Array.isArray(raw) ? raw : []).forEach(x => { const r = cleanRecipe(x); if (r && !seen[r.id] && list.length < LOOKS_MAX) { seen[r.id] = 1; list.push(r); } });
+    return list;
+  };
+  const looksWrite = list => { try { localStorage.setItem(LOOKS_KEY, JSON.stringify(list)); return true; } catch (e) { return false; } };
+  /* a layer's look as a recipe's values, read at the playhead as the panel reads them; null when it has no look */
+  S.lookRecipeOf = function (L) {
+    const lk = S.lookOf(L);
+    if (!lk.filter && !lk.adjust) return null;
+    const adjust = {};
+    LOOK_ADJ.forEach(d => { const u = S.lookValue(L, d.key); if (u) adjust[d.key] = u; });
+    return { fid: lk.filter ? lk.filter.fid : null, strength: lk.filter ? S.lookValue(L, 'strength') : 100, adjust: adjust, auto: S.lookValue(L, 'autofix'), quality: {} };
+  };
+  /* two looks' values are the same look (a filter's Strength counts only where there is a filter) */
+  const sameLook = (a, b) => !!a && !!b && (a.fid || null) === (b.fid || null) && (!a.fid || a.strength === b.strength) && (a.auto || 0) === (b.auto || 0)
+    && LOOK_ADJ.every(d => (a.adjust[d.key] || 0) === (b.adjust[d.key] || 0));
+  /* any control of the layer's look changes over time (keyed in Full): its values at the playhead are then not the whole of it */
+  const lookKeyedAny = L => ['strength', 'autofix'].concat(LOOK_ADJ.map(d => d.key)).some(k => S.lookKeyed(L, k));
+  /* THE ONE WRITE of a saved look onto a layer, whole: its filter in the filter's place (a recipe with no filter takes the filter off;
+     one whose own filter is gone, `gone`, leaves the filter he has), that filter's Strength, then Adjust and Auto from nothing: the
+     Adjust box is emptied WHERE IT STANDS and filled from the recipe (so an effect added after it in Full stays after it), and goes
+     only if the recipe leaves it empty. `box` is the recipe's filter made for this layer, or null. The plan runs this on a copy
+     first, to know what it would leave. */
+  function recipeWrite(L, rec, box, gone) {
+    if (!Array.isArray(L.effects)) L.effects = [];
+    const now = S.lookOf(L), i = L.effects.indexOf(now.filter);
+    if (i >= 0) { if (box) L.effects.splice(i, 1, box); else if (!gone) L.effects.splice(i, 1); }
+    else if (box) { const a = L.effects.indexOf(now.adjust); if (a >= 0) L.effects.splice(a, 0, box); else L.effects.push(box); }
+    if (box) S.lookApply(L, { kind: 'strength', v: rec.strength });
+    if (now.adjust) now.adjust.effects = [];
+    LOOK_ADJ.forEach(d => { if (rec.adjust[d.key]) S.lookApply(L, { kind: 'adjust', key: d.key, v: rec.adjust[d.key] }); });
+    if (rec.auto) S.lookApply(L, { kind: 'autofix', v: rec.auto });
+    const left = S.lookOf(L).adjust;
+    if (left && !left.effects.length) L.effects.splice(L.effects.indexOf(left), 1);
+  }
+  /* Save that layer's look under a name: {ok: true, recipe}, or {ok: false, why} with why 'name' (no name), 'plain' (nothing to save),
+     'full' (60 already) or 'storage' (the device would not take it; nothing is changed then). The newest is first. */
+  S.lookSave = function (L, name) {
+    if (!lookName(name)) return { ok: false, why: 'name' };
+    const vals = S.lookRecipeOf(L);
+    if (!vals) return { ok: false, why: 'plain' };
+    const list = S.looksRead();
+    if (list.length >= LOOKS_MAX) return { ok: false, why: 'full' };
+    let id = '';
+    for (let i = 0; i < 8 && (!id || list.some(x => x.id === id)); i++) id = 'l' + Date.now().toString(36) + Math.floor(Math.random() * 46656).toString(36);
+    const r = cleanRecipe(Object.assign({ id: id, name: name, v: 1 }, vals));
+    if (!r || r.fid !== (vals.fid || null)) return { ok: false, why: 'plain' };   // every value at its zero at the playhead; or a filter with no usable id
+    return looksWrite([r].concat(list)) ? { ok: true, recipe: r } : { ok: false, why: 'storage' };
+  };
+  S.lookRename = function (id, name) {
+    const list = S.looksRead(), i = list.findIndex(x => x.id === id);
+    if (i < 0) return { ok: false, why: 'gone' };
+    const r = cleanRecipe(Object.assign({}, list[i], { name: name }));
+    if (!r) return { ok: false, why: 'name' };
+    list[i] = r;
+    return looksWrite(list) ? { ok: true, recipe: r } : { ok: false, why: 'storage' };
+  };
+  S.lookDelete = function (id) {
+    const list = S.looksRead(), keep = list.filter(x => x.id !== id);
+    if (keep.length === list.length) return { ok: false, why: 'gone' };
+    return looksWrite(keep) ? { ok: true } : { ok: false, why: 'storage' };
+  };
+  /* the look on that layer IS that saved look, value for value with nothing keyed: its tile then shows pressed */
+  S.lookIs = function (L, rec) { const now = L ? S.lookRecipeOf(L) : null; return !!now && !!rec && sameLook(now, rec) && !lookKeyedAny(L); };
+  /* the effects a saved look puts on a bare layer, made fresh on each call: its tile's picture is drawn from them (js/fx-thumbs.js
+     mountStack). Nothing here touches the project. A look whose own filter is gone gives what is left of it. */
+  S.lookRecipeEffects = function (rec) {
+    const r = cleanRecipe(rec);
+    if (!r) return [];
+    const made = (r.fid && FM.filters && FM.filters.makeInstance) ? FM.filters.makeInstance(r.fid, 0) : null;
+    const tmp = { effects: [] };
+    recipeWrite(tmp, r, made, !!r.fid && !made);
+    return tmp.effects;
+  };
+  /* the name the Save field opens on: "My look 1", or the first number no saved look has */
+  S.lookNextName = function () {
+    const base = (words().tools || {}).myLook || 'My look', used = S.looksRead().map(r => r.name);
+    for (let n = 1; n <= LOOKS_MAX + 1; n++) if (used.indexOf(base + ' ' + n) < 0) return base + ' ' + n;
+    return base;
   };
   /* ═══ #1243 S12: LOOK FOR THE WHOLE VIDEO (his words, 8 Nov: "you shouldn't have the look menu on each layer… you want to press add
      and it goes over your entire project immediately… consistent color correction over your project"). Look left the clip's tray and is
@@ -3488,7 +3679,8 @@ window.FM = window.FM || {};
     return plan;
   }
   /* op: {kind: 'filter', fid} (null: None), {kind: 'strength', v}, {kind: 'adjust', key, v}, {kind: 'reset'} — what the per-clip Look
-     took — and {kind: 'clipsOff'} (Remove them) and {kind: 'fix'} (Fix, for a look that ends early). */
+     took — {kind: 'auto', on} and {kind: 'autofix', v} (#1243 S19), {kind: 'recipe', id} (#1243 S18: one of his saved looks, whole),
+     and {kind: 'clipsOff'} (Remove them) and {kind: 'fix'} (Fix, for a look that ends early). */
   S.planProjectLook = function (R, op) {
     if (!op || typeof op !== 'object') return refusePlan('gone');
     if (op.kind === 'clipsOff') return planClipLooksOff();
@@ -3502,7 +3694,7 @@ window.FM = window.FM || {};
     }
     if (!cur && !w) return refusePlan('lookNoClip');
     const lk = S.lookOf(cur), tw = (words().tools || {});
-    let label = 'Change look', live = '', box = null, empty = false;
+    let label = 'Change look', live = '', box = null, empty = false, rec = null, recGone = false;
     if (op.kind === 'filter') {
       const want = op.fid || null;
       if ((lk.filter ? lk.filter.fid : null) === want) return refusePlan('nothingChanged');
@@ -3519,10 +3711,37 @@ window.FM = window.FM || {};
       if (!d) return refusePlan('gone');
       if (S.lookValue(cur, d.key) === Math.round(+op.v || 0) && !S.lookKeyed(cur, d.key)) return refusePlan('nothingChanged');
       label = 'Adjust'; live = line('adjustSet', tw[d.word] || d.key, Math.round(+op.v || 0));
-      empty = !lk.filter && !Math.round(+op.v || 0) && !!lk.adjust && lk.adjust.effects.every(c => c && c.type === d.type) && !S.lookKeyed(cur, d.key);   // its last control back at zero
+      empty = lookEmptied(cur, op);   // its last control back at zero (a shared effect counts every control on it)
+    } else if (op.kind === 'auto' || op.kind === 'autofix') {
+      const v = op.kind === 'auto' ? (op.on ? 100 : 0) : Math.max(0, Math.min(100, Math.round(+op.v || 0)));
+      if (S.lookValue(cur, 'autofix') === v && !S.lookKeyed(cur, 'autofix')) return refusePlan('nothingChanged');
+      label = 'Auto adjust'; live = !v ? line('autoOff') : (op.kind === 'auto' ? line('autoOn') : line('autoFixSet', v));
+      empty = lookEmptied(cur, op);
+    } else if (op.kind === 'recipe') {
+      /* #1243 S18: one of his saved looks, the whole of it, in this ONE step */
+      rec = S.looksRead().filter(x => x.id === op.id)[0] || null;
+      if (!rec) return refusePlan('lookSavedGone');
+      label = 'Saved look';
     } else return refusePlan('gone');
     const L = cur || makeLookLayer(w);
     if (!L) return refusePlan('lookUnsuitedAll');
+    if (op.kind === 'recipe') {
+      if (rec.fid) {
+        const made = FM.filters && FM.filters.makeInstance ? FM.filters.makeInstance(rec.fid, +L.start || 0) : null;
+        box = (made && FM.fxRegistry) ? FM.fxRegistry.fitToLayer(made, L) : null;
+        if (box) box.sm = 1; else recGone = true;   // a filter of his own that he has since deleted: the rest of the look still applies
+      }
+      if (recGone && !Object.keys(rec.adjust).length && !rec.auto) return refusePlan('lookSavedNoFilter');   // and it held nothing else
+      /* what it would leave, worked out on a copy: nothing at all is refused (none of it could be made here), and so is the look
+         that is already there, value for value, with nothing keyed */
+      const copy = x => JSON.parse(JSON.stringify(x, FM.jsonReplacer));
+      const sim = { effects: copy(Array.isArray(L.effects) ? L.effects : []) };
+      recipeWrite(sim, rec, box ? copy(box) : null, recGone);
+      const was = cur ? S.lookRecipeOf(cur) : null, then = S.lookRecipeOf(sim);
+      if (!then) return refusePlan('lookUnsuitedAll');
+      if (was && sameLook(was, then) && !lookKeyedAny(cur)) return refusePlan('nothingChanged');
+      live = recGone ? line('lookRecipeNoFilter') : line('lookSetAll', rec.name);
+    }
     if (op.kind === 'filter') {
       if (op.fid) {
         const def = FM.filters && FM.filters.get ? FM.filters.get(op.fid) : null;
@@ -3550,15 +3769,19 @@ window.FM = window.FM || {};
         const now = S.lookOf(L), i = L.effects.indexOf(now.filter);
         if (i >= 0) { if (box) L.effects.splice(i, 1, box); else L.effects.splice(i, 1); }
         else if (box) { const a = L.effects.indexOf(now.adjust); if (a >= 0) L.effects.splice(a, 0, box); else L.effects.push(box); }
-      } else S.lookApply(L, op);
+      } else if (op.kind === 'recipe') recipeWrite(L, rec, box, recGone);
+      else S.lookApply(L, op);
     });
     /* nothing left to grade: the layer goes with the step (an empty look is a full-frame copy a frame for nothing) */
     if (cur && empty) plan.removes.add(cur.id);
     plan.live = live;
+    /* #1243 S18: a saved look whose filter is gone does LESS than his tap asked (the rest of it applies), so that is said in the line
+       he sees, not only to a screen reader, as a delete that took a look with it does above. (plan.live is the quiet line.) */
+    if (op.kind === 'recipe' && recGone) { plan.say = live; plan.live = null; }
     return plan;
   };
   const projectLookLabel = op => !op ? 'Change look' : op.kind === 'strength' ? 'Look strength' : op.kind === 'reset' ? 'Reset adjust'
-    : op.kind === 'adjust' ? 'Adjust' : op.kind === 'clipsOff' ? 'Remove clip looks' : op.kind === 'fix' ? 'Fit look' : 'Change look';
+    : op.kind === 'adjust' ? 'Adjust' : (op.kind === 'auto' || op.kind === 'autofix') ? 'Auto adjust' : op.kind === 'recipe' ? 'Saved look' : op.kind === 'clipsOff' ? 'Remove clip looks' : op.kind === 'fix' ? 'Fit look' : 'Change look';
   Object.assign(S.cmd, {
     projectLook(op) { return S.edit(projectLookLabel(op), R => S.planProjectLook(R, op)); }
   });

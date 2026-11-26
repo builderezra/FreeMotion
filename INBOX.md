@@ -22,21 +22,3 @@ Follow it; if the tree has moved and a step no longer fits, say so in the entry 
 
 ---
 
-
-### 25 Nov 2026, about 10:48 AWST: he reset the weekly usage: keep going, but pace it so the week is not burned out (his other businesses need usage)
-**His words (verbatim):** Alright, I just reset my usage. Keep going but going to pace now where we're not gonna completely burn it all out before next reset cause I still need a lot of usage from my other businesses.
-
-**His clauses:**
-1. He has reset his weekly usage (25 Nov, morning).
-2. Keep going: resume the work.
-3. PACE from now on: do not burn it all before the next reset (Mon 30 Nov 16:00 AWST).
-4. Why: he needs a lot of usage for his other businesses.
-
-**Logger's plan (not his words):**
-- FreeMotion aims at about HALF the week: roughly 10% a day, a glide line from 0% now to about 50% by Monday 16:00. The PM tick flags it the moment usage runs ahead of that line.
-- Ways to keep inside it:
-  - the builder works lean: small reviews of 3-4 agents rather than 12, no max-effort bursts;
-  - the BIGGEST saver is his /compact of the builder chat, whose 750k-token history makes every step cost about half a percent;
-  - the logger's tick moves from hourly to every 3 hours;
-  - design batches stay small.
-- His 97 rule stays as the hard stop.

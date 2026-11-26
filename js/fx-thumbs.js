@@ -1732,6 +1732,7 @@ window.FM = window.FM || {};
       artFellBack = false;
       if (!entry) entry = (m && m.layerId) ? layerStep(key, m)
                         : (m && m.filter) ? generateFilter(m.filter)
+                        : (m && m.stack) ? generateStack(key, m)
                         : (m && m.preset) ? generatePreset(m.preset)
                         : stockStep(key);   // queue 712: sliced, like layerStep — generate() is the one-call form
       /* A frame rendered while a photograph was still decoding is provisional — see photoArt. It is
@@ -1776,6 +1777,28 @@ window.FM = window.FM || {};
       return { kind: 'static', frame: snap() };
     } catch (e) {
       if (!warned['f:' + id]) { warned['f:' + id] = 1; console.warn('fx-thumbs: filter preview failed for "' + id + '"', e); }
+      return fallback();
+    }
+  }
+
+  /* A WHOLE STACK's tile (#1243 S18: one of his saved looks in Simple, which is a filter AND the Adjust box, two boxes a filter's
+   * tile cannot hold). The photograph and the rules are a filter's tile's: static, the subject the look's filter demonstrates on
+   * (FILTER_SUBJECT, else the leading ingredient's), no demo tuning. `m.stack()` hands back fresh instances for each generation:
+   * they are rendered here and never kept. */
+  function generateStack(key, m) {
+    try {
+      const fx = typeof m.stack === 'function' ? m.stack() : null;
+      if (!Array.isArray(fx) || !fx.length || !fx[0]) return fallback();
+      const lead = (Array.isArray(fx[0].effects) && fx[0].effects[0]) || fx[0];
+      const pk = m.subject ? FILTER_SUBJECT[m.subject] : null;
+      const scene = sceneFor(lead.type, fx[0], 0, pk ? 'photo:' + pk : null);
+      const hero = scene.layers.filter(function (l) { return Array.isArray(l.effects) && l.effects[0] === fx[0]; })[0];
+      if (!hero) return fallback();
+      hero.effects = fx;
+      renderFrame(scene, 0.001);
+      return { kind: 'static', frame: snap() };
+    } catch (e) {
+      if (!warned[key]) { warned[key] = 1; console.warn('fx-thumbs: stack preview failed for "' + key + '"', e); }
       return fallback();
     }
   }
@@ -2338,6 +2361,21 @@ window.FM = window.FM || {};
       const m = layer ? filterLayerMeta(id, layer) : null;   // #482 15.4: on his clip when the Filters tab asks for it
       if (m) mountKey(cv, 'f:' + id + '@' + m.layerId + '#' + m.rev, m);
       else mountKey(cv, 'f:' + id, { filter: id });
+    },
+    /* #1243 S18: A WHOLE STACK's tile: one of his saved looks in Simple (a filter and Adjust), on the photograph a filter's tile
+       uses. `stack()` hands back fresh effect instances each time the tile is generated, `key` names the look (a saved look's
+       values never change, so its picture is kept under that name), `subject` is its filter's id or null. False when it was
+       not given what it needs. See generateStack. */
+    mountStack: function (cv, key, stack, subject) {
+      if (!cv || !key || typeof stack !== 'function') return false;
+      mountKey(cv, 's:' + key, { stack: stack, subject: subject || null });
+      return true;
+    },
+    /* Suite seam (#1243 S18): the frame mountStack would paint, generated now rather than on the rAF queue. */
+    _stackTile: function (key, stack, subject) {
+      preloadArt(); ensureSamples();
+      const e = generateStack('s:' + key, { stack: stack, subject: subject || null });
+      return { key: 's:' + key, frame: e && (e.frame || (e.frames && e.frames[0])), fellBack: e === fallbackEntry };
     },
     /* Suite seam (#482 15.4): the tile mountFilter would paint, generated now rather than on the rAF queue — its cache key,
        whether it is his clip, and the frame. */

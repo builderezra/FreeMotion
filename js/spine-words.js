@@ -189,6 +189,12 @@ window.FM = window.FM || {};
       lookSet: (name, clip) => name + ' on ' + clip, lookOff: clip => 'No filter on ' + clip,
       lookStrengthSet: pct => 'Strength ' + pct + '%', adjustSet: (what, v) => what + ' ' + (v > 0 ? '+' : '') + v,
       adjustReset: 'Adjust is back to zero', lookUnsuited: 'That filter doesn’t work on this clip',
+      /* #1243 S19: Auto, and its one slider */
+      autoOn: 'Auto is on', autoOff: 'Auto is off', autoFixSet: pct => 'Auto fix ' + pct + '%',
+      /* #1243 S18: one of his saved looks whose own filter he has since deleted (the rest of it went on; or it held nothing else),
+         and a saved look deleted on this device while its tile was still showing */
+      lookRecipeNoFilter: 'Its filter is gone · Adjust applied', lookSavedNoFilter: 'That look’s filter is gone',
+      lookSavedGone: 'That look was deleted',
       /* #1243 S12: Look is the whole video's now (the project row's Look, one Look layer); said in #sm-live, the refusal in #sm-say */
       lookSetAll: name => name + ' over the whole video', lookOffAll: 'No filter on the video', lookNoClip: 'Add a clip first, then a look over it',
       lookUnsuitedAll: 'That filter can’t go over this video',
@@ -302,7 +308,20 @@ window.FM = window.FM || {};
       ai: 'Ask & edit', aiTitle: 'Ask & edit: say what to change, in your own words',
       look: 'Look', lookTitle: 'Filters and Adjust over the whole video', lookFilters: 'Filters', lookAdjust: 'Adjust', lookNone: 'None',
       lookStrength: 'Strength', lookReset: 'Reset',
-      adjBright: 'Brightness', adjContrast: 'Contrast', adjSat: 'Saturation', adjExposure: 'Exposure', adjWarmth: 'Warmth', adjVignette: 'Vignette',
+      adjBright: 'Brightness', adjContrast: 'Contrast', adjSat: 'Saturation', adjExposure: 'Exposure', adjWarmth: 'Temperature', adjVignette: 'Vignette',
+      /* #1243 S19 (his words: "way more options… film grain… fade, temperature, blacks, whites… one slider… auto adjust"): ten more controls
+         (Warmth is called Temperature now, his word), the list's three headings, and Auto with its one slider */
+      adjHighlights: 'Highlights', adjShadows: 'Shadows', adjWhites: 'Whites', adjBlacks: 'Blacks', adjTint: 'Tint', adjVibrance: 'Vibrance',
+      adjFade: 'Fade', adjGrain: 'Grain', adjSharpen: 'Sharpen', adjClarity: 'Clarity',
+      adjLight: 'Light', adjColour: 'Colour', adjFinish: 'Finish', lookAuto: 'Auto', lookAutoFix: 'Auto fix',
+      /* #1243 S18: the name the Save field opens on (with a number after it); Save (the Look panel's first row) and its question
+         box; a saved look's ⋯ (Rename, Delete) and their boxes; and what is said when one of them cannot be done */
+      myLook: 'My look',
+      lookSave: 'Save', lookSaveAsk: 'Save this look', lookSaved: name => 'Saved “' + name + '”',
+      lookSaveName: 'Give it a name', lookSavePlain: 'Nothing to save yet', lookSaveFull: 'You have 60 saved looks. Delete one first',
+      lookSaveStorage: 'No room left on this device. Nothing was saved',
+      lookMore: name => 'Options for ' + name, lookRename: 'Rename', lookRenameAsk: 'Rename look', lookDelete: 'Delete',
+      lookDeleteAsk: name => 'Delete “' + name + '”?',
       /* §8.5's line under a keyed numeric row; its Open in Full is the button beside it (openFull) */
       lookKeyed: 'This changes over time. Your change applies to the whole video',
       /* #1243 S12: the chips over the Filters strip (his favourites, his own, then the library's sections by their own names, js/filters.js),

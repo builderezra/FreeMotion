@@ -13086,6 +13086,12 @@ body.ed-simple #sm-tray .sm-tool[data-tool="slidePrev"], body.ed-simple #sm-tray
   color: var(--text); font: 600 12px/1 system-ui, sans-serif; cursor: pointer; }
 .sm-look-reset { align-self: flex-start; }
 .sm-look-reset[aria-disabled="true"] { opacity: .38; cursor: default; }
+/* #1243 S19: the Adjust list's three small headings (Light, Colour, Finish), and Auto, a pressed toggle that stands where a slider's
+   name does, on the one row its slider (Auto fix) is on */
+.sm-look-h { flex: none; margin-top: 4px; padding-top: 6px; border-top: 1px solid var(--line); color: var(--text-dim); font: 700 10.5px/1.2 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .04em; }
+.sm-look-autob { flex: 0 0 78px; min-height: 32px; padding: 0 6px; border-radius: 16px; border: 1px solid var(--line); background: transparent;
+  color: var(--text-dim); font: 600 12px/1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-look-autob[aria-pressed="true"] { color: var(--text); background: var(--panel-2); border-color: var(--accent, #4da3ff); }
 /* #1243 S12 (his words: "the look menu is good… it's just not organized at all"): a row of chips over the ONE strip, one per section, the
    chip of the section in view lit; inside the strip each section opens with a thin divider and its name. Chips are 32 px tall (the tabs'
    floor) and scroll sideways on their own when they do not fit. */
@@ -13096,6 +13102,16 @@ body.ed-simple #sm-tray .sm-tool[data-tool="slidePrev"], body.ed-simple #sm-tray
 .sm-look-chip[aria-pressed="true"] { color: var(--text); background: var(--panel-2); border-color: var(--accent, #4da3ff); }
 .sm-look-sec { flex: 0 0 auto; display: flex; align-items: flex-start; max-width: 64px; margin-left: 2px; padding: 4px 4px 0 8px; border-left: 1px solid var(--line); }
 .sm-look-sec-l { color: var(--text-dim); font: 700 9.5px/1.2 system-ui, sans-serif; text-transform: uppercase; letter-spacing: .02em; white-space: normal; overflow-wrap: anywhere; }
+/* #1243 S18 (his words: "you can save it as a preset"): Save, at the end of the panel's first row; and one of his saved looks in the
+   strip: the tile, with its ⋯ in a narrow column beside the picture (24 px wide, the picture's height: a finger's target that covers
+   none of the picture). The three dots stand upright there. */
+.sm-look-save { margin-left: auto; flex: none; min-width: 56px; min-height: 32px; padding: 0 14px; border-radius: 16px; border: 1px solid var(--line); background: transparent;
+  color: var(--text); font: 600 12px/1 system-ui, sans-serif; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-look-save[aria-disabled="true"] { opacity: .38; cursor: default; }
+.sm-look-mine { flex: 0 0 auto; display: flex; align-items: flex-start; }
+.sm-look-more { flex: 0 0 24px; width: 24px; height: 52px; margin-left: -2px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--text-dim);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.sm-look-more .sm-ico { width: 18px; height: 18px; transform: rotate(90deg); }
 /* …and the panel's two lines (clips that keep a look of their own · Remove them; a look that ends early · Fix), laid out as the keyed note */
 .sm-look-line { display: flex; align-items: center; gap: 8px; color: var(--text-dim); font: 500 11.5px/1.3 system-ui, sans-serif; }
 .sm-look-line > .sm-look-note-t { flex: 1 1 auto; min-width: 0; }

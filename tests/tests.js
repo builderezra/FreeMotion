@@ -207483,8 +207483,9 @@
         const sl = document.querySelector('#inspector .sm-look-r[data-key="bright"]');
         if (!sl) throw new Error('CONTROL: the Adjust tab has no Brightness slider');
         const box = document.querySelector('#inspector .sm-look'), kids = box ? Array.from(box.children) : [], first = kids[1] || null;
+        const au = document.querySelector('#inspector .sm-look-r[data-key="autofix"]');   /* #1243 S19: Auto and its one slider are the first row now */
         if (document.querySelector('#inspector .sm-look-letgo') || /let go/i.test(box ? box.textContent : '')) fails.push('with no look yet the Adjust tab still says “' + ((document.querySelector('#inspector .sm-look-letgo') || {}).textContent || 'Let go') + '” over the sliders');
-        if (!first || !first.contains(sl)) fails.push('with no look yet the first thing under the tabs is ' + (first ? '“' + first.textContent.trim().slice(0, 40) + '”' : 'nothing') + ', want the Brightness row');
+        if (!first || !au || !first.contains(au)) fails.push('with no look yet the first thing under the tabs is ' + (first ? '“' + first.textContent.trim().slice(0, 40) + '”' : 'nothing') + ', want the row of Auto and its slider');
         await smLookSlide(v, 'bright', 30); await r4Settle(150);
         if (!smLookLayers().length) fails.push('letting go of Brightness made no look');
       });
@@ -207515,6 +207516,483 @@
       });
     });
     if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  /* ═══ #1243 S19: ADJUST WITH FAR MORE. His words: "its adjust menu… way more options… film grain… fade, temperature, blacks, whites…
+     color match, color correction… one slider… automatically making it look good… auto adjust." Six controls became sixteen, in one list
+     under Light, Colour and Finish; Highlights, Shadows, Whites and Blacks share ONE Highlights & Shadows and Temperature and Tint ONE
+     Colour Temperature, each made with the values that do nothing (the registry's own defaults are a look: −40 / +50, +40); and Auto
+     (Auto Grade on Levels) with its one slider is the first row. (Match colour, per clip, is not built yet.)
+     THE PICTURE these read has something for every control to move: a dark and a bright quarter (Shadows, Blacks, Fade; Highlights,
+     Whites), a muted and a strong colour (Vibrance, Saturation, Temperature, Tint), hard edges between them (Sharpen, Clarity) and
+     corners (Vignette). The frame is read at the four quarters' centres, on both sides of the upright edge, and in the corners.
+     Auto's own picture is not judged: Auto Grade follows the picture over time and settles, so one still frame says little. */
+  const smS19Pic = (W, H) => {
+    const c = offscreen(W, H), x = c.getContext('2d'), w = W >> 1, h = H >> 1;
+    x.fillStyle = '#181010'; x.fillRect(0, 0, w, h); x.fillStyle = '#f0e8d8'; x.fillRect(w, 0, W - w, h);
+    x.fillStyle = '#7a6a58'; x.fillRect(0, h, w, H - h); x.fillStyle = '#c05030'; x.fillRect(w, h, W - w, H - h);
+    return { kind: 'image', el: c, width: W, height: H };
+  };
+  const smS19Read = (W, H, t) => {
+    const c = offscreen(W, H), g = c.getContext('2d'), w = W >> 1, h = H >> 1, a = w >> 1, b = h >> 1;
+    FM.renderScene(g, FM.scene, t);
+    return [[a, b], [w + a, b], [a, h + b], [w + a, h + b], [w - 1, b], [w, b], [w - 1, h + b], [w, h + b], [3, 3], [W - 4, 3], [3, H - 4], [W - 4, H - 4]].map(p => Array.from(px(g, p[0], p[1])).slice(0, 3));
+  };
+  const smS19Diff = (p, q) => Math.max.apply(null, p.map((v, i) => Math.max(Math.abs(v[0] - q[i][0]), Math.abs(v[1] - q[i][1]), Math.abs(v[2] - q[i][2]))));
+  const smS19Adjust = l => (l ? smLookBoxes(l).filter(f => f.name === 'Adjust')[0] : null) || null;
+  async function smS19Open(v) {
+    await smLookOpen(v);
+    const tab = smLookTab((FM.spineWords.tools || {}).lookAdjust || 'Adjust');
+    if (!tab) throw new Error('setup: the Look panel has no Adjust tab');
+    tab.click(); await v.sleep(120);
+  }
+
+  test('1243 S19 · at 380 Adjust is sixteen controls in one list under Light, Colour and Finish, Warmth is called Temperature, and every control at +50 changes the picture, keeps exactly one effect of its own in the one Adjust box in ONE step, and back at 0 leaves no look and the picture as it was (CONTROLS: the picture renders its four quarters; the same frame read twice is the same)', { item: '980', budgetMs: 180000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smPic('A', 0, 4, W, H)], async function (v) {
+        const W = v.W, H = v.H, S = FM.spine, tw = FM.spineWords.tools || {};
+        FM.time = 1;
+        const base = smS19Read(W, H, 1);
+        if (!(base[0][0] < 60 && base[1][0] > 200 && base[3][0] - base[3][2] > 80)) throw new Error('CONTROL: the picture does not render its four quarters (' + JSON.stringify(base.slice(0, 4)) + ')');
+        if (smS19Diff(base, smS19Read(W, H, 1)) !== 0) throw new Error('CONTROL: the same frame read twice differs, so a changed picture would prove nothing');
+        await smS19Open(v);
+        const A = S.LOOK_ADJ || [];
+        if (A.length !== 16) throw new Error('Adjust has ' + A.length + ' controls, want sixteen');
+        const heads = Array.from(document.querySelectorAll('#inspector .sm-look-h')).map(h => h.textContent);
+        if (heads.join(' · ') !== 'Light · Colour · Finish') fails.push('the list’s headings read “' + heads.join(' · ') + '”, want Light · Colour · Finish');
+        const keys = Array.from(document.querySelectorAll('#inspector .sm-look-r')).map(r => r.dataset.key);
+        if (keys.join() !== ['autofix'].concat(A.map(d => d.key)).join()) fails.push('the sliders are ' + keys.join(', ') + ', want Auto fix and then the sixteen in the table’s order');
+        const names = Array.from(document.querySelectorAll('#inspector .sm-look-row .sm-look-l')).map(l => l.textContent);
+        if (names.indexOf('Temperature') < 0 || names.indexOf('Warmth') >= 0) fails.push('the colour temperature control is named ' + (names.indexOf('Warmth') >= 0 ? 'Warmth' : 'neither Temperature nor Warmth') + ', want Temperature (his word)');
+        for (const d of A) {
+          const n0 = v.steps(), name = tw[d.word] || d.key;
+          await smLookSlide(v, d.key, 50);
+          const box = smS19Adjust(smLookLayers()[0]), kids = box ? box.effects.map(c => c.type) : [];
+          if (kids.join() !== d.type) fails.push(name + ' at +50 leaves the Adjust box holding [' + kids.join(', ') + '], want one ' + d.type);
+          if (v.steps() !== n0 + 1) fails.push(name + ' at +50 took ' + (v.steps() - n0) + ' steps, want 1');
+          if (smS19Diff(base, smS19Read(W, H, 1)) < 3) fails.push(name + ' at +50 does not change the picture');
+          await smLookSlide(v, d.key, 0);
+          if (smLookLayers().length) fails.push(name + ' back at 0 leaves a look (' + JSON.stringify(smLookLayers()[0].effects.map(f => f.name || f.type)) + ')');
+          else if (smS19Diff(base, smS19Read(W, H, 1)) > 1) fails.push(name + ' back at 0 leaves the picture changed');
+        }
+      }, { media: [{ name: 'A', rec: smS19Pic(320, 240) }] });
+    }, 380);
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  test('1243 S19 · at 380 Shadows on its own lifts the dark quarter and leaves the bright one alone, in ONE Highlights & Shadows whose other three controls stay at 0; Whites then moves in that same effect, Shadows back at 0 keeps it for Whites, and Whites back at 0 takes it and the look away; Tint on its own does not warm the picture; and Adjust comes back whole from a save (CONTROL: Shadows +40 lifts the dark quarter)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smPic('A', 0, 4, W, H)], async function (v) {
+        const W = v.W, H = v.H, S = FM.spine;
+        FM.time = 1;
+        const base = smS19Read(W, H, 1);
+        await smS19Open(v);
+        const hs = () => { const b = smS19Adjust(smLookLayers()[0]); return b ? b.effects.filter(c => c.type === 'highlightsshadows') : []; };
+        const kinds = () => { const b = smS19Adjust(smLookLayers()[0]); return b ? b.effects.map(c => c.type).join() : '(no Adjust box)'; };
+        await smLookSlide(v, 'shadows', 40);
+        const one = smS19Read(W, H, 1);
+        if (!(one[0][0] > base[0][0] + 3)) throw new Error('CONTROL: Shadows +40 does not lift the dark quarter (' + base[0] + ' → ' + one[0] + '), so nothing about its other controls can be read');
+        if (base[1][0] - one[1][0] > 3 || base[1][1] - one[1][1] > 3 || base[1][2] - one[1][2] > 3) fails.push('Shadows +40 on its own also pulled the bright quarter down (' + base[1] + ' → ' + one[1] + '): a new Highlights & Shadows must start with its other controls at 0, not at the registry’s −40 / +50');
+        const p = hs()[0] ? hs()[0].params : {};
+        if (hs().length !== 1 || p.highlights !== 0 || p.shadows !== 40 || p.whites !== 0 || p.blacks !== 0) fails.push('Shadows +40 on its own made ' + hs().length + ' Highlights & Shadows with ' + JSON.stringify({ highlights: p.highlights, shadows: p.shadows, whites: p.whites, blacks: p.blacks }) + ', want one at 0 / 40 / 0 / 0');
+        await smLookSlide(v, 'whites', -30);
+        if (kinds() !== 'highlightsshadows' || hs()[0].params.whites !== -30 || hs()[0].params.shadows !== 40) fails.push('Whites −30 did not move in the same effect: the box holds [' + kinds() + '] ' + JSON.stringify(hs()[0] && hs()[0].params));
+        await smLookSlide(v, 'shadows', 0);
+        if (kinds() !== 'highlightsshadows' || hs()[0].params.shadows !== 0 || hs()[0].params.whites !== -30) fails.push('Shadows back at 0 took the effect Whites still uses: the box holds [' + kinds() + ']');
+        if (S.lookValue(smLookLayers()[0], 'whites') !== -30 || S.lookValue(smLookLayers()[0], 'shadows') !== 0) fails.push('the panel would read Whites ' + S.lookValue(smLookLayers()[0], 'whites') + ' and Shadows ' + S.lookValue(smLookLayers()[0], 'shadows') + ', want −30 and 0');
+        await smLookSlide(v, 'whites', 0);
+        if (smLookLayers().length) fails.push('with every control back at 0 a look is left: [' + kinds() + ']');
+        await smLookSlide(v, 'tint', 30);
+        const te = smS19Adjust(smLookLayers()[0]), tc = te ? te.effects[0] : null;
+        if (!tc || tc.type !== 'temperature' || tc.params.amount !== 0 || tc.params.tint !== 30) fails.push('Tint +30 on its own made ' + JSON.stringify(tc && { type: tc.type, amount: tc.params.amount, tint: tc.params.tint }) + ', want a Colour Temperature at amount 0 (the registry’s own default warms by 40)');
+        /* a save brings it all back: the sanitiser keeps what it knows, so every control and Auto must be something it knows */
+        await smLookSlide(v, 'grain', 30); await smLookSlide(v, 'clarity', 20); await smLookSlide(v, 'vibrance', 25); await smLookSlide(v, 'blacks', -15);
+        S.cmd.projectLook({ kind: 'autofix', v: 60 }); await v.idle(); await v.sleep(80);
+        const K = smLookLayers()[0];
+        if (!K) throw new Error('setup: no Look layer to save');
+        const copy = JSON.parse(JSON.stringify(K, FM.jsonReplacer));
+        FM.storage._sanitizeLayers([copy]);
+        const read = l => (S.LOOK_ADJ || []).map(d => d.key + ' ' + S.lookValue(l, d.key)).concat(['autofix ' + S.lookValue(l, 'autofix')]).join(', ');
+        if (read(copy) !== read(K)) fails.push('Adjust does not come back whole from a save: ' + read(copy) + ' · it was ' + read(K));
+        if (!/autofix 60/.test(read(K)) || !/grain 30/.test(read(K)) || !/tint 30/.test(read(K))) fails.push('CONTROL: before the save the look reads ' + read(K));
+        if (!copy.sm || copy.sm.look !== true || !smS19Adjust(copy) || smS19Adjust(copy).sm !== 1) fails.push('the saved Look layer lost its marker, or its Adjust box its own');
+      }, { media: [{ name: 'A', rec: smS19Pic(320, 240) }] });
+    }, 380);
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  test('1243 S19 · at 380 Auto is the first row of Adjust: a press lights it and puts Auto Grade on Levels at full strength first in the Adjust box in ONE step labelled Auto adjust, its one slider, Auto fix, sets that strength, a second press takes it off and leaves the other controls, Auto fix from off turns it on, and with nothing else in the look off takes the look away (CONTROL: the first row under the tabs holds the toggle and its slider)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await atPhoneWidth(async function () {
+      await smP2((W, H) => [smPic('A', 0, 4, W, H)], async function (v) {
+        const S = FM.spine;
+        FM.time = 1;
+        await smS19Open(v);
+        const tg = () => document.querySelector('#inspector .sm-look-autob'), sl = () => document.querySelector('#inspector .sm-look-r[data-key="autofix"]');
+        const kinds = () => { const b = smS19Adjust(smLookLayers()[0]); return b ? b.effects.map(c => c.type).join() : '(no Adjust box)'; };
+        const auto = () => { const b = smS19Adjust(smLookLayers()[0]); return b ? b.effects.filter(c => c.type === 'autograde')[0] || null : null; };
+        const press = async () => { tg().click(); await v.idle(); await v.sleep(100); };
+        const panel = document.querySelector('#inspector .sm-look'), first = panel ? panel.children[1] : null;
+        if (!tg() || !sl() || !first || !first.contains(tg()) || !first.contains(sl())) throw new Error('CONTROL: the first row under the tabs does not hold Auto and its slider (' + (first ? first.textContent.trim().slice(0, 30) : 'nothing') + ')');
+        if (tg().getAttribute('aria-pressed') !== 'false' || sl().value !== '0') fails.push('with no look Auto shows pressed ' + tg().getAttribute('aria-pressed') + ' at ' + sl().value + ', want off at 0');
+        const n0 = v.steps();
+        await press();
+        const a1 = auto();
+        if (!a1 || kinds() !== 'autograde' || a1.params.mode !== 0 || S.lookValue(smLookLayers()[0], 'autofix') !== 100) fails.push('a press on Auto left [' + kinds() + '] ' + JSON.stringify(a1 && a1.params) + ', want Auto Grade on Levels at 100');
+        if (v.steps() !== n0 + 1) fails.push('a press on Auto took ' + (v.steps() - n0) + ' steps, want 1');
+        if (!tg() || tg().getAttribute('aria-pressed') !== 'true' || sl().value !== '100') fails.push('after the press Auto shows pressed ' + (tg() && tg().getAttribute('aria-pressed')) + ' at ' + (sl() && sl().value) + ', want lit at 100');
+        await smLookSlide(v, 'autofix', 40);
+        if (S.lookValue(smLookLayers()[0], 'autofix') !== 40 || !auto() || Math.round(auto().params.strength) !== 40) fails.push('Auto fix at 40 wrote ' + JSON.stringify(auto() && auto().params.strength));
+        await smLookSlide(v, 'contrast', 20);
+        if (kinds() !== 'autograde,contrast') fails.push('with Contrast set after it, the box runs [' + kinds() + '], want Auto first');
+        await press();
+        if (kinds() !== 'contrast' || tg().getAttribute('aria-pressed') !== 'false' || sl().value !== '0') fails.push('a second press left [' + kinds() + '], pressed ' + tg().getAttribute('aria-pressed') + ' at ' + sl().value + ', want Contrast alone and Auto off at 0');
+        await smLookSlide(v, 'autofix', 55);
+        if (kinds() !== 'autograde,contrast' || S.lookValue(smLookLayers()[0], 'autofix') !== 55 || tg().getAttribute('aria-pressed') !== 'true') fails.push('Auto fix moved to 55 from off left [' + kinds() + '] at ' + (smLookLayers()[0] ? S.lookValue(smLookLayers()[0], 'autofix') : 'no look'));
+        await smLookSlide(v, 'contrast', 0);
+        await press();
+        if (smLookLayers().length) fails.push('Auto off with nothing else in the look leaves a look: [' + kinds() + ']');
+        await press();
+        FM.history.undo(); await v.sleep(100);
+        if ((FM.history.lastStep || {}).label !== 'Auto adjust') fails.push('Undo of a press on Auto names ' + JSON.stringify((FM.history.lastStep || {}).label) + ', want Auto adjust');
+        if (smLookLayers().length) fails.push('after Undo of the press a look is left');
+      }, { media: [{ name: 'A', rec: smS19Pic(320, 240) }] });
+    }, 380);
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  /* ═══ #1243 S18 · HIS OWN SAVED LOOKS (queue 980). His words: "the ability to have your own like preset filters… filters, then
+     adjust, and then video quality, and then you can save it as a preset." A saved look is a recipe of values kept on the DEVICE
+     (localStorage fm.sm.looks, js/spine-edit.js), so every test here puts the device's own looks back whatever happens, and plants
+     what it needs. The question box is the app's own (FM.ask) and is answered as a person does: its field is typed into and its
+     button pressed. The model on its own (the validator, the store, the one write) is also run in Node with 26 mutations
+     (~/fm-builder/s18-node.js, s18-mut.py); these are the panel and the whole path. */
+  const SM18_KEY = 'fm.sm.looks';
+  async function smS18Store(plant, fn) {
+    let was = null;
+    try { was = localStorage.getItem(SM18_KEY); } catch (e) {}
+    try {
+      if (plant == null) localStorage.removeItem(SM18_KEY); else localStorage.setItem(SM18_KEY, JSON.stringify(plant));
+      return await fn();
+    } finally {
+      try { if (was === null) localStorage.removeItem(SM18_KEY); else localStorage.setItem(SM18_KEY, was); } catch (e) {}
+      const a = document.getElementById('fm-ask');
+      if (a && !a.classList.contains('hidden')) { const c = a.querySelector('.fm-ask-cancel'); if (c) c.click(); }
+      if (FM.contextMenu && FM.contextMenu.hide) FM.contextMenu.hide(true);
+    }
+  }
+  const smS18Raw = () => { try { return JSON.parse(localStorage.getItem(SM18_KEY) || '[]'); } catch (e) { return 'not JSON'; } };
+  const smS18Box = () => { const a = document.getElementById('fm-ask'); return a && !a.classList.contains('hidden') ? a : null; };
+  /* answer the app's question box: a string is typed into its field and its button pressed, true presses the button, null presses
+     Cancel. Hands back what the box showed. */
+  async function smS18Answer(v, text) {
+    for (let i = 0; i < 60 && !smS18Box(); i++) await v.sleep(25);
+    const a = smS18Box();
+    if (!a) throw new Error('no question box came up');
+    const inp = a.querySelector('input.fm-ask-input'), field = inp && !inp.classList.contains('hidden');
+    const shown = { title: (a.querySelector('.fm-ask-title') || {}).textContent || '', value: field ? inp.value : null, ok: (a.querySelector('.fm-ask-ok') || {}).textContent || '' };
+    if (text === null) a.querySelector('.fm-ask-cancel').click();
+    else {
+      if (typeof text === 'string') { if (!field) throw new Error('the question box “' + shown.title + '” has no field to type ' + text + ' into'); inp.value = text; }
+      a.querySelector('.fm-ask-ok').click();
+    }
+    await v.idle(); await v.sleep(140);
+    return shown;
+  }
+  const smS18Save = () => document.querySelector('#inspector .sm-look-tabs > .sm-look-save');
+  const smS18Mine = () => Array.from(document.querySelectorAll('#inspector .sm-look-strip > .sm-look-mine'));
+  const smS18Tile = id => document.querySelector('#inspector .sm-look-mine > .sm-look-tile[data-rec="' + id + '"]');
+  const smS18More = id => document.querySelector('#inspector .sm-look-mine[data-rec="' + id + '"] > .sm-look-more');
+  const smS18Items = () => { const m = document.getElementById('ctx-menu'); return (m && !m.classList.contains('hidden')) ? Array.from(m.querySelectorAll('[role="menuitem"]')) : []; };
+  async function smS18Pick(v, id, label) {
+    const more = smS18More(id);
+    if (!more) throw new Error('the saved look ' + id + ' has no ⋯');
+    more.click(); await v.sleep(120);
+    const items = smS18Items(), it = items.filter(b => b.textContent.trim() === label)[0];
+    if (!it) throw new Error('the ⋯ menu has no ' + label + ' (it holds ' + JSON.stringify(items.map(b => b.textContent.trim())) + ')');
+    it.click(); await v.sleep(60);
+    return items.map(b => b.textContent.trim());
+  }
+  async function smS18Tab(v, word) {
+    const tab = smLookTab(word);
+    if (!tab) throw new Error('setup: the Look panel has no ' + word + ' tab');
+    tab.click(); await v.sleep(140);
+  }
+  /* a press on one of the panel's buttons, and the step it may run */
+  async function smS18Press(v, el, what) {
+    if (!el) throw new Error('the Look panel has no ' + what);
+    el.click(); await v.idle(); await v.sleep(120);
+  }
+  /* FM.toast counted for the length of fn: Simple says what it cannot do in its line, never a toast */
+  async function smS18Toasts(fn) {
+    const real = FM.toast; let n = 0;
+    FM.toast = function () { n++; return real ? real.apply(this, arguments) : undefined; };
+    try { await fn(); } finally { FM.toast = real; }
+    return n;
+  }
+
+  test('1243 S18 · at 380 Save is off with no look; with one it asks for a name in the app’s own box (My look 1 offered), keeps exactly the filter, its Strength and the Adjust values on this device, says Saved, and is not an edit step; its tile is first in Yours and pressed; with the look taken off, one tap on the tile puts all of it back in ONE step named Saved look, the picture as it was, and Undo leaves nothing (CONTROLS: the look changes the picture; taking it off gives the first picture back)', { item: '980', budgetMs: 150000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await smS18Store(null, async function () {
+      await atPhoneWidth(async function () {
+        await smP2((W, H) => [smPic('A', 0, 4, W, H)], async function (v) {
+          const W = v.W, H = v.H, S = FM.spine, tw = FM.spineWords.tools || {};
+          FM.time = 1;
+          const base = smS19Read(W, H, 1);
+          await smLookOpen(v);
+          if (!smS18Save()) throw new Error('the Look panel’s first row has no Save');
+          if (smS18Save().getAttribute('aria-disabled') !== 'true') fails.push('with no look on the video Save is not off');
+          smS18Save().click(); await v.sleep(200);
+          if (smS18Box()) { fails.push('with no look on the video a press on Save asked for a name'); await smS18Answer(v, null); }
+          /* the look: Noir at 60, Contrast +20, Temperature −10 and Blacks +15 (one of S19's controls) */
+          await smS18Press(v, smLookTile('noir'), 'Noir tile');
+          await smLookSlide(v, 'strength', 60);
+          await smS18Tab(v, tw.lookAdjust || 'Adjust');
+          await smLookSlide(v, 'contrast', 20); await smLookSlide(v, 'warmth', -10); await smLookSlide(v, 'blacks', 15);
+          const withLook = smS19Read(W, H, 1), docLook = v.doc();
+          if (smS19Diff(base, withLook) < 8) throw new Error('CONTROL: the look does not change the picture (' + smS19Diff(base, withLook) + ' levels), so putting it back would prove nothing');
+          if (smS19Diff(withLook, smS19Read(W, H, 1)) !== 0) throw new Error('CONTROL: the look’s picture read twice differs, so the picture after putting it back would prove nothing');
+          /* Save */
+          const sv = smS18Save(), sr = sv.getBoundingClientRect(), hit = document.elementFromPoint(sr.left + sr.width / 2, sr.top + sr.height / 2);
+          if (sv.getAttribute('aria-disabled') === 'true') fails.push('with a look on the video Save is off');
+          if (sr.width < 44 || sr.height < 32 || !hit || !sv.contains(hit) || sr.right > 380.5) fails.push('Save is ' + Math.round(sr.width) + '×' + Math.round(sr.height) + ' px ending at ' + Math.round(sr.right) + ', or covered: want 44×32 at least, on screen');
+          const n0 = v.steps();
+          let box = null;
+          const toasts = await smS18Toasts(async () => { sv.click(); box = await smS18Answer(v, 'Sunday'); });
+          if (box.title !== (tw.lookSaveAsk || 'Save this look') || box.value !== 'My look 1' || box.ok !== (tw.lookSave || 'Save')) fails.push('the box read “' + box.title + '” with ' + JSON.stringify(box.value) + ' in its field and ' + box.ok + ' on its button, want Save this look, My look 1, Save');
+          const raw = smS18Raw(), r = Array.isArray(raw) ? raw[0] : null;
+          const adj = r && r.adjust ? Object.keys(r.adjust).sort().map(k => k + ' ' + r.adjust[k]).join(', ') : '';
+          if (!Array.isArray(raw) || raw.length !== 1 || !r || !/^l[a-z0-9]{1,24}$/.test(r.id) || r.name !== 'Sunday' || r.fid !== 'noir' || r.strength !== 60 || adj !== 'blacks 15, contrast 20, warmth -10' || r.auto !== 0 || r.v !== 1) throw new Error('the device holds ' + JSON.stringify(raw) + ', want one look: Sunday, noir at 60, contrast 20, warmth -10, blacks 15');
+          if (v.say() !== 'Saved “Sunday”') fails.push('after the save the line reads “' + v.say() + '”, want Saved “Sunday”');
+          if (toasts) fails.push('the save raised ' + toasts + ' toast(s)');
+          if (v.steps() !== n0 || v.doc() !== docLook) fails.push('saving a look was an edit: ' + (v.steps() - n0) + ' step(s), the project ' + (v.doc() === docLook ? 'unchanged' : 'changed'));
+          /* its tile: first in Yours, the first section of the strip, pressed, with a ⋯ beside the picture */
+          await smS18Tab(v, tw.lookFilters || 'Filters');
+          const strip = document.querySelector('#inspector .sm-look-strip'), sec = strip.querySelector(':scope > .sm-look-sec'), chip = document.querySelector('#inspector .sm-look-chip');
+          if (!sec || sec.dataset.sec !== 'yours' || !chip || chip.dataset.sec !== 'yours') fails.push('the strip’s first section is ' + (sec ? sec.dataset.sec : 'missing') + ' and its first chip ' + (chip ? chip.dataset.sec : 'missing') + ', want Yours first');
+          const mine = smS18Mine(), tile = smS18Tile(r.id), more = smS18More(r.id);
+          if (mine.length !== 1 || !tile || !more || (sec && sec.nextElementSibling !== mine[0])) throw new Error('the saved look’s tile is not the first tile of Yours (' + mine.length + ' saved tiles drawn)');
+          if (tile.querySelector('.sm-look-name').textContent !== 'Sunday' || tile.getAttribute('aria-label') !== 'Sunday') fails.push('the tile is named “' + tile.querySelector('.sm-look-name').textContent + '”');
+          if (tile.getAttribute('aria-pressed') !== 'true') fails.push('the tile of the look that is on the video does not show pressed');
+          const pic = tile.querySelector('.sm-look-th').getBoundingClientRect(), mr = more.getBoundingClientRect(), mhit = document.elementFromPoint(mr.left + mr.width / 2, mr.top + mr.height / 2);
+          if (mr.width < 24 || mr.height < 44 || !mhit || !more.contains(mhit)) fails.push('the tile’s ⋯ is ' + Math.round(mr.width) + '×' + Math.round(mr.height) + ' px or covered');
+          if (mr.left < pic.right - 2.5 || mr.left > pic.right + 12) fails.push('the ⋯ starts at ' + Math.round(mr.left) + ' and the picture ends at ' + Math.round(pic.right) + ': want it beside the picture, not over it');
+          if (!(more.getAttribute('aria-label') || '').includes('Sunday')) fails.push('the ⋯ is not named for its look (' + more.getAttribute('aria-label') + ')');
+          /* the look off: None, then Reset */
+          await smS18Press(v, smLookTile(''), 'None tile');
+          await smS18Tab(v, tw.lookAdjust || 'Adjust');
+          await smS18Press(v, document.querySelector('#inspector .sm-look-reset'), 'Reset');
+          if (smLookLayers().length || smS19Diff(base, smS19Read(W, H, 1)) > 1) throw new Error('CONTROL: with None and Reset the look is not off (' + smLookLayers().length + ' look layers, the picture ' + smS19Diff(base, smS19Read(W, H, 1)) + ' levels from the first)');
+          if (smS18Save().getAttribute('aria-disabled') !== 'true') fails.push('with the look taken off Save is not off again');
+          await smS18Tab(v, tw.lookFilters || 'Filters');
+          if (!smS18Tile(r.id) || smS18Tile(r.id).getAttribute('aria-pressed') !== 'false') fails.push('with the look taken off its tile still shows pressed');
+          /* one tap puts all of it back */
+          const n1 = v.steps(), docOff = v.doc();
+          await smS18Press(v, smS18Tile(r.id), 'saved tile');
+          const L = smLookLayers()[0];
+          if (!L) throw new Error('a tap on the saved look’s tile made no look');
+          const f = S.lookOf(L).filter;
+          const got = 'noir ' + (f ? f.fid === 'noir' : false) + ' at ' + S.lookValue(L, 'strength') + ', contrast ' + S.lookValue(L, 'contrast') + ', warmth ' + S.lookValue(L, 'warmth') + ', blacks ' + S.lookValue(L, 'blacks');
+          if (got !== 'noir true at 60, contrast 20, warmth -10, blacks 15') fails.push('the tap put back ' + got);
+          if (f && Math.abs(FM.evalProp(f.params.strength, 1) - 0.6) > 1e-9) fails.push('the filter’s Strength is ' + FM.evalProp(f.params.strength, 1) + ', want 0.6');
+          if (v.steps() !== n1 + 1) fails.push('the tap took ' + (v.steps() - n1) + ' steps, want 1');
+          const back = smS19Diff(withLook, smS19Read(W, H, 1));
+          if (back > 1) fails.push('the picture is ' + back + ' levels from the look that was saved');
+          if (!smS18Tile(r.id) || smS18Tile(r.id).getAttribute('aria-pressed') !== 'true') fails.push('after the tap the tile does not show pressed');
+          FM.history.undo(); await v.sleep(120);
+          if ((FM.history.lastStep || {}).label !== 'Saved look') fails.push('Undo names the step ' + JSON.stringify((FM.history.lastStep || {}).label) + ', want Saved look');
+          if (smLookLayers().length || v.doc() !== docOff) fails.push('Undo of the tap leaves ' + (smLookLayers().length ? 'a look' : 'the project changed'));
+        }, { media: [{ name: 'A', rec: smS19Pic(320, 240) }] });
+      }, 380);
+    });
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  test('1243 S18 · at 380 a saved look planted with a 500-character name of markup, Strength 400, an unknown key and Blacks −250 reads back as text, cut and held in range, and applies in ONE step; one whose filter is gone keeps the filter on the video, applies its Adjust and says so; one that held only that filter is refused in words; the look already on the video is Nothing changed; and a thing that is not a look is not drawn (CONTROL: the three planted looks are drawn in the order they were kept)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [], evil = '<img src=x onerror=window.__s18x=1>';
+    const plant = [
+      { id: 'lplant1', name: evil + 'x'.repeat(500), fid: 'noir', strength: 400, adjust: { contrast: 30, bogus: 5, blacks: -250, grain: -40 }, auto: 70, evil: 1 },
+      'junk', null, { id: 'not-an-id', name: 'Bad id', fid: 'noir' }, { id: 'lplant0', name: 'Does nothing' },
+      { id: 'lplant2', name: 'Gone', fid: 'no-such-filter', adjust: { sat: 25 } },
+      { id: 'lplant3', name: 'Only gone', fid: 'no-such-filter' }
+    ];
+    delete window.__s18x;
+    await smS18Store(plant, async function () {
+      await atPhoneWidth(async function () {
+        await smP2((W, H) => [smPic('A', 0, 4, W, H)], async function (v) {
+          const S = FM.spine, lines = FM.spineWords.lines || {};
+          FM.time = 1;
+          await smLookOpen(v);
+          const ids = smS18Mine().map(m => m.dataset.rec);
+          if (ids.join() !== 'lplant1,lplant2,lplant3') throw new Error('CONTROL: the strip draws the saved looks [' + ids.join(', ') + '], want lplant1, lplant2, lplant3 (a thing that is not a look is not drawn)');
+          const strip = document.querySelector('#inspector .sm-look-strip'), t1 = smS18Tile('lplant1'), nm = t1.querySelector('.sm-look-name').textContent;
+          if (strip.querySelector('img') || window.__s18x) fails.push('a saved look’s name was drawn as markup');
+          if (Array.from(nm).length !== 40 || nm.indexOf(evil) !== 0) fails.push('the 535-character name is drawn as ' + Array.from(nm).length + ' characters (“' + nm.slice(0, 20) + '…”), want its first 40 as text');
+          const r1 = S.looksRead()[0];
+          const adj = Object.keys(r1.adjust).sort().map(k => k + ' ' + r1.adjust[k]).join(', ');
+          if (r1.strength !== 100 || adj !== 'blacks -100, contrast 30' || r1.auto !== 70 || 'evil' in r1 || 'bogus' in r1.adjust) fails.push('the planted look reads back as Strength ' + r1.strength + ', [' + adj + '], Auto ' + r1.auto + ': want 100, blacks -100 and contrast 30 (Grain never goes below 0), 70');
+          /* 1: the whole of it, one step */
+          const n0 = v.steps();
+          await smS18Press(v, t1, 'first saved tile');
+          let L = smLookLayers()[0];
+          if (!L) throw new Error('a tap on the planted look made no look');
+          const f1 = S.lookOf(L).filter;
+          const got1 = (f1 ? f1.fid : 'no filter') + ' at ' + S.lookValue(L, 'strength') + ', contrast ' + S.lookValue(L, 'contrast') + ', blacks ' + S.lookValue(L, 'blacks') + ', auto ' + S.lookValue(L, 'autofix') + ', grain ' + S.lookValue(L, 'grain');
+          if (got1 !== 'noir at 100, contrast 30, blacks -100, auto 70, grain 0') fails.push('the planted look put on ' + got1);
+          if (v.steps() !== n0 + 1) fails.push('the planted look took ' + (v.steps() - n0) + ' steps, want 1');
+          if (window.__s18x) fails.push('applying the look ran its name as markup');
+          /* 2: its filter is gone: the filter on the video stays, Adjust is the look's, and the line says so */
+          const n1 = v.steps();
+          await smS18Press(v, smS18Tile('lplant2'), 'second saved tile');
+          L = smLookLayers()[0];
+          const f2 = L ? S.lookOf(L).filter : null;
+          const got2 = L ? (f2 ? f2.fid : 'no filter') + ' at ' + S.lookValue(L, 'strength') + ', sat ' + S.lookValue(L, 'sat') + ', contrast ' + S.lookValue(L, 'contrast') + ', blacks ' + S.lookValue(L, 'blacks') + ', auto ' + S.lookValue(L, 'autofix') : 'no look';
+          if (got2 !== 'noir at 100, sat 25, contrast 0, blacks 0, auto 0') fails.push('the look whose filter is gone left ' + got2 + ', want Noir kept and only Saturation +25 in Adjust');
+          if (v.steps() !== n1 + 1) fails.push('the look whose filter is gone took ' + (v.steps() - n1) + ' steps, want 1');
+          if (v.say() !== (lines.lookRecipeNoFilter || '?')) fails.push('the line reads “' + v.say() + '”, want “' + lines.lookRecipeNoFilter + '”');
+          /* 3: the same again changes nothing */
+          const n2 = v.steps(), doc2 = v.doc();
+          await smS18Press(v, smS18Tile('lplant2'), 'second saved tile');
+          if (v.steps() !== n2 || v.doc() !== doc2 || v.say() !== (lines.nothingChanged || 'Nothing changed')) fails.push('the look already on the video took ' + (v.steps() - n2) + ' steps and said “' + v.say() + '”, want none and Nothing changed');
+          /* 4: one that held only the missing filter is refused in words */
+          await smS18Press(v, smS18Tile('lplant3'), 'third saved tile');
+          if (v.steps() !== n2 || v.doc() !== doc2) fails.push('the look that held only a missing filter changed the project');
+          if (v.say() !== (lines.lookSavedNoFilter || '?')) fails.push('for the look that held only a missing filter the line reads “' + v.say() + '”, want “' + lines.lookSavedNoFilter + '”');
+        }, { media: [{ name: 'A', rec: smS19Pic(320, 240) }] });
+      }, 380);
+    });
+    delete window.__s18x;
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  test('1243 S18 · at 380 what Save cannot do is said in the line and never a toast (the device will not take it, no name, 60 already) and leaves the saved looks as they were, and Cancel saves nothing; a saved look’s ⋯ renames it, and deletes it after asking once, neither is an edit step and the look on the video stays (CONTROL: the ⋯ opens a menu of Rename and Delete)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    await smS18Store([{ id: 'lkeep1', name: 'Keep', fid: 'noir' }], async function () {
+      await atPhoneWidth(async function () {
+        await smP2((W, H) => [smPic('A', 0, 4, W, H)], async function (v) {
+          const S = FM.spine, tw = FM.spineWords.tools || {};
+          FM.time = 1;
+          await smLookOpen(v);
+          await smS18Press(v, smLookTile('noir'), 'Noir tile');
+          await smLookSlide(v, 'strength', 45);
+          const kept = JSON.stringify(smS18Raw()), n0 = v.steps(), doc0 = v.doc();
+          const save = async text => { smS18Save().click(); return smS18Answer(v, text); };
+          /* the device will not take it */
+          const realSet = Storage.prototype.setItem;
+          let threw = 0;
+          const toasts = await smS18Toasts(async () => {
+            Storage.prototype.setItem = function (k) { if (this === localStorage && k === SM18_KEY) { threw++; throw new DOMException('no room', 'QuotaExceededError'); } return realSet.apply(this, arguments); };
+            try { await save('No room'); } finally { Storage.prototype.setItem = realSet; }
+            if (!threw) throw new Error('CONTROL: the save never tried to write to the device, so its failure was not exercised');
+            if (v.say() !== (tw.lookSaveStorage || '?')) fails.push('with the device refusing the line reads “' + v.say() + '”, want “' + tw.lookSaveStorage + '”');
+            if (JSON.stringify(smS18Raw()) !== kept) fails.push('with the device refusing the saved looks changed');
+            /* no name */
+            await save('   ');
+            if (v.say() !== (tw.lookSaveName || '?')) fails.push('with no name the line reads “' + v.say() + '”, want “' + tw.lookSaveName + '”');
+            if (JSON.stringify(smS18Raw()) !== kept) fails.push('a save with no name changed the saved looks');
+            /* Cancel */
+            await save(null);
+            if (JSON.stringify(smS18Raw()) !== kept) fails.push('Cancel changed the saved looks');
+          });
+          if (toasts) fails.push('what Save could not do raised ' + toasts + ' toast(s)');
+          /* Rename, from the ⋯ */
+          await smS18Tab(v, tw.lookFilters || 'Filters');
+          const menu = await smS18Pick(v, 'lkeep1', tw.lookRename || 'Rename');
+          if (menu.join('|') !== (tw.lookRename || 'Rename') + '|' + (tw.lookDelete || 'Delete')) throw new Error('CONTROL: the ⋯ menu holds ' + menu.join('|') + ', want Rename|Delete');
+          const rb = await smS18Answer(v, 'Evening');
+          if (rb.title !== (tw.lookRenameAsk || 'Rename look') || rb.value !== 'Keep' || rb.ok !== (tw.lookRename || 'Rename')) fails.push('the rename box read “' + rb.title + '” with ' + JSON.stringify(rb.value) + ' and ' + rb.ok);
+          const after = smS18Raw();
+          if (!Array.isArray(after) || after.length !== 1 || after[0].id !== 'lkeep1' || after[0].name !== 'Evening' || after[0].fid !== 'noir') fails.push('after the rename the device holds ' + JSON.stringify(after));
+          if (!smS18Tile('lkeep1') || smS18Tile('lkeep1').querySelector('.sm-look-name').textContent !== 'Evening') fails.push('after the rename the tile is not named Evening');
+          /* (the mutation run, 26 Nov: the line still read Give it a name from the no-name Save above, so a rename to nothing that said
+             nothing passed. The line is set to something else first, and the device's own answer is read too.) */
+          S.say('S18 probe');
+          await smS18Pick(v, 'lkeep1', tw.lookRename || 'Rename');
+          await smS18Answer(v, '  ');
+          if (smS18Raw()[0].name !== 'Evening' || v.say() !== (tw.lookSaveName || '?')) fails.push('a rename to nothing left the name “' + smS18Raw()[0].name + '” and said “' + v.say() + '”');
+          const rr = S.lookRename('lkeep1', '   ');
+          if (!rr || rr.ok !== false || rr.why !== 'name' || smS18Raw()[0].name !== 'Evening') fails.push('the device took a rename to nothing (' + JSON.stringify(rr) + ', the name now “' + smS18Raw()[0].name + '”)');
+          /* Delete asks once: Cancel keeps it, the button deletes it */
+          await smS18Pick(v, 'lkeep1', tw.lookDelete || 'Delete');
+          const db = await smS18Answer(v, null);
+          if (db.title !== 'Delete “Evening”?' || db.value !== null || db.ok !== (tw.lookDelete || 'Delete')) fails.push('the delete box read “' + db.title + '” with ' + (db.value === null ? 'no field' : 'a field') + ' and ' + db.ok + ', want Delete “Evening”? and Delete');
+          if (smS18Box()) fails.push('Delete asked a second time');
+          if (smS18Raw().length !== 1 || !smS18Tile('lkeep1')) fails.push('Cancel on the delete box deleted the look');
+          await smS18Pick(v, 'lkeep1', tw.lookDelete || 'Delete');
+          await smS18Answer(v, true);
+          if (smS18Box()) fails.push('Delete asked a second time');
+          const ownFilters = (FM.filters && FM.filters.custom) ? FM.filters.custom().length : 0, yours = document.querySelector('#inspector .sm-look-sec[data-sec="yours"]');
+          if (smS18Raw().length !== 0 || smS18Mine().length || (!ownFilters && yours)) fails.push('after Delete the device holds ' + JSON.stringify(smS18Raw()) + ' and the strip ' + smS18Mine().length + ' saved tiles' + (!ownFilters && yours ? ', with an empty Yours' : ''));
+          if (v.steps() !== n0 || v.doc() !== doc0) fails.push('Save, Rename and Delete were edits: ' + (v.steps() - n0) + ' step(s), the project ' + (v.doc() === doc0 ? 'unchanged' : 'changed'));
+          /* 60 already */
+          localStorage.setItem(SM18_KEY, JSON.stringify(Array.from({ length: 60 }, (x, i) => ({ id: 'lfull' + i, name: 'Look ' + (i + 1), fid: 'noir' }))));
+          const fb = await save('One more');
+          if (fb.value !== 'My look 1') fails.push('with 60 looks named Look 1 to Look 60 the box offered ' + JSON.stringify(fb.value) + ', want My look 1');
+          if (v.say() !== (tw.lookSaveFull || '?') || smS18Raw().length !== 60) fails.push('the 61st save said “' + v.say() + '” and left ' + smS18Raw().length + ' looks, want “' + tw.lookSaveFull + '” and 60');
+          if (S.looksRead().some(r => r.name === 'One more')) fails.push('the 61st look was saved');
+        }, { media: [{ name: 'A', rec: smS19Pic(320, 240) }] });
+      }, 380);
+    });
+    if (fails.length) throw new Error('380: ' + fails.join(' · '));
+  });
+
+  test('1243 S18 · at 1280×800 Save and a saved look’s tile with its ⋯ are in view in the band, the ⋯ beside the picture and not over it; and the tile’s picture is the look whole: with Saturation −100 saved in it the picture is grey where the same picture with a mild control keeps its colour, it is not the stand-in, and it is made new each time it is asked for (CONTROL: the picture with a mild control has colour)', { item: '980', budgetMs: 120000 }, async function () {
+    smNeedP2();
+    const fails = [];
+    if (!FM.fxThumbs || !FM.fxThumbs.mountStack || !FM.fxThumbs._stackTile) throw new Error('FM.fxThumbs has no mountStack: a saved look’s tile has no picture of its own');
+    await smS18Store([{ id: 'lgrey1', name: 'Grey', adjust: { sat: -100 } }, { id: 'lmild1', name: 'Mild', adjust: { sat: 4 } }, { id: 'lnoir1', name: 'Noir bright', fid: 'noir', strength: 100, adjust: { bright: 60 } }], async function () {
+      await smTrayBAt(1280, 800, async function () {
+        await smP2(smClips3, async function (v) {
+          const S = FM.spine;
+          await smLookOpen(v);
+          const band = document.getElementById('inspector').getBoundingClientRect();
+          const inView = (el, what) => {
+            if (!el) { fails.push('no ' + what); return null; }
+            const r = el.getBoundingClientRect(), hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+            if (r.left < band.left - 0.5 || r.right > band.right + 0.5 || r.top < band.top - 0.5 || r.bottom > band.bottom + 0.5 || !hit || !el.contains(hit)) fails.push(what + ' is not in view in the band (' + Math.round(r.left) + ',' + Math.round(r.top) + ' to ' + Math.round(r.right) + ',' + Math.round(r.bottom) + ')');
+            return r;
+          };
+          inView(smS18Save(), 'Save');
+          const tr = inView(smS18Tile('lgrey1'), 'the first saved tile'), mr = inView(smS18More('lgrey1'), 'its ⋯');
+          const th = smS18Tile('lgrey1') ? smS18Tile('lgrey1').querySelector('.sm-look-th') : null, pr = th ? th.getBoundingClientRect() : null;
+          if (tr && mr && pr && (mr.left < pr.right - 2.5 || mr.top > pr.bottom || mr.bottom < pr.top)) fails.push('the ⋯ (' + Math.round(mr.left) + ' to ' + Math.round(mr.right) + ') lies over the picture (' + Math.round(pr.left) + ' to ' + Math.round(pr.right) + ') or off its row');
+          if (smS18Mine().length !== 3) fails.push('the strip draws ' + smS18Mine().length + ' saved tiles, want 3');
+          /* the picture: the look whole */
+          const recs = S.looksRead(), by = id => recs.filter(r => r.id === id)[0];
+          const frame = r => FM.fxThumbs._stackTile('t18-' + r.id, () => S.lookRecipeEffects(r), r.fid);
+          const spread = t => {
+            const c = t && t.frame; if (!c || !c.getContext) return -1;
+            const d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let m = 0;
+            for (let i = 0; i < d.length; i += 4 * 37) m = Math.max(m, Math.max(d[i], d[i + 1], d[i + 2]) - Math.min(d[i], d[i + 1], d[i + 2]));
+            return m;
+          };
+          const mean = t => { const c = t.frame, d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data; let s = 0, n = 0; for (let i = 0; i < d.length; i += 4 * 37) { s += d[i] + d[i + 1] + d[i + 2]; n += 3; } return s / n; };
+          const mild = frame(by('lmild1')), grey = frame(by('lgrey1'));
+          if (mild.fellBack || grey.fellBack) fails.push('a saved look’s picture is the stand-in (' + (mild.fellBack ? 'Mild ' : '') + (grey.fellBack ? 'Grey' : '') + ')');
+          if (spread(mild) < 24) throw new Error('CONTROL: the picture with a mild control has no colour (its widest channel spread is ' + spread(mild) + '), so a grey one would prove nothing');
+          if (spread(grey) > 6) fails.push('with Saturation −100 saved in it the picture still has colour (a channel spread of ' + spread(grey) + '): Adjust is not in the picture');
+          /* a look with a filter AND Adjust is both: brighter than the filter's own tile. MEASURED (26 Nov, the laptop): with the Adjust on
+             the picture 49.9 against Noir's own 38.4 (+11.5); with it left off (the s18-picture mutation) 38.4 against 38.4 (+0.0). The line
+             sits between them at +6; it was a guessed +12 and failed the right picture. */
+          const both = frame(by('lnoir1')), own = FM.fxThumbs._filterTile('noir', null);
+          if (both.fellBack || !own || !own.frame) fails.push('the Noir look’s picture, or Noir’s own tile, was not drawn');
+          else if (!(mean(both) > mean({ frame: own.frame }) + 6)) fails.push('Noir with Brightness +60 draws at a mean of ' + mean(both).toFixed(1) + ' and Noir’s own tile at ' + mean({ frame: own.frame }).toFixed(1) + ': the look’s Adjust is not on its picture');
+          else if (spread(both) > spread({ frame: own.frame }) + 14) fails.push('Noir with Brightness +60 draws with a channel spread of ' + spread(both) + ' and Noir’s own tile ' + spread({ frame: own.frame }) + ': its filter is not on its picture');
+          const a = S.lookRecipeEffects(by('lnoir1')), b = S.lookRecipeEffects(by('lnoir1'));
+          if (a.length !== 2 || a[0] === b[0] || a[1] === b[1]) fails.push('a saved look’s effects are ' + a.length + ' boxes, or are handed out again and not made new');
+          if (smLookLayers().length) fails.push('drawing the pictures made a look on the video');
+        });
+      }, 1280);
+    });
+    if (fails.length) throw new Error('1280×800: ' + fails.join(' · '));
   });
 
   test('1243 R9 · S12 review at 380 a shape lifted above a Noir look keeps its own colour when Overlay adds a photo over it: the look moves above the photo and lifts the shape above itself in that same step (CONTROL: before the add the shape is red, above the look)', { item: '980', budgetMs: 90000 }, async function () {

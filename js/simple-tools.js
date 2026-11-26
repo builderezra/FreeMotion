@@ -1516,8 +1516,11 @@ window.FM = window.FM || {};
     const valid = list => (list || []).filter(f => f && f.id);
     try {
       /* 1243-R (a) item 7's order: Yours · Favourites · the sections */
+      /* #1243 S18: his saved looks come first in Yours (FM.spine.looksRead: each through the model's one validator), then the filters
+         he saved in Full. A saved look's item carries `rec`: its tile applies the whole look and has its own ⋯ */
+      const mine = (FM.spine && FM.spine.looksRead ? FM.spine.looksRead() : []).map(r => ({ id: 'look:' + r.id, name: r.name, rec: r }));
       const own = valid(F.custom ? F.custom() : []);
-      if (own.length) out.push({ key: 'yours', label: w.lookYours || 'Yours', list: own });
+      if (mine.length || own.length) out.push({ key: 'yours', label: w.lookYours || 'Yours', list: mine.concat(own) });
       const fav = valid(F.faves ? F.faves() : []);
       if (fav.length) out.push({ key: 'fav', label: w.lookFaves || 'Favourites', list: fav });
       (F.sections ? F.sections() : []).forEach(s => {
@@ -1531,9 +1534,11 @@ window.FM = window.FM || {};
   /* L: the project's Look layer, or null before the first pick (then a slider has nothing to preview on, and its release makes the layer) */
   function lookSlider(L, key, label, lo) {
     const S = FM.spine, w = W(), id = L ? L.id : null, now = S.lookValue(L, key), frag = document.createDocumentFragment();
-    const pctLike = key === 'strength' || key === 'vignette';
-    const fmt = v => pctLike ? (key === 'strength' ? v + '%' : String(v)) : (v > 0 ? '+' + v : String(v));
-    const op = v => key === 'strength' ? { kind: 'strength', v: v } : { kind: 'adjust', key: key, v: v };
+    /* how a value is written out: Strength and Auto fix are a percent; a control that only goes up from 0 (Fade, Grain, Sharpen, Vignette)
+       a plain number; one that goes both ways carries its sign */
+    const pct = key === 'strength' || key === 'autofix';
+    const fmt = v => pct ? v + '%' : (lo === 0 ? String(v) : (v > 0 ? '+' + v : String(v)));
+    const op = v => key === 'strength' ? { kind: 'strength', v: v } : key === 'autofix' ? { kind: 'autofix', v: v } : { kind: 'adjust', key: key, v: v };
     const row = el('div', 'sm-look-row');
     const rng = el('input', 'sm-look-r'); rng.type = 'range'; rng.min = String(lo); rng.max = '100'; rng.step = '1';
     rng.value = String(Math.max(lo, Math.min(100, now))); rng.dataset.key = key; rng.dataset.look = 'r-' + key;
@@ -1652,6 +1657,27 @@ window.FM = window.FM || {};
       b.addEventListener('click', e => { e.stopPropagation(); if (fid !== (cur || '')) FM.spine.cmd.projectLook({ kind: 'filter', fid: fid || null }); });
       return b;
     };
+    /* #1243 S18: ONE OF HIS SAVED LOOKS. Its picture is the look whole (the filter and Adjust) on the photograph a filter's tile uses
+       (FM.fxThumbs.mountStack, drawn from FM.spine.lookRecipeEffects); a tap applies it whole in ONE step; the ⋯ beside it offers
+       Rename and Delete. It shows pressed while the look on the video is exactly it. The name is his words: text, never markup. */
+    const mineTile = r => {
+      const wrap = el('div', 'sm-look-mine'); wrap.dataset.rec = r.id;
+      const b = el('button', 'sm-look-tile'); b.type = 'button';
+      b.dataset.rec = r.id; b.dataset.look = 'rec-' + r.id;
+      b.setAttribute('aria-pressed', (FM.spine.lookIs && FM.spine.lookIs(L, r)) ? 'true' : 'false');
+      b.title = r.name; b.setAttribute('aria-label', r.name);
+      const cv = el('canvas', 'sm-look-th'); cv.setAttribute('aria-hidden', 'true');
+      b.appendChild(cv);
+      cvs.push([cv, r]);   // mounted when it comes into view, as a filter's tile is
+      b.appendChild(el('span', 'sm-look-name', r.name));
+      b.addEventListener('click', e => { e.stopPropagation(); FM.spine.cmd.projectLook({ kind: 'recipe', id: r.id }); });
+      const more = el('button', 'sm-look-more'); more.type = 'button'; more.dataset.look = 'recmore-' + r.id;
+      more.innerHTML = svg('more');   // a fixed string, never user data
+      more.setAttribute('aria-haspopup', 'menu'); more.setAttribute('aria-label', typeof w.lookMore === 'function' ? w.lookMore(r.name) : 'Options');
+      more.addEventListener('click', e => { e.stopPropagation(); lookMineMenu(more, r); });
+      wrap.append(b, more);
+      return wrap;
+    };
     /* #1243 S12: ONE STRIP, each section opened by a thin divider with its name, and a row of chips over it, one per section: a tap
        brings that section into view (his pick: chips over one strip, so the picture stays in view on a phone). Names are text, never markup. */
     const chips = el('div', 'sm-look-chips');
@@ -1661,7 +1687,7 @@ window.FM = window.FM || {};
       const h = el('div', 'sm-look-sec'); h.dataset.sec = s.key;
       h.appendChild(el('span', 'sm-look-sec-l', s.label));
       strip.appendChild(h);
-      s.list.forEach(f => { const t = tile(String(f.id), String(f.name || f.id)); t.dataset.sec = s.key; strip.appendChild(t); });
+      s.list.forEach(f => { const t = f.rec ? mineTile(f.rec) : tile(String(f.id), String(f.name || f.id)); t.dataset.sec = s.key; strip.appendChild(t); });
       const c = el('button', 'sm-look-chip', s.label); c.type = 'button'; c.dataset.sec = s.key; c.dataset.look = 'chip-' + s.key;
       c.setAttribute('aria-pressed', 'false');
       c.addEventListener('click', e => { e.stopPropagation(); lookToSection(strip, s.key); });
@@ -1671,7 +1697,10 @@ window.FM = window.FM || {};
     if (secs.length) box.appendChild(chips);
     box.appendChild(strip);
     requestAnimationFrame(() => { if (strip.isConnected) lookLight(strip); });   // once the panel is laid out
-    if (FM.fxThumbs && FM.fxThumbs.mountFilter) lazyTiles(strip, cvs, q => FM.fxThumbs.mountFilter(q[0], q[1], null));
+    if (FM.fxThumbs && FM.fxThumbs.mountFilter) lazyTiles(strip, cvs, q => {
+      if (typeof q[1] === 'string') FM.fxThumbs.mountFilter(q[0], q[1], null);
+      else if (FM.fxThumbs.mountStack) FM.fxThumbs.mountStack(q[0], q[1].id, () => FM.spine.lookRecipeEffects(q[1]), q[1].fid);   // #1243 S18: a saved look, whole
+    });
     if (lk.filter) box.appendChild(lookSlider(L, 'strength', w.lookStrength || 'Strength', 0));
   }
   function lookAdjust(box, L) {
@@ -1679,11 +1708,70 @@ window.FM = window.FM || {};
     /* (With no look yet a slider has no layer to show the picture on, so it changes when let go. The R9 review's line saying so, "Let go
        to see it", stood over the sliders every time; it went with #1255's 20:53 follow-up, his words: "There shouldn't be any explanations
        like that". Letting go shows it, and from then on the sliders show the picture as they move.) */
-    (S.LOOK_ADJ || []).forEach(d => box.appendChild(lookSlider(L, d.key, w[d.word] || d.key, d.lo)));
+    /* #1243 S19 (his words: "way more options… film grain… fade, temperature, blacks, whites… one slider… automatically making it look
+       good… auto adjust"). ONE ROW AT THE TOP FOR AUTO: the toggle stands where a slider's name does, and its one slider, Auto fix, is
+       how strongly it corrects (off is 0; the toggle turns it on at 100). Then every control in ONE list under three small headings,
+       Light, Colour, Finish (the plan's pick A; the table and its order are js/spine-edit.js's LOOK_ADJ, read here, never copied). */
+    const on = !!(S.lookAuto && S.lookAuto(L));
+    const autoRow = lookSlider(L, 'autofix', w.lookAutoFix || 'Auto fix', 0), name = autoRow.querySelector('.sm-look-l');
+    const tg = el('button', 'sm-look-autob', w.lookAuto || 'Auto'); tg.type = 'button'; tg.dataset.look = 'auto';
+    tg.setAttribute('aria-pressed', on ? 'true' : 'false');
+    tg.addEventListener('click', e => { e.stopPropagation(); lookUndrag(); S.cmd.projectLook({ kind: 'auto', on: !on }); });
+    if (name) name.replaceWith(tg);
+    box.appendChild(autoRow);
+    const heads = { light: 'adjLight', colour: 'adjColour', finish: 'adjFinish' };
+    let g = '';
+    (S.LOOK_ADJ || []).forEach(d => {
+      if (d.g && d.g !== g) {
+        g = d.g;
+        const h = el('div', 'sm-look-h', w[heads[g]] || g); h.dataset.g = g;
+        h.setAttribute('role', 'heading'); h.setAttribute('aria-level', '3');
+        box.appendChild(h);
+      }
+      box.appendChild(lookSlider(L, d.key, w[d.word] || d.key, d.lo));
+    });
     const rs = el('button', 'sm-look-reset', w.lookReset || 'Reset'); rs.type = 'button'; rs.dataset.look = 'reset';
     if (!S.lookOf(L).adjust) rs.setAttribute('aria-disabled', 'true');
     rs.addEventListener('click', e => { e.stopPropagation(); if (rs.getAttribute('aria-disabled') !== 'true') S.cmd.projectLook({ kind: 'reset' }); });
     box.appendChild(rs);
+  }
+  /* #1243 S18: HIS SAVED LOOKS — SAVE, RENAME, DELETE. Each asks in the app's own question box (FM.ask: the phone's keyboard comes up
+     inside the tap, the name is selected, never the browser's prompt()); Delete asks once. They are the device's (FM.spine.lookSave /
+     lookRename / lookDelete), so none of them is an edit step, and the panel is drawn again afterwards. What cannot be done is said
+     in the line (FM.spine.say), never a toast. A name is his words: it goes into the box and the line as text. */
+  const lookWhy = why => { const w = W(); return why === 'name' ? (w.lookSaveName || 'Give it a name') : why === 'full' ? (w.lookSaveFull || 'You have 60 saved looks. Delete one first') : why === 'storage' ? (w.lookSaveStorage || 'No room left on this device. Nothing was saved') : why === 'gone' ? (((FM.spineWords && FM.spineWords.lines) || {}).lookSavedGone || 'That look was deleted') : (w.lookSavePlain || 'Nothing to save yet'); };
+  const lookRedraw = () => { if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh(); };
+  function lookSaveAsk(id) {
+    const w = W(), S = FM.spine;
+    if (!FM.ask || !S.lookSave) return;
+    FM.ask({ title: w.lookSaveAsk || 'Save this look', ok: w.lookSave || 'Save', input: { value: S.lookNextName() } }).then(ans => {
+      if (ans == null) return;
+      const L = id ? FM.layerById(FM.scene, id) : null, res = S.lookSave(L, ans);   // the layer as it is NOW: the box was open a while
+      S.say(res.ok ? (typeof w.lookSaved === 'function' ? w.lookSaved(res.recipe.name) : 'Saved') : lookWhy(res.why));
+      if (res.ok) { lookLeft = 0; lookRedraw(); }   // Yours is the strip's first section: the new tile is in view
+    });
+  }
+  function lookMineMenu(btn, r) {
+    const w = W(), S = FM.spine, at = btn.getBoundingClientRect();
+    if (!FM.contextMenu || !FM.ask) return;
+    FM.contextMenu.show(at.left, at.bottom + 4, [
+      { label: w.lookRename || 'Rename', action: () => {
+        FM.ask({ title: w.lookRenameAsk || 'Rename look', ok: w.lookRename || 'Rename', input: { value: r.name } }).then(ans => {
+          if (ans == null) return;
+          const res = S.lookRename(r.id, ans);
+          if (!res.ok) S.say(lookWhy(res.why));
+          lookRedraw();
+        });
+      } },
+      { label: w.lookDelete || 'Delete', danger: true, action: () => {
+        FM.ask({ title: typeof w.lookDeleteAsk === 'function' ? w.lookDeleteAsk(r.name) : 'Delete this look?', ok: w.lookDelete || 'Delete', danger: true }).then(yes => {
+          if (!yes) return;
+          const res = S.lookDelete(r.id);
+          if (!res.ok) S.say(lookWhy(res.why));
+          lookRedraw();
+        });
+      } }
+    ], { right: at.right, above: at.top });
   }
   /* #1243 S12: a line in the panel with its one-step button (the words are the words file's, never data) */
   function lookLine(text, label, key, fn) {
@@ -1706,6 +1794,12 @@ window.FM = window.FM || {};
       b.addEventListener('click', e => { e.stopPropagation(); if (lookTab === t[0]) return; lookUndrag(); lookTab = t[0]; if (FM.inspector && FM.inspector.refresh) FM.inspector.refresh(); });
       tabs.appendChild(b);
     });
+    /* #1243 S18 (his words: "then you can save it as a preset"): Save, at the end of the panel's first row: the look on the video, kept
+       on this device under a name. Off while the video has no look. */
+    const sv = el('button', 'sm-look-save', w.lookSave || 'Save'); sv.type = 'button'; sv.dataset.look = 'save';
+    if (!(L && S.lookRecipeOf && S.lookRecipeOf(L))) sv.setAttribute('aria-disabled', 'true');
+    sv.addEventListener('click', e => { e.stopPropagation(); if (sv.getAttribute('aria-disabled') === 'true') return; lookUndrag(); lookSaveAsk(L.id); });
+    tabs.appendChild(sv);
     box.appendChild(tabs);
     /* #1243 S12: CLIPS THAT KEEP A LOOK OF THEIR OWN (the tray's Look, before Look was the video's): how many, and Remove them, ONE step that
        takes off only those looks (S.planProjectLook 'clipsOff'). And a look that ends before the last clip (clips added in Full; every
