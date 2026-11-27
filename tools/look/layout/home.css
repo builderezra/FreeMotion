@@ -1,0 +1,86 @@
+/* tools/look/layout/home.css: HOME IN THE NEW LOOK (#1255), on a phone. His picks: H9r, the Quiet list ("h9r dark home minimal
+   is great", 21 Nov; no giant Projects heading, the name in the middle, settings on the left), and N1 for the dock ("Just go
+   with N1.", 24 Nov: four tabs with the + in the middle where it is today; a chosen tab is a soft chip, never a line).
+   Hand-written. tools/look/build.py writes this into both generated stylesheets, LOOK replaced by the look's name, after the
+   generated part and its tails, so at the same prefix these rules win. Colours come from tokens-<look>.css only.
+   ONLY A PROJECT'S ROW CHANGES SHAPE: js/home.js marks a project card .hm-row while a look is on and gives it its one line
+   (.hm-line) and, when pinned, a pin after its name. Templates, Elements and Tutorials keep today's cards in the new colours
+   until their own picks (HT2, HE2, HU3) are built. A computer keeps today's Home in the new colours until H9a is built.
+   Two places differ from the boards ON PURPOSE: the wordmark is the app's own picture (his rule of 21 Nov: the real logo,
+   recoloured, never typed), and the header's buttons keep today's distance from the top of the screen (the board has them
+   6 px higher, nearer the iPhone's own blur at the top, which he has asked about four times). */
+
+/* what the row carries only for the phone list stays out of sight everywhere else */
+html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row :is(.hm-line, .hm-name-pin) { display: none; }
+/* while he selects, the + steps away (styles.css hides it); its drawing goes with it: a tail keeps the + drawing visible with an
+   important rule, and that left a dark + standing in the dock under the select bar */
+html:root[data-ui="LOOK"][data-theme] body.hm-selecting #hm-new > svg { visibility: hidden !important; }
+
+@media (max-width: 700px) {
+  /* THE HEADER. The cog and search are bare drawings in a 44 px target, no disc behind them; the profile is a small quiet disc
+     with the initial in the display face. The wordmark is the app's own picture (the tails recolour it). */
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-top { padding-left: 8px; padding-right: 8px; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-top-actions { gap: 0; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-top .hm-search-btn { color: var(--n-t2); }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-top .hm-search-btn::before { background: none; border: 0; box-shadow: none; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-top .hm-search-btn:not(#hm-profile-btn) > svg { width: 22px; height: 22px; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-top .hm-search-btn:not(#hm-profile-btn) > svg * { stroke-width: 1.6; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-top .hm-search-btn.on { color: var(--n-t1); }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-top .hm-search-btn.on::before { inset: 4px; border-radius: 12px; background: var(--n-chip); }
+  html:root[data-ui="LOOK"][data-theme] #home-screen #hm-profile-btn,
+  html:root[data-ui="LOOK"][data-theme] #home-screen #hm-profile-btn.has-profile { color: var(--n-t1); text-shadow: none; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen #hm-profile-btn::before,
+  html:root[data-ui="LOOK"][data-theme] #home-screen #hm-profile-btn.has-profile::before { inset: 7px; border-radius: 50%; background: var(--n-s3); border: 0; box-shadow: none; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen #hm-profile-btn .hm-profile-initials { font-family: var(--font-display); font-style: italic; font-weight: 500; font-size: 16px; line-height: 1; letter-spacing: 0; padding-bottom: 1px; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen #hm-profile-btn .hm-profile-person { width: 18px; height: 18px; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-top .hm-search-btn > .hm-profile-photo { inset: 7px; width: 30px; height: 30px; }
+
+  /* THE LIST. Rows, not cards: no box, no rule between them, 82 px each; the picture keeps the project's own shape inside a
+     56 x 62 place (js/home.js gives the row --hm-ar, width over height); the name in the display face; one quiet line under it. */
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-scroll:has(> .hm-grid > .hm-row) { padding: 2px 0 24px; }
+  html:root[data-ui="LOOK"][data-theme] body.hm-selecting #home-screen .hm-scroll:has(> .hm-grid > .hm-row) { padding-bottom: 160px; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-grid:has(> .hm-row) { gap: 0; max-width: none; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-grid:has(> .hm-row) > .hm-note { margin: 0 20px 10px; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-card.hm-row { --hm-th-h: min(62px, calc(56px / var(--hm-ar, .8)));
+    min-height: 82px; padding: 0 8px 0 20px; gap: 16px; background: transparent; background-image: none; border: 0; border-radius: 0; box-shadow: none; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-card.hm-row:active { background: var(--n-s1); }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-card.hm-row.hm-sel { outline: 0; background: var(--n-s2); }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-thumb { flex: 0 0 56px; width: 56px; height: 62px; background: transparent; background-image: none; border-radius: 0; box-shadow: none; overflow: visible; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-thumb > :is(img, .hm-thumb-empty) { flex: none; width: calc(var(--hm-th-h) * var(--hm-ar, .8)); height: var(--hm-th-h); border-radius: 4px; background: #000; opacity: 1; box-shadow: 0 0 0 1px var(--n-thumb-edge); }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-thumb > img { object-fit: cover; }
+  /* no picture yet: a black frame of the project's own shape, nothing drawn in it; while a picture loads it stands in its place */
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-thumb > .hm-thumb-empty > * { display: none; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-thumb > img ~ .hm-thumb-empty { display: none; }
+  /* the length, Open and the pin are said in the row's words here, so their badges come off the picture */
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-thumb :is(.hm-dur, .hm-open-badge, .hm-pin) { display: none; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-body { display: flex; flex-direction: column; gap: 7px; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-name { display: flex; align-items: center; gap: 7px; min-width: 0; overflow: visible; font-family: var(--font-display); font-weight: 500; font-size: 20px; letter-spacing: -.012em; line-height: 1.1; color: var(--n-t1); }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-name-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-name-pin { display: block; flex: none; width: 14px; height: 14px; color: var(--n-t3); }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row :is(.hm-meta, .hm-sub) { display: none; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-line { display: flex; align-items: center; min-width: 0; overflow: hidden; white-space: nowrap; font-family: var(--font-ui); font-size: 13px; font-weight: 400; line-height: 1.3; color: var(--n-t3); font-variant-numeric: tabular-nums; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-line-sep { flex: none; padding: 0 6px; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-line-dot { flex: none; width: 7px; height: 7px; margin-right: 7px; border-radius: 50%; background: var(--n-accent); }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-line-b { flex: none; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-line-b:last-child { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-card-more { width: 44px; height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--n-t3); gap: 3px; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-card-more .hm-dot { width: 2.5px; height: 2.5px; }
+
+  /* THE DOCK (N1). A flat bar with a hairline: five equal columns, the four tabs and the + in the middle one, each tab 50 px
+     tall; the tab he is on is ink on a soft chip the size of its column (never a line, his rule of 23 Nov); the + is the
+     vermilion key with its cut corner. On an iPhone with a home bar the dock is 84 px, as today and as the board; on a screen
+     without one it is 57 (today 50) so the tabs keep their 50, and the select bar follows its top. */
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; align-items: start;
+    height: calc(57px + max(0px, env(safe-area-inset-bottom) - 7px)); padding: 6px 6px 0;
+    border-radius: 0; border-top: 1px solid var(--n-line); background: var(--n-bg); background-image: none; box-shadow: none; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-tabs .hm-tab { height: 50px; min-height: 0; gap: 5px; border: 0; border-radius: 12px; background: transparent; background-image: none; box-shadow: none;
+    color: var(--n-t3); font-family: var(--font-ui); font-size: 11px; font-weight: 500; line-height: 1; letter-spacing: 0; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-tabs .hm-tab :is(svg, svg *, .hm-tab-ico, .hm-tab-label) { color: inherit; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-tabs .hm-tab.active { background: var(--n-chip); color: var(--n-t1); font-weight: 600; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-tabs .hm-tab.active :is(svg, svg *, .hm-tab-ico, .hm-tab-label) { color: var(--n-t1); }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-tabs .hm-tab-ico { width: 21px; height: 21px; stroke-width: 1.6; }
+  html:root[data-ui="LOOK"][data-theme] .hm-selbar { bottom: calc(57px + max(0px, env(safe-area-inset-bottom) - 7px)); }
+  html:root[data-ui="LOOK"][data-theme] #hm-new { bottom: calc(1px + max(0px, env(safe-area-inset-bottom) - 7px)); width: 48px; height: 48px; border-radius: 14px; box-shadow: none;
+    clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 0 100%); }
+  html:root[data-ui="LOOK"][data-theme] #hm-new > svg { width: 24px; height: 24px; stroke-width: 2.2; }
+}

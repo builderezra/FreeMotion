@@ -213268,4 +213268,303 @@
       if (bad.length) throw new Error(bad.join(' · '));
     } finally { if (had === null) de.removeAttribute('data-ui'); else de.setAttribute('data-ui', had); }
   });
+
+  /* ═══ #1255 · HOME IN THE NEW LOOK (his picks H9r, the Quiet list, and N1, the dock; on a phone) ════════════════════════════════
+   * His words: "h9r dark home minimal is great" (21 Nov), "Just go with N1." (24 Nov), and the rule over all of it: "rethinking how
+   * everything could be laid out, not just recoloring stuff" (23 Nov). While New look (preview) is on, a project's card is a ROW
+   * (js/home.js projectCard, tools/look/layout/home.css): no box, its picture in the project's own shape inside 56 x 62, the name in
+   * the display face with the pin after it, one line under it; the dock is a flat bar of five equal columns, the chosen tab a soft
+   * chip and the + a vermilion key with a cut corner. With the look off Home is exactly today's. Every test reads today's Home, or
+   * the look's other state, as its CONTROL, so a probe that cannot tell a row from a card fails as a control instead of passing.
+   * The cards are drawn from made-up records through FM.home._projectCard into a list of their own beside Home's (the same parent and
+   * classes, so every Home rule reaches them, and no redraw of Home's list can take them away); nothing is stored but a pin, put back. */
+  const home1255 = {
+    INK: {
+      cutline: { t1: 'rgb(245, 240, 232)', t3: 'rgb(154, 144, 132)', bg: 'rgb(18, 17, 16)', line: 'rgb(51, 48, 44)', chip: 'rgba(245, 240, 232, 0.09)', accent: 'rgb(255, 90, 54)', edge: 'rgba(0, 0, 0, 0)' },
+      light: { t1: 'rgb(30, 26, 21)', t3: 'rgb(108, 98, 86)', bg: 'rgb(243, 238, 229)', line: 'rgb(221, 211, 195)', chip: 'rgba(30, 26, 21, 0.09)', accent: 'rgb(198, 60, 27)', edge: 'rgba(30, 24, 16, 0.1)' },
+    },
+    forced: function () { return /[?&]ui=(cutline|light|now)(?![\w-])/.test(location.search); },
+    setLook: async function (lk) {
+      if (home1255.forced()) throw new Error('setup: this frame was opened with ?ui= in its address, which overrides New look (preview): run these without ?look=');
+      FM.settings.set('newLook', lk);
+      await look1255.until(function () { if ((look1255.ui() || '') !== lk) return false; if (!lk) return true; const l = look1255.link(lk); return !!(l && l.sheet); }, 'New look (preview) set to ' + (lk || 'Off') + ' never took (html data-ui is ' + look1255.ui() + ')');
+      await sleep(80);
+    },
+    /* Home open and settled: its first redraw after opening (the picture grab) comes up to two seconds later */
+    open: async function () { if (!FM.home.isOpen()) { FM.home.open(); await sleep(2200); } },
+    dur: function (s) { s = Math.max(0, Math.round(s || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); },
+    frame: function (w, h) { const ar = (w > 0 && h > 0) ? w / h : 0.8, fh = Math.min(62, 56 / ar); return { w: fh * ar, h: fh }; },
+    pic: function (w, h, colour) { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'); g.fillStyle = '#000'; g.fillRect(0, 0, w, h); g.fillStyle = colour; g.fillRect(w * 0.3, h * 0.3, w * 0.4, h * 0.4); return c.toDataURL('image/png'); },
+    /* made-up records (never stored), and the project open in this tab as the suite has it */
+    records: function () {
+      const now = Date.now(), D = 86400000, openId = FM.storage.openProjectId();
+      const open = (FM.projects.list() || []).filter(function (p) { return p.id === openId; })[0];
+      if (!open) throw new Error('setup: no project is open in this tab, so there is no Open row to read');
+      return {
+        pinned: { id: 'p_h1255pin', name: 'Row probe 8', width: 1080, height: 1350, duration: 19, fps: 30, layers: 4, modified: now - 12.3 * D, created: now - 15 * D },
+        square: { id: 'p_h1255sq', name: 'Row probe 6', width: 1080, height: 1080, duration: 5, fps: 30, layers: 4, modified: now - 11.4 * D, created: now - 14 * D },
+        wide: { id: 'p_h1255wide', name: 'Row probe 7', width: 1440, height: 1080, duration: 6, fps: 30, layers: 7, modified: now - 12.2 * D, created: now - 14 * D },
+        long: { id: 'p_h1255long', name: 'A project with a name far too long for one row of Home 1255', width: 1080, height: 1920, duration: 75, fps: 30, layers: 2, modified: now - 2.2 * D, created: now - 3 * D },
+        open: Object.assign({}, open),
+      };
+    },
+    since: { pinned: '12d ago', square: '11d ago', wide: '12d ago', long: '2d ago' },
+    /* FM.projects.getThumb answers for the made-up records from MAP and from the real store for every other id; returns the undo */
+    thumbs: function (map) {
+      const d = Object.getOwnPropertyDescriptor(FM.projects, 'getThumb'), real = FM.projects.getThumb;
+      FM.projects.getThumb = function (id) { return Object.prototype.hasOwnProperty.call(map, id) ? Promise.resolve(map[id]) : real.apply(this, arguments); };
+      return function () { if (d) Object.defineProperty(FM.projects, 'getThumb', d); else delete FM.projects.getThumb; };
+    },
+    /* a card for each record, in a list of their own beside Home's, each picture in WITH loaded */
+    draw: async function (recs, withPic) {
+      const sc = document.querySelector('#home-screen .hm-scroll');
+      if (!sc) throw new Error('setup: Home has no list to draw beside');
+      home1255.clear();
+      const list = document.createElement('div');
+      list.className = 'hm-grid'; list.setAttribute('data-h1255', '1');
+      sc.appendChild(list);
+      const out = {};
+      Object.keys(recs).forEach(function (k) { const c = FM.home._projectCard(recs[k]); list.appendChild(c); out[k] = c; });
+      for (let i = 0; i < 80; i++) {
+        if (withPic.every(function (k) { const im = out[k].querySelector('.hm-thumb > img'); return im && im.complete && im.naturalWidth > 0; })) break;
+        await sleep(25);
+      }
+      withPic.forEach(function (k) { const im = out[k].querySelector('.hm-thumb > img'); if (!(im && im.complete && im.naturalWidth > 0)) throw new Error('setup: the ' + k + ' card’s picture never loaded'); });
+      await sleep(40);
+      return out;
+    },
+    clear: function () { document.querySelectorAll('#home-screen [data-h1255]').forEach(function (n) { n.remove(); }); },
+    css: function (el, k, pseudo) { return el ? getComputedStyle(el, pseudo || null)[k] : '(none)'; },
+    box: function (el) { return el.getBoundingClientRect(); },
+    near: function (a, b, tol) { return Math.abs(a - b) <= (tol == null ? 0.6 : tol); },
+    px: function (r) { return Math.round(r.left * 10) / 10 + ',' + Math.round(r.top * 10) / 10 + ' ' + Math.round(r.width * 10) / 10 + ' × ' + Math.round(r.height * 10) / 10; },
+    restore: async function (was) {
+      home1255.clear();
+      try { await home1255.setLook(was.look === 'cutline' || was.look === 'light' ? was.look : ''); } catch (e) {}
+      try { if (!was.open && FM.home.isOpen()) FM.home.close(); } catch (e) {}
+      await sleep(80);
+    },
+  };
+
+  test('1255 home · under the new look a project on Home is a quiet row at a phone’s size, in Dark and in Light: no box, 82 px tall and edge to edge, its picture in the project’s own shape inside a 56 × 62 place (4:5 and 1:1 with a picture, 4:3 and 9:16 without), the name in the display face 16 px after it with the pin right after a pinned name and a long name cut short before its pin, one line under it in its own words (a vermilion dot, Open and the length for the open project, else the length and how long ago), the badges and sizes off the picture and the ⋯ a 44 px target 8 px from the edge (CONTROL: with the look off the same record is today’s card, a box with its badges and its sizes)', { item: '1255', budgetMs: 90000 }, async function () {
+    if (!FM.home || !FM.home._projectCard || !FM.home._pin) throw new Error('setup: Home has no seam to draw a project card or to pin one (FM.home._projectCard, FM.home._pin)');
+    const H = home1255, R = H.records(), bad = [];
+    const was = { look: FM.settings.get('newLook'), open: FM.home.isOpen(), pins: localStorage.getItem('fm.home.pins') };
+    const undoThumbs = H.thumbs({ p_h1255pin: H.pic(160, 200, '#e2a04f'), p_h1255sq: H.pic(200, 200, '#6fd9ec') });
+    try {
+      FM.home._pin(R.pinned.id, true); FM.home._pin(R.long.id, true);
+      await atPhoneWidth(async function () {
+        /* CONTROL · the look off: the same record is today's card, a box with its badges and its sizes */
+        await H.setLook('');
+        await H.open();
+        const t = (await H.draw({ pinned: R.pinned }, ['pinned'])).pinned;
+        if (t.classList.contains('hm-row') || t.querySelector('.hm-line, .hm-name-t, .hm-name-pin')) throw new Error('CONTROL: with the look off the card is already a row');
+        if (H.css(t, 'borderTopWidth') !== '1px' || H.css(t, 'borderTopLeftRadius') === '0px' || ['.hm-meta', '.hm-sub', '.hm-dur', '.hm-pin'].some(function (s) { return H.css(t.querySelector(s), 'display') === 'none'; }))
+          throw new Error('CONTROL: with the look off the probe does not read today’s card as a box with its badges and sizes (border ' + H.css(t, 'borderTopWidth') + ', corner ' + H.css(t, 'borderTopLeftRadius') + ')');
+        for (const lk of ['cutline', 'light']) {
+          const I = H.INK[lk], who = lk === 'cutline' ? 'Dark' : 'Light';
+          await H.setLook(lk);
+          const cards = await H.draw(R, ['pinned', 'square']);
+          const lb = H.box(cards.pinned.parentNode);
+          if (!H.near(lb.left, 0, 1) || !H.near(lb.width, innerWidth, 1)) bad.push(who + ': the list is ' + H.px(lb) + ', not the screen’s whole width (' + innerWidth + ')');
+          Object.keys(cards).forEach(function (k) {
+            const c = cards[k], rec = R[k], say = who + ', ' + k + ': ';
+            if (!c.isConnected) { bad.push(say + 'the card was taken out of the page before it was read'); return; }
+            if (!c.classList.contains('hm-row')) { bad.push(say + 'the card is not a row'); return; }
+            const cb = H.box(c), th = c.querySelector('.hm-thumb'), tb = H.box(th);
+            if (H.css(c, 'backgroundColor') !== 'rgba(0, 0, 0, 0)' || H.css(c, 'backgroundImage') !== 'none' || H.css(c, 'borderTopWidth') !== '0px' || H.css(c, 'borderTopLeftRadius') !== '0px' || H.css(c, 'boxShadow') !== 'none')
+              bad.push(say + 'the row still has a box (' + H.css(c, 'backgroundColor') + ', border ' + H.css(c, 'borderTopWidth') + ', corner ' + H.css(c, 'borderTopLeftRadius') + ', shadow ' + H.css(c, 'boxShadow') + ')');
+            if (!H.near(cb.height, 82) || !H.near(cb.left, lb.left) || !H.near(cb.width, lb.width)) bad.push(say + 'the row is ' + H.px(cb) + ', want 82 px tall across the whole list');
+            if (!H.near(tb.width, 56) || !H.near(tb.height, 62) || !H.near(tb.left, cb.left + 20) || !H.near(tb.top + tb.height / 2, cb.top + cb.height / 2, 1)) bad.push(say + 'the picture’s place is ' + H.px(tb) + ', want 56 × 62, 20 px in, centred on the row');
+            const img = th.querySelector(':scope > img'), ph = th.querySelector(':scope > .hm-thumb-empty');
+            const pic = img || ph, pb = pic && H.box(pic), f = H.frame(rec.width, rec.height);
+            if (!pb || !H.near(pb.width, f.w) || !H.near(pb.height, f.h) || !H.near(pb.left + pb.width / 2, tb.left + 28) || !H.near(pb.top + pb.height / 2, tb.top + 31))
+              bad.push(say + 'the picture is ' + (pb ? H.px(pb) : 'missing') + ', want ' + f.w.toFixed(1) + ' × ' + f.h.toFixed(1) + ' (the project’s ' + rec.width + ' × ' + rec.height + ') in the middle of its place');
+            if (pic && (H.css(pic, 'borderTopLeftRadius') !== '4px' || H.css(pic, 'backgroundColor') !== 'rgb(0, 0, 0)' || H.css(pic, 'boxShadow').indexOf(I.edge) !== 0)) bad.push(say + 'the picture is not a black frame with 4 px corners and the look’s edge (' + H.css(pic, 'borderTopLeftRadius') + ', ' + H.css(pic, 'backgroundColor') + ', ' + H.css(pic, 'boxShadow') + ')');
+            if ((k === 'pinned' || k === 'square') && !img) bad.push(say + 'the card shows no picture although it has one');
+            if (img && ph && H.css(ph, 'display') !== 'none') bad.push(say + 'the empty frame still stands beside the picture');
+            ['.hm-dur', '.hm-open-badge', '.hm-pin', '.hm-meta', '.hm-sub'].forEach(function (s) { const e = c.querySelector(s); if (e && H.css(e, 'display') !== 'none') bad.push(say + s + ' still shows'); });
+            const nm = c.querySelector('.hm-name'), nt = nm && nm.querySelector(':scope > .hm-name-t'), pin = nm && nm.querySelector(':scope > .hm-name-pin');
+            if (!nt || nt.textContent !== rec.name) { bad.push(say + 'the name is not in a span of its own (' + (nm ? nm.innerHTML.slice(0, 60) : 'no name') + ')'); return; }
+            const nb = H.box(nt);
+            if (!/^"?Newsreader/.test(H.css(nm, 'fontFamily')) || H.css(nm, 'fontSize') !== '20px' || H.css(nm, 'color') !== I.t1) bad.push(say + 'the name is ' + H.css(nm, 'fontFamily').slice(0, 30) + ' ' + H.css(nm, 'fontSize') + ' ' + H.css(nm, 'color') + ', want the display face at 20 px in ' + I.t1);
+            if (!H.near(nb.left, tb.right + 16)) bad.push(say + 'the name starts at ' + nb.left.toFixed(1) + ', want 16 px after the picture’s place (' + (tb.right + 16).toFixed(1) + ')');
+            const mb = H.box(c.querySelector('.hm-card-more'));
+            if (!H.near(mb.width, 44) || !H.near(mb.height, 44) || !H.near(mb.right, cb.right - 8)) bad.push(say + 'the ⋯ is ' + H.px(mb) + ', want 44 × 44, 8 px from the row’s right edge');
+            if (k === 'pinned' || k === 'long') {
+              const qb = pin && H.box(pin);
+              if (!pin || pin.previousElementSibling !== nt) bad.push(say + 'a pinned project has no pin right after its name');
+              else if (!H.near(qb.width, 14) || !H.near(qb.height, 14) || qb.left < nb.right + 5 || !H.near(qb.top + qb.height / 2, nb.top + nb.height / 2, 2) || pin.getAttribute('aria-label') !== 'Pinned' || qb.right > mb.left)
+                bad.push(say + 'the pin is ' + H.px(qb) + ' beside a name at ' + H.px(nb) + ', want 14 × 14 right after it on its middle, before the ⋯, named Pinned');
+            } else if (pin) bad.push(say + 'a project that is not pinned wears a pin');
+            if (k === 'long' && !(nt.scrollWidth > nt.clientWidth + 1 && H.css(nt, 'textOverflow') === 'ellipsis')) bad.push(say + 'a long name is not cut short with an ellipsis (' + nt.scrollWidth + ' in ' + nt.clientWidth + ')');
+            const ln = c.querySelector('.hm-body > .hm-line'), want = k === 'open' ? 'Open·' + H.dur(rec.duration) : H.dur(rec.duration) + '·' + H.since[k];
+            if (!ln || ln.textContent !== want) { bad.push(say + 'the line under the name reads ' + (ln ? '«' + ln.textContent + '»' : 'nothing') + ', want «' + want + '»'); return; }
+            const lnb = H.box(ln), dot = ln.querySelector('.hm-line-dot');
+            if (H.css(ln, 'fontSize') !== '13px' || H.css(ln, 'color') !== I.t3 || lnb.top < nb.bottom + 5 || H.css(ln, 'display') === 'none') bad.push(say + 'the line is ' + H.css(ln, 'fontSize') + ' ' + H.css(ln, 'color') + ' at ' + H.px(lnb) + ', want 13 px in ' + I.t3 + ' under the name');
+            if (k === 'open') { if (!dot || ln.firstElementChild !== dot || H.css(dot, 'backgroundColor') !== I.accent || !H.near(H.box(dot).width, 7)) bad.push(say + 'the open project’s line does not start with a 7 px vermilion dot'); }
+            else if (dot) bad.push(say + 'a project that is not open has the dot');
+          });
+        }
+      }, 380);
+    } finally {
+      undoThumbs();
+      FM.home._pin(R.pinned.id, false); FM.home._pin(R.long.id, false);
+      try { if (was.pins === null) localStorage.removeItem('fm.home.pins'); else localStorage.setItem('fm.home.pins', was.pins); } catch (e) {}
+      await H.restore(was);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('1255 home · under the new look the dock at a phone’s size is N1 in Dark and in Light: a flat bar with a hairline and no blur, five equal columns with the four tabs 50 px tall in theirs, the chosen tab ink on a soft chip the size of its column with no line under it and the others plain, and the + the vermilion key 48 px square with its cut corner in the middle column, whose corner really is cut; while he selects, the select bar stands on the dock and the + steps away with its drawing (CONTROLS: with the look off the dock is today’s, the chosen tab with no chip and a round +; a tap on Templates moves the chip there; with its cut taken away the + is hit where the cut is; the + drawing shows before Select)', { item: '1255', budgetMs: 60000 }, async function () {
+    const H = home1255, bad = [], was = { look: FM.settings.get('newLook'), open: FM.home.isOpen() };
+    const tabs = function () { return Array.from(document.querySelectorAll('#home-screen .hm-tabs .hm-tab')); };
+    const active = function () { return tabs().filter(function (b) { return b.classList.contains('active'); }); };
+    try {
+      await atPhoneWidth(async function () {
+        await H.setLook('');
+        await H.open();
+        FM.home.showTab('projects'); await sleep(250);
+        /* CONTROL · today's dock: the chosen tab wears no chip and the + is round */
+        const t0 = active()[0], nb0 = document.getElementById('hm-new');
+        if (!t0 || H.css(t0, 'backgroundColor') !== 'rgba(0, 0, 0, 0)' || H.css(nb0, 'clipPath') !== 'none' || H.css(nb0, 'borderTopLeftRadius') !== '50%')
+          throw new Error('CONTROL: with the look off the probe does not read today’s dock (the chosen tab ' + H.css(t0, 'backgroundColor') + ', the + corner ' + H.css(nb0, 'borderTopLeftRadius') + ', clip ' + H.css(nb0, 'clipPath') + ')');
+        for (const lk of ['cutline', 'light']) {
+          const I = H.INK[lk], who = lk === 'cutline' ? 'Dark' : 'Light';
+          await H.setLook(lk);
+          FM.home.showTab('projects'); await sleep(250);
+          const dock = document.querySelector('#home-screen .hm-tabs'), db = H.box(dock);
+          if (!H.near(db.height, 57) || !H.near(db.bottom, innerHeight) || !H.near(db.width, innerWidth)) bad.push(who + ': the dock is ' + H.px(db) + ', want the screen’s width and 57 px at its foot (50 for the tabs, 6 above them, the hairline; no home bar here)');
+          if (H.css(dock, 'backgroundColor') !== I.bg || H.css(dock, 'backgroundImage') !== 'none' || H.css(dock, 'borderTopWidth') !== '1px' || H.css(dock, 'borderTopColor') !== I.line || H.css(dock, 'borderTopLeftRadius') !== '0px' || H.css(dock, 'boxShadow') !== 'none' || !/^none$/.test(H.css(dock, 'backdropFilter')))
+            bad.push(who + ': the dock is not a flat bar on the ground with a hairline (' + [H.css(dock, 'backgroundColor'), H.css(dock, 'borderTopWidth'), H.css(dock, 'borderTopColor'), H.css(dock, 'borderTopLeftRadius'), H.css(dock, 'boxShadow'), H.css(dock, 'backdropFilter')].join(', ') + ')');
+          const cols = H.css(dock, 'gridTemplateColumns').split(' ').map(parseFloat), col = (db.width - 12) / 5;
+          if (cols.length !== 5 || cols.some(function (w) { return !H.near(w, col); })) bad.push(who + ': the dock’s columns are ' + H.css(dock, 'gridTemplateColumns') + ', want five of ' + col.toFixed(1) + ' px');
+          const tt = tabs();
+          if (tt.map(function (b) { return b.textContent.trim(); }).join('|') !== 'Projects|Templates|Elements|Tutorials') bad.push(who + ': the dock’s tabs are ' + tt.map(function (b) { return b.textContent.trim(); }).join(', '));
+          [0, 1, 3, 4].forEach(function (slot, i) {
+            const b = tt[i], bb = b && H.box(b);
+            if (!bb || !H.near(bb.width, col) || !H.near(bb.height, 50) || !H.near(bb.left, db.left + 6 + col * slot) || !H.near(bb.top, db.top + 7)) bad.push(who + ': ' + (b ? b.textContent.trim() : 'a tab') + ' is ' + (bb ? H.px(bb) : 'missing') + ', want its whole column (' + col.toFixed(1) + ' × 50) in column ' + (slot + 1));
+            const ic = b && b.querySelector('svg.hm-tab-ico'), ib = ic && H.box(ic);
+            if (!ib || !H.near(ib.width, 21) || !H.near(ib.height, 21)) bad.push(who + ': ' + (b ? b.textContent.trim() : 'a tab') + '’s drawing is ' + (ib ? H.px(ib) : 'missing') + ', want 21 px');
+          });
+          const on = active();
+          if (on.length !== 1 || on[0] !== tt[0]) bad.push(who + ': the chosen tab is not Projects alone');
+          const a = tt[0];
+          if (H.css(a, 'backgroundColor') !== I.chip || H.css(a, 'borderTopLeftRadius') !== '12px' || H.css(a, 'color') !== I.t1) bad.push(who + ': the chosen tab is ' + [H.css(a, 'backgroundColor'), H.css(a, 'borderTopLeftRadius'), H.css(a, 'color')].join(', ') + ', want ink on the soft chip ' + I.chip + ' with 12 px corners');
+          if (H.css(a, 'borderBottomWidth') !== '0px' || H.css(a, 'boxShadow') !== 'none' || H.css(a, 'textDecorationLine') !== 'none' || ['::before', '::after'].some(function (p) { const c = H.css(a, 'content', p); return c && c !== 'none' && c !== 'normal'; }))
+            bad.push(who + ': the chosen tab has a line or a mark under it (border ' + H.css(a, 'borderBottomWidth') + ', shadow ' + H.css(a, 'boxShadow') + ') - his rule: a soft chip, never a line');
+          tt.slice(1).forEach(function (b) { if (H.css(b, 'backgroundColor') !== 'rgba(0, 0, 0, 0)' || H.css(b, 'color') !== I.t3) bad.push(who + ': ' + b.textContent.trim() + ', not chosen, is ' + H.css(b, 'backgroundColor') + ' ' + H.css(b, 'color') + ', want plain ' + I.t3); });
+          const nb = document.getElementById('hm-new'), pb = H.box(nb), clip = H.css(nb, 'clipPath');
+          if (!H.near(pb.width, 48) || !H.near(pb.height, 48) || !H.near(pb.left + 24, db.left + db.width / 2) || !H.near(pb.top, db.top + 8)) bad.push(who + ': the + is ' + H.px(pb) + ', want 48 × 48 in the middle column, 8 px under the dock’s top');
+          if (H.css(nb, 'borderTopLeftRadius') !== '14px' || !/^polygon\(/.test(clip) || clip.indexOf('11px') < 0 || H.css(nb, 'backgroundColor') !== I.accent || H.css(nb, 'boxShadow') !== 'none')
+            bad.push(who + ': the + is not the vermilion key with a cut corner (corner ' + H.css(nb, 'borderTopLeftRadius') + ', clip ' + clip + ', ' + H.css(nb, 'backgroundColor') + ', shadow ' + H.css(nb, 'boxShadow') + ')');
+          /* the cut is read where only the cut can make a miss: 41 px in and 2.5 px down is inside the key's 14 px rounded corner
+             but past the 11 px cut (x - y > 37). CONTROL: with the cut taken away the same point is the + */
+          const at = function (x, y) { const e = document.elementFromPoint(x, y); return !!(e && (e === nb || nb.contains(e))); };
+          const cx = pb.left + 41, cy = pb.top + 2.5;
+          nb.style.setProperty('clip-path', 'none');
+          const whole = at(cx, cy);
+          nb.style.removeProperty('clip-path');
+          if (!at(pb.left + 24, pb.top + 24) || !whole) bad.push(who + ': CONTROL: with its cut taken away the + is not hit at its middle or 41 px in and 2.5 px down, so its cut corner cannot be read');
+          else if (at(cx, cy)) bad.push(who + ': the + is still hit 41 px in and 2.5 px down (a tap there opens New project): its top-right corner is not cut');
+          /* CONTROL · the chip is the chosen state, not a fixed paint: a tap on Templates moves it there */
+          tt[1].click(); await sleep(260);
+          if (H.css(tt[1], 'backgroundColor') !== I.chip || H.css(tt[0], 'backgroundColor') !== 'rgba(0, 0, 0, 0)') bad.push(who + ': CONTROL: after a tap on Templates the chip did not move there (Templates ' + H.css(tt[1], 'backgroundColor') + ', Projects ' + H.css(tt[0], 'backgroundColor') + ')');
+          tt[0].click(); await sleep(260);
+          /* while he selects, the select bar stands on the dock's top and the + steps away with its drawing (a tail keeps the drawing
+             visible with an important rule: it stood as a dark + in the dock). CONTROL: before Select the drawing shows. */
+          if (H.css(nb.querySelector('svg'), 'visibility') !== 'visible') bad.push(who + ': CONTROL: the + drawing does not show before Select, so its hiding cannot be read');
+          FM.home._setSelection([]); FM.home._render('projects'); await sleep(120);
+          try {
+            const sb = document.getElementById('hm-selbar');
+            if (!document.body.classList.contains('hm-selecting') || !sb) bad.push(who + ': setup: Select did not come on');
+            else {
+              sb.getAnimations({ subtree: true }).forEach(function (x) { try { x.finish(); } catch (e) {} });
+              const sbb = H.box(sb);
+              if (!H.near(sbb.bottom, db.top, 1)) bad.push(who + ': the select bar ends at ' + sbb.bottom.toFixed(1) + ', not on the dock’s top (' + db.top.toFixed(1) + ')');
+              if (H.css(nb, 'visibility') !== 'hidden' || H.css(nb.querySelector('svg'), 'visibility') !== 'hidden') bad.push(who + ': while he selects the + or its drawing still shows (the key ' + H.css(nb, 'visibility') + ', the drawing ' + H.css(nb.querySelector('svg'), 'visibility') + ')');
+            }
+          } finally {
+            const sbtn = document.getElementById('hm-select-btn');
+            if (FM.home._selectionState().selectMode && sbtn) sbtn.click();
+            await sleep(200);
+          }
+        }
+      }, 380);
+    } finally { await H.restore(was); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('1255 home · with the look off Home is today’s: a project’s card has no row class, no shape of its own, no line, no wrapped name and no drawn pin, its children are today’s, Home’s own cards are today’s, the dock keeps today’s columns and corners, the + stays round and html carries no data-ui (CONTROL: the same record under the look is a row, so the check sees one where there is one; off again, Home’s own cards are today’s once more)', { item: '1255', budgetMs: 60000 }, async function () {
+    const H = home1255, R = H.records(), bad = [];
+    const was = { look: FM.settings.get('newLook'), open: FM.home.isOpen(), pins: localStorage.getItem('fm.home.pins') };
+    const today = function (c, say, drawn) {
+      if (c.classList.contains('hm-row') || c.style.getPropertyValue('--hm-ar') || (drawn && c.getAttribute('style') !== null)) bad.push(say + 'the card carries the row class or a shape of its own (' + c.className + ', style ' + c.getAttribute('style') + ')');
+      if (c.querySelector('.hm-line, .hm-name-t, .hm-name-pin, .hm-line-dot')) bad.push(say + 'the card holds a piece of the row (' + Array.from(c.querySelectorAll('.hm-line, .hm-name-t, .hm-name-pin')).map(function (n) { return n.getAttribute('class'); }).join(', ') + ')');
+      const kids = Array.from(c.children).map(function (n) { return n.className; }).filter(function (k) { return k !== 'hm-glint'; });
+      if (kids.join('|') !== 'hm-thumb|hm-body|hm-card-more') bad.push(say + 'the card’s children are ' + kids.join(', ') + ', not today’s thumb, body and ⋯');
+      const body = c.querySelector('.hm-body'), nm = c.querySelector('.hm-name');
+      if (!body || Array.from(body.children).map(function (n) { return n.className; }).join('|') !== 'hm-name|hm-meta|hm-sub') bad.push(say + 'the body holds ' + (body ? Array.from(body.children).map(function (n) { return n.className; }).join(', ') : 'nothing') + ', not today’s name, sizes and edited line');
+      if (!nm || nm.childNodes.length !== 1 || nm.firstChild.nodeType !== 3) bad.push(say + 'the name is not one plain run of text');
+    };
+    try {
+      FM.home._pin(R.pinned.id, true);
+      await atPhoneWidth(async function () {
+        await H.setLook('');
+        await H.open();
+        FM.home.showTab('projects'); await sleep(250);
+        const off = await H.draw({ pinned: R.pinned, open: R.open }, []);
+        today(off.pinned, 'off, pinned: ', true); today(off.open, 'off, open: ', true);
+        const own = Array.from(document.querySelectorAll('#home-screen .hm-grid:not([data-h1255]) > .hm-card[data-pid]'));
+        if (!own.length) bad.push('setup: Home lists no project of its own');
+        own.forEach(function (c, i) { if (i < 4) today(c, 'off, Home’s own card ' + (i + 1) + ': '); });
+        const dock = document.querySelector('#home-screen .hm-tabs'), cols = H.css(dock, 'gridTemplateColumns').split(' ');
+        if (cols.length !== 5 || cols[2] !== '76px' || H.css(dock, 'borderTopLeftRadius') !== '22px' || !H.near(H.box(dock).height, 50)) bad.push('off: the dock is not today’s (columns ' + cols.join(' ') + ', corner ' + H.css(dock, 'borderTopLeftRadius') + ', ' + H.box(dock).height + ' px tall)');
+        const nb = document.getElementById('hm-new');
+        if (H.css(nb, 'borderTopLeftRadius') !== '50%' || H.css(nb, 'clipPath') !== 'none') bad.push('off: the + is not today’s round + (corner ' + H.css(nb, 'borderTopLeftRadius') + ', clip ' + H.css(nb, 'clipPath') + ')');
+        if (look1255.ui() !== null) bad.push('off: html carries data-ui=' + look1255.ui());
+        /* CONTROL · the same record under the look is a row: the checks above can see one */
+        await H.setLook('cutline');
+        const on = await H.draw({ pinned: R.pinned }, []);
+        if (!on.pinned.classList.contains('hm-row') || !on.pinned.querySelector('.hm-body > .hm-line') || !on.pinned.querySelector('.hm-name > .hm-name-t + .hm-name-pin') || !/--hm-ar/.test(on.pinned.getAttribute('style') || ''))
+          throw new Error('CONTROL: under the look the same record is not a row (' + on.pinned.className + '), so the look-off checks cannot be told from a probe that sees nothing · ' + bad.join(' · '));
+        /* …and off again: Home's own list is today's cards once more, with no reload */
+        await H.setLook('');
+        Array.from(document.querySelectorAll('#home-screen .hm-grid:not([data-h1255]) > .hm-card[data-pid]')).forEach(function (c, i) { if (i < 4) today(c, 'off again, Home’s own card ' + (i + 1) + ': '); });
+      }, 380);
+    } finally {
+      FM.home._pin(R.pinned.id, false);
+      try { if (was.pins === null) localStorage.removeItem('fm.home.pins'); else localStorage.setItem('fm.home.pins', was.pins); } catch (e) {}
+      await H.restore(was);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('1255 home · the look going on or off redraws an open Home by itself: told by fm-look (the word index.html’s new-look script says when html data-ui changes), Home’s own cards become rows, and cards again when it goes off (CONTROLS: with the look on a drawn list is rows; with no word the cards stay as they were drawn)', { item: '1255', budgetMs: 45000 }, async function () {
+    const H = home1255, de = document.documentElement, bad = [], was = { look: FM.settings.get('newLook'), open: FM.home.isOpen() };
+    const own = function () { return Array.from(document.querySelectorAll('#home-screen .hm-grid:not([data-h1255]) > .hm-card[data-pid]')); };
+    const rows = function () { const o = own(); return o.length ? o.filter(function (c) { return c.classList.contains('hm-row') && c.querySelector('.hm-line'); }).length / o.length : -1; };
+    try {
+      await atPhoneWidth(async function () {
+        await H.setLook('cutline');
+        await H.open();
+        FM.home._render('projects'); await sleep(120);
+        if (rows() !== 1) throw new Error('CONTROL: with the look on, Home’s own list drawn afresh is not all rows (' + rows() + '), so a redraw could not be seen');
+        /* the look comes off with no word said: nothing redraws, the rows stay */
+        de.removeAttribute('data-ui'); await sleep(150);
+        if (rows() !== 1) throw new Error('CONTROL: Home redrew its list with nothing said (rows ' + rows() + '), so the word cannot be told apart from another redraw');
+        window.dispatchEvent(new Event('fm-look')); await sleep(80);
+        const offDrawn = rows() === 0;
+        if (!offDrawn) bad.push('told that the look went off (fm-look), Home did not redraw its list as cards (' + Math.round(rows() * 100) + '% rows)');
+        de.setAttribute('data-ui', 'cutline'); await sleep(80);
+        if (offDrawn && rows() !== 0) bad.push('CONTROL: the look came back on with no word and the list redrew anyway');
+        window.dispatchEvent(new Event('fm-look')); await sleep(80);
+        if (rows() !== 1) bad.push('told that the look went on (fm-look), Home did not redraw its list as rows (' + Math.round(rows() * 100) + '% rows)');
+      }, 380);
+    } finally {
+      if (FM.settings.get('newLook') === 'cutline' && look1255.ui() !== 'cutline') de.setAttribute('data-ui', 'cutline');
+      await H.restore(was);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
 })();

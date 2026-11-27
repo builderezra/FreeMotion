@@ -1,0 +1,10 @@
+/* tools/look/layout/tokens-cutline.css: the names the hand-written layouts use (tools/look/layout/*.css), for the new dark.
+   The values are the identity's own (the design run's tokens for the dark look); nothing else may define an --n- name. */
+html:root[data-ui="cutline"][data-theme] {
+  --n-bg: #121110; --n-s1: #1b1a18; --n-s2: #232120; --n-s3: #2d2a27;
+  --n-line: #33302c; --n-line-strong: #4a453f;
+  --n-t1: #f5f0e8; --n-t2: #bdb4a8; --n-t3: #9a9084;
+  --n-accent: #ff5a36; --n-accent-ink: #ff7656; --n-on-accent: #1d0904; --n-danger: #ff5c7a; --n-focus: #ffb29f;
+  --n-chip: rgba(245, 240, 232, .09);       /* a chosen tab: the ink at 9 in 100, a soft chip and never a line under it */
+  --n-thumb-edge: transparent;              /* a project's picture needs no edge on charcoal */
+}

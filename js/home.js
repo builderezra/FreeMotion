@@ -1385,6 +1385,33 @@ window.FM = window.FM || {};
     return !!(U && U.switchAsk && U.switchAsk());
   }
 
+  /* ═══ #1255 HOME IN THE NEW LOOK: A PROJECT IS A QUIET ROW (his picks H9r and N1, on a phone) ═══════════════════════════════════
+     His words: "h9r dark home minimal is great" (21 Nov), and of the whole redesign, "this whole project like thing we were doing
+     was supposed to be like rethinking how everything could be laid out, not just recoloring stuff" (23 Nov). So while the new
+     look is ON (FM.newLook.on(): the look that is really on, never one only chosen whose stylesheet has not arrived) a project's
+     card is also a ROW: class hm-row, the project's shape as --hm-ar (width over height) for its picture's frame, the name in a
+     span of its own with the pin after it, and ONE line under it: a dot, Open and the length for the project open in this tab,
+     else the length and how long ago it was edited (a friend's copy says whose it is; a search by date says why it matched).
+     Everything the card has today stays in it (OPEN, the length and the pin on the picture, the sizes, the edited line):
+     tools/look/layout/home.css hides what the row says in words, and only on a phone, where the row is drawn. With the look off
+     none of this runs and the card is exactly today's. js/home.js re-draws an open Home when the look goes on or off (fm-look). */
+  function lookOn() { return !!(FM.newLook && FM.newLook.on && FM.newLook.on()); }
+  const ROW_PIN = '<path d="M12 17v4.5"/><path d="M9 10.8a2 2 0 0 1-1.1 1.8l-1.8.9A2 2 0 0 0 5 15.2v.8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.8a2 2 0 0 0-1.1-1.8l-1.8-.9a2 2 0 0 1-1.1-1.8V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/>';
+  function rowPin() {   // the board's pin, drawn in the text's own colour; a constant, nothing from the project goes in it
+    const t = document.createElement('template');
+    t.innerHTML = '<svg class="hm-name-pin" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Pinned" focusable="false">' + ROW_PIN + '</svg>';
+    return t.content.firstChild;
+  }
+  function rowLine(words, open) {   // built from nodes: a search's reason and a friend's name are plain text
+    const ln = el('div', 'hm-line');
+    if (open) { const d = el('span', 'hm-line-dot'); d.setAttribute('aria-hidden', 'true'); ln.appendChild(d); }
+    words.filter(Boolean).forEach((w, i) => {
+      if (i) { const s = el('span', 'hm-line-sep', '·'); s.setAttribute('aria-hidden', 'true'); ln.appendChild(s); }
+      ln.appendChild(el('span', 'hm-line-b', w));
+    });
+    return ln;
+  }
+
   function projectCard(p, subOverride) {
     // a DIV, not a button — a card is a <button> and the ⋯ is a nested <button>, which is invalid
     // HTML and silently breaks the inner tap on iOS Safari (the "three dots do nothing" bug).
@@ -1418,6 +1445,16 @@ window.FM = window.FM || {};
     const sub = el('div', 'hm-sub', subOverride || (cx && cx.kind === 'shared'
       ? 'Shared by ' + cx.host + (cx.ended ? ' · ended' : cx.now ? ' · live now' : ' · not connected')
       : 'edited ' + ago(p.modified)));
+    let rowLn = null;   // #1255: the row's one line, under the new look only (see lookOn)
+    if (lookOn()) {
+      card.classList.add('hm-row');
+      if (p.width > 0 && p.height > 0) card.style.setProperty('--hm-ar', String(Math.round(p.width / p.height * 10000) / 10000));
+      const nameT = el('span', 'hm-name-t', name.textContent);
+      name.textContent = ''; name.appendChild(nameT);
+      if (isPinned('projects', p.id)) name.appendChild(rowPin());
+      const since = subOverride || (cx && cx.kind === 'shared' ? sub.textContent : ago(p.modified));
+      rowLn = isOpen ? rowLine(['Open', fmtDur(p.duration), subOverride], true) : rowLine([fmtDur(p.duration), since], false);
+    }
     const more = moreBtn();
     more.setAttribute('aria-label', 'Project actions');
     more.addEventListener('click', (ev) => {
@@ -1574,6 +1611,7 @@ window.FM = window.FM || {};
     });
     const body = el('div', 'hm-body');
     body.appendChild(name); body.appendChild(meta); body.appendChild(sub);
+    if (rowLn) body.appendChild(rowLn);
     card.appendChild(th); card.appendChild(body);
     if (!selectMode) card.appendChild(more);   // the ⋯ menu is redundant while selecting (the check owns that corner)
     // The open project's travelling glint (Ezra: "make it so the project that's open, along the border
@@ -3877,6 +3915,10 @@ window.FM = window.FM || {};
       refreshHomeProfile();
       // re-sort / re-render when a setting that affects this screen changes
       if (FM.settings) FM.settings.onChange(() => { if (FM.home.isOpen()) render(); });
+      /* #1255: …and when the new look goes on or off. Switched on, its stylesheet arrives AFTER the setting changed (index.html's
+         new-look script puts html[data-ui] on at its load and says so with fm-look), so the render above still drew cards; this
+         one draws the rows. Off, or a stylesheet that never arrived, gives the cards back the same way. */
+      window.addEventListener('fm-look', () => { if (FM.home.isOpen()) render(); });
       // The home ⋯ is GONE (v5.24). Its only two entries — Import project file and Shortcuts — moved
       // into the settings cog beside it, which is where app-level actions already live. Ezra: "Put the
       // options that show up in the three dots that are in the home menu specifically inside the menus
@@ -4155,5 +4197,9 @@ window.FM = window.FM || {};
   FM.home.templateFileMessage = templateFileMessage;
   FM.home._selectionState = selectionState;   // queue 828
   FM.home._setSelection = setSelectionForTest;   // queue 828
+  /* #1255 suite seams: a project's card from a made-up record (a row under the new look, today's card without it), and a pin set
+     or cleared for one project id (returns whether it is pinned now), so a test can draw a pinned row and put the pin back */
+  FM.home._projectCard = projectCard;
+  FM.home._pin = function (id, on) { if (isPinned('projects', id) !== !!on) togglePin('projects', id); return isPinned('projects', id); };
 
 })(window.FM);

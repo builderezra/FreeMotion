@@ -1,0 +1,10 @@
+/* tools/look/layout/tokens-light.css: the names the hand-written layouts use (tools/look/layout/*.css), for the new light.
+   The values are the identity's own (the design run's tokens for the light look); nothing else may define an --n- name. */
+html:root[data-ui="light"][data-theme] {
+  --n-bg: #f3eee5; --n-s1: #fffcf6; --n-s2: #f8f3ea; --n-s3: #ebe3d6;
+  --n-line: #ddd3c3; --n-line-strong: #c3b6a2;
+  --n-t1: #1e1a15; --n-t2: #564d42; --n-t3: #6c6256;
+  --n-accent: #c63c1b; --n-accent-ink: #bd3a1a; --n-on-accent: #ffffff; --n-danger: #b8284a; --n-focus: #d9411f;
+  --n-chip: rgba(30, 26, 21, .09);          /* a chosen tab: the ink at 9 in 100, a soft chip and never a line under it */
+  --n-thumb-edge: rgba(30, 24, 16, .10);    /* a project's picture gets a hairline on paper, or a white frame would have no edge */
+}
