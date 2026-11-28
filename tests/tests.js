@@ -93194,29 +93194,26 @@
       const cx = c.getContext('2d', { willReadFrequently: true });
       cx.drawImage(img, 0, 0);
       const d = cx.getImageData(0, 0, c.width, c.height).data;
-      let transparent = 0, lit = 0;
-      let minx = c.width, miny = c.height, maxx = -1, maxy = -1;
+      /* #1255 (27 Nov): his LOCKED logo, dark lines and a thin white playhead on the orange tile #ff5a36. The mark is every pixel
+         that is not the tile. The safe zone: the logger measured the short line's rounded corner at about 40.6 % of the side from
+         the centre (only a circular mask would clip a sliver; he locked that size), so the bound is 41 %; the old mark sat at 29 %. */
+      let transparent = 0, mark = 0, white = 0, far = 0;
+      const cxp = c.width / 2, cyp = c.height / 2;
       for (let y = 0; y < c.height; y++) {
         for (let x = 0; x < c.width; x++) {
           const i = (y * c.width + x) * 4;
           if (d[i + 3] < 250) transparent++;
-          if (d[i] > 150 && d[i + 1] > 150 && d[i + 2] > 150) {
-            lit++;
-            if (x < minx) minx = x; if (x > maxx) maxx = x;
-            if (y < miny) miny = y; if (y > maxy) maxy = y;
+          if (Math.abs(d[i] - 255) + Math.abs(d[i + 1] - 90) + Math.abs(d[i + 2] - 54) > 60) {
+            mark++;
+            if (d[i] > 230 && d[i + 1] > 230 && d[i + 2] > 230) white++;
+            far = Math.max(far, Math.hypot(x + 0.5 - cxp, y + 0.5 - cyp));
           }
         }
       }
-      if (transparent > 0) throw new Error(name + ' has ' + transparent + ' non-opaque pixels — a maskable Android icon and an iOS home-screen icon are composited onto a ground this app does not choose, so transparency shows up as black or white depending on the launcher');
-      if (lit < c.width * c.height * 0.02) throw new Error(name + ' has almost no light pixels (' + lit + ') — the mark is missing or nearly invisible');
-      /* THE MASKABLE SAFE ZONE: Android may crop to a circle of 80% diameter, so every lit pixel has
-         to sit inside it or the mark loses its ends on some launchers. */
-      const cxp = c.width / 2, cyp = c.height / 2, safe = c.width * 0.4;
-      const corners = [[minx, miny], [maxx, miny], [minx, maxy], [maxx, maxy]];
-      for (const [px, py] of corners) {
-        const dist = Math.sqrt((px - cxp) * (px - cxp) + (py - cyp) * (py - cyp));
-        if (dist > safe) throw new Error(name + ': the mark reaches ' + Math.round(dist) + 'px from centre but a maskable icon\u2019s safe circle is ' + Math.round(safe) + 'px — Android would crop its ends');
-      }
+      if (transparent > 0) throw new Error(name + ' has ' + transparent + ' non-opaque pixels \u2014 a maskable Android icon and an iOS home-screen icon are composited onto a ground this app does not choose');
+      if (mark < c.width * c.height * 0.10) throw new Error(name + ': only ' + mark + ' pixels are not the orange tile \u2014 the mark is missing or nearly invisible');
+      if (white < c.width * c.height * 0.003) throw new Error(name + ': the white playhead is missing (' + white + ' white pixels)');
+      if (far > c.width * 0.41) throw new Error(name + ': the mark reaches ' + (far / c.width * 100).toFixed(1) + ' % of the side from centre, past the 41 % his locked size needs \u2014 Android would crop it');
     }
   });
 
@@ -195065,19 +195062,19 @@
   test('1180 the manifest and the page point at the D2 icons with their busters bumped', { item: '1180' }, async function () {
     const html = await src1180();
     const doc = new DOMParser().parseFromString(html, 'text/html');
-    const want = [['link[rel="manifest"]', 'manifest.json?v=4'], ['link[rel="apple-touch-icon"]', 'apple-touch-icon.png?v=3'], ['link[rel="icon"]', 'icon-192.png?v=3']];
+    const want = [['link[rel="manifest"]', 'manifest.json?v=5'], ['link[rel="apple-touch-icon"]', 'apple-touch-icon.png?v=4'], ['link[rel="icon"]', 'icon-192.png?v=4']];
     for (const [sel, href] of want) {
       const l = doc.querySelector(sel);
       if (!l || l.getAttribute('href') !== href) throw new Error(sel + ' is ' + (l ? l.getAttribute('href') : 'missing') + ', not ' + href + ' — a phone that cached the old icon keeps it');
     }
-    const man = await (await fetch('manifest.json?v=4&t1180=' + Date.now(), { cache: 'no-store' })).json();
+    const man = await (await fetch('manifest.json?v=5&t1180=' + Date.now(), { cache: 'no-store' })).json();
     const icons = (man && man.icons) || [];
-    for (const [src, size] of [['icon-192.png?v=3', '192x192'], ['icon-512.png?v=3', '512x512']]) {
+    for (const [src, size] of [['icon-192.png?v=4', '192x192'], ['icon-512.png?v=4', '512x512']]) {
       const ic = icons.find(i => i.src === src);
       if (!ic) throw new Error('manifest.json has no icon ' + src + ' (it lists ' + icons.map(i => i.src).join(', ') + ')');
       if (ic.sizes !== size) throw new Error('manifest.json lists ' + src + ' as ' + ic.sizes + ', not ' + size);
     }
-    for (const [src, n] of [['icon-192.png?v=3', 192], ['icon-512.png?v=3', 512], ['apple-touch-icon.png?v=3', 180]]) {
+    for (const [src, n] of [['icon-192.png?v=4', 192], ['icon-512.png?v=4', 512], ['apple-touch-icon.png?v=4', 180]]) {
       const img = await new Promise(function (res, rej) {
         const i = new Image();
         i.onload = function () { res(i); };
@@ -213345,6 +213342,30 @@
       await sleep(80);
     },
   };
+
+  test('1255 logo · the app icon files are his locked orange logo: icon-192, icon-512 and the Apple touch icon are the orange tile at every corner with the dark lines and the white playhead where the master draws them, at the sizes the manifest names (CONTROL: each file loaded, and the line and the playhead are not the tile)', { item: '1255' }, async function () {
+    /* #1255, his words 27 Nov 21:05: "orange one only is good, with the size i prefered lock it in". Every icon file is made from
+       tools/design/plans/1255-logo-final.svg (viewBox -15.035 -18.035 150.070 150.070), scaled, never redrawn. Points are read in
+       the master's own units. */
+    const U = X => (X + 15.035) / 150.07, V = Y => (Y + 18.035) / 150.07;
+    const tile = [255, 90, 54], ink = [29, 9, 4], white = [255, 255, 255], fails = [];
+    const near = (a, b) => a.every((v, i) => Math.abs(v - b[i]) <= 8);
+    const man = await (await fetch('../manifest.json', { cache: 'no-store' })).json();
+    const sizes = {}; (man.icons || []).forEach(i => { sizes[String(i.src).split('?')[0]] = i.sizes; });
+    for (const [f, n] of [['icon-192.png', 192], ['icon-512.png', 512], ['apple-touch-icon.png', 180]]) {
+      const im = await new Promise((res, rej) => { const m = new Image(); m.onload = () => res(m); m.onerror = () => rej(new Error('CONTROL: ' + f + ' did not load')); m.src = '../' + f + '?t=' + Date.now(); });
+      if (im.naturalWidth !== n || im.naturalHeight !== n) fails.push(f + ' is ' + im.naturalWidth + 'x' + im.naturalHeight + ', want ' + n);
+      if (f !== 'apple-touch-icon.png' && sizes[f] !== n + 'x' + n) fails.push('the manifest names ' + f + ' as ' + sizes[f]);
+      const c = document.createElement('canvas'); c.width = n; c.height = n; const x = c.getContext('2d'); x.drawImage(im, 0, 0, n, n);
+      const px = (u, v) => Array.from(x.getImageData(Math.min(n - 1, Math.floor(u * n)), Math.min(n - 1, Math.floor(v * n)), 1, 1).data.slice(0, 3));
+      [[0.03, 0.03], [0.97, 0.03], [0.03, 0.97], [0.97, 0.97]].forEach(p => { const v = px(p[0], p[1]); if (!near(v, tile)) fails.push(f + ' at the corner ' + p + ' is rgb(' + v + '), not the orange tile'); });
+      const line = px(U(40), V(31)), head = px(U(82), V(60));
+      if (near(line, tile) || near(head, tile)) throw new Error('CONTROL: in ' + f + ' the top line or the playhead reads as the tile, so the reading is off');
+      if (!near(line, ink)) fails.push(f + ': the top line is rgb(' + line + '), not the dark ink');
+      if (!near(head, white)) fails.push(f + ': the playhead is rgb(' + head + '), not white');
+    }
+    if (fails.length) throw new Error(fails.join(' · '));
+  });
 
   test('1255 home · under the new look a project on Home is a quiet row at a phone’s size, in Dark and in Light: no box, 82 px tall and edge to edge, its picture in the project’s own shape inside a 56 × 62 place (4:5 and 1:1 with a picture, 4:3 and 9:16 without), the name in the display face 16 px after it with the pin right after a pinned name and a long name cut short before its pin, one line under it in its own words (a vermilion dot, Open and the length for the open project, else the length and how long ago), the badges and sizes off the picture and the ⋯ a 44 px target 8 px from the edge (CONTROL: with the look off the same record is today’s card, a box with its badges and its sizes)', { item: '1255', budgetMs: 90000 }, async function () {
     if (!FM.home || !FM.home._projectCard || !FM.home._pin) throw new Error('setup: Home has no seam to draw a project card or to pin one (FM.home._projectCard, FM.home._pin)');

@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="-15.035 -18.035 150.070 150.070">
+  <!-- FreeMotion logo, FINAL 27 Nov 2026 (1255-PICKS.md 3.16): the orange tile ONLY (LG5), the real mark at the
+       medium size he picked (15% bigger than as drawn). Make every icon file from this one; never retype or redraw
+       the shapes, only scale. Full-bleed square on purpose: iOS and Android round the corners themselves; wherever
+       the app draws the tile itself, round it at 22.37%. -->
+  <rect x="-15.035" y="-18.035" width="150.070" height="150.070" fill="#ff5a36"/>
+  <rect x="14" y="20" width="92" height="22" rx="5" fill="#1d0904"/>
+  <rect x="14" y="49" width="62" height="22" rx="5" fill="#1d0904"/>
+  <rect x="14" y="78" width="26" height="22" rx="5" fill="#1d0904"/>
+  <rect x="79.5" y="14" width="5" height="96" rx="2.5" fill="#ff5a36"/>
+  <rect x="80.5" y="14" width="3" height="96" rx="1.5" fill="#ffffff"/>
+  <path d="M77 3 89 8.5 77 14z" fill="#ffffff"/>
+</svg>

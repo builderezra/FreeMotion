@@ -1,6 +1,6 @@
 # #1255 redesign: everything open, unfinished, or waiting on Ezra
 Kept by the logger, last updated 24 Nov 2026 01:30 AWST. This file is the durable copy; his words are verbatim under #1255 in REQUESTS.md.
-**27 Nov 2026, 03:5x (logger): SUPERSEDED.** His picks and the open questions now live in 1255-PICKS.md: his READY came on 24 Nov at about 16:31, and the builder builds from that list. Shipped so far: v18.55 (the intro plays on the compositor, no stutter) and v18.56 (Settings › New look (preview): Off by default, then Dark or Light, over today's layouts). Next: Home in the new look, behind the same switch. The rest of this file is the 24 Nov history.
+**27 Nov 2026, 03:5x (logger): SUPERSEDED.** His picks and the open questions now live in 1255-PICKS.md: his READY came on 24 Nov at about 16:31, and the builder builds from that list. Shipped so far: v18.55 (the intro plays on the compositor, no stutter), v18.56 (Settings › New look (preview): Off by default, then Dark or Light, over today's layouts) and v18.57 (Home in the new look on a phone: his quiet rows and flat dock, under the same switch). Next: the two fonts (his yes came 27 Nov 11:27). The rest of this file is the 24 Nov history.
 **His correction, 23 Nov 16:44-16:52 (verbatim):** "this whole project like thing we were doing was supposed to be like rethinking how everything could be laid out, not just recoloring stuff" / "the layout now is fine, but I'm just like open to inspiration and new ideas" / "we literally came up with some new designs. They're not even in here." (about the real-app page). So every surface gets today's layout POLISHED plus new layout ideas (never a recolour alone), and the real-app page must show his picks.
 His plan (21 Nov 02:10): "finish this up and we can properly do EVERYTHING when monday 4pm hits", i.e. after the weekly reset on **Mon 23 Nov 16:00 AWST**.
 His process rule: before ANY switch-over, ONE simple decisions chat covering every decision, his earlier likes ("still like them?"), and each change shown before/after, ending with "ready to switch over?". The builder builds nothing from these designs until he says he is ready.
@@ -46,7 +46,7 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
      - SEX (Simple export, more options)
      - MAR (Audio react)
      - MXD/MXP (export)
-     - LG (the real logo retinted)
+     - LG (the real logo retinted): PICKED 27 Nov 21:05, the orange one only at the medium size (PICKS 3.16; master tools/design/plans/1255-logo-final.svg)
      - E1D (E1 on PC)
      - and the other colours-only screens
    - **D1-D4: how every dropdown connects to its button.** Shown on the Home card •••, the copy/duplicate menu, the editor's top-right ••• and the parent picker. [D1 pointer recommended: his own "an arrow coming off of it"]

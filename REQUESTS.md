@@ -1,8 +1,10 @@
 # Ezra's requests — the running list
 
-> ## 📌 WHAT I NEED FROM YOU — updated 27 Nov at v18.57
+> ## 📌 WHAT I NEED FROM YOU — updated 28 Nov at v18.58
 >
-> **State:** v18.57 — **Your Home, in the new look.** With Settings › New look (preview) on Dark or Light, Home on your phone has the quiet rows and the flat dock you picked, the + as the vermilion key. Off is today's Home. Try it and say what is wrong; the other screens follow. **Still yours to do:** take down the old v2.83 copy in your other repo (Claude-game-2 → the FreeMotion folder → ••• → Delete directory → Commit changes). **From you, most useful first:** **open FreeMotion cold from your Home Screen on your iPhone and say if the intro still lags, and if an empty project's clapper lid still gets cut off as it lifts (#1231, #1232)**; play a project on your iPhone where a clip has an effect on its sound, for a minute, then paste Settings → Reports → Your last playback (#663); export something short with sound on your iPhone, save it and play it in Photos: is there sound? (#215); open a project on your iPhone and paste Settings → Reports → Your last project open, or say it is smooth (#508); if a video has landed with no picture, paste Settings → Reports → A clip with no picture (#129); play a slideshow of about 20 photos once and say if the app reloads (#1057); and go through the 26 Sep question page in your other Claude account, or say it is out of date (#956). **One question that had gone missing since August:** should the finished requests move out of this file into a second one, or stay here? I would leave the file whole (#352).
+> **State:** v18.58 — **Your logo is the app icon now** (the orange one, the size you picked). Your iPhone keeps the old icon on its Home Screen until FreeMotion is added again: do NOT remove it yet, removing it can delete your projects. Say when you want the new icon and I will take you through backing up first. **Still yours to do:** take down the old v2.83 copy in your other repo (Claude-game-2 → the FreeMotion folder → ••• → Delete directory → Commit changes). **From you, most useful first:** **open FreeMotion cold from your Home Screen on your iPhone and say if the intro still lags, and if an empty project's clapper lid still gets cut off as it lifts (#1231, #1232)**; play a project on your iPhone where a clip has an effect on its sound, for a minute, then paste Settings → Reports → Your last playback (#663); export something short with sound on your iPhone, save it and play it in Photos: is there sound? (#215); open a project on your iPhone and paste Settings → Reports → Your last project open, or say it is smooth (#508); if a video has landed with no picture, paste Settings → Reports → A clip with no picture (#129); play a slideshow of about 20 photos once and say if the app reloads (#1057); and go through the 26 Sep question page in your other Claude account, or say it is out of date (#956). **One question that had gone missing since August:** should the finished requests move out of this file into a second one, or stay here? I would leave the file whole (#352).
+>
+> v18.57 — **Your Home, in the new look.** With Settings › New look (preview) on Dark or Light, Home on your phone has the quiet rows and the flat dock you picked, the + as the vermilion key. Off is today's Home. Try it and say what is wrong; the other screens follow.
 >
 > v18.56 — **Your new look, as a preview.** Settings › New look (preview): Dark (Cutline) or Light puts your picks over the whole app; Off is today's look. Try it on your phone and say what looks wrong. The new layouts come next, then the switch-over when you say ready.
 >
@@ -41548,6 +41550,118 @@ re-opened #480, which I had marked done and had not fixed.
       📌 **Builder, 24 Nov 23:23:** the 6 follow-ups above are logged word for word (24 Nov, after the lock run's PASS and before v18.52's ship; new entries: none; other entries: none). They are his direction for the redesign's MOTION, and nothing of them is built yet: the effects panel opens with MO1, through the right flow (Effects, then the layer's effects, then Add effect, then the browser), on a computer on the combined editor, and from the canvas's own pan and zoom, which it gives back on close; every dropdown and pop-up opens in O2's family (the pointer first, then the panel, short and calm, a fade under reduced motion); he makes no more motion choices, the logger decides them. One of them is a BUG for the builder: the intro still stutters on his phone, which answers #1232's ask. To do: measure today's intro at a phone's size under a CPU throttle and in a WebKit pass, find the dropped frames, and fix them with transforms and opacity only; the category animations get the same frame check when they are built. The upgraded intros in the new colours are the logger's to draw.
       📍 **v18.56 (26 Nov): the new look is in the app as a PREVIEW** — Settings › New look (preview): Off (the default), Dark (Cutline), Light. It is his picks over today's layouts; the layouts themselves (Home, the editor, the panels in his new shapes) are the next steps, and the switch-over waits for his "ready?". Not yet: the fonts, the Simple editor's own lines, a real iPhone.
       📍 **v18.57 (27 Nov): Home in the new look, on a phone** — under the preview switch: the H9r rows and the N1 dock. Still today's layout in the new colours: the other tabs, search, Select, the menus, the computer's Home.
+      📥 **Follow-up, via INBOX — 27 Nov 2026, about 12:44 AWST: his iPhone checks: the new look (preview) loads on his phone, the clock stays readable in Light, and the intro plays smoothly [builder: filed under #1255; it answers the iPhone checks v18.55 and v18.56 left open]**
+      **His words (verbatim), in order (logging chat, 27 Nov, about 11:2x-11:4x):**
+      1. "How do I test the clock" (asking how to do his pending check: are the clock and battery at the top readable in the new look's Light).
+      2. [screenshot, phone clock 11:28, the installed app on v18.56: TODAY'S light Home, New look (preview) not on; the clock and battery are dark and readable] file: C:\Users\build\.claude\uploads\038c53db-a288-427b-b4c4-2509b19d3eaf\b3861a70-image.png
+      3. [screenshot, phone clock 11:28, after the logger asked him to set Settings > New look (preview) > Light: the new look's Light Home (warm cream ground, vermilion + and active tab, today's boxed cards); the clock and battery are dark and clearly readable] file: C:\Users\build\.claude\uploads\038c53db-a288-427b-b4c4-2509b19d3eaf\f1dbd658-image.png
+      4. "Yes" (his whole reply to the logger's "watch the opening intro once: does it play smoothly?")
+
+      **What it settles (logger's reading, not his words):**
+      - The new look (preview) loads on his real iPhone, in the installed app: v18.56's NOT YET "a look on a real iPhone" is answered for Home in Light, and so is PICKS Q24 (the clock in Light is readable). The editor's Light top strip was not looked at; it is the same light paper, so very likely the same.
+      - iOS draws the status-bar text DARK over a light page, although index.html asks for black-translucent.
+      - The v18.55 intro plays smoothly on his iPhone. This is read from his one-word "Yes"; the logger told him that reading so he can correct it.
+      - Nothing new to build: it closes the iPhone checks left open by v18.55 and v18.56. Dark was not reported on.
+
+      📥 **His answer in the builder's chat, 27 Nov 11:28 AWST: the fonts [builder: filed under #1255]**
+      **His words (verbatim):** Yes to the font
+      (The builder's reading: his yes to downloading the two typefaces of 1255-PICKS.md 40, Instrument Sans for the UI and Newsreader for display, self-hosted and precached. They are built as the next release; the files, their source and sizes go in its notes.)
+      📥 **Follow-up, via INBOX — 27 Nov 2026, about 13:59 AWST: his logo: he likes the orange tile, at the original smaller size; draw a bunch of alternative options [builder: filed under #1255]**
+      **His words (verbatim):** I like it, let's go with the original small size, draw up a bunch of alternative options
+
+      **Context (logger's, not his words):** this answers the logger's pictures of his orange logo (LG5 Orange tile, his 24 Nov 12:09 idea: orange background, black edit lines, white playhead; the real mark, recoloured only). He had asked "Would it be better if the image was bigger?", and the logger drew the mark at three sizes inside its square: as drawn (about 60% of the square), 15% bigger (marked Recommended) and 25% bigger. Pictures: C:\Users\build\AppData\Local\Temp\claude\85ce9db26a0b11ca\038c53db-a288-427b-b4c4-2509b19d3eaf\scratchpad\lgsize\logo-sizes.png and freemotion-logo-orange-1-as-drawn.png (his size).
+
+      **His clauses:**
+      1. He likes the orange logo (LG5 Orange tile).
+      2. Size: the ORIGINAL, smaller one (the mark as drawn, about 60% of the square), not the recommended 15% bigger.
+      3. Draw up a bunch of alternative options (the logger draws them now, on the real mark at the original size, recoloured only, rule 32).
+      📥 **Follow-up, via INBOX — 27 Nov 2026, about 17:06 AWST: his logo: he likes the cream background; draw a few playing on it, like black on cream [builder: filed under #1255]**
+      **His words (verbatim):** back to logos, i like the cream background, do a couple playing on that like black on cream background or something like that
+
+      **Context (logger's, not his words):** after the 16 creative takes of 27 Nov 16:2x (the cream one there was 8, paper cut-outs).
+
+      **His clauses:**
+      1. He likes the cream background for the logo.
+      2. Do a few playing on it, for example black on cream "or something like that" (the logger draws them now: the real mark at his original size, rule 32).
+
+      📥 **Follow-up, via INBOX — 27 Nov 2026, about 17:12 AWST: the new look Home: lift the bottom buttons, they sit too close to the bottom [builder: filed under #1255]**
+      **His words (verbatim):** I know you're still really early stages with developing the new look and all the new animations and stuff and I know you're going to polish it all like extremely and you're gonna take your time and it's a long project but you're gonna do a really good job after a long time and it's obviously in a terrible state right now but just one quick note in case you don't catch it the buttons at the bottom in the home menu are too close to the bottom on most apps they're elevated a bit so you know figure out a way to lift them up without looking ugly
+
+      **With his screenshot** (iPhone, installed app, new look dark, Home, 5:08): C:\Users\build\.claude\uploads\5be24294-4935-4991-9bf5-87724beb83b1\8c6bec28-image.png
+
+      **His clauses:**
+      1. He knows the new look is early and expects it to be polished thoroughly over time (the animations too).
+      2. His view of it today: "obviously in a terrible state right now".
+      3. Home: the bottom buttons sit too close to the bottom; most apps lift them a bit.
+      4. Lift them, without it looking ugly.
+
+      **Measured on his screenshot (logger):** 440 x 956 pt phone. Dock 84 pt tall; the active chip and the + end 28 pt above the screen's bottom edge and the labels end about 33 pt above it, all inside the iPhone's 34 pt home-bar zone (screenshots do not show the home bar itself, 8 to 13 pt up).
+
+      **Ready-to-build plan (logger; A is recommended and stands unless he picks otherwise):**
+      - A. Lift 10 px, the same flat N1 dock. Source: tools/look/layout/home.css, the DOCK (N1) block (about lines 69 to 85), then tools/look/build.py: .hm-tabs height calc(57px + ...) -> calc(67px + ...); #hm-new bottom calc(1px + ...) -> calc(11px + ...); .hm-selbar bottom calc(57px + ...) -> calc(67px + ...). The chip then ends 38 pt up on his phone, and 10 px up on a phone with no home bar (today 0).
+      - The dock test that wants 57 px with no home bar (tests/tests.js, about line 213437) moves to 67 with it.
+      - Today's look (preview Off) is not touched.
+      - Other options shown to him: B lift 18 px; C a floating rounded bar (would change his N1 pick, so only on his word).
+      - Picture sent to him: C:\Users\build\AppData\Local\Temp\claude\85ce9db26a0b11ca\5be24294-4935-4991-9bf5-87724beb83b1\scratchpad\dock\dock-lift.png
+
+      📥 **Follow-up, via INBOX — 27 Nov 2026, about 17:16 AWST: the dock: he picks the floating bar, polished and centred (replaces the lift plan) [builder: filed under #1255]**
+      **His words (verbatim):** I like the floating one just a polish it up a bit. It's a little bit off centred
+
+      **Context (logger's, not his words):** answering the logger's picture of 27 Nov 17:12 (A lift 10 px, B lift 18 px, C floating bar). He PICKS C, the floating bar. This REPLACES the "A" build plan in the 17:12 block, and it replaces the flat N1 dock.
+
+      **His clauses:**
+      1. He likes the floating bar.
+      2. Polish it up.
+      3. It was a little off centre (true in the first drawing: the buttons sat low in the bar, and the highlight crowded the left end).
+
+      **Ready-to-build spec (logger; the Solid version below is recommended and stands unless he picks the see-through one). Values in CSS px on his phone:**
+      - New look only (preview Off untouched). Phone only.
+      - Bar: 14 px from each side, 64 px tall, radius 32 (a full capsule), bottom = max(12px, env(safe-area-inset-bottom) - 10px) (24 px on his phone).
+      - Surface: solid #201e1b, 1 px border rgba(255,244,230,.09), box-shadow 0 12px 28px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,244,230,.04).
+      - Inside: 6 px padding all round, five equal columns, the + in the middle one.
+      - Active highlight: fills its column, 52 px tall, radius 26 (concentric with the bar's end), #34302c. The same space above, below and at the end.
+      - The + key: 46 x 46, radius 14, his 11 px cut corner, centred.
+      - Under the bar: a bottom fade (transparent to the list colour) so rows dissolve under it; pointer-events none.
+      - The list runs under the bar and gets bottom padding (bar + its offset + 12 px) so the last project can scroll clear. The select bar sits above the floating bar.
+      - Light look: the same shape in Light's cream surface, hairline and softer shadow.
+      - Tests that pin the flat dock (tests/tests.js, about line 213437: 57 px, full width, no home bar) move to the new shape.
+      - Picture sent to him: C:\Users\build\AppData\Local\Temp\claude\85ce9db26a0b11ca\5be24294-4935-4991-9bf5-87724beb83b1\scratchpad\dock\dock-float.png
+
+      📥 **Follow-up, via INBOX — 27 Nov 2026, about 17:17 AWST: his logo: asked for the orange-playhead cream version as an image by itself (sent) [builder: filed under #1255]**
+      **His words (verbatim):** Also for your recommended orange play head, can you give it to me as a picture by itself so I can just have the logo by itself as an image
+
+      **Context (logger's, not his words):** "your recommended orange play head" is cream-sheet option 2 (black lines, orange playhead and flag on cream #f3ead9). He was sent it alone at 1024 px: C:\Users\build\AppData\Local\Temp\claude\85ce9db26a0b11ca\5be24294-4935-4991-9bf5-87724beb83b1\scratchpad\lgcream\freemotion-logo-cream-orange-playhead.png. Not stated as his final pick yet.
+
+      **His clauses:**
+      1. Give him the recommended orange-playhead logo as a picture by itself (done, 27 Nov about 17:2x).
+      📥 **Follow-up, via INBOX — 27 Nov 2026, about 19:23 AWST: #1255 logo: the medium size (the one he circled); cream or orange still his to pick, and his colour question [builder: filed under #1255]**
+      His words, this chat, about 19:1x (two messages; he cut the first one off himself):
+
+      "Alright, so I'm thinking between the basic cream one with the orange flathead and then like the one with the orange background and it's a hard choice because I think the cream one looks nicer but the orange one kind of grabbed your attention better. I'm just wondering is there any science behind like colouring that sort of thing McDonald's apparently uses like red and yellow to get people's attention the orange one like actually be better like branding and advertising and like for people to see it cause it's like a big bright orange that grabs your attention"
+
+      [A screenshot of his iPhone home screen. He had made three test icons from the logger's pictures and put them beside today's icon: the orange tile at "25% bigger", the orange tile at "15% bigger", and the cream tile with the orange playhead at the original size. He circled the "15% bigger" orange one in red.]
+
+      "Also sorry to cut you off there. I forgot I still had you on Sonnet but also I think the sizing I prefer the sizing of the red circled one like the one that I circled with red. It's like I think it's a medium one. I think that's the right size."
+
+      What it decides (logger):
+      1. SIZE = the medium one: the real mark 15% bigger inside its square, viewBox "-15.035 -18.035 150.070 150.070" (the size first marked Recommended at 13:4x). Measured on his screenshot, the circled tile's side margins are 18.8 % and 21.4 % of its width; the 15%-bigger drawing's are 19.3 %. It REPLACES his 13:59 "original small size", whichever background wins.
+      2. BACKGROUND = still his to pick: cream (black lines, orange playhead and flag) or orange (black lines, white playhead and flag). He likes the cream's looks and the orange's pull. The logger answers his colour question with research and sends both at the medium size. The recommendation goes into 1255-PICKS.md 3.16.
+      3. Nothing to build yet. Once he picks: the app icon, the splash and the tab icon at the medium size (recolour and scale only; never redraw the mark).
+      📥 **Follow-up, via INBOX — 27 Nov 2026, about 21:05 AWST: #1255 logo LOCKED: the orange one only, at the medium size [builder: filed under #1255]**
+      His words, verbatim (his reply to the logger's cream-or-orange research answer, which had recommended orange for the app icon with cream as a second version for light places):
+
+      "orange one only is good, with the size i prefered lock it in"
+
+      What this locks (1255-PICKS.md 3.16 is now FINAL):
+      1. The orange one ONLY (LG5 Orange tile): tile #ff5a36, the three edit lines #1d0904, the playhead and its flag white #ffffff, with a thin gap of tile orange either side of the playhead where it cuts the top line. No cream version anywhere: he chose orange only, so there is no second version for light places.
+      2. At the medium size he circled on his home screen: the real mark 15% bigger inside its square (viewBox "-15.035 -18.035 150.070 150.070"). Scaled only, never redrawn.
+      3. The master is tools/design/plans/1255-logo-final.svg, a full-bleed square because iOS and Android round the corners themselves (where the app draws the tile itself, round it at 22.37%). Make every icon file from it; never retype the shapes.
+
+      To build, all from the master: every surface PICKS 3.16 lists (the app icon, meaning the manifest icons and the Apple touch icon; the Home wordmark; the splash) and the browser-tab icon. Measured tonight, for whoever builds it:
+      - Small sizes: at 48 px and up it reads fully. At 32 px the white playhead fades to a pale line, and at 16 px it nearly disappears; the orange square and the three lines still read. Picture (logger scratchpad): C:\Users\build\AppData\Local\Temp\claude\85ce9db26a0b11ca\5be24294-4935-4991-9bf5-87724beb83b1\scratchpad\lgfinal\small-check.png. Fine to ship as it is; a crisper tab-only version (the playhead snapped to whole pixels) would be his pick, so show it to him first.
+      - Maskable Android icon: at this size the bottom-left corner of the shortest line reaches about 1 unit (of 150) past the 80% safe circle. Only a circular mask would clip it, and only a sliver: use the master as it is.
+      - His phone keeps the old Home Screen icon until FreeMotion is added to the Home Screen again, and removing a Home Screen web app can delete what it stored. The release note to him must give him a safe way (his projects backed up first) before he re-adds it.
+      📍 **v18.58 (28 Nov): his locked logo is the app icon** (icon-192, icon-512, the Apple touch icon, from tools/design/plans/1255-logo-final.svg). Still to do: the Home wordmark, the splash, a crisper tab icon (shown to him first).
 - [ ] **1256 — The light Home: the strip under the clock is a little lighter than the page under it, with nothing open and under every dim (hunt MEDIUM #1256)** (21 Nov, found by the review inside v18.48's build of #1255 clause 4; not his words)
       **STATUS: 🟢 READY — nothing is stopping this**
       🔎 **What was measured (v18.48's build, a phone-width run on the laptop):** every top-edge tab on the light Home is the screen's BACKGROUND colour (#920's rule): #fafdff with nothing open, #acb4bb under a dim, #f4f6f9 under Settings. But the page really paints a tint there (#hm-bleed's gradient and the glows of #home-screen::before, which drift) and its dims blur what is under them. Under a dim the real pixels at the top centre read about #94a8b6, 10 to 24 levels darker than the tab. With nothing open the page paints about #d6eef5 against the #fafdff tab, about 20 levels: an ESTIMATE worked back from the dims' pixels, not measured with nothing open.
