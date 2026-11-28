@@ -7,4 +7,7 @@ html:root[data-ui="light"][data-theme] {
   --n-accent: #c63c1b; --n-accent-ink: #bd3a1a; --n-on-accent: #ffffff; --n-danger: #b8284a; --n-focus: #d9411f;
   --n-chip: rgba(30, 26, 21, .09);          /* a chosen tab: the ink at 9 in 100, a soft chip and never a line under it */
   --n-thumb-edge: rgba(30, 24, 16, .10);    /* a project's picture gets a hairline on paper, or a white frame would have no edge */
+  /* the floating dock (his pick of 27 Nov): the same shape in the light cream, a hairline and a softer shadow */
+  --n-dock: #fffcf6; --n-dock-edge: rgba(30, 24, 16, .12);
+  --n-dock-shadow: 0 10px 24px rgba(60, 42, 22, .16), inset 0 1px 0 rgba(255, 255, 255, .7);
 }

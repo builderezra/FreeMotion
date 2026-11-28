@@ -1,6 +1,7 @@
 /* tools/look/layout/home.css: HOME IN THE NEW LOOK (#1255), on a phone. His picks: H9r, the Quiet list ("h9r dark home minimal
    is great", 21 Nov; no giant Projects heading, the name in the middle, settings on the left), and N1 for the dock ("Just go
-   with N1.", 24 Nov: four tabs with the + in the middle where it is today; a chosen tab is a soft chip, never a line).
+   with N1.", 24 Nov: four tabs with the + in the middle where it is today; a chosen tab is a soft chip, never a line), lifted
+   into a floating bar on 27 Nov ("I like the floating one just a polish it up a bit. It's a little bit off centred").
    Hand-written. tools/look/build.py writes this into both generated stylesheets, LOOK replaced by the look's name, after the
    generated part and its tails, so at the same prefix these rules win. Colours come from tokens-<look>.css only.
    ONLY A PROJECT'S ROW CHANGES SHAPE: js/home.js marks a project card .hm-row while a look is on and gives it its one line
@@ -37,8 +38,8 @@ html:root[data-ui="LOOK"][data-theme] body.hm-selecting #hm-new > svg { visibili
 
   /* THE LIST. Rows, not cards: no box, no rule between them, 82 px each; the picture keeps the project's own shape inside a
      56 x 62 place (js/home.js gives the row --hm-ar, width over height); the name in the display face; one quiet line under it. */
-  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-scroll:has(> .hm-grid > .hm-row) { padding: 2px 0 24px; }
-  html:root[data-ui="LOOK"][data-theme] body.hm-selecting #home-screen .hm-scroll:has(> .hm-grid > .hm-row) { padding-bottom: 160px; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-scroll:has(> .hm-grid > .hm-row) { padding: 2px 0 calc(var(--hm-dock-lift) + 76px); }
+  html:root[data-ui="LOOK"][data-theme] body.hm-selecting #home-screen .hm-scroll:has(> .hm-grid > .hm-row) { padding-bottom: calc(var(--hm-dock-lift) + 232px); }
   html:root[data-ui="LOOK"][data-theme] #home-screen .hm-grid:has(> .hm-row) { gap: 0; max-width: none; }
   html:root[data-ui="LOOK"][data-theme] #home-screen .hm-grid:has(> .hm-row) > .hm-note { margin: 0 20px 10px; }
   html:root[data-ui="LOOK"][data-theme] #home-screen .hm-card.hm-row { --hm-th-h: min(62px, calc(56px / var(--hm-ar, .8)));
@@ -66,21 +67,47 @@ html:root[data-ui="LOOK"][data-theme] body.hm-selecting #hm-new > svg { visibili
   html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-card-more { width: 44px; height: 44px; border: 0; border-radius: 12px; background: transparent; color: var(--n-t3); gap: 3px; }
   html:root[data-ui="LOOK"][data-theme] #home-screen .hm-row .hm-card-more .hm-dot { width: 2.5px; height: 2.5px; }
 
-  /* THE DOCK (N1). A flat bar with a hairline: five equal columns, the four tabs and the + in the middle one, each tab 50 px
-     tall; the tab he is on is ink on a soft chip the size of its column (never a line, his rule of 23 Nov); the + is the
-     vermilion key with its cut corner. On an iPhone with a home bar the dock is 84 px, as today and as the board; on a screen
-     without one it is 57 (today 50) so the tabs keep their 50, and the select bar follows its top. */
-  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 0; align-items: start;
-    height: calc(57px + max(0px, env(safe-area-inset-bottom) - 7px)); padding: 6px 6px 0;
-    border-radius: 0; border-top: 1px solid var(--n-line); background: var(--n-bg); background-image: none; box-shadow: none; }
-  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-tabs .hm-tab { height: 50px; min-height: 0; gap: 5px; border: 0; border-radius: 12px; background: transparent; background-image: none; box-shadow: none;
+  /* THE DOCK: N1's tabs in the FLOATING BAR he picked on 27 Nov (the Solid one), polished and centred. A capsule 64 px tall,
+     14 px in from each side and lifted off the bottom edge: 12 px on a screen with no home bar, and on an iPhone its home bar's
+     inset less 10 (24 px on his), so it sits clear of the home indicator. Inside, 6 px all round from its outer edge (5 of
+     padding and the hairline): five equal columns, the four tabs and the + in the middle one; the tab he is on is ink on a soft
+     chip that fills its column, 52 px tall with 26 px ends, so it has the same 6 px above, below and at the bar's rounded end
+     (never a line, his rule of 23 Nov). Each tab's drawing and word sit in the middle of the chip, the + key keeps N1's size,
+     corners and cut and sits in the bar's middle, both ways. The list runs on under the bar and fades out under it, with room
+     at its foot to scroll its last row clear above it; the select bar sits above the bar.
+     --hm-sab is the home bar's inset, read once (and so one value a test can stand in for); --hm-dock-lift is the bar's gap. */
+  html:root[data-ui="LOOK"][data-theme] #home-screen { --hm-sab: env(safe-area-inset-bottom, 0px); --hm-dock-lift: max(12px, calc(var(--hm-sab) - 10px)); }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-tabs { position: absolute; left: 14px; right: 14px; bottom: var(--hm-dock-lift); z-index: 3;
+    width: auto; max-width: none; height: 64px; margin: 0; padding: 5px;
+    grid-template-columns: repeat(5, minmax(0, 1fr)); grid-template-rows: minmax(0, 1fr); gap: 0; align-items: stretch;
+    border: 1px solid var(--n-dock-edge); border-radius: 32px; background: var(--n-dock); background-image: none; box-shadow: var(--n-dock-shadow);
+    -webkit-backdrop-filter: none; backdrop-filter: none; }
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-tabs .hm-tab { height: auto; min-height: 0; gap: 5px; border: 0; border-radius: 26px; background: transparent; background-image: none; box-shadow: none;
     color: var(--n-t3); font-family: var(--font-ui); font-size: 11px; font-weight: 500; line-height: 1; letter-spacing: 0; }
   html:root[data-ui="LOOK"][data-theme] #home-screen .hm-tabs .hm-tab :is(svg, svg *, .hm-tab-ico, .hm-tab-label) { color: inherit; }
   html:root[data-ui="LOOK"][data-theme] #home-screen .hm-tabs .hm-tab.active { background: var(--n-chip); color: var(--n-t1); font-weight: 600; }
   html:root[data-ui="LOOK"][data-theme] #home-screen .hm-tabs .hm-tab.active :is(svg, svg *, .hm-tab-ico, .hm-tab-label) { color: var(--n-t1); }
   html:root[data-ui="LOOK"][data-theme] #home-screen .hm-tabs .hm-tab-ico { width: 21px; height: 21px; stroke-width: 1.6; }
-  html:root[data-ui="LOOK"][data-theme] .hm-selbar { bottom: calc(57px + max(0px, env(safe-area-inset-bottom) - 7px)); }
-  html:root[data-ui="LOOK"][data-theme] #hm-new { bottom: calc(1px + max(0px, env(safe-area-inset-bottom) - 7px)); width: 48px; height: 48px; border-radius: 14px; box-shadow: none;
+  html:root[data-ui="LOOK"][data-theme] .hm-selbar { bottom: calc(var(--hm-dock-lift) + 72px); }
+  html:root[data-ui="LOOK"][data-theme] #hm-new { bottom: calc(var(--hm-dock-lift) + 8px); width: 48px; height: 48px; border-radius: 14px; box-shadow: none;
     clip-path: polygon(0 0, calc(100% - 11px) 0, 100% 11px, 100% 100%, 0 100%); }
   html:root[data-ui="LOOK"][data-theme] #hm-new > svg { width: 24px; height: 24px; stroke-width: 2.2; }
+  /* the list under the bar: room at its foot for the bar, its gap and 12 more (and for the select bar while he selects) */
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-scroll { padding-bottom: calc(var(--hm-dock-lift) + 76px); }
+  html:root[data-ui="LOOK"][data-theme] body.hm-selecting #home-screen .hm-scroll { padding-bottom: calc(var(--hm-dock-lift) + 232px); }
+  /* …and its rows fade out as they pass under the bar: from 28 px above its top to nothing at the screen's foot (a mask, so
+     they dissolve into whatever ground is behind them; the fade at the top, which follows the scroll, stays as it is) */
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-scroll {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 var(--hm-scroll-fade, 0px), #000 calc(100% - var(--hm-dock-lift) - 92px), rgba(0, 0, 0, .12) calc(100% - (var(--hm-dock-lift) + 92px) * .45), transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 var(--hm-scroll-fade, 0px), #000 calc(100% - var(--hm-dock-lift) - 92px), rgba(0, 0, 0, .12) calc(100% - (var(--hm-dock-lift) + 92px) * .45), transparent 100%); }
+}
+@media (max-width: 360px) {
+  /* a 320 px phone: the bar stands 8 px from each side instead of 14, so the four words keep room in their columns */
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-tabs { left: 8px; right: 8px; }
+}
+@media (max-width: 700px) and (prefers-reduced-motion: reduce) {
+  /* with less motion asked for, the list keeps no fade at its top (styles.css), but the one under the bar stays: it does not move */
+  html:root[data-ui="LOOK"][data-theme] #home-screen .hm-scroll {
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--hm-dock-lift) - 92px), rgba(0, 0, 0, .12) calc(100% - (var(--hm-dock-lift) + 92px) * .45), transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - var(--hm-dock-lift) - 92px), rgba(0, 0, 0, .12) calc(100% - (var(--hm-dock-lift) + 92px) * .45), transparent 100%); }
 }

@@ -213437,81 +213437,251 @@
     if (bad.length) throw new Error(bad.join(' · '));
   });
 
-  test('1255 home · under the new look the dock at a phone’s size is N1 in Dark and in Light: a flat bar with a hairline and no blur, five equal columns with the four tabs 50 px tall in theirs, the chosen tab ink on a soft chip the size of its column with no line under it and the others plain, and the + the vermilion key 48 px square with its cut corner in the middle column, whose corner really is cut; while he selects, the select bar stands on the dock and the + steps away with its drawing (CONTROLS: with the look off the dock is today’s, the chosen tab with no chip and a round +; a tap on Templates moves the chip there; with its cut taken away the + is hit where the cut is; the + drawing shows before Select)', { item: '1255', budgetMs: 60000 }, async function () {
-    const H = home1255, bad = [], was = { look: FM.settings.get('newLook'), open: FM.home.isOpen() };
-    const tabs = function () { return Array.from(document.querySelectorAll('#home-screen .hm-tabs .hm-tab')); };
-    const active = function () { return tabs().filter(function (b) { return b.classList.contains('active'); }); };
+  /* ═══ #1255 · THE FLOATING DOCK (his pick of 27 Nov) ═══════════════════════════════════════════════════════════════════════════
+   * His words, 27 Nov 17:12: "the buttons at the bottom in the home menu are too close to the bottom on most apps they're elevated a
+   * bit so you know figure out a way to lift them up without looking ugly"; and at 17:16, on the logger's drawings: "I like the
+   * floating one just a polish it up a bit. It's a little bit off centred". Under the look, on a phone, Home's dock (N1's four tabs
+   * and the + key) is a capsule 64 px tall, 14 px in from each side and lifted off the bottom edge: 12 px with no home bar, and an
+   * iPhone's home-bar inset less 10 where it has one (24 on his). The tab he is on is a chip with the same 6 px above, below and at
+   * the bar's end; the + key sits in the bar's middle; the list runs on under the bar with room to scroll its last row clear above
+   * it (tools/look/layout/home.css). Measured at 390 x 844, an iPhone's points.
+   * THE HOME BAR: this browser has no safe area, so env(safe-area-inset-bottom) is 0 here. The layout reads that inset ONCE, into
+   * --hm-sab on #home-screen, so a test stands in for an iPhone's by setting that one value on the element (IPHONE_SAB, 34 px, as
+   * the safe-area tests do), and the float test reads that the look's own stylesheet fills it from env(safe-area-inset-bottom). */
+  const dock1255 = {
+    SAB: IPHONE_SAB,
+    /* the look's own dock surface, hairline and the start of its shadow (tools/look/layout/tokens-<look>.css) */
+    INK: {
+      cutline: { bg: 'rgb(32, 30, 27)', edge: 'rgba(255, 244, 230, 0.09)', shadow: 'rgba(0, 0, 0, 0.55) 0px 12px 28px 0px' },
+      light: { bg: 'rgb(255, 252, 246)', edge: 'rgba(30, 24, 16, 0.12)', shadow: 'rgba(60, 42, 22, 0.16) 0px 10px 24px 0px' },
+    },
+    hs: function () { return document.getElementById('home-screen'); },
+    dock: function () { return document.querySelector('#home-screen .hm-tabs'); },
+    tabs: function () { return Array.from(document.querySelectorAll('#home-screen .hm-tabs .hm-tab')); },
+    /* the dock at rest: a tab's press reaction (a short scale) or its rise is brought to its end before the dock is measured */
+    still: function () { const d = dock1255.dock(); if (d) d.getAnimations({ subtree: true }).forEach(function (a) { try { a.finish(); } catch (e) {} }); },
+    /* stand in for an iPhone's home bar of PX (or take the stand-in away: null) */
+    sab: async function (px) { const hs = dock1255.hs(); if (px == null) hs.style.removeProperty('--hm-sab'); else hs.style.setProperty('--hm-sab', px + 'px'); await sleep(80); dock1255.still(); },
+    /* Home open on Projects under LOOK ('' = off) */
+    ready: async function (lk) { await home1255.setLook(lk); await home1255.open(); FM.home.showTab('projects'); await sleep(250); dock1255.still(); },
+    /* --hm-sab as the look's own stylesheet writes it on #home-screen (null if no rule there gives it) */
+    sabSource: function (lk) {
+      const l = look1255.link(lk); let out = null;
+      const walk = function (rules) { Array.from(rules || []).forEach(function (r) { if (r.style && /#home-screen\s*$/.test(r.selectorText || '') && r.style.getPropertyValue('--hm-sab')) out = r.style.getPropertyValue('--hm-sab').trim(); if (r.cssRules) walk(r.cssRules); }); };
+      try { walk(l && l.sheet && l.sheet.cssRules); } catch (e) { out = 'unreadable: ' + e.message; }
+      return out;
+    },
+    /* the box around several elements */
+    union: function (els) { const bs = els.map(function (e) { return e.getBoundingClientRect(); }); return { left: Math.min.apply(null, bs.map(function (b) { return b.left; })), right: Math.max.apply(null, bs.map(function (b) { return b.right; })), top: Math.min.apply(null, bs.map(function (b) { return b.top; })), bottom: Math.max.apply(null, bs.map(function (b) { return b.bottom; })) }; },
+    /* select mode on (as a card's Select does) and its bar settled; returns the bar */
+    selectOn: async function () { FM.home._setSelection([]); FM.home._render('projects'); await sleep(120); const sb = document.getElementById('hm-selbar'); if (sb) sb.getAnimations({ subtree: true }).forEach(function (x) { try { x.finish(); } catch (e) {} }); return sb; },
+    selectOff: async function () { const b = document.getElementById('hm-select-btn'); if (FM.home._selectionState().selectMode && b) b.click(); await sleep(200); },
+    /* the list's mask ends in nothing (its rows fade out at its foot) */
+    fadesAtFoot: function (sc) { const cs = getComputedStyle(sc), m = String(cs.maskImage && cs.maskImage !== 'none' ? cs.maskImage : cs.webkitMaskImage || ''); return /rgba\(0, 0, 0, 0\) 100%\)\s*$/.test(m); },
+  };
+
+  test('1255 dock · under the new look Home’s dock floats on a 390 × 844 phone, in Dark and in Light: a capsule 64 px tall with 32 px ends, 14 px in from each side and lifted off the bottom edge, 12 px with no home bar and 24 px over an iPhone’s 34 px one, on the look’s own surface with its hairline and shadow and no blur; the + is the vermilion key 48 px square with its cut corner, whose corner really is cut; while he selects, the select bar sits 8 px above the bar and the + steps away with its drawing (CONTROLS: with the look off the same probe finds the dock on the screen’s foot; the look’s stylesheet fills the home bar’s inset from env(safe-area-inset-bottom); with its cut taken away the + is hit where the cut is; the + drawing shows before Select)', { item: '1255', budgetMs: 90000 }, async function () {
+    const H = home1255, D = dock1255, bad = [], was = { look: FM.settings.get('newLook'), open: FM.home.isOpen() };
     try {
-      await atPhoneWidth(async function () {
-        await H.setLook('');
-        await H.open();
-        FM.home.showTab('projects'); await sleep(250);
-        /* CONTROL · today's dock: the chosen tab wears no chip and the + is round */
-        const t0 = active()[0], nb0 = document.getElementById('hm-new');
-        if (!t0 || H.css(t0, 'backgroundColor') !== 'rgba(0, 0, 0, 0)' || H.css(nb0, 'clipPath') !== 'none' || H.css(nb0, 'borderTopLeftRadius') !== '50%')
-          throw new Error('CONTROL: with the look off the probe does not read today’s dock (the chosen tab ' + H.css(t0, 'backgroundColor') + ', the + corner ' + H.css(nb0, 'borderTopLeftRadius') + ', clip ' + H.css(nb0, 'clipPath') + ')');
+      await atSize921(390, 844, async function () {
+        /* CONTROL · the look off: the probe finds today's dock standing on the screen's foot, so a gap it reads is a real one */
+        await D.ready('');
+        const d0 = H.box(D.dock());
+        if (!H.near(d0.bottom, innerHeight, 1) || !H.near(d0.left, 0, 1) || !H.near(d0.width, innerWidth, 1)) throw new Error('CONTROL: with the look off the probe does not find today’s dock across the screen’s foot (' + H.px(d0) + ' in ' + innerWidth + ' × ' + innerHeight + ')');
         for (const lk of ['cutline', 'light']) {
-          const I = H.INK[lk], who = lk === 'cutline' ? 'Dark' : 'Light';
-          await H.setLook(lk);
-          FM.home.showTab('projects'); await sleep(250);
-          const dock = document.querySelector('#home-screen .hm-tabs'), db = H.box(dock);
-          if (!H.near(db.height, 57) || !H.near(db.bottom, innerHeight) || !H.near(db.width, innerWidth)) bad.push(who + ': the dock is ' + H.px(db) + ', want the screen’s width and 57 px at its foot (50 for the tabs, 6 above them, the hairline; no home bar here)');
-          if (H.css(dock, 'backgroundColor') !== I.bg || H.css(dock, 'backgroundImage') !== 'none' || H.css(dock, 'borderTopWidth') !== '1px' || H.css(dock, 'borderTopColor') !== I.line || H.css(dock, 'borderTopLeftRadius') !== '0px' || H.css(dock, 'boxShadow') !== 'none' || !/^none$/.test(H.css(dock, 'backdropFilter')))
-            bad.push(who + ': the dock is not a flat bar on the ground with a hairline (' + [H.css(dock, 'backgroundColor'), H.css(dock, 'borderTopWidth'), H.css(dock, 'borderTopColor'), H.css(dock, 'borderTopLeftRadius'), H.css(dock, 'boxShadow'), H.css(dock, 'backdropFilter')].join(', ') + ')');
-          const cols = H.css(dock, 'gridTemplateColumns').split(' ').map(parseFloat), col = (db.width - 12) / 5;
-          if (cols.length !== 5 || cols.some(function (w) { return !H.near(w, col); })) bad.push(who + ': the dock’s columns are ' + H.css(dock, 'gridTemplateColumns') + ', want five of ' + col.toFixed(1) + ' px');
-          const tt = tabs();
+          const who = lk === 'cutline' ? 'Dark' : 'Light', K = D.INK[lk], I = H.INK[lk];
+          await D.ready(lk);
+          const src = D.sabSource(lk);
+          if (!/^env\(\s*safe-area-inset-bottom\b/.test(src || '')) bad.push(who + ': CONTROL: the look’s stylesheet does not fill the home bar’s inset (--hm-sab on #home-screen) from env(safe-area-inset-bottom) but from ' + JSON.stringify(src) + ', so standing in for it proves nothing about an iPhone');
+          for (const sab of [0, D.SAB]) {
+            await D.sab(sab || null);
+            const say = who + (sab ? ', over a ' + sab + ' px home bar: ' : ', no home bar: '), lift = Math.max(12, sab - 10);
+            const dock = D.dock(), db = H.box(dock), gap = innerHeight - db.bottom;
+            if (!H.near(db.height, 64) || !H.near(db.left, 14) || !H.near(db.right, innerWidth - 14) || !H.near(gap, lift)) bad.push(say + 'the dock is ' + H.px(db) + ', ' + gap.toFixed(1) + ' px off the bottom edge; want a bar 64 px tall, 14 px in from each side and ' + lift + ' px off the bottom edge');
+            const corners = ['borderTopLeftRadius', 'borderTopRightRadius', 'borderBottomLeftRadius', 'borderBottomRightRadius'].map(function (k) { return H.css(dock, k); });
+            if (corners.some(function (c) { return c !== '32px'; })) bad.push(say + 'the dock’s corners are ' + corners.join(' ') + ', want 32 px all round (a capsule)');
+            if (H.css(dock, 'position') !== 'absolute' || H.css(dock, 'backgroundColor') !== K.bg || H.css(dock, 'backgroundImage') !== 'none' || H.css(dock, 'borderTopWidth') !== '1px' || H.css(dock, 'borderBottomWidth') !== '1px' || H.css(dock, 'borderTopColor') !== K.edge || H.css(dock, 'boxShadow').indexOf(K.shadow) !== 0 || H.css(dock, 'backdropFilter') !== 'none')
+              bad.push(say + 'the dock is not the look’s floating surface (' + [H.css(dock, 'position'), H.css(dock, 'backgroundColor'), H.css(dock, 'borderTopWidth') + ' ' + H.css(dock, 'borderTopColor'), H.css(dock, 'boxShadow').slice(0, 60), H.css(dock, 'backdropFilter')].join(', ') + '), want absolute, ' + K.bg + ', a 1 px ' + K.edge + ' hairline and a shadow starting ' + K.shadow);
+            const nb = document.getElementById('hm-new'), pb = H.box(nb), clip = H.css(nb, 'clipPath');
+            if (!H.near(pb.width, 48) || !H.near(pb.height, 48) || !H.near(db.bottom - pb.bottom, 8)) bad.push(say + 'the + is ' + H.px(pb) + ', want 48 × 48 standing 8 px inside the bar’s foot (' + db.bottom.toFixed(1) + ')');
+            if (H.css(nb, 'borderTopLeftRadius') !== '14px' || !/^polygon\(/.test(clip) || clip.indexOf('11px') < 0 || H.css(nb, 'backgroundColor') !== I.accent || H.css(nb, 'boxShadow') !== 'none')
+              bad.push(say + 'the + is not the vermilion key with a cut corner (corner ' + H.css(nb, 'borderTopLeftRadius') + ', clip ' + clip + ', ' + H.css(nb, 'backgroundColor') + ', shadow ' + H.css(nb, 'boxShadow') + ')');
+            if (!sab) {
+              /* the cut is read where only the cut can make a miss: 41 px in and 2.5 px down is inside the key's 14 px rounded corner
+                 but past the 11 px cut. CONTROL: with the cut taken away the same point is the + */
+              const at = function (x, y) { const e = document.elementFromPoint(x, y); return !!(e && (e === nb || nb.contains(e))); };
+              const cx = pb.left + 41, cy = pb.top + 2.5;
+              nb.style.setProperty('clip-path', 'none');
+              const whole = at(cx, cy);
+              nb.style.removeProperty('clip-path');
+              if (!at(pb.left + 24, pb.top + 24) || !whole) bad.push(say + 'CONTROL: with its cut taken away the + is not hit at its middle or 41 px in and 2.5 px down, so its cut corner cannot be read');
+              else if (at(cx, cy)) bad.push(say + 'the + is still hit 41 px in and 2.5 px down (a tap there opens New project): its top-right corner is not cut');
+              continue;
+            }
+            /* while he selects (read over his home bar): the select bar sits 8 px above the floating bar and the + steps away with its
+               drawing (a tail keeps the drawing visible with an important rule). CONTROL: before Select the drawing shows. */
+            if (H.css(nb.querySelector('svg'), 'visibility') !== 'visible') bad.push(say + 'CONTROL: the + drawing does not show before Select, so its hiding cannot be read');
+            try {
+              const sb = await D.selectOn();
+              if (!document.body.classList.contains('hm-selecting') || !sb) bad.push(say + 'setup: Select did not come on');
+              else {
+                const sbb = H.box(sb), db2 = H.box(D.dock());
+                if (!H.near(db2.top - sbb.bottom, 8, 1) || !H.near(db2.bottom, db.bottom, 1)) bad.push(say + 'the select bar ends at ' + sbb.bottom.toFixed(1) + ' over a bar from ' + db2.top.toFixed(1) + ' to ' + db2.bottom.toFixed(1) + ', want it 8 px above the bar, the bar where it was');
+                if (H.css(nb, 'visibility') !== 'hidden' || H.css(nb.querySelector('svg'), 'visibility') !== 'hidden') bad.push(say + 'while he selects the + or its drawing still shows (the key ' + H.css(nb, 'visibility') + ', the drawing ' + H.css(nb.querySelector('svg'), 'visibility') + ')');
+              }
+            } finally { await D.selectOff(); }
+          }
+          await D.sab(null);
+        }
+      });
+    } finally { await D.sab(null); await H.restore(was); }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('1255 dock · the floating bar is centred on a 390 × 844 phone, in Dark and in Light: its middle within 1 px of the screen’s, Projects, Templates, Elements and Tutorials in four of five equal columns 6 px in from its outer edge with the + in the middle one, the five as a group in the bar’s middle, each tab’s drawing and word in the middle of its column both ways, the + in the middle of the bar both ways; the tab he is on is ink on a soft chip filling its column with the same 6 px above, below and at the bar’s rounded end at either end (Projects, then Tutorials), its 26 px ends the bar’s less 6, the others plain, no line under it (CONTROLS: the bar moved 3 px reads off centre; a word moved 3 px down reads low; a tap on Templates moves the chip there)', { item: '1255', budgetMs: 90000 }, async function () {
+    const H = home1255, D = dock1255, bad = [], was = { look: FM.settings.get('newLook'), open: FM.home.isOpen() };
+    let moved = null;
+    try {
+      await atSize921(390, 844, async function () {
+        for (const lk of ['cutline', 'light']) {
+          const who = lk === 'cutline' ? 'Dark' : 'Light', I = H.INK[lk];
+          await D.ready(lk);
+          const dock = D.dock(), db = H.box(dock), tt = D.tabs(), nb = document.getElementById('hm-new'), mid = innerWidth / 2;
+          const offCentre = function () { const b = H.box(D.dock()); return Math.abs((b.left + b.right) / 2 - mid); };
+          /* CONTROL · the probe sees a bar 3 px off the middle */
+          dock.style.setProperty('transform', 'translateX(3px)'); moved = dock;
+          const off3 = offCentre();
+          dock.style.removeProperty('transform'); moved = null;
+          if (!(off3 > 2.5)) throw new Error(who + ': CONTROL: the bar moved 3 px reads ' + off3.toFixed(2) + ' px off the middle, so a bar off centre could not be seen');
+          if (offCentre() > 1) bad.push(who + ': the bar’s middle is ' + offCentre().toFixed(2) + ' px off the screen’s (' + H.px(db) + ' in ' + innerWidth + ')');
           if (tt.map(function (b) { return b.textContent.trim(); }).join('|') !== 'Projects|Templates|Elements|Tutorials') bad.push(who + ': the dock’s tabs are ' + tt.map(function (b) { return b.textContent.trim(); }).join(', '));
+          const col = (db.width - 12) / 5, inner = db.height - 12;
           [0, 1, 3, 4].forEach(function (slot, i) {
-            const b = tt[i], bb = b && H.box(b);
-            if (!bb || !H.near(bb.width, col) || !H.near(bb.height, 50) || !H.near(bb.left, db.left + 6 + col * slot) || !H.near(bb.top, db.top + 7)) bad.push(who + ': ' + (b ? b.textContent.trim() : 'a tab') + ' is ' + (bb ? H.px(bb) : 'missing') + ', want its whole column (' + col.toFixed(1) + ' × 50) in column ' + (slot + 1));
-            const ic = b && b.querySelector('svg.hm-tab-ico'), ib = ic && H.box(ic);
-            if (!ib || !H.near(ib.width, 21) || !H.near(ib.height, 21)) bad.push(who + ': ' + (b ? b.textContent.trim() : 'a tab') + '’s drawing is ' + (ib ? H.px(ib) : 'missing') + ', want 21 px');
+            const b = tt[i], bb = b && H.box(b), name = b ? b.textContent.trim() : 'a tab';
+            if (!bb || !H.near(bb.width, col) || !H.near(bb.height, inner) || !H.near(bb.left, db.left + 6 + col * slot) || !H.near(bb.top, db.top + 6)) bad.push(who + ': ' + name + ' is ' + (bb ? H.px(bb) : 'missing') + ', want its whole column (' + col.toFixed(1) + ' × ' + inner.toFixed(1) + ') in column ' + (slot + 1) + ', 6 px inside the bar’s edge');
+            const ic = b && b.querySelector('svg.hm-tab-ico'), lb = b && b.querySelector('.hm-tab-label');
+            if (!ic || !lb) { bad.push(who + ': ' + name + ' has no drawing or no word'); return; }
+            const ib = H.box(ic), g = D.union([ic, lb]);
+            if (!H.near(ib.width, 21) || !H.near(ib.height, 21)) bad.push(who + ': ' + name + '’s drawing is ' + H.px(ib) + ', want 21 px');
+            const dx = (g.left + g.right) / 2 - (bb.left + bb.right) / 2, dy = (g.top + g.bottom) / 2 - (bb.top + bb.bottom) / 2;
+            if (Math.abs(dx) > 1 || Math.abs(dy) > 1) bad.push(who + ': ' + name + '’s drawing and word sit ' + dx.toFixed(1) + ' px across and ' + dy.toFixed(1) + ' px down from its column’s middle (' + (dy > 0 ? 'low' : dy < 0 ? 'high' : 'beside it') + ')');
           });
-          const on = active();
-          if (on.length !== 1 || on[0] !== tt[0]) bad.push(who + ': the chosen tab is not Projects alone');
-          const a = tt[0];
-          if (H.css(a, 'backgroundColor') !== I.chip || H.css(a, 'borderTopLeftRadius') !== '12px' || H.css(a, 'color') !== I.t1) bad.push(who + ': the chosen tab is ' + [H.css(a, 'backgroundColor'), H.css(a, 'borderTopLeftRadius'), H.css(a, 'color')].join(', ') + ', want ink on the soft chip ' + I.chip + ' with 12 px corners');
-          if (H.css(a, 'borderBottomWidth') !== '0px' || H.css(a, 'boxShadow') !== 'none' || H.css(a, 'textDecorationLine') !== 'none' || ['::before', '::after'].some(function (p) { const c = H.css(a, 'content', p); return c && c !== 'none' && c !== 'normal'; }))
-            bad.push(who + ': the chosen tab has a line or a mark under it (border ' + H.css(a, 'borderBottomWidth') + ', shadow ' + H.css(a, 'boxShadow') + ') - his rule: a soft chip, never a line');
-          tt.slice(1).forEach(function (b) { if (H.css(b, 'backgroundColor') !== 'rgba(0, 0, 0, 0)' || H.css(b, 'color') !== I.t3) bad.push(who + ': ' + b.textContent.trim() + ', not chosen, is ' + H.css(b, 'backgroundColor') + ' ' + H.css(b, 'color') + ', want plain ' + I.t3); });
-          const nb = document.getElementById('hm-new'), pb = H.box(nb), clip = H.css(nb, 'clipPath');
-          if (!H.near(pb.width, 48) || !H.near(pb.height, 48) || !H.near(pb.left + 24, db.left + db.width / 2) || !H.near(pb.top, db.top + 8)) bad.push(who + ': the + is ' + H.px(pb) + ', want 48 × 48 in the middle column, 8 px under the dock’s top');
-          if (H.css(nb, 'borderTopLeftRadius') !== '14px' || !/^polygon\(/.test(clip) || clip.indexOf('11px') < 0 || H.css(nb, 'backgroundColor') !== I.accent || H.css(nb, 'boxShadow') !== 'none')
-            bad.push(who + ': the + is not the vermilion key with a cut corner (corner ' + H.css(nb, 'borderTopLeftRadius') + ', clip ' + clip + ', ' + H.css(nb, 'backgroundColor') + ', shadow ' + H.css(nb, 'boxShadow') + ')');
-          /* the cut is read where only the cut can make a miss: 41 px in and 2.5 px down is inside the key's 14 px rounded corner
-             but past the 11 px cut (x - y > 37). CONTROL: with the cut taken away the same point is the + */
-          const at = function (x, y) { const e = document.elementFromPoint(x, y); return !!(e && (e === nb || nb.contains(e))); };
-          const cx = pb.left + 41, cy = pb.top + 2.5;
-          nb.style.setProperty('clip-path', 'none');
-          const whole = at(cx, cy);
-          nb.style.removeProperty('clip-path');
-          if (!at(pb.left + 24, pb.top + 24) || !whole) bad.push(who + ': CONTROL: with its cut taken away the + is not hit at its middle or 41 px in and 2.5 px down, so its cut corner cannot be read');
-          else if (at(cx, cy)) bad.push(who + ': the + is still hit 41 px in and 2.5 px down (a tap there opens New project): its top-right corner is not cut');
+          /* CONTROL · a word 3 px low reads low */
+          const lb0 = tt[0].querySelector('.hm-tab-label'), ic0 = tt[0].querySelector('svg.hm-tab-ico');
+          lb0.style.setProperty('position', 'relative'); lb0.style.setProperty('top', '3px');
+          const g3 = D.union([ic0, lb0]), b0 = H.box(tt[0]), low3 = (g3.top + g3.bottom) / 2 - (b0.top + b0.bottom) / 2;
+          lb0.style.removeProperty('position'); lb0.style.removeProperty('top');
+          if (!(low3 > 1.2)) throw new Error(who + ': CONTROL: Projects’ word moved 3 px down reads ' + low3.toFixed(2) + ' px low, so a tab sitting low in the bar could not be seen');
+          const pb = H.box(nb), cdx = (pb.left + pb.right) / 2 - (db.left + db.right) / 2, cdy = (pb.top + pb.bottom) / 2 - (db.top + db.bottom) / 2;
+          if (Math.abs(cdx) > 1 || Math.abs(cdy) > 1) bad.push(who + ': the + sits ' + cdx.toFixed(1) + ' px across and ' + cdy.toFixed(1) + ' px down from the bar’s middle (' + H.px(pb) + ' in ' + H.px(db) + ')');
+          const grp = D.union(tt.concat([nb])), gl = grp.left - db.left, gr = db.right - grp.right, gt = grp.top - db.top, gb = db.bottom - grp.bottom;
+          if (Math.abs(gl - gr) > 1 || Math.abs(gt - gb) > 1 || !H.near(gl, 6) || !H.near(gt, 6)) bad.push(who + ': the tabs and the + as a group stand ' + [gl, gr, gt, gb].map(function (v) { return v.toFixed(1); }).join(', ') + ' px in from the bar’s left, right, top and foot, want 6 all round');
+          /* the chip: ink on the soft chip, the same 6 px above, below and at the bar's end, at the left end and then the right */
+          const chip = function (b, end) {
+            const say = who + ', ' + b.textContent.trim() + ' chosen: ', cb = H.box(b), d = H.box(D.dock());
+            const sides = end === 'left' ? cb.left - d.left : d.right - cb.right;
+            if (!H.near(cb.top - d.top, 6) || !H.near(d.bottom - cb.bottom, 6) || !H.near(sides, 6)) bad.push(say + 'the chip stands ' + (cb.top - d.top).toFixed(1) + ' px under the bar’s top, ' + (d.bottom - cb.bottom).toFixed(1) + ' above its foot and ' + sides.toFixed(1) + ' from its ' + end + ' end, want 6 each (' + H.px(cb) + ' in ' + H.px(d) + ')');
+            if (H.css(b, 'backgroundColor') !== I.chip || H.css(b, 'color') !== I.t1 || H.css(b, 'borderTopLeftRadius') !== '26px' || H.css(b, 'borderBottomRightRadius') !== '26px') bad.push(say + 'the chip is ' + [H.css(b, 'backgroundColor'), H.css(b, 'color'), H.css(b, 'borderTopLeftRadius')].join(', ') + ', want ink ' + I.t1 + ' on the soft chip ' + I.chip + ' with 26 px ends');
+            if (H.css(b, 'borderBottomWidth') !== '0px' || H.css(b, 'boxShadow') !== 'none' || H.css(b, 'textDecorationLine') !== 'none' || ['::before', '::after'].some(function (p) { const c = H.css(b, 'content', p); return c && c !== 'none' && c !== 'normal'; }))
+              bad.push(say + 'the chip has a line or a mark under it (border ' + H.css(b, 'borderBottomWidth') + ', shadow ' + H.css(b, 'boxShadow') + ') - his rule: a soft chip, never a line');
+            D.tabs().filter(function (x) { return x !== b; }).forEach(function (x) { if (H.css(x, 'backgroundColor') !== 'rgba(0, 0, 0, 0)' || H.css(x, 'color') !== I.t3) bad.push(say + x.textContent.trim() + ', not chosen, is ' + H.css(x, 'backgroundColor') + ' ' + H.css(x, 'color') + ', want plain ' + I.t3); });
+          };
+          if (!tt[0].classList.contains('active')) bad.push(who + ': setup: Projects is not the chosen tab');
+          chip(tt[0], 'left');
+          tt[3].click(); await sleep(260); D.still();
+          if (!tt[3].classList.contains('active')) bad.push(who + ': setup: a tap on Tutorials did not choose it');
+          chip(tt[3], 'right');
           /* CONTROL · the chip is the chosen state, not a fixed paint: a tap on Templates moves it there */
           tt[1].click(); await sleep(260);
-          if (H.css(tt[1], 'backgroundColor') !== I.chip || H.css(tt[0], 'backgroundColor') !== 'rgba(0, 0, 0, 0)') bad.push(who + ': CONTROL: after a tap on Templates the chip did not move there (Templates ' + H.css(tt[1], 'backgroundColor') + ', Projects ' + H.css(tt[0], 'backgroundColor') + ')');
+          if (H.css(tt[1], 'backgroundColor') !== I.chip || H.css(tt[3], 'backgroundColor') !== 'rgba(0, 0, 0, 0)') bad.push(who + ': CONTROL: after a tap on Templates the chip did not move there (Templates ' + H.css(tt[1], 'backgroundColor') + ', Tutorials ' + H.css(tt[3], 'backgroundColor') + ')');
           tt[0].click(); await sleep(260);
-          /* while he selects, the select bar stands on the dock's top and the + steps away with its drawing (a tail keeps the drawing
-             visible with an important rule: it stood as a dark + in the dock). CONTROL: before Select the drawing shows. */
-          if (H.css(nb.querySelector('svg'), 'visibility') !== 'visible') bad.push(who + ': CONTROL: the + drawing does not show before Select, so its hiding cannot be read');
-          FM.home._setSelection([]); FM.home._render('projects'); await sleep(120);
-          try {
-            const sb = document.getElementById('hm-selbar');
-            if (!document.body.classList.contains('hm-selecting') || !sb) bad.push(who + ': setup: Select did not come on');
-            else {
-              sb.getAnimations({ subtree: true }).forEach(function (x) { try { x.finish(); } catch (e) {} });
-              const sbb = H.box(sb);
-              if (!H.near(sbb.bottom, db.top, 1)) bad.push(who + ': the select bar ends at ' + sbb.bottom.toFixed(1) + ', not on the dock’s top (' + db.top.toFixed(1) + ')');
-              if (H.css(nb, 'visibility') !== 'hidden' || H.css(nb.querySelector('svg'), 'visibility') !== 'hidden') bad.push(who + ': while he selects the + or its drawing still shows (the key ' + H.css(nb, 'visibility') + ', the drawing ' + H.css(nb.querySelector('svg'), 'visibility') + ')');
-            }
-          } finally {
-            const sbtn = document.getElementById('hm-select-btn');
-            if (FM.home._selectionState().selectMode && sbtn) sbtn.click();
-            await sleep(200);
-          }
         }
-      }, 380);
+      });
+    } finally {
+      if (moved) moved.style.removeProperty('transform');
+      D.tabs().forEach(function (b) { const l = b.querySelector('.hm-tab-label'); if (l) { l.style.removeProperty('position'); l.style.removeProperty('top'); } });
+      try { FM.home.showTab('projects'); } catch (e) {}
+      await H.restore(was);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('1255 dock · under the new look Home’s list runs on under the floating bar and its last project row scrolls fully clear above it on a 390 × 844 phone, in Dark and in Light, with no home bar and over an iPhone’s 34 px one, and while he selects it scrolls clear above the select bar; its rows fade out under the bar (CONTROLS: the list reaches the screen’s foot under the bar; with the room at its foot taken away the last row ends under the bar)', { item: '1255', budgetMs: 90000 }, async function () {
+    const H = home1255, D = dock1255, bad = [], was = { look: FM.settings.get('newLook'), open: FM.home.isOpen() };
+    const now = Date.now(), recs = {};
+    for (let i = 1; i <= 12; i++) recs['p' + i] = { id: 'p_dock1255_' + i, name: 'Dock probe ' + i, width: 1080, height: 1350, duration: 5, fps: 30, layers: 2, modified: now - i * 3600000, created: now - i * 3600000 - 60000 };
+    let sc = null;
+    try {
+      await atSize921(390, 844, async function () {
+        for (const lk of ['cutline', 'light']) {
+          const who = lk === 'cutline' ? 'Dark' : 'Light';
+          await D.ready(lk);
+          const cards = await H.draw(recs, []), last = cards.p12;
+          sc = document.querySelector('#home-screen .hm-scroll');
+          const end = async function () { sc.scrollTop = sc.scrollHeight; await sleep(80); return { r: H.box(last), d: H.box(D.dock()) }; };
+          for (const sab of [0, D.SAB]) {
+            await D.sab(sab || null);
+            const say = who + (sab ? ', over a ' + sab + ' px home bar: ' : ', no home bar: ');
+            const sb = H.box(sc), db = H.box(D.dock());
+            /* CONTROL · the list runs on under the bar to the screen's foot: a list that stopped at the bar would read clear for nothing */
+            if (!H.near(sb.bottom, innerHeight, 1) || !(sb.bottom > db.bottom + 1)) throw new Error(say + 'CONTROL: the list ends at ' + sb.bottom.toFixed(1) + ' over a bar from ' + db.top.toFixed(1) + ' to ' + db.bottom.toFixed(1) + ': it does not run on under the bar to the screen’s foot (' + innerHeight + ')');
+            if (!(sc.scrollHeight > sc.clientHeight + 200)) throw new Error(say + 'setup: twelve rows do not make the list scroll (' + sc.scrollHeight + ' in ' + sc.clientHeight + ')');
+            if (!D.fadesAtFoot(sc)) bad.push(say + 'the list’s rows do not fade out at its foot under the bar (mask ' + String(getComputedStyle(sc).maskImage).slice(0, 160) + ')');
+            const e1 = await end();
+            if (!(e1.r.bottom <= e1.d.top - 0.5) || !(e1.r.top > H.box(document.querySelector('#home-screen .hm-top')).bottom)) bad.push(say + 'scrolled to its end, the last row is ' + H.px(e1.r) + ' over a bar from ' + e1.d.top.toFixed(1) + ': it does not come fully clear above the bar');
+            /* CONTROL · with the room at its foot taken away the same reading finds the last row under the bar */
+            sc.style.setProperty('padding-bottom', '0px');
+            const e0 = await end();
+            sc.style.removeProperty('padding-bottom');
+            if (!(e0.r.bottom > e0.d.top + 20)) throw new Error(say + 'CONTROL: with no room at the list’s foot its last row still ends at ' + e0.r.bottom.toFixed(1) + ', above the bar’s top ' + e0.d.top.toFixed(1) + ', so the reading cannot tell a row under the bar');
+            if (sab) {
+              /* while he selects: the last row scrolls clear above the select bar, which sits above the floating bar */
+              try {
+                const bar = await D.selectOn();
+                if (!bar || !document.body.classList.contains('hm-selecting')) bad.push(say + 'setup: Select did not come on');
+                else {
+                  const es = await end(), bb = H.box(bar);
+                  if (!(es.r.bottom <= bb.top - 0.5)) bad.push(say + 'while he selects, the last row scrolled to its end is ' + H.px(es.r) + ' under a select bar from ' + bb.top.toFixed(1) + ': it does not come clear above it');
+                }
+              } finally { await D.selectOff(); }
+            }
+            sc.scrollTop = 0;
+          }
+          await D.sab(null);
+        }
+      });
+    } finally {
+      if (sc) { sc.style.removeProperty('padding-bottom'); sc.scrollTop = 0; }
+      await D.sab(null); await H.restore(was);
+    }
+    if (bad.length) throw new Error(bad.join(' · '));
+  });
+
+  test('1255 dock · with the look off Home’s dock is today’s on a 390 × 844 phone: in the flow at the screen’s foot across its whole width, 50 px tall with its 22 px top corners and today’s columns, the chosen tab with no chip, the + round and 22 px off the bottom edge, the list ending at the dock’s top with no fade at its foot, and no home-bar stand-in on Home (CONTROL: under the look the same probe reads the floating bar, lifted, its chosen tab on a chip, with the list running under it and fading out)', { item: '1255', budgetMs: 60000 }, async function () {
+    const H = home1255, D = dock1255, bad = [], was = { look: FM.settings.get('newLook'), open: FM.home.isOpen() };
+    const read = function () {
+      const dock = D.dock(), sc = document.querySelector('#home-screen .hm-scroll'), nb = document.getElementById('hm-new'), on = D.tabs().filter(function (b) { return b.classList.contains('active'); });
+      return { db: H.box(dock), pos: H.css(dock, 'position'), sb: H.box(sc), fade: D.fadesAtFoot(sc), pb: H.box(nb), dock: dock, nb: nb, sab: getComputedStyle(D.hs()).getPropertyValue('--hm-sab').trim(),
+        chip: on.length === 1 ? H.css(on[0], 'backgroundColor') : on.length + ' chosen tabs' };
+    };
+    try {
+      await atSize921(390, 844, async function () {
+        await D.ready('');
+        const o = read(), cols = H.css(o.dock, 'gridTemplateColumns').split(' ');
+        if (o.pos !== 'relative' || !H.near(o.db.bottom, innerHeight) || !H.near(o.db.left, 0) || !H.near(o.db.width, innerWidth) || !H.near(o.db.height, 50)) bad.push('the dock is ' + o.pos + ' at ' + H.px(o.db) + ', want today’s: in the flow, 50 px tall across the whole width of the screen’s foot');
+        if (cols.length !== 5 || cols[2] !== '76px' || H.css(o.dock, 'borderTopLeftRadius') !== '22px' || H.css(o.dock, 'borderBottomLeftRadius') !== '0px') bad.push('the dock’s columns and corners are not today’s (columns ' + cols.join(' ') + ', corners ' + H.css(o.dock, 'borderTopLeftRadius') + ' / ' + H.css(o.dock, 'borderBottomLeftRadius') + ')');
+        if (H.css(o.nb, 'borderTopLeftRadius') !== '50%' || H.css(o.nb, 'clipPath') !== 'none' || !H.near(innerHeight - o.pb.bottom, 22) || !H.near((o.pb.left + o.pb.right) / 2, innerWidth / 2)) bad.push('the + is not today’s round + 22 px off the bottom edge in the middle (' + H.px(o.pb) + ', corner ' + H.css(o.nb, 'borderTopLeftRadius') + ', clip ' + H.css(o.nb, 'clipPath') + ')');
+        if (!H.near(o.sb.bottom, o.db.top, 1)) bad.push('the list ends at ' + o.sb.bottom.toFixed(1) + ', not at the dock’s top (' + o.db.top.toFixed(1) + ')');
+        if (o.fade) bad.push('the list fades out at its foot with the look off (' + String(getComputedStyle(document.querySelector('#home-screen .hm-scroll')).maskImage).slice(0, 160) + ')');
+        if (o.sab !== '') bad.push('with the look off Home carries the floating bar’s home-bar value (--hm-sab ' + o.sab + ')');
+        if (o.chip !== 'rgba(0, 0, 0, 0)') bad.push('with the look off the chosen tab wears ' + o.chip + ', want no chip (today’s chosen tab is its colour alone)');
+        /* CONTROL · under the look the same probe reads the floating bar: lifted, out of the flow, its chosen tab on the chip, the list
+           running on under it and fading */
+        await D.ready('cutline');
+        const n = read();
+        if (n.pos !== 'absolute' || !(innerHeight - n.db.bottom > 5) || !H.near(n.sb.bottom, innerHeight, 1) || !n.fade || n.sab === '' || n.chip !== H.INK.cutline.chip)
+          throw new Error('CONTROL: under the look the probe does not read the floating bar (' + n.pos + ' at ' + H.px(n.db) + ', the list to ' + n.sb.bottom.toFixed(1) + ', fade ' + n.fade + ', --hm-sab ' + JSON.stringify(n.sab) + ', the chosen tab ' + n.chip + '), so today’s dock could not be told from it · ' + bad.join(' · '));
+      });
     } finally { await H.restore(was); }
     if (bad.length) throw new Error(bad.join(' · '));
   });

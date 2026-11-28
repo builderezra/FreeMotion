@@ -7,4 +7,7 @@ html:root[data-ui="cutline"][data-theme] {
   --n-accent: #ff5a36; --n-accent-ink: #ff7656; --n-on-accent: #1d0904; --n-danger: #ff5c7a; --n-focus: #ffb29f;
   --n-chip: rgba(245, 240, 232, .09);       /* a chosen tab: the ink at 9 in 100, a soft chip and never a line under it */
   --n-thumb-edge: transparent;              /* a project's picture needs no edge on charcoal */
+  /* the floating dock (his pick of 27 Nov, the Solid bar): a lifted surface, its hairline, and a soft shadow under it */
+  --n-dock: #201e1b; --n-dock-edge: rgba(255, 244, 230, .09);
+  --n-dock-shadow: 0 12px 28px rgba(0, 0, 0, .55), inset 0 1px 0 rgba(255, 244, 230, .04);
 }

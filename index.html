@@ -30,7 +30,7 @@
      holds this value, so a new release plays it once even in a session that already saw the last one (a resumed app, the
      update chip), and a reload of the same build stays silent. It sits in <head> because the splash script runs before the
      version label (.ver) is parsed. A test pins it equal to that label: a release bumps BOTH. -->
-<meta name="fm-build" content="v18.58">
+<meta name="fm-build" content="v18.59">
 <!-- The FIRST thing in the document that paints. An external stylesheet is render-blocking, but on an
      iOS home-screen launch the WebView can still show one white frame before it resolves; declaring
      the ground colour inline means the earliest possible paint is already black. -->
@@ -130,7 +130,7 @@
     'use strict';
     var FM = window.FM = window.FM || {};
     var de = document.documentElement;
-    var FILES = { cutline: 'theme-cutline.css?v=de8f837a19', light: 'theme-light.css?v=81d7923a24' };   /* each stamped with its own bytes by tools/look/build.py */
+    var FILES = { cutline: 'theme-cutline.css?v=48e424810a', light: 'theme-light.css?v=e9c3473d23' };   /* each stamped with its own bytes by tools/look/build.py */
     var BAR = { cutline: '#121110', light: '#fffcf6' };                              /* the browser's own bar (theme-color) under each look */
     function wanted() {
       var q = /[?&]ui=(cutline|light|now)(?![\w-])/.exec(window.location.search || '');
@@ -1620,7 +1620,7 @@
            where every app puts back, at the size of a real control rather than an icon, and the
            accessible name lives on aria-label so nothing is lost by dropping the text node. -->
       <button id="btn-back" class="icon-btn tb-back" title="Back to projects" aria-label="Back to projects"><svg viewBox="0 0 24 24" class="ico" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M15 4.5l-7.5 7.5 7.5 7.5"/></svg></button>
-      <div class="brand"><span class="brand-name"><svg class="fm-ic brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M8.5 5.8v12.4a.8.8 0 0 0 1.2.7l9.9-6.2a.8.8 0 0 0 0-1.4L9.7 5.1a.8.8 0 0 0-1.2.7z"/></svg>FreeMotion</span> <span class="ver" title="Tap to force-update to the very latest build">v18.58</span></div>
+      <div class="brand"><span class="brand-name"><svg class="fm-ic brand-mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" d="M8.5 5.8v12.4a.8.8 0 0 0 1.2.7l9.9-6.2a.8.8 0 0 0 0-1.4L9.7 5.1a.8.8 0 0 0-1.2.7z"/></svg>FreeMotion</span> <span class="ver" title="Tap to force-update to the very latest build">v18.59</span></div>
       <div class="top-actions">
         <!-- Undo/Redo moved to the centred transport row ([the reference app] keeps them by the play button, not the top bar). -->
         <!-- Generate + Import (and Text/Captions/etc.) live in the inspector's ADD menu (shown when nothing

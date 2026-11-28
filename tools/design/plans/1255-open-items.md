@@ -46,7 +46,7 @@ His process rule: before ANY switch-over, ONE simple decisions chat covering eve
      - SEX (Simple export, more options)
      - MAR (Audio react)
      - MXD/MXP (export)
-     - LG (the real logo retinted): PICKED 27 Nov 21:05, the orange one only at the medium size (PICKS 3.16; master tools/design/plans/1255-logo-final.svg)
+     - LG (the real logo retinted): PICKED 27 Nov 21:05, the orange one only at the medium size (PICKS 3.16; master tools/design/plans/1255-logo-final.svg). SHIPPED in v18.58 (28 Nov 08:10, 240a5e51) as the app icon, the Apple touch icon and the browser tab's icon; the Home wordmark and splash were not in v18.58
      - E1D (E1 on PC)
      - and the other colours-only screens
    - **D1-D4: how every dropdown connects to its button.** Shown on the Home card •••, the copy/duplicate menu, the editor's top-right ••• and the parent picker. [D1 pointer recommended: his own "an arrow coming off of it"]
